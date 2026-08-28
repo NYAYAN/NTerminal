@@ -667,7 +667,11 @@ export class TerminalSession {
     }
     const dim = "\x1b[38;5;240m";
     this.term.write(
-      `\r\n${dim}[oturum sona erdi${code === null ? "" : `, çıkış kodu ${code}`}]\x1b[0m\r\n`,
+      `
+${dim}[${
+        code === null ? t("term.sessionEnded") : t("term.sessionEndedCode", { code })
+      }][0m
+`,
     );
     this.callbacks.onExit?.(code);
   }

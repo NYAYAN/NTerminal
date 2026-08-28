@@ -179,6 +179,11 @@ export const MESSAGES = {
   "term.prevSessionEnded": ["önceki oturum burada bitti", "previous session ended here"],
   "term.spawnFailed": ["Kabuk başlatılamadı:", "Failed to start shell:"],
   "term.linkFailed": ["Bağlantı açılamadı: {uri}", "Could not open the link: {uri}"],
+  "term.sessionEnded": ["oturum sona erdi", "session ended"],
+  "term.sessionEndedCode": [
+    "oturum sona erdi, çıkış kodu {code}",
+    "session ended, exit code {code}",
+  ],
 
   // ------------------------------------------------------------------ bölmeler
   "pane.running": ["komut çalışıyor", "command running"],
@@ -258,9 +263,11 @@ export const MESSAGES = {
     "Yalnızca favori grupları göster ({n})",
     "Show favorite groups only ({n})",
   ],
-  "group.collapseAll": ["Tümünü Kapat", "Collapse All"],
-  "group.expandAll": ["Tümünü Aç", "Expand All"],
-  "group.collapse": ["Grubu Kapat", "Collapse Group"],
+  "group.collapseAll": ["Grupları Daralt", "Collapse Groups"],
+  "group.expandAll": ["Grupları Aç", "Expand Groups"],
+  // "Kapat" bir grup icin belirsiz (silmek gibi okunuyor); "Daralt"
+  // tam olarak ne oldugunu soyluyor ve tumu/teki ayni fiili kullaniyor.
+  "group.collapse": ["Grubu Daralt", "Collapse Group"],
   "group.expand": ["Grubu Aç", "Expand Group"],
   "group.noFavorites": [
     "Favori grup yok.\nBir grubun üzerinde sağ tık → Favori Gruba Ekle.",
@@ -509,8 +516,34 @@ export const MESSAGES = {
     "Restore settings to defaults",
   ],
   "settings.title": ["Ayarlar", "Settings"],
+  "settings.general": ["Genel", "General"],
+  "settings.session": ["Oturum", "Session"],
+  "settings.navTerminal": ["Terminal", "Terminal"],
+  "settings.navHistory": ["Geçmiş", "History"],
+  "settings.copyPaste": ["Kopyala ve yapıştır", "Copy and paste"],
+  "settings.links": ["Bağlantılar", "Links"],
+  "settings.closeTabSection": ["Sekme kapatma", "Closing tabs"],
+  "settings.fontSize": ["Boyut ({n} px)", "Size ({n} px)"],
+  "settings.lineHeightLabel": ["Satır yüksekliği ({n})", "Line height ({n})"],
+  "settings.letterSpacingLabel": ["Harf aralığı ({n})", "Letter spacing ({n})"],
+  "settings.scrollbackHint": [
+    "Terminalde geriye doğru kaç satır saklanacağı. Yüksek değer daha çok bellek kullanır.",
+    "How many lines are kept for scrolling back. A higher value uses more memory.",
+  ],
+  "settings.restoreSessionLabel": [
+    "Açılışta grup ve sekme düzenini geri yükle",
+    "Restore the group and tab layout at startup",
+  ],
+  "settings.restoreScrollbackLabel": [
+    "Sekmelerin ekran çıktısını da geri yükle",
+    "Restore tab screen output as well",
+  ],
+  "settings.scrollbackPerTabHint": [
+    "Diske yazılan satır sayısı. Kabuk süreçleri uygulamayla kapanır; geri yüklenen içerik geçmiş ekran görüntüsüdür, canlı çıktı değildir.",
+    "How many lines are written to disk. Shell processes close with the application; restored content is a past screenshot, not live output.",
+  ],
+  "settings.historyStats": ["{n} kayıt · {size}", "{n} records · {size}"],
   "settings.appearance": ["Görünüm", "Appearance"],
-  "settings.behavior": ["Davranış", "Behavior"],
   "settings.profiles": ["Profiller", "Profiles"],
   "settings.groups": ["Gruplar", "Groups"],
   "settings.keys": ["Kısayollar", "Shortcuts"],
@@ -556,7 +589,6 @@ export const MESSAGES = {
     "Yeni sekme etkin sekmenin klasöründe açılsın",
     "Open new tabs in the active tab's folder",
   ],
-  "settings.terminal": ["Terminal", "Terminal"],
   "settings.copyOnSelect": ["Seçim yapınca panoya kopyala", "Copy to clipboard on selection"],
   "settings.rightClick": ["Sağ tık", "Right-click"],
   "settings.rightClickMenu": [
@@ -586,6 +618,7 @@ export const MESSAGES = {
     "As you type, a list opens below the prompt: select with up/down, accept with the right arrow, dismiss with Esc. While the list is open the arrow keys move within it; on an empty line the list is closed so the arrows reach the shell's own history. It works independently of the shell's built-in prediction and is available in cmd and bash too.",
   ],
   "settings.prediction": ["Komut önerisi", "Command suggestions"],
+  "settings.predictionShell": ["Kabuğun kendi önerisi", "The shell's own suggestion"],
   "settings.predictionList": [
     "İstemin altında liste (yukarı/aşağı ok ile seç)",
     "List below the prompt (select with up/down)",
@@ -622,6 +655,7 @@ export const MESSAGES = {
   "settings.pickProfile": ["Soldan bir profil seçin.", "Pick a profile on the left."],
   "settings.pickGroup": ["Soldan bir grup seçin.", "Pick a group on the left."],
   "settings.shellKind": ["Kabuk türü", "Shell type"],
+  "settings.browse": ["Gözat", "Browse"],
   "settings.executable": ["Çalıştırılabilir", "Executable"],
   "settings.executablePlaceholder": [
     "boş = türe göre varsayılan",

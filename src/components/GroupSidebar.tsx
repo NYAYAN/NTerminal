@@ -335,12 +335,17 @@ export function GroupSidebar() {
       ...(others.length > 0
         ? [
             { kind: "separator" as const },
-            { kind: "header" as const, label: t("menu.moveToGroup") },
-            ...others.map((g) => ({
-              kind: "item" as const,
-              label: g.name,
-              run: () => store().moveTabToGroup(tab.id, g.id),
-            })),
+            {
+              // Alt menu: on bes grubu olan kullanicida duz liste menuyu
+              // uzatip "Sekmeyi kapat"i ekran disina itiyordu.
+              kind: "submenu" as const,
+              label: t("menu.moveToGroup"),
+              entries: others.map((g) => ({
+                kind: "item" as const,
+                label: g.name,
+                run: () => store().moveTabToGroup(tab.id, g.id),
+              })),
+            },
           ]
         : []),
       { kind: "separator" },

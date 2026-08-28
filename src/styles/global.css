@@ -53,23 +53,49 @@ body {
 
 /* ------------------------------------------------------------- denetimler */
 
+/* ------------------------------------------------------------------ dugmeler
+ *
+ * Uc kademe: sessiz (varsayilan), cerceveli (.outline) ve dolgulu (.primary).
+ * Bir kutuda yalnizca BIR dolgulu dugme olmali - dolgu "burada devam et"
+ * demek, ikisi olunca hicbiri demiyor.
+ *
+ * Dolgunun uzerindeki metin rengi `--accent-fg` / `--err-fg` degiskenlerinden
+ * geliyor; bunlari tema uygulanirken karsitlik hesabiyla JS yaziyor. Onceki
+ * hali `color-mix(accent 12%, #000)` idi - vurgu rengi koyu olan bir temada
+ * koyu uzerine koyu cikiyordu.
+ */
 button {
   font: inherit;
+  font-weight: 500;
   color: inherit;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  padding: 4px 9px;
+  /* Sabit taban yukseklik: yalnizca dolguya dayanan dugmeler icerigine gore
+     (simge mi metin mi) birkac piksel oynuyor ve bir siradaki dugmeler ayni
+     yukseklikte durmuyordu. */
+  min-height: 26px;
+  padding: 3px 10px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
-  transition: background 90ms ease, color 90ms ease, border-color 90ms ease;
+  transition:
+    background 90ms ease,
+    color 90ms ease,
+    border-color 90ms ease,
+    box-shadow 90ms ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--hover-strong);
+}
+
+button:active:not(:disabled) {
+  /* Basildigi an gorunsun: gecis suresi kadar bile olsa geri bildirim. */
+  transform: translateY(0.5px);
 }
 
 button:disabled {
@@ -77,31 +103,69 @@ button:disabled {
   cursor: default;
 }
 
+/* Odak halkasi IKI katmanli.
+ *
+ * Tek katmanli vurgu renkli bir halka, vurgu renkli DOLGUNUN uzerinde
+ * kayboluyordu (birincil dugmede halka ile dolgu ayni renk). Ic katman
+ * yuzey renginde bir ayirici cizip halkayi her zemin uzerinde gorunur
+ * kiliyor. `outline` yerine `box-shadow`: iki katman gerekiyor. */
+button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface-alt),
+    0 0 0 4px var(--accent);
+}
+
 button.primary {
   background: var(--accent);
-  color: color-mix(in srgb, var(--accent) 12%, #000);
+  color: var(--accent-fg);
   font-weight: 600;
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.12);
+  /* `filter: brightness()` metni de soluklastiriyordu; karisim yalnizca
+     zemini degistiriyor. */
+  background: color-mix(in srgb, var(--accent) 86%, var(--text));
+}
+
+button.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+
+/* Yikici birincil eylem: dolgulu ama kirmizi. Onay penceresinde "Kapat" /
+   "Sil" bunu kullaniyor - eylem hem birincil hem geri donusu zor. */
+button.primary.destructive {
+  background: var(--err);
+  color: var(--err-fg);
+}
+
+button.primary.destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--err) 86%, var(--text));
+}
+
+button.primary.destructive:active:not(:disabled) {
+  background: color-mix(in srgb, var(--err) 78%, var(--text));
 }
 
 button.outline {
   border-color: var(--border);
+  color: var(--text);
 }
 
 button.outline:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--text) 30%, transparent);
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--text) 34%, transparent);
 }
 
+/* Sessiz yikici: panel altliklarinda yan yana birkac tane olabiliyor, dolgu
+   orada gurultu olurdu. */
 button.danger {
   color: var(--err);
 }
 
 button.danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--err) 16%, transparent);
+  color: var(--err);
 }
 
 .icon-btn {
@@ -689,11 +753,13 @@ input[type="color"] {
 }
 
 .suggest-row {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
-  padding: 3px 10px;
+  padding: 3px 10px 3px 7px;
   border: none;
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   background: transparent;
   text-align: left;
   font-family: var(--mono-font);
@@ -710,10 +776,35 @@ input[type="color"] {
   background: var(--hover);
 }
 
+/* Secili satir UC ayri isaretle belli oluyor: isaret oku, daha guclu arka
+ * plan tonu ve metnin parlaklasmasi.
+ *
+ * Onceki hali yalnizca %16 arka plan ve 2px cizgiydi; olculdugunde secili ve
+ * secili olmayan satirlarin EN dikkat ceken kismi (onerinin devami) ayni renk
+ * (#e6edf3) ve ayni kalinliktaydi (600), yani "hangisini sectim" sorusunun
+ * gorsel cevabi zayifti. */
 .suggest-row.on {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
   border-left-color: var(--accent);
   color: var(--text);
+}
+
+.suggest-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 9px;
+  color: var(--accent);
+  /* Gorunmez ama yer tutuyor: yalnizca secilide cizmek satirlari kaydirirdi. */
+  visibility: hidden;
+}
+
+.suggest-mark svg {
+  display: block;
+}
+
+.suggest-row.on .suggest-mark {
+  visibility: visible;
 }
 
 /* Yazilan kisim soluk, onerinin devami belirgin: "bunu yazdiniz, su
@@ -722,16 +813,24 @@ input[type="color"] {
   opacity: 0.55;
 }
 
-/* Onerinin eklenecek kismi ANA METIN renginde.
+/* Onerinin eklenecek kismi.
  *
- * Once vurgu rengiydi; secili satirin arka plani da vurgu renginin acik bir
- * karisimi oldugu icin renk rengin uzerine geliyordu ve karsitlik Solarized
- * Acik'ta 2.54'e kadar iniyordu - listenin en onemli metni en okunmaz olani
- * olmustu. Vurgu rengi artik yalnizca arka plan tonu ve sol kenar cizgisinde:
- * secili satir orada belli oluyor, metin ise her temada okunur kaliyor. */
+ * Secili olmayan satirlarda soluk, secili satirda parlak ve daha kalin:
+ * secimin nerede oldugu metnin kendisinden de okunuyor.
+ *
+ * Vurgu rengi BILINCLI olarak kullanilmiyor: secili satirin arka plani da
+ * vurgu renginin bir karisimi oldugu icin renk rengin uzerine gelir ve
+ * karsitlik Solarized Acik'ta 2.54'e kadar iniyordu. */
 .suggest-rest {
+  color: var(--text-dim);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggest-row.on .suggest-rest {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .suggest-foot {
@@ -1674,6 +1773,31 @@ input[type="color"] {
   text-align: left;
 }
 
+/* Alt menulu satir: sagda ok, acikken kalici vurgu. */
+.ctx-item.has-sub .ctx-sub-arrow {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-dim);
+}
+
+.ctx-item.has-sub .ctx-sub-arrow svg {
+  display: block;
+}
+
+.ctx-item.has-sub.open {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.ctx-item.has-sub.open .ctx-sub-arrow {
+  color: var(--text);
+}
+
+/* Alt menu ana menunun USTUNDE cizilmeli. */
+.ctx-sub-wrap .ctx-menu {
+  z-index: 302;
+}
+
 .ctx-item:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
@@ -1779,12 +1903,6 @@ input[type="color"] {
   line-height: 1.5;
 }
 
-/* Odakli dugme belli olmali: Enter'in ne yapacagi gorunsun. */
-.modal.confirm .modal-foot button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .modal-head {
   display: flex;
   align-items: center;
@@ -1817,6 +1935,60 @@ input[type="color"] {
   flex: 1;
 }
 
+/* --------------------------------------------------------- ayarlar penceresi */
+
+/* Ayar bolumleri DIKEY bir listede.
+ *
+ * Yatay serit alti bolumde bile darlasiyordu; dokuz bolumde sigmiyor. Dikey
+ * liste bolum adlarina yer aciyor, yeni bolum eklemek olculeri degistirmiyor
+ * ve etkin bolum tek bakista belli oluyor. */
+.modal.settings {
+  width: min(880px, 94vw);
+}
+
+.settings-body {
+  display: grid;
+  grid-template-columns: 172px 1fr;
+  /* Sabit yukseklik. Bolumler farkli uzunlukta; pencere icerige gore
+     kuculup buyudugunde bolum degistirmek gorsel bir ziplama uretiyordu
+     (olculen: 379px ile 590px arasi). min() kucuk ekranda tasmayi onluyor.
+     Kisa bolumler bosluk birakiyor, uzun olanlar govdede kayiyor. */
+  height: min(430px, 62vh);
+  /* Izgara ogesi icerige gore buyuyup kaydirmayi yukari kacirmasin. */
+  min-height: 0;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.settings-nav button {
+  border: none;
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.settings-nav button.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
 .tabs-strip {
   display: flex;
   gap: 4px;
@@ -1838,9 +2010,24 @@ input[type="color"] {
 
 /* ---------------------------------------------------------- form ızgarası */
 
+/* Form hizalamasi: etiket sutunu + denetim sutunu.
+ *
+ * Olculen sorun: ilgili metinler DORT ayri sol kenardaydi - bolum ipuclari
+ * 14px, alan etiketleri 215px, onay kutusu etiketleri 244px, denetimler 415px.
+ * Ipucunun bazi yerlerde alanin icinde bazi yerlerde bolumun dogrudan cocugu
+ * olmasi hizalamayi rastgele birakiyordu.
+ *
+ * Cozum: bolum de ayni izgarayi tasiyor. Alanlar iki sutunu birlikte
+ * kapliyor (kendi ic izgaralari var), bolum duzeyindeki ipuclari ve onay
+ * kutulari ise DENETIM sutununa yerlesiyor. Sonuc iki kenar: etiketler ve
+ * denetimler. */
+:root {
+  --label-col: 190px;
+}
+
 .field {
   display: grid;
-  grid-template-columns: 190px 1fr;
+  grid-template-columns: var(--label-col) 1fr;
   gap: 10px;
   align-items: center;
   padding: 6px 0;
@@ -1858,7 +2045,46 @@ input[type="color"] {
 }
 
 .section {
+  display: grid;
+  grid-template-columns: var(--label-col) 1fr;
+  column-gap: 10px;
   margin-bottom: 18px;
+}
+
+/* Varsayilan: bolum cocugu iki sutunu kapliyor (basliklar, alanlar, listeler). */
+.section > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Denetim sutununa hizalananlar: bolum duzeyindeki ipucu, onay kutusu satiri
+   ve secim dugmeleri. */
+.section > .hintline,
+.section > .check-row,
+.section > .seg {
+  grid-column: 2;
+}
+
+/* Profil ve grup formlari iki panelli duzenin sag tarafinda; alanlari bir
+   bolum icinde degil dogrudan bu kapta. Ayni izgarayi burada da kuruyoruz,
+   yoksa onay kutulari (kabuk entegrasyonu, varsayilan profil) alanlarin
+   denetim sutununa degil formun sol kenarina hizaliyordu. */
+.settings-form {
+  display: grid;
+  grid-template-columns: var(--label-col) 1fr;
+  column-gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.settings-form > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.settings-form > .hintline,
+.settings-form > .check-row {
+  grid-column: 2;
 }
 
 .section > h3 {
@@ -1876,6 +2102,15 @@ input[type="color"] {
   align-items: center;
   gap: 8px;
   padding: 5px 0;
+}
+
+/* Tarayicinin onay kutusuna ve kaydiriciya verdigi varsayilan bosluk denetim
+   sutunundan 4px kaydiriyordu (olculen: 218 ve 216, otekiler 214). Bosluk
+   izgaradan geliyor, ogenin kendisinden degil. */
+.modal-body input[type="checkbox"],
+.modal-body input[type="range"],
+.modal-body input[type="color"] {
+  margin: 0;
 }
 
 .check-row label {

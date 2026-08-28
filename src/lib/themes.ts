@@ -1,6 +1,6 @@
 import type { ITheme } from "@xterm/xterm";
 
-import { harmonizeTheme } from "./contrast";
+import { ensureContrast, harmonizeTheme, onColor } from "./contrast";
 import type { MsgKey } from "./messages";
 
 export interface TerminalTheme {
@@ -180,6 +180,15 @@ export function getTheme(id: string): TerminalTheme {
 }
 
 /** Tema renklerini CSS değişkenlerine yazar; arayüz ve terminal aynı paleti kullanır. */
+/**
+ * Arayuz metni icin en az karsitlik.
+ *
+ * 4.5 = WCAG AA (normal boy metin). Durum renkleri hem metin hem dolgu olarak
+ * kullaniliyor; metin olarak kullanildigi yer belirleyici oldugu icin sinir
+ * oradan aliniyor.
+ */
+const MIN_UI_TEXT_CONTRAST = 4.5;
+
 export function applyThemeToDocument(theme: TerminalTheme) {
   const root = document.documentElement;
   root.style.setProperty("--surface", theme.ui.surface);
@@ -187,10 +196,28 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   root.style.setProperty("--border", theme.ui.border);
   root.style.setProperty("--text", theme.ui.text);
   root.style.setProperty("--text-dim", theme.ui.textDim);
-  root.style.setProperty("--accent", theme.ui.accent);
   root.style.setProperty("--term-bg", theme.xterm.background ?? theme.ui.surface);
-  root.style.setProperty("--ok", theme.xterm.green ?? "#3fb950");
-  root.style.setProperty("--err", theme.xterm.red ?? "#ff7b72");
+  /*
+   * Durum renkleri terminal paletinden geliyor ama ARAYUZ yuzeylerinde
+   * kullaniliyor (kirmizi metinli "Sil" dugmesi, yesil "entegrasyon" rozeti).
+   * Palet, terminal arka planina gore duzeltiliyor (harmonizeTheme); arayuz
+   * yuzeyi ise baska bir renk. Olculen sonuc: Windows Terminal temasinda
+   * kirmizi metin dugmesi 2.87 karsitlik - okunmuyordu.
+   *
+   * Burada ayni renkleri ARAYUZ yuzeyine gore de duzeltiyoruz. ensureContrast
+   * rengi tonunu koruyarak yalnizca gerektigi kadar itiyor.
+   */
+  const surface = theme.ui.surfaceAlt;
+  const ok = ensureContrast(theme.xterm.green ?? "#3fb950", surface, MIN_UI_TEXT_CONTRAST);
+  const err = ensureContrast(theme.xterm.red ?? "#ff7b72", surface, MIN_UI_TEXT_CONTRAST);
+  const accent = ensureContrast(theme.ui.accent, surface, MIN_UI_TEXT_CONTRAST);
+  root.style.setProperty("--accent", accent);
+  root.style.setProperty("--ok", ok);
+  root.style.setProperty("--err", err);
+  // Dolgulu dugmelerin metin rengi: CSS karsitlik hesabi yapamiyor, biz
+  // yapiyoruz. Aksi halde koyu vurgu renginde koyu metin cikiyor.
+  root.style.setProperty("--accent-fg", onColor(accent));
+  root.style.setProperty("--err-fg", onColor(err));
   root.dataset.theme = theme.id;
   // Açık temalarda arayüz metin/gölge tonlarının ters çevrilmesi gerekiyor.
   const isLight = theme.id.includes("light");
