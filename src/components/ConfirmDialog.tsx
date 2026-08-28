@@ -70,7 +70,10 @@ export function ConfirmDialog() {
           </button>
           <button
             ref={okRef}
-            className={request.danger ? "danger" : "primary"}
+            // Yikici eylem de BIRINCIL: onay penceresinin sebebi o eylem.
+            // Dolgulu ama kirmizi; sessiz kirmizi metin burada "ikincil"
+            // gibi durup Enter'in ne yapacagini belirsizlestiriyordu.
+            className={request.danger ? "primary destructive" : "primary"}
             onClick={() => resolveConfirm(request.id, true)}
           >
             {request.confirmLabel ?? t("confirm.ok")}

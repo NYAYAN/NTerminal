@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
-import { LANGS, tp, useT, type Translate } from "../lib/i18n";
+import { LANGS, localeTag, tp, useT, type Translate } from "../lib/i18n";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { THEMES } from "../lib/themes";
@@ -19,11 +19,35 @@ import type {
 } from "../types";
 import { EnvEditor } from "./EnvEditor";
 
-type Section = "appearance" | "behavior" | "profiles" | "groups" | "keys" | "about";
+/**
+ * Ayar bölümleri.
+ *
+ * Altı bölüm yatay bir şeritteydi ve iki bölüm ("Görünüm", "Davranış")
+ * birbiriyle ilgisiz ayarları taşıyacak kadar büyümüştü: dil görünümün
+ * altındaydı, kopyala/yapıştır ile sekme kapatma onayı aynı "Terminal"
+ * başlığı altındaydı ve iki ayrı bölümde aynı başlık iki kez geçiyordu.
+ * Ölçüm: tek bir bölümün içeriği 776px, görünür alan 461px.
+ *
+ * Şimdi dokuz bölüm ve dikey gezinme: her bölüm kaydırmasız sığıyor,
+ * başlıklar tekrarlamıyor ve yeni ayar eklemek şeridi taşırmıyor.
+ */
+type Section =
+  | "general"
+  | "appearance"
+  | "terminal"
+  | "session"
+  | "history"
+  | "profiles"
+  | "groups"
+  | "keys"
+  | "about";
 
 const SECTIONS: { id: Section; key: MsgKey }[] = [
+  { id: "general", key: "settings.general" },
   { id: "appearance", key: "settings.appearance" },
-  { id: "behavior", key: "settings.behavior" },
+  { id: "terminal", key: "settings.navTerminal" },
+  { id: "session", key: "settings.session" },
+  { id: "history", key: "settings.navHistory" },
   { id: "profiles", key: "settings.profiles" },
   { id: "groups", key: "settings.groups" },
   { id: "keys", key: "settings.keys" },
@@ -75,7 +99,7 @@ export function SettingsDialog() {
   const editingGroupId = useStore((s) => s.ui.editingGroupId);
   const setUi = useStore((s) => s.setUi);
 
-  const [section, setSection] = useState<Section>(editingGroupId ? "groups" : "appearance");
+  const [section, setSection] = useState<Section>(editingGroupId ? "groups" : "general");
   const [selectedProfileId, setSelectedProfileId] = useState(settings.profiles[0]?.id ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingGroupId ?? groups[0]?.id ?? "");
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -140,14 +164,17 @@ export function SettingsDialog() {
 
   // Geçmiş boyutunu yalnızca ilgili bölüm açıldığında oku.
   useEffect(() => {
-    if (section !== "behavior") return;
+    if (section !== "history") return;
     let alive = true;
     void api
       .historyStats()
       .then((stats) => {
         if (alive) {
           setHistorySize(
-            `${stats.total.toLocaleString("tr-TR")} kayıt · ${formatBytes(stats.fileBytes)}`,
+            t("settings.historyStats", {
+              n: stats.total.toLocaleString(localeTag()),
+              size: formatBytes(stats.fileBytes),
+            }),
           );
         }
       })
@@ -159,7 +186,7 @@ export function SettingsDialog() {
 
   return (
     <div className="overlay" onMouseDown={close}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal settings" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{t("settings.title")}</h2>
           <span className="dim mono" style={{ fontSize: 11 }}>
@@ -170,16 +197,24 @@ export function SettingsDialog() {
           </button>
         </div>
 
-        <div className="tabs-strip">
-          {SECTIONS.map((s) => (
-            <button key={s.id} className={section === s.id ? "on" : ""} onClick={() => setSection(s.id)}>
-              {t(s.key)}
-            </button>
-          ))}
-        </div>
+        <div className="settings-body">
+          {/* Dikey gezinme: dokuz bölüm yatay bir şeride sığmıyor ve her
+              yeni ayar şeridi biraz daha daraltıyordu. */}
+          <nav className="settings-nav">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                className={section === s.id ? "on" : ""}
+                aria-current={section === s.id}
+                onClick={() => setSection(s.id)}
+              >
+                {t(s.key)}
+              </button>
+            ))}
+          </nav>
 
-        <div className="modal-body">
-          {section === "appearance" && (
+          <div className="modal-body">
+          {section === "general" && (
             <>
               <div className="section">
                 <h3>{t("settings.language")}</h3>
@@ -195,35 +230,38 @@ export function SettingsDialog() {
                       </option>
                     ))}
                   </select>
+                  <div className="hintline">{t("settings.languageHint")}</div>
                 </div>
-                <div className="hintline">{t("settings.languageHint")}</div>
               </div>
 
               <div className="section">
                 <h3>{t("view.heading")}</h3>
-                <div className="seg">
-                  {VIEW_MODES.map((mode) => (
-                    <button
-                      key={mode.value}
-                      className={settings.appearance.viewMode === mode.value ? "on" : ""}
-                      onClick={() => void store().setViewMode(mode.value)}
-                    >
-                      {t(mode.key)}
-                    </button>
-                  ))}
-                </div>
-                <div className="hintline">
-                  {t(
-                    settings.appearance.viewMode === "panes"
-                      ? "view.panesHint"
-                      : "view.tabsHint",
-                  )}{" "}
-                  {t("view.shortcut", {
-                    keys: prettyCombo(settings.keybindings.toggleViewMode ?? "Ctrl+Shift+E"),
-                  })}
+                <div className="field">
+                  <label>{t("view.label")}</label>
+                  <div className="seg">
+                    {VIEW_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        className={settings.appearance.viewMode === mode.value ? "on" : ""}
+                        onClick={() => void store().setViewMode(mode.value)}
+                      >
+                        {t(mode.key)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="hintline">
+                    {t(settings.appearance.viewMode === "panes" ? "view.panesHint" : "view.tabsHint")}{" "}
+                    {t("view.shortcut", {
+                      keys: prettyCombo(settings.keybindings.toggleViewMode ?? "Ctrl+Shift+E"),
+                    })}
+                  </div>
                 </div>
               </div>
+            </>
+          )}
 
+          {section === "appearance" && (
+            <>
               <div className="section">
                 <h3>{t("settings.theme")}</h3>
                 <div className="field">
@@ -252,53 +290,49 @@ export function SettingsDialog() {
                   />
                 </div>
                 <div className="field">
-                  <label>Boyut ({settings.appearance.fontSize} px)</label>
+                  <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
                   <input
                     type="range"
                     min={8}
                     max={28}
                     value={settings.appearance.fontSize}
-                    onChange={(e) => void store().patchAppearance({ fontSize: Number(e.target.value) })}
+                    onChange={(e) =>
+                      void store().patchAppearance({ fontSize: Number(e.target.value) })
+                    }
                   />
                 </div>
                 <div className="field">
-                  <label>Satır yüksekliği ({settings.appearance.lineHeight.toFixed(2)})</label>
+                  <label>
+                    {t("settings.lineHeightLabel", {
+                      n: settings.appearance.lineHeight.toFixed(2),
+                    })}
+                  </label>
                   <input
                     type="range"
                     min={1}
                     max={2}
                     step={0.05}
                     value={settings.appearance.lineHeight}
-                    onChange={(e) => void store().patchAppearance({ lineHeight: Number(e.target.value) })}
+                    onChange={(e) =>
+                      void store().patchAppearance({ lineHeight: Number(e.target.value) })
+                    }
                   />
                 </div>
                 <div className="field">
-                  <label>Harf aralığı ({settings.appearance.letterSpacing})</label>
+                  <label>
+                    {t("settings.letterSpacingLabel", { n: settings.appearance.letterSpacing })}
+                  </label>
                   <input
                     type="range"
                     min={-1}
                     max={3}
                     step={0.5}
                     value={settings.appearance.letterSpacing}
-                    onChange={(e) => void store().patchAppearance({ letterSpacing: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              <div className="section">
-                <h3>{t("settings.terminal")}</h3>
-                <div className="check-row">
-                  <input
-                    id="highlightLinks"
-                    type="checkbox"
-                    checked={settings.appearance.highlightLinks}
                     onChange={(e) =>
-                      void store().patchAppearance({ highlightLinks: e.target.checked })
+                      void store().patchAppearance({ letterSpacing: Number(e.target.value) })
                     }
                   />
-                  <label htmlFor="highlightLinks">{t("settings.highlightLinks")}</label>
                 </div>
-                <div className="hintline">{t("settings.highlightLinksHint")}</div>
               </div>
 
               <div className="section">
@@ -335,74 +369,21 @@ export function SettingsDialog() {
                     max={200000}
                     step={500}
                     value={settings.appearance.scrollback}
-                    onChange={(e) => void store().patchAppearance({ scrollback: Number(e.target.value) })}
+                    onChange={(e) =>
+                      void store().patchAppearance({ scrollback: Number(e.target.value) })
+                    }
                     onKeyDown={(e) => e.stopPropagation()}
                   />
-                  <div className="hintline">
-                    Terminalde geriye doğru kaç satır saklanacağı. Yüksek değer daha çok bellek kullanır.
-                  </div>
+                  <div className="hintline">{t("settings.scrollbackHint")}</div>
                 </div>
               </div>
             </>
           )}
 
-          {section === "behavior" && (
+          {section === "terminal" && (
             <>
               <div className="section">
-                <h3>{t("settings.sessionRestore")}</h3>
-                <div className="check-row">
-                  <input
-                    id="restoreSession"
-                    type="checkbox"
-                    checked={settings.behavior.restoreSession}
-                    onChange={(e) => void store().patchBehavior({ restoreSession: e.target.checked })}
-                  />
-                  <label htmlFor="restoreSession">
-                    Açılışta grup ve sekme düzenini geri yükle
-                  </label>
-                </div>
-                <div className="check-row">
-                  <input
-                    id="restoreScrollback"
-                    type="checkbox"
-                    checked={settings.behavior.restoreScrollback}
-                    onChange={(e) => void store().patchBehavior({ restoreScrollback: e.target.checked })}
-                  />
-                  <label htmlFor="restoreScrollback">
-                    Sekmelerin ekran çıktısını da geri yükle
-                  </label>
-                </div>
-                <div className="field">
-                  <label>{t("settings.scrollbackPerTab")}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20000}
-                    step={100}
-                    value={settings.behavior.scrollbackSaveLines}
-                    onChange={(e) =>
-                      void store().patchBehavior({ scrollbackSaveLines: Number(e.target.value) })
-                    }
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                  <div className="hintline">
-                    Diske yazılan satır sayısı. Kabuk süreçleri kapanır; geri yüklenen içerik geçmiş
-                    ekran görüntüsüdür, canlı çıktı değildir.
-                  </div>
-                </div>
-                <div className="check-row">
-                  <input
-                    id="inheritCwd"
-                    type="checkbox"
-                    checked={settings.behavior.inheritCwd}
-                    onChange={(e) => void store().patchBehavior({ inheritCwd: e.target.checked })}
-                  />
-                  <label htmlFor="inheritCwd">{t("settings.inheritCwd")}</label>
-                </div>
-              </div>
-
-              <div className="section">
-                <h3>{t("settings.terminal")}</h3>
+                <h3>{t("settings.copyPaste")}</h3>
                 <div className="check-row">
                   <input
                     id="copyOnSelect"
@@ -439,6 +420,26 @@ export function SettingsDialog() {
                   <label htmlFor="ctrlCCopiesSelection">{t("settings.ctrlCCopies")}</label>
                 </div>
                 <div className="hintline">{t("settings.ctrlCHint")}</div>
+              </div>
+
+              <div className="section">
+                <h3>{t("settings.links")}</h3>
+                <div className="check-row">
+                  <input
+                    id="highlightLinks"
+                    type="checkbox"
+                    checked={settings.appearance.highlightLinks}
+                    onChange={(e) =>
+                      void store().patchAppearance({ highlightLinks: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="highlightLinks">{t("settings.highlightLinks")}</label>
+                </div>
+                <div className="hintline">{t("settings.highlightLinksHint")}</div>
+              </div>
+
+              <div className="section">
+                <h3>{t("settings.prediction")}</h3>
                 <div className="check-row">
                   <input
                     id="appSuggestions"
@@ -451,9 +452,8 @@ export function SettingsDialog() {
                   <label htmlFor="appSuggestions">{t("settings.appSuggestions")}</label>
                 </div>
                 <div className="hintline">{t("settings.appSuggestionsHint")}</div>
-
                 <div className="field">
-                  <label>{t("settings.prediction")}</label>
+                  <label>{t("settings.predictionShell")}</label>
                   <select
                     value={settings.behavior.shellPrediction}
                     onChange={(e) =>
@@ -466,9 +466,66 @@ export function SettingsDialog() {
                     <option value="inline">{t("settings.predictionInline")}</option>
                     <option value="off">{t("settings.predictionOff")}</option>
                   </select>
+                  <div className="hintline">{t("settings.predictionHint")}</div>
                 </div>
-                <div className="hintline">{t("settings.predictionHint")}</div>
+              </div>
+            </>
+          )}
 
+          {section === "session" && (
+            <>
+              <div className="section">
+                <h3>{t("settings.sessionRestore")}</h3>
+                <div className="check-row">
+                  <input
+                    id="restoreSession"
+                    type="checkbox"
+                    checked={settings.behavior.restoreSession}
+                    onChange={(e) =>
+                      void store().patchBehavior({ restoreSession: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="restoreSession">{t("settings.restoreSessionLabel")}</label>
+                </div>
+                <div className="check-row">
+                  <input
+                    id="restoreScrollback"
+                    type="checkbox"
+                    checked={settings.behavior.restoreScrollback}
+                    onChange={(e) =>
+                      void store().patchBehavior({ restoreScrollback: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="restoreScrollback">{t("settings.restoreScrollbackLabel")}</label>
+                </div>
+                <div className="field">
+                  <label>{t("settings.scrollbackPerTab")}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20000}
+                    step={100}
+                    value={settings.behavior.scrollbackSaveLines}
+                    onChange={(e) =>
+                      void store().patchBehavior({ scrollbackSaveLines: Number(e.target.value) })
+                    }
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                  <div className="hintline">{t("settings.scrollbackPerTabHint")}</div>
+                </div>
+                <div className="check-row">
+                  <input
+                    id="inheritCwd"
+                    type="checkbox"
+                    checked={settings.behavior.inheritCwd}
+                    onChange={(e) => void store().patchBehavior({ inheritCwd: e.target.checked })}
+                  />
+                  <label htmlFor="inheritCwd">{t("settings.inheritCwd")}</label>
+                </div>
+              </div>
+
+              <div className="section">
+                <h3>{t("settings.closeTabSection")}</h3>
                 <div className="field">
                   <label>{t("settings.confirmCloseTab")}</label>
                   <select
@@ -483,40 +540,44 @@ export function SettingsDialog() {
                     <option value="running">{t("settings.confirmRunning")}</option>
                     <option value="never">{t("settings.confirmNever")}</option>
                   </select>
-                </div>
-                <div className="hintline">{t("settings.confirmCloseTabHint")}</div>
-              </div>
-
-              <div className="section">
-                <h3>{t("settings.history")}</h3>
-                <div className="field">
-                  <label>{t("settings.historyLimit")}</label>
-                  <input
-                    type="number"
-                    min={100}
-                    max={500000}
-                    step={1000}
-                    value={settings.behavior.historyLimit}
-                    onChange={(e) => void store().patchBehavior({ historyLimit: Number(e.target.value) })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                  <div className="hintline">
-                    {t("settings.historyLimitHint", {
-                      size: historySize || t("settings.historyReading"),
-                    })}
-                  </div>
-                </div>
-                <div className="check-row">
-                  <input
-                    id="historyDedupe"
-                    type="checkbox"
-                    checked={settings.behavior.historyDedupe}
-                    onChange={(e) => void store().patchBehavior({ historyDedupe: e.target.checked })}
-                  />
-                  <label htmlFor="historyDedupe">{t("settings.historyDedupeDefault")}</label>
+                  <div className="hintline">{t("settings.confirmCloseTabHint")}</div>
                 </div>
               </div>
             </>
+          )}
+
+          {section === "history" && (
+            <div className="section">
+              <h3>{t("settings.history")}</h3>
+              <div className="field">
+                <label>{t("settings.historyLimit")}</label>
+                <input
+                  type="number"
+                  min={100}
+                  max={500000}
+                  step={1000}
+                  value={settings.behavior.historyLimit}
+                  onChange={(e) =>
+                    void store().patchBehavior({ historyLimit: Number(e.target.value) })
+                  }
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+                <div className="hintline">
+                  {t("settings.historyLimitHint", {
+                    size: historySize || t("settings.historyReading"),
+                  })}
+                </div>
+              </div>
+              <div className="check-row">
+                <input
+                  id="historyDedupe"
+                  type="checkbox"
+                  checked={settings.behavior.historyDedupe}
+                  onChange={(e) => void store().patchBehavior({ historyDedupe: e.target.checked })}
+                />
+                <label htmlFor="historyDedupe">{t("settings.historyDedupeDefault")}</label>
+              </div>
+            </div>
           )}
 
           {section === "profiles" && (
@@ -558,7 +619,7 @@ export function SettingsDialog() {
                 </div>
               </div>
 
-              <div>
+              <div className="settings-form">
                 {!profile && <div className="hint">{t("settings.pickProfile")}</div>}
                 {profile && (
                   <>
@@ -603,7 +664,7 @@ export function SettingsDialog() {
                             void pickExe(t, profile.shell).then((p) => p && updateProfile({ shell: p }))
                           }
                         >
-                          Gözat
+                          {t("settings.browse")}
                         </button>
                       </div>
                     </div>
@@ -638,7 +699,7 @@ export function SettingsDialog() {
                             void pickFolder(t, profile.cwd).then((p) => p && updateProfile({ cwd: p }))
                           }
                         >
-                          Gözat
+                          {t("settings.browse")}
                         </button>
                       </div>
                     </div>
@@ -700,7 +761,7 @@ export function SettingsDialog() {
                 ))}
               </div>
 
-              <div>
+              <div className="settings-form">
                 {!group && <div className="hint">{t("settings.pickGroup")}</div>}
                 {group && (
                   <>
@@ -758,7 +819,7 @@ export function SettingsDialog() {
                             )
                           }
                         >
-                          Gözat
+                          {t("settings.browse")}
                         </button>
                       </div>
                     </div>
@@ -884,6 +945,7 @@ export function SettingsDialog() {
               </div>
             </>
           )}
+          </div>
         </div>
 
         <div className="modal-foot">

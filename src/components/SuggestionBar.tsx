@@ -1,4 +1,5 @@
 import { useT } from "../lib/i18n";
+import { ChevronIcon } from "./Icons";
 import { useStore } from "../store/useStore";
 
 /**
@@ -31,6 +32,11 @@ export function SuggestionBar() {
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => useStore.getState().acceptSuggestionAt(index)}
           >
+            {/* İşaret her satırda çiziliyor, yalnızca seçili olanda görünüyor:
+                yalnızca seçilide çizmek satırları yatay olarak kaydırırdı. */}
+            <span className="suggest-mark" aria-hidden="true">
+              <ChevronIcon open={false} size={9} />
+            </span>
             {/* Yazdığınız kısım vurgusuz, önerinin devamı vurgulu: "bunu
                 yazdınız, şu eklenecek" ayrımı görünsün. */}
             <span className="suggest-typed">{item.slice(0, suggest.input.length)}</span>

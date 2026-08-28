@@ -21,7 +21,7 @@ küçük bir işaretle belirtilir; boş bırakmak adı sıfırlar, başlık yeni
 klasör/kabuk adından türetilir. Aynı işlem kenar çubuğundaki sekme satırında da
 geçerli. Gruplar da aynı şekilde adlandırılıyor.
 
-**Grup düzeni.** Kenar çubuğunun başlığındaki **Tümünü Kapat** / **Tümünü Aç**
+**Grup düzeni.** Kenar çubuğunun başlığındaki **Grupları Daralt** / **Grupları Aç**
 düğmesi bütün grupları tek tuşla toplar veya açar (biri bile açıksa hepsi
 kapanır, hepsi kapalıysa hepsi açılır). Aynı eylem grup sağ tık menüsünde de
 var. Gruplar favori işaretlenebilir (sağ tık → *Favori Gruba Ekle* ya da
@@ -29,6 +29,11 @@ satırdaki yıldız) ve yıldız süzgeciyle yalnızca favoriler listelenir — 
 grupla çalışırken
 listeyi kısaltmak için. Süzgeç açıkken **etkin grup favori olmasa da listede
 kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz.
+
+**Menüler.** Sağ tık menülerinde uzun listeler alt menüde açılıyor: on beş
+grubu olan bir kullanıcıda "Gruba taşı" altındaki düz liste menüyü uzatıp
+"Sekmeyi kapat"ı ekranın dışına itiyordu. Alt menü sağda yer yoksa sola
+açılıyor.
 
 **Sürükle-bırak.** Sekmeler hem sekme çubuğunda hem kenar çubuğunda
 sürüklenerek yeniden sıralanır. Kenar çubuğunda bir sekmeyi başka bir grubun
@@ -135,7 +140,11 @@ bağlantı yok. Çok yoğun çıktı üreten işlerde ayardan kapatılabilir.
 İki bağımsız kaynak var:
 
 *Uygulamanın kendi geçmişi (her kabukta).* Yazdıkça istemin altında bir liste
-açılır: **↑↓** seçer, **→** kabul eder, **Esc** kapatır. Liste yalnızca en az
+açılır: **↑↓** seçer, **→** kabul eder, **Esc** kapatır. Seçili öneri üç ayrı
+işaretle belli oluyor — işaret oku, arka plan tonu ve metnin parlaklaşması;
+önceki hâlinde seçili ve seçili olmayan satırların en dikkat çeken kısmı aynı
+renk ve aynı kalınlıktaydı, yani "hangisini seçtim" sorusunun görsel cevabı
+yoktu. Liste yalnızca en az
 iki karakter yazıldığında, eşleşme varken ve imleç satır sonundayken açılıyor —
 bu üç koşul özelliğin güvenliği: boş satırda liste kapalı olduğu için ok tuşları
 kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıyor;
@@ -386,6 +395,51 @@ Gruplarda *birleştir*, gelen grupları mevcutların yanına ekler; ad çakış�
 
 ---
 
+## Ayarlar penceresi
+
+Dokuz bölüm, dikey gezinme: **Genel** (dil, görünüm kipi), **Görünüm** (tema,
+yazı tipi, imleç), **Terminal** (kopyala/yapıştır, bağlantılar, komut önerisi),
+**Oturum** (devamlılık, sekme kapatma onayı), **Geçmiş**, **Profiller**,
+**Gruplar**, **Kısayollar**, **Hakkında**.
+
+Pencere bu hâline üç ölçülmüş kusurdan geçerek geldi:
+
+- **Altı bölüm yatay bir şeritteydi** ve iki bölüm birbiriyle ilgisiz ayarları
+  taşıyacak kadar büyümüştü: dil "Görünüm" altındaydı, kopyala/yapıştır ile
+  sekme kapatma onayı aynı "Terminal" başlığını paylaşıyordu ve **aynı başlık
+  iki ayrı bölümde** geçiyordu. Tek bir bölümün içeriği 776px, görünür alan
+  461px'ti. Şimdi en uzun bölüm 564px ve dokuz bölümün altısı kaydırmasız
+  sığıyor.
+- **İlgili metinler dört ayrı sol kenardaydı**: bölüm ipuçları 14px, alan
+  etiketleri 215px, onay kutusu etiketleri 244px, denetimler 415px. İpucunun
+  bazı yerlerde alanın içinde, bazı yerlerde bölümün doğrudan çocuğu olması
+  hizalamayı rastgele bırakıyordu. Şimdi bölüm de aynı ızgarayı taşıyor: iki
+  kenar kaldı, etiketler ve denetimler.
+- **Pencere içeriğe göre büyüyüp küçülüyordu** (379px ile 590px arası), bölüm
+  değiştirmek görsel bir zıplama üretiyordu. Gövde artık sabit yükseklikte.
+
+## Düğmeler
+
+Üç kademe: sessiz (varsayılan), çerçeveli ve dolgulu. Bir kutuda yalnızca bir
+dolgulu düğme var — dolgu "burada devam et" demek, ikisi olunca hiçbiri demiyor.
+Yıkıcı birincil eylem (onay penceresindeki *Kapat* / *Sil*) dolgulu ve kırmızı.
+
+Dolgunun üzerindeki metin rengi CSS'te sabitlenemiyor: vurgu rengi temaya göre
+açık ya da koyu olabiliyor. Karşıtlık hesabıyla siyah/beyaz seçilip tema
+uygulanırken bir değişkene yazılıyor (`--accent-fg`, `--err-fg`). Önceki hâli
+`color-mix(accent 12%, #000)` idi — koyu vurgu renginde koyu üstüne koyu.
+
+Odak halkası iki katmanlı: iç katman yüzey renginde bir ayırıcı çiziyor. Tek
+katmanlı vurgu renkli bir halka, vurgu renkli **dolgunun** üzerinde
+kayboluyordu — halka ile dolgu aynı renk.
+
+Durum renkleri (kırmızı/yeşil) terminal paletinden geliyor ama arayüz
+yüzeyinde de kullanılıyor; ikisi farklı zemin. Ölçüm: Windows Terminal
+temasında kırmızı metinli düğme **2.87** karşıtlık, okunmuyordu. Aynı renkler
+artık arayüz yüzeyine göre de düzeltiliyor — en kötü değer 4.56, hepsi WCAG AA.
+
+---
+
 ## Klavye kısayolları
 
 Hepsi Ayarlar → Kısayollar altından değiştirilebilir ve ayarlarla birlikte
@@ -412,8 +466,8 @@ dışa aktarılır.
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Yazıyı büyült / küçült / sıfırla |
 
 Kenar çubuğu başlığındaki üç düğme sırayla: yıldız favori grup süzgecini açıp
-kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Tümünü Kapat** /
-**Tümünü Aç**, artı yeni grup ekler. Sekme çubuğunun sağındaki iki düğme sekme /
+kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Grupları Daralt** /
+**Grupları Aç**, artı yeni grup ekler. Sekme çubuğunun sağındaki iki düğme sekme /
 bölme görünümünü seçer.
 
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
@@ -534,7 +588,7 @@ bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
 npm test
 ```
 
-- **Arayüz (321 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
+- **Arayüz (367 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
   simetrik olmak zorunda), base64 çözücü (UTF-8 dışı baytlar dahil), kısayol
   eşleştirme, biçimlendirme, bulanık arama, sekme etiketi mantığı, sekme kilidi
   kuralları, sıralama/sürükle-bırak indeks matematiği, grup görünürlük süzgeci,
@@ -568,6 +622,19 @@ npm test
   - **Sözlük hijyeni** — kullanılmayan anahtar bırakılmıyor (bu test yazıldığında
     sekiz ölü anahtar buldu) ve çoğul kökleri gerçekten `tp()` ile çağrılıyor.
   - **Tauri yapılandırması** — `dragDropEnabled` kapalı, CSP `script-src 'self'`.
+  - **Sabit kodlanmış metin taraması** — yorumlar ve `{...}` ifadeleri
+    çıkarıldıktan sonra kalan JSX metni ile `placeholder`/`title`/`label`
+    değerleri taranıyor; iki sözcükten uzun olanlar sözlüğe taşınmamış sayılıyor.
+    Bu test bir kez ödenmiş bedelden geliyor: elle `grep` ile tararken dört
+    metni kaçırdım, hepsi arada `{}` ya da satır sonu olduğu için.
+  - **Ayarlar penceresi** — dokuz bölüm, gezinmenin çalışması, her bölümün en az
+    bir başlığı olması ve **aynı başlığın iki bölümde geçmemesi**.
+  - **Düğme renkleri** — 4 tema için dolgulu birincil, dolgulu yıkıcı, sessiz
+    kırmızı, yeşil rozet ve çerçeveli düğme ≥ 4.5 karşıtlık; odak halkasının
+    iki katmanlı olması.
+  - **Bağlam menüsü** — alt menünün üzerine gelince/tıklayınca açılması, başka
+    satıra geçince kapanması, alt menüden seçimin TÜM menüyü kapatması, devre
+    dışı alt menünün açılmaması.
 - **Rust birim (51 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
   yeniden okuma, bozuk satıra dayanıklılık, sıkıştırma), yol taşınabilirliği
   (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,

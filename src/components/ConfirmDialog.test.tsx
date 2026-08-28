@@ -116,12 +116,25 @@ describe("onay penceresi", () => {
     expect((document.activeElement as HTMLElement)?.textContent).toBe("Kapat");
   });
 
-  it("tehlikeli eylemde onay düğmesi tehlike biçiminde", async () => {
+  it("tehlikeli eylemde onay düğmesi dolgulu ve kırmızı", async () => {
+    // Yıkıcı eylem de BİRİNCİL: pencerenin var olma sebebi o eylem. Sessiz
+    // kırmızı metin "ikincil" gibi durup Enter'ın ne yapacağını
+    // belirsizleştiriyordu.
     const { container } = render(<ConfirmDialog />);
     void useStore.getState().askConfirm({ title: "T", message: "M", danger: true });
     await act(async () => {});
-    expect(container.querySelector(".modal-foot .danger")).not.toBe(null);
-    expect(container.querySelector(".modal-foot .primary")).toBe(null);
+    const ok = container.querySelector(".modal-foot .primary");
+    expect(ok, "onay düğmesi birincil olmalı").not.toBe(null);
+    expect(ok!.classList.contains("destructive"), "yıkıcı biçim eksik").toBe(true);
+  });
+
+  it("yıkıcı olmayan eylemde kırmızı biçim yok", async () => {
+    const { container } = render(<ConfirmDialog />);
+    void useStore.getState().askConfirm({ title: "T", message: "M" });
+    await act(async () => {});
+    const ok = container.querySelector(".modal-foot .primary");
+    expect(ok).not.toBe(null);
+    expect(ok!.classList.contains("destructive")).toBe(false);
   });
 
   it("özel düğme etiketleri kullanılıyor", async () => {

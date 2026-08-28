@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { contrastRatio } from "../lib/contrast";
+import { ensureContrast, onColor } from "../lib/contrast";
 import { THEMES, getTheme } from "../lib/themes";
 
 /**
@@ -157,13 +158,35 @@ describe("öneri listesi okunabilirliği", () => {
 
   it("seçili satırın metni vurgu rengi DEĞİL", () => {
     // Vurgu rengini vurgu tonlu arka plana koymak hatanın kendisiydi.
-    const body = CSS.slice(CSS.indexOf(".suggest-rest {"));
-    const rule = body.slice(0, body.indexOf("}"));
-    expect(rule).toMatch(/color:\s*var\(--text\)/);
+    const at = CSS.indexOf(".suggest-row.on .suggest-rest {");
+    expect(at, "seçili satırın metin kuralı bulunamadı").toBeGreaterThan(-1);
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule, "seçili satırın metni ana metin renginde olmalı").toMatch(
+      /color:\s*var\(--text\)/,
+    );
     expect(
       CSS,
       "seçili satır için accent renkli metin kuralı geri gelmiş",
     ).not.toMatch(/\.suggest-row\.on\s+\.suggest-rest\s*\{[^}]*var\(--accent\)/);
+  });
+
+  it("seçili olmayan satırın metni soluk", () => {
+    // Seçimin metnin kendisinden de okunması için: eskiden ikisi de aynı
+    // renk ve aynı kalınlıktaydı, "hangisini seçtim" görsel olarak
+    // yanıtlanmıyordu.
+    const at = CSS.indexOf(".suggest-rest {");
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule).toMatch(/color:\s*var\(--text-dim\)/);
+  });
+
+  it("seçili satırda üç ayrı işaret var", () => {
+    // Arka plan tonu, sol kenar çizgisi ve işaret oku. Biri kaldırılırsa
+    // seçim yeniden belirsizleşir.
+    const at = CSS.indexOf(".suggest-row.on {");
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule, "arka plan tonu").toMatch(/background:\s*color-mix/);
+    expect(rule, "sol kenar çizgisi").toMatch(/border-left-color:\s*var\(--accent\)/);
+    expect(CSS, "işaret oku kuralı").toMatch(/\.suggest-row\.on\s+\.suggest-mark\s*\{[^}]*visible/);
   });
 
   for (const meta of THEMES) {
@@ -180,4 +203,72 @@ describe("öneri listesi okunabilirliği", () => {
       expect(ratio, `karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(3.0);
     });
   }
+});
+
+/**
+ * Düğme renkleri.
+ *
+ * Dolgulu düğmenin metin rengi CSS'te sabitlenemiyor: vurgu rengi temaya göre
+ * açık ya da koyu olabiliyor. Eski hâli `color-mix(accent 12%, #000)` idi —
+ * koyu vurgu renginde koyu üstüne koyu. Artık `onColor()` karşıtlığa bakıp
+ * siyah/beyaz seçiyor ve tema uygulanırken bir değişkene yazılıyor.
+ *
+ * Durum renkleri (kırmızı/yeşil) terminal paletinden geliyor ama ARAYÜZ
+ * yüzeyinde de kullanılıyor. Ölçülen sonuç: Windows Terminal temasında kırmızı
+ * metinli düğme 2.87 karşıtlık — okunmuyordu. `ensureContrast` artık aynı
+ * renkleri arayüz yüzeyine göre de düzeltiyor.
+ */
+describe("düğme renkleri", () => {
+  const MIN = 4.5;
+
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+    const surface = theme.ui.surfaceAlt;
+    // applyThemeToDocument ile AYNI hesap.
+    const accent = ensureContrast(theme.ui.accent, surface, MIN);
+    const err = ensureContrast(theme.xterm.red ?? "#ff7b72", surface, MIN);
+    const ok = ensureContrast(theme.xterm.green ?? "#3fb950", surface, MIN);
+
+    it(`${meta.id}: dolgulu birincil düğme okunabilir`, () => {
+      const ratio = contrastRatio(onColor(accent), accent);
+      expect(ratio, `dolgu ${accent}, metin ${onColor(accent)}, karşıtlık ${ratio.toFixed(2)}`)
+        .toBeGreaterThanOrEqual(MIN);
+    });
+
+    it(`${meta.id}: dolgulu yıkıcı düğme okunabilir`, () => {
+      const ratio = contrastRatio(onColor(err), err);
+      expect(ratio, `dolgu ${err}, metin ${onColor(err)}, karşıtlık ${ratio.toFixed(2)}`)
+        .toBeGreaterThanOrEqual(MIN);
+    });
+
+    it(`${meta.id}: sessiz kırmızı düğme okunabilir`, () => {
+      // `.danger` yüzey üzerinde kırmızı METİN; panel altlıklarında yan yana
+      // birkaç tane olabildiği için dolgu yerine metin kullanılıyor.
+      const ratio = contrastRatio(err, surface);
+      expect(ratio, `metin ${err} yüzey ${surface}, karşıtlık ${ratio.toFixed(2)}`)
+        .toBeGreaterThanOrEqual(MIN);
+    });
+
+    it(`${meta.id}: yeşil durum rozeti okunabilir`, () => {
+      const ratio = contrastRatio(ok, surface);
+      expect(ratio, `karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(MIN);
+    });
+
+    it(`${meta.id}: çerçeveli düğme okunabilir`, () => {
+      const ratio = contrastRatio(theme.ui.text, surface);
+      expect(ratio, `karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(MIN);
+    });
+  }
+
+  it("odak halkası iki katmanlı", () => {
+    // Tek katmanlı vurgu renkli halka, vurgu renkli DOLGUNUN üzerinde
+    // kayboluyordu (halka ile dolgu aynı renk). İç katman yüzey renginde bir
+    // ayırıcı çiziyor.
+    const at = CSS.indexOf("button:focus-visible {");
+    expect(at, "odak kuralı bulunamadı").toBeGreaterThan(-1);
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule).toMatch(/box-shadow:/);
+    expect(rule, "iç ayırıcı katman eksik").toMatch(/var\(--surface-alt\)/);
+    expect(rule).toMatch(/var\(--accent\)/);
+  });
 });

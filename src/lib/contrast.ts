@@ -88,6 +88,20 @@ function mix(color: Rgb, target: Rgb, amount: number): Rgb {
  * yön arka plandan uzaklaşıyorsa. Açık zeminde koyulaşır, koyu zeminde açılır -
  * yani rengin kimliği kalır, sadece okunur hâle gelir.
  */
+/**
+ * Dolgu renginin üzerine yazılacak metin rengi: siyah mı beyaz mı.
+ *
+ * Vurgu rengi temaya göre değişiyor (açık mavi, koyu mavi, mor…) ve dolgulu
+ * bir düğmenin metnini sabit bir renge bağlamak bazı temalarda okunmaz
+ * bırakıyor. Hangisi daha yüksek karşıtlık veriyorsa o seçiliyor — CSS bu
+ * hesabı yapamadığı için tema uygulanırken bir değişkene yazılıyor.
+ */
+export function onColor(background: string): string {
+  const black = "#0b0f14";
+  const white = "#ffffff";
+  return contrastRatio(white, background) >= contrastRatio(black, background) ? white : black;
+}
+
 export function ensureContrast(color: string, background: string, minRatio: number): string {
   const rgb = parseHex(color);
   if (!rgb) return color;
