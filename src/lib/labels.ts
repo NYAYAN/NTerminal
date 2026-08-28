@@ -1,4 +1,5 @@
 import { baseName, shortenPath } from "./format";
+import { t } from "./i18n";
 import type { Profile, ShellKind, TabState } from "../types";
 
 /**
@@ -16,7 +17,7 @@ export function tabLabel(tab: TabState): string {
   // Kabuk başlığı tam exe yolu olabiliyor (PowerShell böyle yapıyor);
   // o durumda sadece dosya adını göster.
   if (title) return /[\\/]/.test(title) ? baseName(title) : title;
-  return "sekme";
+  return t("tab.fallbackName");
 }
 
 /** Kullanıcı bu sekmeye elle ad verdi mi? Arayüzde küçük bir işaretle gösteriliyor. */
@@ -53,11 +54,7 @@ export function tabTooltip(tab: TabState, profile: Profile | undefined): string 
   const lines = [tabLabel(tab)];
   if (profile) lines.push(profile.name);
   if (tab.cwd) lines.push(tab.cwd);
-  if (tab.lastCommand) lines.push(`son komut: ${tab.lastCommand}`);
-  lines.push(
-    hasCustomTitle(tab)
-      ? "elle adlandırıldı — çift tıkla değiştir, boş bırak sıfırla"
-      : "çift tıkla ad ver",
-  );
+  if (tab.lastCommand) lines.push(t("tab.lastCommand", { command: tab.lastCommand }));
+  lines.push(t(hasCustomTitle(tab) ? "tab.renamedHint" : "tab.nameHint"));
   return lines.join("\n");
 }

@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/ipc";
 import { hasCustomTitle, shellBadge, tabLabel, tabTooltip } from "../lib/labels";
+import { useT } from "../lib/i18n";
+import { prettyCombo } from "../lib/keys";
 import { dropIndex, isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
 import type { TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
+import { ChevronIcon, PanesViewIcon, PlusIcon, TabsViewIcon } from "./Icons";
 
 export function TabBar() {
   const groups = useStore((s) => s.groups);
@@ -14,8 +17,14 @@ export function TabBar() {
   const exited = useStore((s) => s.exited);
   const profiles = useStore((s) => s.settings.profiles);
   const renamingTabId = useStore((s) => s.ui.renamingTabId);
+  const viewMode = useStore((s) => s.settings.appearance.viewMode);
+  const keybindings = useStore((s) => s.settings.keybindings);
   const setUi = useStore((s) => s.setUi);
   const store = useStore.getState;
+
+  const t = useT();
+  const key = (action: string) => prettyCombo(keybindings[action] ?? "");
+  const viewShortcut = key("toggleViewMode");
 
   const [draft, setDraft] = useState("");
   const [dragTabId, setDragTabId] = useState<string | null>(null);
@@ -69,21 +78,21 @@ export function TabBar() {
   };
 
   const profileMenu = (): MenuEntry[] => [
-    { kind: "header", label: "Yeni sekme" },
+    { kind: "header", label: t("menu.newTab") },
     ...profiles.map((profile) => ({
       kind: "item" as const,
       label: profile.name,
-      hint: profile.unavailable ? "yok" : undefined,
+      hint: profile.unavailable ? t("common.missing") : undefined,
       run: () => {
         if (profile.unavailable) {
-          store().toast(`${profile.name} bu makinede kullanilamiyor`, "err");
+          store().toast(t("tab.profileUnavailable", { name: profile.name }), "err");
           return;
         }
         store().addTab({ profileId: profile.id });
       },
     })),
     { kind: "separator" },
-    { kind: "item", label: "Profilleri duzenle...", run: () => setUi({ settingsOpen: true }) },
+    { kind: "item", label: t("menu.editProfiles"), run: () => setUi({ settingsOpen: true }) },
   ];
 
   const entriesFor = (tab: TabState, index: number): MenuEntry[] => {
@@ -91,15 +100,15 @@ export function TabBar() {
     return [
       {
         kind: "item",
-        label: hasCustomTitle(tab) ? "Adı değiştir…" : "Ad ver…",
-        hint: "çift tık",
+        label: t(hasCustomTitle(tab) ? "menu.rename" : "menu.giveName"),
+        hint: t("common.doubleClick"),
         run: () => beginRename(tab),
       },
       ...(hasCustomTitle(tab)
         ? [
             {
               kind: "item" as const,
-              label: "Adı sıfırla",
+              label: t("menu.resetName"),
               run: () => store().updateTab(tab.id, { customTitle: null }),
             },
           ]
@@ -107,16 +116,16 @@ export function TabBar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: isLocked(tab) ? "Kilit Kapat" : "Kilit Aç",
+        label: t(isLocked(tab) ? "menu.unlock" : "menu.lock"),
         run: () => store().toggleTabLock(tab.id),
       },
       { kind: "separator" },
-      { kind: "item", label: "Kabuğu yeniden başlat", run: () => void store().restartTab(tab.id) },
+      { kind: "item", label: t("common.restartShell"), run: () => void store().restartTab(tab.id) },
       ...(tab.cwd
         ? [
             {
               kind: "item" as const,
-              label: "Klasörü Gezgin'de aç",
+              label: t("common.revealFolder"),
               run: () => void api.revealInExplorer(tab.cwd!).catch(() => {}),
             },
           ]
@@ -124,20 +133,20 @@ export function TabBar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: "Sola taşı",
+        label: t("common.moveLeft"),
         disabled: index === 0,
         run: () => store().moveTab(tab.id, -1),
       },
       {
         kind: "item",
-        label: "Sağa taşı",
+        label: t("common.moveRight"),
         disabled: index === group.tabs.length - 1,
         run: () => store().moveTab(tab.id, 1),
       },
       ...(otherGroups.length > 0
         ? [
             { kind: "separator" as const },
-            { kind: "header" as const, label: "Gruba taşı" },
+            { kind: "header" as const, label: t("menu.moveToGroup") },
             ...otherGroups.map((g) => ({
               kind: "item" as const,
               label: g.name,
@@ -148,15 +157,15 @@ export function TabBar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: isLocked(tab) ? "Sekmeyi kapat (kilitli)" : "Sekmeyi kapat",
-        hint: "Ctrl+W",
+        label: t(isLocked(tab) ? "menu.closeTabLocked" : "menu.closeTab"),
+        hint: key("closeTab"),
         danger: true,
         disabled: isLocked(tab),
         run: () => void store().closeTab(tab.id),
       },
       {
         kind: "item",
-        label: "Diğerlerini kapat",
+        label: t("menu.closeOthers"),
         disabled: group.tabs.length < 2,
         danger: true,
         // Kilitli sekmeler atlanıyor; kaç tanesinin atlandığı bildiriliyor.
@@ -166,7 +175,9 @@ export function TabBar() {
   };
 
   return (
-    <div className="tabbar">
+    // Etkin grubun rengi sekme cubugunun altindaki cizgiye gidiyor: kenar
+    // cubugu kapaliyken de hangi grupta oldugunuz gorunuyor.
+    <div className="tabbar" style={{ ["--group-color" as string]: group.color ?? "#6e7681" }}>
       <div className="tabbar-strip" ref={stripRef} onDragEnd={endDrag}>
         {group.tabs.map((tab, index) => {
           const isActive = group.activeTabId === tab.id;
@@ -220,7 +231,7 @@ export function TabBar() {
                   className="tab-rename"
                   autoFocus
                   value={draft}
-                  placeholder="sekme adı"
+                  placeholder={t("tab.namePlaceholder")}
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={() => commitRename(tab.id)}
                   onKeyDown={(e) => {
@@ -235,35 +246,35 @@ export function TabBar() {
                 <span className="tab-label">
                   {tabLabel(tab)}
                   {hasCustomTitle(tab) && (
-                    <span className="tab-pin" title="elle adlandırıldı">
+                    <span className="tab-pin" title={t("tab.renamed")}>
                       ·
                     </span>
                   )}
                 </span>
               )}
 
-              {running[tab.id] && <span className="tab-dot busy" title="komut çalışıyor" />}
+              {running[tab.id] && <span className="tab-dot busy" title={t("tab.running")} />}
               {exited[tab.id] && !running[tab.id] && (
-                <span className="tab-dot dead" title="kabuk kapandı" />
+                <span className="tab-dot dead" title={t("tab.exited")} />
               )}
               {session?.integration === false && !exited[tab.id] && (
-                <span className="tab-dot warn" title="kabuk entegrasyonu yok" />
+                <span className="tab-dot warn" title={t("tab.noIntegration")} />
               )}
 
               {/* Kilit gostergesi bilincli olarak TIKLANAMAZ.
                   Kapatma dugmesiyle ayni yerde duruyor; tiklanabilir olsa
                   kullanici carpi sanip basiyor, kilit kalkiyor ve ikinci
                   tikta sekme kapaniyordu - tam olarak onlemek istedigimiz
-                  kaza. Kilit yalnizca sag tik > Kilit Kapat ya da
+                  kaza. Kilit yalnizca sag tik > Kilidi Ac ya da
                   Ctrl+Shift+L ile kaldirilabilir. */}
               {isLocked(tab) ? (
-                <span className="tab-lock" title="Kilitli - sag tik > Kilit Kapat (ya da Ctrl+Shift+L)">
+                <span className="tab-lock" title={t("tab.lockedTitle", { keys: key("toggleLock") })}>
                   🔒
                 </span>
               ) : (
                 <button
                   className="tab-close"
-                  title="Kapat (Ctrl+W)"
+                  title={t("tab.closeTitle", { keys: key("closeTab") })}
                   onClick={(e) => {
                     e.stopPropagation();
                     void store().closeTab(tab.id);
@@ -278,12 +289,16 @@ export function TabBar() {
       </div>
 
       <div className="tabbar-actions">
-        <button className="icon-btn" title="Yeni sekme (Ctrl+T)" onClick={() => store().addTab()}>
-          +
+        <button
+          className="icon-btn"
+          title={t("tab.newTabTitle", { keys: key("newTab") })}
+          onClick={() => store().addTab()}
+        >
+          <PlusIcon size={13} />
         </button>
         <button
           className="icon-btn"
-          title="Profil secerek yeni sekme"
+          title={t("tab.newWithProfile")}
           onClick={(e) => {
             // Menuyu dugmenin altina konumluyoruz; ContextMenu fixed oldugu
             // icin sekme cubugunun tasma kirpmasindan etkilenmiyor.
@@ -291,8 +306,31 @@ export function TabBar() {
             menu.openAt(rect.right - 8, rect.bottom + 4, profileMenu());
           }}
         >
-          &#8964;
+          <ChevronIcon open size={13} />
         </button>
+
+        <span className="tabbar-sep" />
+
+        {/* Görünüm kipi. İki durumlu bir düğme yerine iki ayrı düğme:
+            hangisinin etkin olduğu tıklamadan önce görünüyor. */}
+        <div className="seg-mini" role="group" aria-label={t("view.label")}>
+          <button
+            className={viewMode === "tabs" ? "on" : ""}
+            title={t("view.tabsTitle", { keys: viewShortcut })}
+            aria-pressed={viewMode === "tabs"}
+            onClick={() => void store().setViewMode("tabs")}
+          >
+            <TabsViewIcon size={13} />
+          </button>
+          <button
+            className={viewMode === "panes" ? "on" : ""}
+            title={t("view.panesTitle", { keys: viewShortcut })}
+            aria-pressed={viewMode === "panes"}
+            onClick={() => void store().setViewMode("panes")}
+          >
+            <PanesViewIcon size={13} />
+          </button>
+        </div>
       </div>
 
       {menu.state && <ContextMenu state={menu.state} onClose={menu.close} />}

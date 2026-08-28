@@ -93,6 +93,31 @@ export function StarIcon({ filled = true, size = 13, className }: IconProps & { 
   );
 }
 
+/**
+ * Sekme görünümü: üstte tek sekmesi olan bir pano — aynı anda tek terminal.
+ */
+export function TabsViewIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 5.5 H13.5 V13 H2.5 Z" />
+      <path d="M2.5 5.5 V3.5 H7.5 V5.5" />
+    </Svg>
+  );
+}
+
+/**
+ * Bölme görünümü: bölünmüş pano — grubun sekmeleri aynı ekranda.
+ */
+export function PanesViewIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 3.5 H13.5 V12.5 H2.5 Z" />
+      <path d="M8 3.5 V12.5" />
+      <path d="M8 8 H13.5" />
+    </Svg>
+  );
+}
+
 /** Artı — yeni sekme / yeni grup. */
 export function PlusIcon(props: IconProps) {
   return (

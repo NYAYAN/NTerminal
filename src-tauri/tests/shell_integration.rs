@@ -51,6 +51,40 @@ fn find_git_bash() -> Option<PathBuf> {
     None
 }
 
+/// SGR (renk) dizilerini atar.
+///
+/// Bu yardimcinin gerekli olmasi testin kanitladigi seyin ta kendisi: Node
+/// renk destegi gordugu icin `console.log` ciktisini kendiliginden renkliyor
+/// (boolean'i sariya boyuyor), dolayisiyla ayristirmadan once temizlemek
+/// gerekiyor.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\u{1b}' {
+            out.push(ch);
+            continue;
+        }
+        // ESC [ ... <son harf>  (CSI dizisi)
+        if chars.peek() == Some(&'[') {
+            chars.next();
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() || c == '~' {
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+fn find_node() -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join("node.exe"))
+        .find(|candidate| candidate.is_file())
+}
+
 fn find_cmd() -> Option<PathBuf> {
     let sysroot = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     let candidate = PathBuf::from(sysroot).join("System32\\cmd.exe");
@@ -539,6 +573,197 @@ fn powershell_bos_enter_tekrar_kayit_uretmez() {
         reports, 0,
         "bos Enter {reports} komut bildirdi, 0 olmali. Son cikti:
 {}",
+        pty.tail()
+    );
+}
+
+/// Renk cocuk surece "renk uretebilirsin" diye bildirilmek zorunda.
+///
+/// `ng serve`, `dotnet run`, `vite` gibi araclar rengi KENDILERI uretiyor;
+/// bizim isimiz ANSI dizilerini gecirmek degil yalnizca - once o araclarin
+/// renk uretmeye karar vermesi gerekiyor. Node tabanli araclar (Angular CLI,
+/// Vite, chalk, supports-color) karari `process.stdout.getColorDepth()` ile
+/// veriyor; o da (1) stdout'un gercek bir TTY olmasina, (2) COLORTERM'e,
+/// (3) TERM'e bakiyor.
+///
+/// Uc kosuldan biri bozulursa cikti tek renk geliyor ve bu arayuzden hata
+/// gibi gorunmuyor - kullanici "renklendirme yapmiyoruz" diye bildiriyor,
+/// sebebi gorunmuyor. O yuzden gercek ConPTY icinde gercek Node'a soruyoruz.
+#[test]
+fn renk_destegi_cocuk_surece_ulasiyor() {
+    let Some(powershell) = find_powershell() else {
+        eprintln!("powershell.exe yok, test atlandi");
+        return;
+    };
+    if find_node().is_none() {
+        eprintln!("node.exe PATH'te yok, test atlandi");
+        return;
+    }
+
+    let mut cmd = CommandBuilder::new(&powershell);
+    cmd.arg("-NoLogo");
+    cmd.arg("-NoExit");
+    cmd.arg("-File");
+    cmd.arg(script_path("nterminal.ps1"));
+    // Uygulamanin gercekte gonderdigi degerler; ayni sabitten geliyor ki
+    // pty.rs'te degistirilirse test de onunla birlikte degissin.
+    for (key, value) in nterminal_lib::pty::TERMINAL_ENV {
+        cmd.env(key, value);
+    }
+    cmd.env("NTERMINAL", "1");
+    // NO_COLOR / NODE_DISABLE_COLORS her seyi kilitliyor: Node bu degiskenleri
+    // gorunce TERM ve COLORTERM'e HIC bakmadan renk derinligini 1 dondururuyor.
+    // Testi calistiran ortamda ayarli olabiliyorlar - olcum ilk denemede tam
+    // bu yuzden 1 cikti ve test uygulama hakkinda yanlis bilgi verdi.
+    // Bilincli olarak temizliyoruz: burada olculen sey UYGULAMANIN cocuga ne
+    // bildirdigi, testi calistiran kabugun tercihi degil.
+    //
+    // Uygulamanin kendisi bunlari temizlemiyor: kullanici NO_COLOR ayarladiysa
+    // bunu kastediyor demektir.
+    cmd.env_remove("NO_COLOR");
+    cmd.env_remove("NODE_DISABLE_COLORS");
+    cmd.env_remove("FORCE_COLOR");
+
+    let mut pty = PtyHarness::spawn(cmd);
+    assert!(
+        pty.sync_prompt(Duration::from_secs(40)),
+        "istem hazir olmadi. Son cikti:\n{}",
+        pty.tail()
+    );
+
+    // Isaret bilincli olarak parcali yaziliyor ("NT" + "COLOR"): kabuk yazilan
+    // komutu ekrana yansitiyor, tek parca olsa yansimayi cikti sanardik.
+    pty.send_line(
+        "node -e \"const s=process.stdout; \
+console.log('NT'+'COLOR', !!s.isTTY, s.getColorDepth ? s.getColorDepth() : 0, \
+process.env.TERM, process.env.COLORTERM)\"",
+    );
+
+    assert!(
+        pty.wait_for("NTCOLOR ", Duration::from_secs(40)),
+        "node cikti vermedi. Son cikti:\n{}",
+        pty.tail()
+    );
+
+    let clean = strip_ansi(&pty.buffer);
+    let at = clean.rfind("NTCOLOR ").expect("isaret");
+    let rest = &clean[at + "NTCOLOR ".len()..];
+    let line = rest.lines().next().unwrap_or("").trim();
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    assert!(
+        fields.len() >= 4,
+        "beklenmeyen cikti bicimi: {line:?}\nSon cikti:\n{}",
+        pty.tail()
+    );
+
+    let is_tty = fields[0];
+    let depth: u32 = fields[1].parse().unwrap_or(0);
+    let term = fields[2];
+    let colorterm = fields[3];
+
+    assert_eq!(
+        is_tty, "true",
+        "cocuk surec stdout'u TTY gormuyor - hicbir arac renk uretmez. Cikti: {line:?}"
+    );
+    // 1 = renk yok, 4 = 16 renk, 8 = 256 renk, 24 = truecolor.
+    assert!(
+        depth >= 8,
+        "renk derinligi {depth} - arac 256 renk bile kullanamaz. Cikti: {line:?}"
+    );
+    assert_eq!(term, "xterm-256color", "TERM cocuga ulasmamis: {line:?}");
+    assert_eq!(colorterm, "truecolor", "COLORTERM cocuga ulasmamis: {line:?}");
+}
+
+/// Komut onerisi istendiginde entegrasyon KIRILMAMALI.
+///
+/// PSReadLine tahmini yalnizca 2.2+ surumunde var; Windows PowerShell 5.1 ile
+/// gelen 2.0 `Set-PSReadLineOption -PredictionSource` parametresini tanimiyor.
+/// Betik bunu yakalamazsa yuklenirken hata verir ve entegrasyonun TAMAMI
+/// (komut gecmisi, cikis kodu, dizin bildirimi) sessizce olur - kullanici
+/// yalnizca "gecmis bos" diye gorur, sebebini gormez.
+///
+/// Bu yuzden testi tahmini DESTEKLEMEYEN kabukla calistiriyoruz: burada
+/// onemli olan onerinin gorunmesi degil, istegin zarar vermemesi.
+#[test]
+fn oneri_istegi_eski_psreadline_ile_entegrasyonu_bozmuyor() {
+    let Some(powershell) = find_powershell() else {
+        eprintln!("powershell.exe yok, test atlandi");
+        return;
+    };
+
+    let mut cmd = CommandBuilder::new(&powershell);
+    cmd.arg("-NoLogo");
+    cmd.arg("-NoExit");
+    cmd.arg("-File");
+    cmd.arg(script_path("nterminal.ps1"));
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("NTERMINAL", "1");
+    // Arayuzun varsayilani: liste gorunumu.
+    cmd.env("NTERMINAL_PREDICTION", "list");
+
+    let mut pty = PtyHarness::spawn(cmd);
+
+    // Istem isaretleri: entegrasyon ayakta mi?
+    assert!(
+        pty.wait_for("]133;A", Duration::from_secs(40)),
+        "oneri istendiginde OSC 133;A gelmedi - betik yuklenirken hata vermis olabilir. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert!(
+        pty.wait_for("]133;B", Duration::from_secs(20)),
+        "oneri istendiginde OSC 133;B gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+
+    // Durum arayuze bildirilmis olmali. Hangi deger geldigi makineye bagli
+    // (PSReadLine 2.2+ varsa 'list'/'inline', yoksa 'unsupported'); onemli olan
+    // bildirimin YAPILMASI - destek yokken arayuz ne yapilacagini soyluyor.
+    //
+    // Bu kontrol sync_prompt'tan ONCE: bildirim betik yuklenirken bir kez
+    // gidiyor, sync_prompt ise tamponu temizliyor. Ilk denemede kontrol
+    // sonraya kalmisti ve bildirim "gelmedi" gorunuyordu.
+    assert!(
+        pty.wait_for("]633;P;Prediction=", Duration::from_secs(20)),
+        "oneri durumu bildirilmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+
+    let early = strip_ansi(&pty.buffer);
+    let at = early.find("]633;P;Prediction=").unwrap() + "]633;P;Prediction=".len();
+    let state: String = early[at..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    assert!(
+        ["list", "inline", "unsupported"].contains(&state.as_str()),
+        "beklenmeyen oneri durumu: {state:?}"
+    );
+    eprintln!("oneri durumu: {state}");
+
+    // Betikten hata sizmamis olmali; yukleme ciktisina bakiyoruz.
+    for needle in [
+        "PredictionSource",
+        "ParameterBindingException",
+        "CommandNotFoundException",
+    ] {
+        assert!(
+            !early.contains(needle),
+            "betik hata sizdirmis ({needle}). Son cikti:\n{}",
+            pty.tail()
+        );
+    }
+
+    // Komut kaydi da calismaya devam etmeli.
+    assert!(pty.sync_prompt(Duration::from_secs(30)), "istem hazir olmadi");
+    pty.send_line("Write-Output ONERI_TESTI");
+    assert!(
+        pty.wait_for("]633;E;Write-Output ONERI_TESTI", Duration::from_secs(20)),
+        "komut metni bildirilmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert!(
+        pty.wait_for("]133;D;0", Duration::from_secs(20)),
+        "cikis kodu bildirilmedi. Son cikti:\n{}",
         pty.tail()
     );
 }

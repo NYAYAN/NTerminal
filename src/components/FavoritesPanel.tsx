@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { formatWhen, fuzzyScore, shortenPath } from "../lib/format";
+import { tp, tSplit, useT } from "../lib/i18n";
 import { useStore } from "../store/useStore";
 import type { Favorite } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
@@ -35,6 +36,10 @@ function toDraft(favorite: Favorite): DraftForm {
  * kayıtlar.
  */
 export function FavoritesPanel() {
+  const t = useT();
+  // Boş liste ipucundaki "+ Favori" düğme adı cümlenin ortasında; parçaları
+  // çeviriden alıyoruz ki cümle yapısı dile göre değişebilsin.
+  const [emptyBefore, emptyAfter] = tSplit("fav.emptyLine3", "button");
   const favorites = useStore((s) => s.favorites);
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
@@ -68,7 +73,7 @@ export function FavoritesPanel() {
     if (!form) return;
     const command = form.command.trim();
     if (!command) {
-      store().toast("Komut boş olamaz", "err");
+      store().toast(t("fav.commandEmpty"), "err");
       return;
     }
     if (form.id) {
@@ -92,32 +97,42 @@ export function FavoritesPanel() {
   };
 
   const entriesFor = (favorite: Favorite, index: number): MenuEntry[] => [
-    { kind: "item", label: "Çalıştır", hint: "çift tık", run: () => void store().runFavorite(favorite.id, true) },
-    { kind: "item", label: "İstem satırına yaz", hint: "tık", run: () => void store().runFavorite(favorite.id, false) },
-    { kind: "separator" },
-    { kind: "item", label: "Düzenle…", run: () => setForm(toDraft(favorite)) },
     {
       kind: "item",
-      label: "Komutu kopyala",
+      label: t("common.run"),
+      hint: t("common.doubleClick"),
+      run: () => void store().runFavorite(favorite.id, true),
+    },
+    {
+      kind: "item",
+      label: t("menu.insertAtPrompt"),
+      hint: t("common.click"),
+      run: () => void store().runFavorite(favorite.id, false),
+    },
+    { kind: "separator" },
+    { kind: "item", label: t("common.edit"), run: () => setForm(toDraft(favorite)) },
+    {
+      kind: "item",
+      label: t("common.copyCommand"),
       run: () => void navigator.clipboard?.writeText(favorite.command).catch(() => {}),
     },
     { kind: "separator" },
     {
       kind: "item",
-      label: "Yukarı taşı",
+      label: t("common.moveUp"),
       disabled: index === 0,
       run: () => void store().moveFavorite(favorite.id, -1),
     },
     {
       kind: "item",
-      label: "Aşağı taşı",
+      label: t("common.moveDown"),
       disabled: index === favorites.length - 1,
       run: () => void store().moveFavorite(favorite.id, 1),
     },
     { kind: "separator" },
     {
       kind: "item",
-      label: "Favoriden kaldır",
+      label: t("menu.removeFavorite"),
       danger: true,
       run: () => void store().removeFavorite(favorite.id),
     },
@@ -127,7 +142,7 @@ export function FavoritesPanel() {
     <>
       <div className="panel-controls">
         <input
-          placeholder="favorilerde ara…"
+          placeholder={t("fav.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -138,7 +153,7 @@ export function FavoritesPanel() {
             checked={onlyThisGroup}
             onChange={(e) => setOnlyThisGroup(e.target.checked)}
           />
-          <span className="dim">bu grup</span>
+          <span className="dim">{t("fav.thisGroup")}</span>
         </label>
       </div>
 
@@ -147,7 +162,7 @@ export function FavoritesPanel() {
           <input
             autoFocus
             className="mono"
-            placeholder="komut (zorunlu)"
+            placeholder={t("fav.commandPlaceholder")}
             value={form.command}
             onChange={(e) => setForm({ ...form, command: e.target.value })}
             onKeyDown={(e) => {
@@ -157,7 +172,7 @@ export function FavoritesPanel() {
             }}
           />
           <input
-            placeholder="kısa ad (isteğe bağlı)"
+            placeholder={t("fav.labelPlaceholder")}
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
             onKeyDown={(e) => {
@@ -167,14 +182,14 @@ export function FavoritesPanel() {
             }}
           />
           <input
-            placeholder="not (isteğe bağlı)"
+            placeholder={t("fav.notePlaceholder")}
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <input
             className="mono"
-            placeholder="klasör — boşsa etkin sekmenin klasörü"
+            placeholder={t("fav.cwdPlaceholder")}
             value={form.cwd}
             onChange={(e) => setForm({ ...form, cwd: e.target.value })}
             onKeyDown={(e) => e.stopPropagation()}
@@ -183,19 +198,19 @@ export function FavoritesPanel() {
             value={form.groupId}
             onChange={(e) => setForm({ ...form, groupId: e.target.value })}
           >
-            <option value="">Tüm gruplarda görünsün</option>
+            <option value="">{t("fav.allGroups")}</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
-                Yalnızca: {g.name}
+                {t("fav.onlyGroup", { name: g.name })}
               </option>
             ))}
           </select>
           <div className="fav-form-actions">
             <button className="primary" onClick={() => void submit()}>
-              {form.id ? "Kaydet" : "Ekle"}
+              {t(form.id ? "fav.save" : "fav.add")}
             </button>
             <button className="outline" onClick={() => setForm(null)}>
-              Vazgeç
+              {t("common.cancel")}
             </button>
           </div>
         </div>
@@ -206,14 +221,16 @@ export function FavoritesPanel() {
           <div className="hint">
             {favorites.length === 0 ? (
               <>
-                Henüz favori yok.
+                {t("fav.emptyLine1")}
                 <br />
-                Geçmiş listesinde bir komutun yanındaki ☆ işaretine basarak
+                {t("fav.emptyLine2")}
                 <br />
-                ya da aşağıdaki <strong>+ Favori</strong> ile ekleyebilirsiniz.
+                {emptyBefore}
+                <strong>{t("fav.newButton")}</strong>
+                {emptyAfter}
               </>
             ) : (
-              "Bu aramaya uyan favori yok."
+              t("fav.noSearchMatch")
             )}
           </div>
         )}
@@ -225,7 +242,7 @@ export function FavoritesPanel() {
             <div
               key={favorite.id}
               className={selected === favorite.id ? "fav-item sel" : "fav-item"}
-              title={`${favorite.command}\n${favorite.note ?? ""}\nçift tık: çalıştır · tık: istem satırına yaz`}
+              title={[favorite.command, favorite.note ?? "", t("fav.rowHint")].join("\n")}
               onClick={() => {
                 setSelected(favorite.id);
                 void store().runFavorite(favorite.id, false);
@@ -242,7 +259,13 @@ export function FavoritesPanel() {
                   {favorite.cwd && <span className="path">{shortenPath(favorite.cwd, 2)}</span>}
                   {favorite.note && <span>{favorite.note}</span>}
                   {favorite.usedCount > 0 && (
-                    <span title={favorite.lastUsedAt ? `son: ${formatWhen(favorite.lastUsedAt)}` : undefined}>
+                    <span
+                      title={
+                        favorite.lastUsedAt
+                          ? t("fav.lastUsed", { when: formatWhen(favorite.lastUsedAt) })
+                          : undefined
+                      }
+                    >
                       {favorite.usedCount}×
                     </span>
                   )}
@@ -250,7 +273,7 @@ export function FavoritesPanel() {
               </div>
               <button
                 className="icon-btn"
-                title="Çalıştır"
+                title={t("common.run")}
                 onClick={(e) => {
                   e.stopPropagation();
                   void store().runFavorite(favorite.id, true);
@@ -264,7 +287,7 @@ export function FavoritesPanel() {
       </div>
 
       <div className="panel-foot">
-        <span>{favorites.length} favori</span>
+        <span>{tp("fav.count", favorites.length)}</span>
         <span style={{ flex: 1 }} />
         <button
           className="outline"
@@ -275,7 +298,7 @@ export function FavoritesPanel() {
             setForm({ ...EMPTY, cwd });
           }}
         >
-          + Favori
+          {t("fav.newButton")}
         </button>
       </div>
 

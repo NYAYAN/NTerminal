@@ -1,3 +1,6 @@
+import { t } from "./i18n";
+import type { MsgKey } from "./messages";
+
 /**
  * Kısayol eşleştirme. Kısayollar ayarlarda "Ctrl+Shift+H" biçiminde metin
  * olarak tutuluyor; kullanıcı düzenleyebilsin ve import/export ile taşınabilsin
@@ -98,24 +101,37 @@ export function comboFromEvent(event: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-export const ACTION_LABELS: Record<string, string> = {
-  newTab: "Yeni sekme",
-  closeTab: "Sekmeyi kapat",
-  nextTab: "Sonraki sekme",
-  prevTab: "Önceki sekme",
-  newGroup: "Yeni grup",
-  commandPalette: "Komut paleti",
-  historyPanel: "Geçmiş panelini aç/kapat",
-  historySearch: "Geçmişte hızlı arama",
-  favorites: "Favori komutlar",
-  settings: "Ayarlar",
-  renameTab: "Sekmeyi yeniden adlandır",
-  toggleLock: "Sekme kilidini aç/kapat",
-  clearTerminal: "Terminali temizle",
-  findInTerminal: "Terminalde ara",
-  copy: "Kopyala",
-  paste: "Yapıştır",
-  zoomIn: "Yazıyı büyült",
-  zoomOut: "Yazıyı küçült",
-  zoomReset: "Yazı boyutunu sıfırla",
+/**
+ * Eylem adı -> sözlük anahtarı.
+ *
+ * Ayarlar dosyasından gelen, burada karşılığı olmayan bir eylem adı olduğu
+ * gibi gösteriliyor: başka bir sürümden gelen kısayol yüzünden liste boş
+ * kalmasın.
+ */
+const ACTION_KEYS: Record<string, MsgKey> = {
+  newTab: "action.newTab",
+  closeTab: "action.closeTab",
+  nextTab: "action.nextTab",
+  prevTab: "action.prevTab",
+  newGroup: "action.newGroup",
+  commandPalette: "action.commandPalette",
+  historyPanel: "action.historyPanel",
+  historySearch: "action.historySearch",
+  favorites: "action.favorites",
+  settings: "action.settings",
+  renameTab: "action.renameTab",
+  toggleLock: "action.toggleLock",
+  toggleViewMode: "action.toggleViewMode",
+  clearTerminal: "action.clearTerminal",
+  findInTerminal: "action.findInTerminal",
+  copy: "action.copy",
+  paste: "action.paste",
+  zoomIn: "action.zoomIn",
+  zoomOut: "action.zoomOut",
+  zoomReset: "action.zoomReset",
 };
+
+export function actionLabel(action: string): string {
+  const key = ACTION_KEYS[action];
+  return key ? t(key) : action;
+}

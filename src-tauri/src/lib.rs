@@ -5,7 +5,7 @@ mod history;
 mod model;
 mod osinfo;
 mod paths;
-mod pty;
+pub mod pty;
 mod shellint;
 mod shells;
 mod store;
@@ -486,6 +486,39 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// Terminalde tiklanan baglantiyi isletim sisteminin varsayilan tarayicisinda
+/// acar.
+///
+/// Bunun var olmasi sart: xterm'in WebLinksAddon'i varsayilan olarak
+/// `window.open` cagiriyor, Tauri webview'unde ise bu hicbir sey yapmiyor -
+/// linke tiklamak sessizce isleve yaramiyordu.
+///
+/// `cmd /c start` DEGIL: url kabuktan gecerse icindeki `&`, `|`, `^` gibi
+/// karakterler komut ayirici olur (`?a=1&b=2` gibi siradan bir sorgu dizesi
+/// bile yeter). `rundll32 url.dll,FileProtocolHandler` url'i tek bir arguman
+/// olarak aliyor, araya kabuk girmiyor.
+///
+/// Sema beyaz listeli: yalnizca http/https. `file:`, `ms-msdt:` gibi semalar
+/// terminal ciktisindaki rastgele bir metnin yerel bir seyi calistirmasina yol
+/// acabilir - cikti guvenilir bir kaynak degil.
+#[tauri::command]
+fn open_external(url: String) -> CmdResult<()> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        return Err(format!("yalnizca http/https acilabilir: {url}"));
+    }
+    // Satir sonu / bosluk enjeksiyonuna karsi: url tek satir olmali.
+    if url.chars().any(|c| c.is_control()) {
+        return Err("baglantida denetim karakteri var".into());
+    }
+    std::process::Command::new("rundll32.exe")
+        .arg("url.dll,FileProtocolHandler")
+        .arg(&url)
+        .spawn()
+        .map_err(fail)?;
+    Ok(())
+}
+
 /// Verilen klasoru Dosya Gezgini'nde acar.
 #[tauri::command]
 fn reveal_in_explorer(path: String) -> CmdResult<()> {
@@ -585,6 +618,7 @@ pub fn run() {
             config_import_preview,
             config_import_apply,
             reveal_in_explorer,
+            open_external,
         ])
         .on_window_event(|window, event| {
             // Pencere yok olurken kabuk sureclerini birakmiyoruz: aksi halde

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { api } from "../lib/ipc";
+import { tabLabel } from "../lib/labels";
 import {
   canCloseTab,
   canDeleteGroup,
@@ -9,6 +10,8 @@ import {
   nextCollapsedAll,
   reorder,
 } from "../lib/tabs";
+import { setLanguage as applyLanguage, t, tp } from "../lib/i18n";
+import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
@@ -18,8 +21,10 @@ import type {
   NewFavorite,
   PathsInfo,
   Profile,
+  Lang,
   Settings,
   TabState,
+  ViewMode,
   Workspace,
 } from "../types";
 
@@ -68,6 +73,14 @@ interface Store {
   favorites: Favorite[];
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
+  /**
+   * Durum çubuğunu yeniden çizdirmek için sayaç.
+   *
+   * Durum çubuğu canlı oturum nesnesinden okuyor (pid, entegrasyon, öneri)
+   * ama oturumlar React durumunda değil; bu yüzden değişiklik bildirimi
+   * geldiğinde bir kez yeniden çizmek gerekiyor.
+   */
+  statusTick: number;
 
   bootstrap: () => Promise<void>;
   persistNow: () => Promise<void>;
@@ -76,6 +89,9 @@ interface Store {
   patchSettings: (patch: Partial<Settings>) => Promise<void>;
   patchAppearance: (patch: Partial<Settings["appearance"]>) => Promise<void>;
   patchBehavior: (patch: Partial<Settings["behavior"]>) => Promise<void>;
+  setLanguage: (lang: Lang) => Promise<void>;
+  setViewMode: (mode: ViewMode) => Promise<void>;
+  toggleViewMode: () => Promise<void>;
   setProfiles: (profiles: Profile[], defaultProfileId?: string) => Promise<void>;
   resetSettings: () => Promise<void>;
 
@@ -88,7 +104,7 @@ interface Store {
   toggleAllCollapsed: () => void;
 
   addTab: (opts?: { groupId?: string; profileId?: string; cwd?: string | null }) => string | null;
-  closeTab: (tabId: string) => Promise<void>;
+  closeTab: (tabId: string, options?: { confirm?: boolean }) => Promise<void>;
   setActiveTab: (tabId: string) => void;
   updateTab: (tabId: string, patch: Partial<TabState>) => void;
   moveTabToGroup: (tabId: string, groupId: string) => void;
@@ -188,22 +204,26 @@ export const useStore = create<Store>((set, get) => ({
       scrollback: 10000,
       sidebarWidth: 240,
       panelWidth: 390,
+      viewMode: "tabs",
     },
     behavior: {
       restoreSession: true,
       restoreScrollback: true,
       scrollbackSaveLines: 2000,
-      confirmCloseRunning: true,
+      confirmCloseTab: "always",
       copyOnSelect: true,
-      pasteOnRightClick: true,
+      rightClickAction: "menu",
+      ctrlCCopiesSelection: true,
       inheritCwd: true,
       historyLimit: 50000,
       historyDedupe: false,
       showOnlyFavoriteGroups: false,
+      shellPrediction: "list",
     },
     profiles: [],
     defaultProfileId: "",
     keybindings: {},
+    language: "tr",
   },
   groups: [],
   activeGroupId: null,
@@ -211,6 +231,7 @@ export const useStore = create<Store>((set, get) => ({
   running: {},
   exited: {},
   sessionEpoch: {},
+  statusTick: 0,
   favorites: [],
   ui: {
     historyOpen: false,
@@ -231,6 +252,8 @@ export const useStore = create<Store>((set, get) => ({
   async bootstrap() {
     try {
       const boot = await api.bootstrap();
+      // Dil temadan once: hata iletileri de dogru dilde cikabilsin.
+      applyLanguage(boot.settings.language);
       applyThemeToDocument(getTheme(boot.settings.appearance.theme));
       set({
         ready: true,
@@ -274,6 +297,7 @@ export const useStore = create<Store>((set, get) => ({
   async patchSettings(patch) {
     const next = { ...get().settings, ...patch };
     set({ settings: next });
+    applyLanguage(next.language);
     applyThemeToDocument(getTheme(next.appearance.theme));
     for (const session of sessions.values()) session.applySettings(next);
     scheduleSettingsWrite(next, (message) => get().toast(message, "err"));
@@ -287,6 +311,22 @@ export const useStore = create<Store>((set, get) => ({
   async patchBehavior(patch) {
     const settings = get().settings;
     await get().patchSettings({ behavior: { ...settings.behavior, ...patch } });
+  },
+
+  async setLanguage(lang) {
+    if (get().settings.language === lang) return;
+    await get().patchSettings({ language: lang });
+  },
+
+  async setViewMode(mode) {
+    if (get().settings.appearance.viewMode === mode) return;
+    await get().patchAppearance({ viewMode: mode });
+  },
+
+  async toggleViewMode() {
+    // normalizeViewMode: diskteki deger baska bir surumden gelmis olabilir.
+    const current = normalizeViewMode(get().settings.appearance.viewMode);
+    await get().setViewMode(nextViewMode(current));
   },
 
   async setProfiles(profiles, defaultProfileId) {
@@ -305,7 +345,7 @@ export const useStore = create<Store>((set, get) => ({
       set({ settings: fresh });
       applyThemeToDocument(getTheme(fresh.appearance.theme));
       for (const session of sessions.values()) session.applySettings(fresh);
-      get().toast("Ayarlar varsayılanlara döndürüldü", "ok");
+      get().toast(t("store.settingsReset"), "ok");
     } catch (err) {
       get().toast(String(err), "err");
     }
@@ -318,7 +358,7 @@ export const useStore = create<Store>((set, get) => ({
     const id = newId("grp");
     const group: Group = {
       id,
-      name: name?.trim() || `Grup ${groups.length + 1}`,
+      name: name?.trim() || t("group.newName", { n: groups.length + 1 }),
       color: GROUP_COLORS[groups.length % GROUP_COLORS.length],
       icon: null,
       collapsed: false,
@@ -344,7 +384,7 @@ export const useStore = create<Store>((set, get) => ({
   async deleteGroup(id) {
     const { groups } = get();
     if (groups.length <= 1) {
-      get().toast("En az bir grup kalmalı", "err");
+      get().toast(t("store.lastGroup"), "err");
       return;
     }
     const group = groups.find((g) => g.id === id);
@@ -352,10 +392,7 @@ export const useStore = create<Store>((set, get) => ({
 
     if (!canDeleteGroup(group)) {
       const count = lockedTabs(group.tabs).length;
-      get().toast(
-        `Bu grupta ${count} kilitli sekme var - once kilitlerini kaldirin`,
-        "err",
-      );
+      get().toast(t("store.groupHasLocked", { n: count }), "err");
       return;
     }
 
@@ -387,7 +424,10 @@ export const useStore = create<Store>((set, get) => ({
     const group = get().groups.find((g) => g.id === id);
     if (!group) return;
     get().updateGroup(id, { favorite: !group.favorite });
-    get().toast(group.favorite ? "Favori gruptan cikarildi" : "Favori gruplara eklendi", "ok");
+    get().toast(
+      t(group.favorite ? "store.favoriteGroupRemoved" : "store.favoriteGroupAdded"),
+      "ok",
+    );
   },
 
   /** Tum gruplari katla ya da ac. Biri bile acıksa hepsi katlanir. */
@@ -423,7 +463,7 @@ export const useStore = create<Store>((set, get) => ({
       settings.profiles[0]?.id ??
       "";
     if (!profileId) {
-      get().toast("Tanımlı kabuk profili yok - Ayarlar > Profiller", "err");
+      get().toast(t("store.noProfiles"), "err");
       return null;
     }
 
@@ -459,7 +499,7 @@ export const useStore = create<Store>((set, get) => ({
     return tab.id;
   },
 
-  async closeTab(tabId) {
+  async closeTab(tabId, options) {
     const { groups, settings } = get();
     const group = groups.find((g) => g.tabs.some((t) => t.id === tabId));
     if (!group) return;
@@ -468,16 +508,28 @@ export const useStore = create<Store>((set, get) => ({
     // "digerlerini kapat" ve grup silme hepsi bu fonksiyondan geciyor.
     const target = group.tabs.find((t) => t.id === tabId);
     if (target && !canCloseTab(target)) {
-      get().toast("Sekme kilitli - kapatmak icin kilidi kaldirin", "err");
+      get().toast(t("store.tabLocked"), "err");
       return;
     }
 
     const session = sessions.get(tabId);
-    if (session && settings.behavior.confirmCloseRunning && session.running) {
-      const ok = window.confirm(
-        "Bu sekmede bir komut çalışıyor. Sekmeyi kapatmak istediğinize emin misiniz?",
-      );
-      if (!ok) return;
+
+    // Onay: kullanicinin en sik sikayeti "yanlislikla carpiya bastim".
+    // `options.confirm === false` yalnizca coklu kapatma yollari icin;
+    // onlar tek bir onay soruyor, sekme basina tekrar sormuyor.
+    if (options?.confirm !== false && target) {
+      const mode = settings.behavior.confirmCloseTab;
+      const running = !!session?.running;
+      const ask = mode === "always" || (mode === "running" && running);
+      if (ask) {
+        const name = tabLabel(target);
+        const ok = window.confirm(
+          running
+            ? t("store.closeRunningConfirm", { name })
+            : t("store.closeTabConfirm", { name }),
+        );
+        if (!ok) return;
+      }
     }
 
     if (session) {
@@ -577,7 +629,7 @@ export const useStore = create<Store>((set, get) => ({
     const tab = groups.flatMap((g) => g.tabs).find((t) => t.id === tabId);
     if (!tab) return;
     get().updateTab(tabId, { locked: !tab.locked });
-    get().toast(tab.locked ? "Sekme kilidi kaldirildi" : "Sekme kilitlendi", "ok");
+    get().toast(t(tab.locked ? "store.tabLockedOff" : "store.tabLockedOn"), "ok");
   },
 
   /** Bir sekme dısındakileri kapatir; kilitli olanlara dokunmaz. */
@@ -587,11 +639,22 @@ export const useStore = create<Store>((set, get) => ({
     if (!group) return;
     const targets = closableOthers(group.tabs, keepId);
     const skipped = group.tabs.length - 1 - targets.length;
+    if (targets.length === 0) {
+      if (skipped > 0) get().toast(tp("store.skippedLocked", skipped), "info");
+      return;
+    }
+
+    // Tek onay, sekme basina degil: aksi halde "digerlerini kapat"
+    // kullanicidan ust uste onay istiyordu.
+    if (get().settings.behavior.confirmCloseTab !== "never") {
+      const ok = window.confirm(tp("store.closeOthersConfirm", targets.length));
+      if (!ok) return;
+    }
     for (const tab of targets) {
-      await get().closeTab(tab.id);
+      await get().closeTab(tab.id, { confirm: false });
     }
     if (skipped > 0) {
-      get().toast(`${skipped} kilitli sekme kapatilmadi`, "info");
+      get().toast(tp("store.skippedLocked", skipped), "info");
     }
   },
 
@@ -714,6 +777,12 @@ export const useStore = create<Store>((set, get) => ({
           exited: { ...get().exited, [tab.id]: true },
         });
       },
+      // Sessizce yutmuyoruz: baglanti acilmiyorsa kullanici bunu bilmeli,
+      // yoksa "tikliyorum hicbir sey olmuyor" durumu geri gelir.
+      onLinkFailed: (uri) => get().toast(t("term.linkFailed", { uri }), "err"),
+      // Durum cubugu oturum nesnesini okuyor ama ona abone degil;
+      // bildirim gelince bir kez yeniden cizdirmek icin sayaci artiriyoruz.
+      onPrediction: () => set({ statusTick: get().statusTick + 1 }),
     });
 
     sessions.set(tab.id, session);
@@ -807,10 +876,10 @@ export const useStore = create<Store>((set, get) => ({
     if (!trimmed) return;
     if (get().isFavorite(trimmed)) {
       await api.favoritesRemoveByCommand(trimmed).catch(() => 0);
-      get().toast("Favoriden kaldirildi", "info");
+      get().toast(t("store.favoriteRemoved"), "info");
     } else {
       const created = await get().addFavorite({ command: trimmed });
-      if (created) get().toast("Favorilere eklendi", "ok");
+      if (created) get().toast(t("store.favoriteAdded"), "ok");
       return;
     }
     await get().loadFavorites();
@@ -835,7 +904,7 @@ export const useStore = create<Store>((set, get) => ({
     if (!favorite) return;
     const session = get().activeSession();
     if (!session) {
-      get().toast("Etkin bir terminal yok", "err");
+      get().toast(t("store.noActiveTerminal"), "err");
       return;
     }
     if (favorite.cwd && favorite.cwd !== session.cwd) {

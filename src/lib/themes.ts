@@ -1,10 +1,12 @@
 import type { ITheme } from "@xterm/xterm";
 
 import { harmonizeTheme } from "./contrast";
+import type { MsgKey } from "./messages";
 
 export interface TerminalTheme {
   id: string;
-  name: string;
+  /** Tema adi da ceviriden geliyor: "Koyu"/"Acik" gibi sifatlar dile bagli. */
+  nameKey: MsgKey;
   /** Arayüzün de bu temaya uyması için gereken kabuk renkleri. */
   ui: {
     surface: string;
@@ -20,7 +22,7 @@ export interface TerminalTheme {
 export const THEMES: TerminalTheme[] = [
   {
     id: "nterminal-dark",
-    name: "NTerminal Koyu",
+    nameKey: "theme.nterminalDark",
     ui: {
       surface: "#0d1117",
       surfaceAlt: "#161b22",
@@ -55,7 +57,7 @@ export const THEMES: TerminalTheme[] = [
   },
   {
     id: "windows-terminal",
-    name: "Windows Terminal",
+    nameKey: "theme.windowsTerminal",
     ui: {
       surface: "#0c0c0c",
       surfaceAlt: "#1a1a1a",
@@ -89,7 +91,7 @@ export const THEMES: TerminalTheme[] = [
   },
   {
     id: "one-half-dark",
-    name: "One Half Koyu",
+    nameKey: "theme.oneHalfDark",
     ui: {
       surface: "#282c34",
       surfaceAlt: "#31363f",
@@ -123,7 +125,7 @@ export const THEMES: TerminalTheme[] = [
   },
   {
     id: "solarized-light",
-    name: "Solarized Açık",
+    nameKey: "theme.solarizedLight",
     ui: {
       surface: "#fdf6e3",
       surfaceAlt: "#eee8d5",

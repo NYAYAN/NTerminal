@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { useT } from "../lib/i18n";
+
 interface Props {
   value: Record<string, string>;
   onChange: (next: Record<string, string>) => void;
@@ -13,6 +15,7 @@ interface Props {
  * yerini değiştirir ve odak kaybolur.
  */
 export function EnvEditor({ value, onChange }: Props) {
+  const t = useT();
   const [pairs, setPairs] = useState<[string, string][]>(() => Object.entries(value));
 
   // Dışarıdan farklı bir kayıt seçilirse (profil/grup değişimi) tazele.
@@ -38,7 +41,7 @@ export function EnvEditor({ value, onChange }: Props) {
         <div className="pair" key={index}>
           <input
             className="mono"
-            placeholder="AD"
+            placeholder={t("env.name")}
             value={key}
             onChange={(e) => {
               const next = [...pairs];
@@ -49,7 +52,7 @@ export function EnvEditor({ value, onChange }: Props) {
           />
           <input
             className="mono"
-            placeholder="değer"
+            placeholder={t("env.value")}
             value={val}
             onChange={(e) => {
               const next = [...pairs];
@@ -60,7 +63,7 @@ export function EnvEditor({ value, onChange }: Props) {
           />
           <button
             className="icon-btn danger"
-            title="Sil"
+            title={t("common.delete")}
             onClick={() => commit(pairs.filter((_, i) => i !== index))}
           >
             ×
@@ -68,7 +71,7 @@ export function EnvEditor({ value, onChange }: Props) {
         </div>
       ))}
       <button className="outline" onClick={() => setPairs([...pairs, ["", ""]])}>
-        + Değişken ekle
+        {t("env.add")}
       </button>
     </div>
   );

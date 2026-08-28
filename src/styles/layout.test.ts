@@ -21,7 +21,16 @@ import { describe, expect, it } from "vitest";
  * alan 609px → 5px bindirme. Dolgu xterm öğesine taşındığında 50 satır ve
  * 19px boşluk.
  */
-const CSS = readFileSync(join(process.cwd(), "src/styles/global.css"), "utf8");
+/*
+ * Yorumlar ayıklanıyor. İki sebep: (1) bir kuralın gövdesindeki açıklama
+ * metni bildirim sanılıyordu — `display:none` yapsak…` diye başlayan yorum,
+ * "display:none kullanılmamalı" testini düşürüyordu; (2) yorum içindeki bir
+ * `}` karakteri aşağıdaki basit blok ayrıştırmasını da bozar.
+ */
+const CSS = readFileSync(join(process.cwd(), "src/styles/global.css"), "utf8").replace(
+  /\/\*[\s\S]*?\*\//g,
+  "",
+);
 
 function ruleBody(selector: string): string {
   // Basit ayrıştırma: `selector {` ile başlayan ilk bloğun gövdesi.
@@ -95,5 +104,41 @@ describe("terminal arka planı", () => {
   it("dolgu halkasının arkasında tema rengi var", () => {
     // Viewport saydam olsaydı bile arkada doğru renk durmalı.
     expect(ruleBody(".main")).toMatch(/background:\s*var\(--term-bg\)/);
+  });
+});
+
+/**
+ * Bölme kipi, terminal alanının satır hesabına dokunmadan çalışmak zorunda.
+ * Buradaki üç kural da bir kez bedeli ödenmiş hatalardan geliyor.
+ */
+describe("bölme kipi", () => {
+  it(".pane dolgu taşımıyor", () => {
+    // Dolgu bölme kabuğuna konursa xterm ebeveyninin yüksekliğini olduğu gibi
+    // ölçüp fazla satır üretir - .term-host'ta yaşanan hatanın aynısı.
+    expect(/(?:^|\s|;)padding\s*:/.test(ruleBody(".pane")), ".pane dolgu taşımamalı").toBe(false);
+  });
+
+  it("gizli bölme düzenden çıkarılmıyor", () => {
+    const body = ruleBody('.pane[data-visible="false"]');
+    expect(body, "display:none xterm'in ölçüm hesabını sıfırlar").not.toMatch(
+      /display\s*:\s*none/,
+    );
+    expect(body).toMatch(/visibility\s*:\s*hidden/);
+  });
+
+  it("odaklı bölme kenarlık değil outline kullanıyor", () => {
+    // border kutuyu 2px büyütür ve xterm'in satır hesabını kaydırır; outline
+    // düzenden yer almıyor.
+    const body = ruleBody('.terminal-area[data-view="panes"] > .pane[data-visible="true"]');
+    expect(body).toMatch(/outline\s*:/);
+    expect(body, "bölme çerçevesi border ile çizilmemeli").not.toMatch(/(?:^|\s|;)border\s*:/);
+  });
+
+  it("bölme ızgarası içeriğe göre büyümüyor", () => {
+    // `1fr` tek başına içerik boyutunun altına inmiyor; terminal de içerik
+    // olarak geniş, dolayısıyla bölmeler kapsayıcıyı taşırıyordu.
+    const source = readFileSync(join(process.cwd(), "src/components/TerminalArea.tsx"), "utf8");
+    expect(source).toMatch(/gridTemplateColumns:\s*`repeat\(\$\{grid\.cols\}, minmax\(0, 1fr\)\)`/);
+    expect(source).toMatch(/gridTemplateRows:\s*`repeat\(\$\{grid\.rows\}, minmax\(0, 1fr\)\)`/);
   });
 });

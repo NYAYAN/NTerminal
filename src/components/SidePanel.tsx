@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "../lib/i18n";
+import type { MsgKey } from "../lib/messages";
 import { useStore, type SidePanelMode } from "../store/useStore";
 import { FavoritesPanel } from "./FavoritesPanel";
 import { HistoryPanel } from "./HistoryPanel";
 
-const MODE_LABELS: Record<SidePanelMode, string> = {
-  history: "Geçmiş",
-  favorites: "Favoriler",
+const MODE_KEYS: Record<SidePanelMode, MsgKey> = {
+  history: "app.history",
+  favorites: "app.favorites",
 };
 
 /**
@@ -14,6 +16,7 @@ const MODE_LABELS: Record<SidePanelMode, string> = {
  * İçerik iki listeden biri — geçmiş ya da favoriler.
  */
 export function SidePanel() {
+  const t = useT();
   const mode = useStore((s) => s.ui.panelMode);
   const favoriteCount = useStore((s) => s.favorites.length);
   const storedWidth = useStore((s) => s.settings.appearance.panelWidth);
@@ -67,20 +70,20 @@ export function SidePanel() {
 
       <div className="panel-head">
         <div className="panel-tabs">
-          {(Object.keys(MODE_LABELS) as SidePanelMode[]).map((key) => (
+          {(Object.keys(MODE_KEYS) as SidePanelMode[]).map((key) => (
             <button
               key={key}
               className={mode === key ? "on" : ""}
               onClick={() => setUi({ panelMode: key })}
             >
-              {MODE_LABELS[key]}
+              {t(MODE_KEYS[key])}
               {key === "favorites" && favoriteCount > 0 && (
                 <span className="pill-count">{favoriteCount}</span>
               )}
             </button>
           ))}
         </div>
-        <button className="icon-btn" title="Paneli kapat" onClick={() => setUi({ historyOpen: false })}>
+        <button className="icon-btn" title={t("panel.close")} onClick={() => setUi({ historyOpen: false })}>
           ×
         </button>
       </div>

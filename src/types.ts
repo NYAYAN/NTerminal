@@ -3,6 +3,19 @@
 
 export type ShellKind = "power-shell" | "pwsh" | "cmd" | "bash" | "wsl" | "custom";
 
+export type RightClickAction = "menu" | "paste" | "copyPaste";
+
+/** Sekme kapatılırken onay sorulsun mu. */
+export type ConfirmCloseTab = "always" | "running" | "never";
+
+/** Kabuğun komut önerisi (PSReadLine tahmini) görünümü. */
+export type ShellPrediction = "off" | "inline" | "list";
+
+export type ViewMode = "tabs" | "panes";
+
+/** Arayüz dili. */
+export type Lang = "tr" | "en";
+
 export interface Profile {
   id: string;
   name: string;
@@ -29,20 +42,28 @@ export interface Appearance {
   sidebarWidth: number;
   /** Sağ panelin (geçmiş / favoriler) genişliği. */
   panelWidth: number;
+  /** Terminal alanı: tek sekme mi, grubun tüm sekmeleri döşenmiş mi. */
+  viewMode: ViewMode;
 }
 
 export interface Behavior {
   restoreSession: boolean;
   restoreScrollback: boolean;
   scrollbackSaveLines: number;
-  confirmCloseRunning: boolean;
+  /** Sekme kapatma onayı: her zaman / yalnızca komut çalışıyorsa / hiç. */
+  confirmCloseTab: ConfirmCloseTab;
   copyOnSelect: boolean;
-  pasteOnRightClick: boolean;
+  /** Terminalde sağ tık: menü aç / yapıştır / seçim varsa kopyala yoksa yapıştır. */
+  rightClickAction: RightClickAction;
+  /** Ctrl+C seçim varken kopyalasın; seçim yoksa kabuğa SIGINT olarak gider. */
+  ctrlCCopiesSelection: boolean;
   inheritCwd: boolean;
   historyLimit: number;
   historyDedupe: boolean;
   /** Kenar çubuğunda yalnızca favori grupları göster. */
   showOnlyFavoriteGroups: boolean;
+  /** Kabukta komut önerisi: kapalı / satır içi hayalet metin / liste. */
+  shellPrediction: ShellPrediction;
 }
 
 export interface Settings {
@@ -52,6 +73,8 @@ export interface Settings {
   profiles: Profile[];
   defaultProfileId: string;
   keybindings: Record<string, string>;
+  /** Arayüz dili. */
+  language: Lang;
 }
 
 export interface TabState {

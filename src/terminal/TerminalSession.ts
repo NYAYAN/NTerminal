@@ -8,6 +8,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { api, onPtyData, onPtyExit } from "../lib/ipc";
+import { t } from "../lib/i18n";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { getTheme } from "../lib/themes";
 import type { Settings } from "../types";
@@ -16,6 +17,14 @@ interface BufferMark {
   y: number;
   x: number;
 }
+
+/**
+ * Kabuğun komut önerisi durumu.
+ *
+ * `unsupported` = kabuk destekliyor ama sürümü yetmiyor (PSReadLine 2.0).
+ * `unknown` = kabuk hiç bildirmedi (cmd, bash, entegrasyonsuz profil).
+ */
+export type PredictionState = "unknown" | "off" | "inline" | "list" | "unsupported";
 
 export interface SessionCallbacks {
   onTitle?: (title: string) => void;
@@ -26,6 +35,10 @@ export interface SessionCallbacks {
   onBell?: () => void;
   /** Terminal içinden yeni sekme / kapatma gibi bir kısayol geldiğinde. */
   onShortcut?: (action: string) => boolean;
+  /** Bağlantı açılamadı (tarayıcı başlatılamadı, şema desteklenmiyor). */
+  onLinkFailed?: (uri: string) => void;
+  /** Kabuk komut önerisini açabildi mi. */
+  onPrediction?: (state: PredictionState) => void;
 }
 
 export interface SessionInit {
@@ -53,6 +66,8 @@ export class TerminalSession {
   private readonly serializer = new SerializeAddon();
   readonly search = new SearchAddon();
   private webgl: WebglAddon | null = null;
+  /** Kabuğun bildirdiği komut önerisi durumu; durum çubuğu gösteriyor. */
+  prediction: PredictionState = "unknown";
 
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -132,7 +147,24 @@ export class TerminalSession {
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.serializer);
     this.term.loadAddon(this.search);
-    this.term.loadAddon(new WebLinksAddon());
+    // Baglanti tiklamasi: varsayilan handler `window.open` cagiriyor, Tauri
+    // webview'unde bu hicbir sey yapmadigi icin linkler tiklanamaz
+    // gorunuyordu. Isletim sisteminin varsayilan tarayicisina Rust tarafindan
+    // gonderiyoruz.
+    this.term.loadAddon(
+      new WebLinksAddon(
+        (event, uri) => {
+          event.preventDefault();
+          void api.openExternal(uri).catch(() => {
+            this.callbacks.onLinkFailed?.(uri);
+          });
+        },
+        {
+          hover: () => this.container?.classList.add("link-hover"),
+          leave: () => this.container?.classList.remove("link-hover"),
+        },
+      ),
+    );
 
     const unicode = new Unicode11Addon();
     this.term.loadAddon(unicode);
@@ -172,7 +204,7 @@ export class TerminalSession {
       const reset = "\x1b[0m";
       const line = "\u2500".repeat(Math.max(8, Math.min(60, this.term.cols - 24)));
       this.term.write(
-        `\r\n${dim}${line} önceki oturum burada bitti ${line}${reset}\r\n`,
+        `\r\n${dim}${line} ${t("term.prevSessionEnded")} ${line}${reset}\r\n`,
       );
     }
 
@@ -181,7 +213,12 @@ export class TerminalSession {
         id: this.tabId,
         profileId: this.profileId,
         cwd: this.cwd,
-        env: this.env,
+        env: {
+          ...this.env,
+          // Kabuk betigi bunu okuyup PSReadLine tahminini aciyor. Ayar
+          // olarak tasiniyor cunku kullanici kapatabilmeli.
+          NTERMINAL_PREDICTION: this.settings.behavior.shellPrediction,
+        },
         cols: this.term.cols,
         rows: this.term.rows,
       });
@@ -191,7 +228,7 @@ export class TerminalSession {
       if (result.cwd) this.cwd = result.cwd;
     } catch (err) {
       this.term.write(
-        `\r\n\x1b[31mKabuk başlatılamadı:\x1b[0m ${String(err)}\r\n`,
+        `\r\n\x1b[31m${t("term.spawnFailed")}\x1b[0m ${String(err)}\r\n`,
       );
       this.exited = true;
       return;
@@ -205,15 +242,33 @@ export class TerminalSession {
     );
   }
 
-  /** Görünür sekme değişince çağrılır: WebGL bağlamını yalnızca aktif terminal tutar. */
-  setActive(active: boolean) {
-    if (active) {
-      this.enableWebgl();
-      this.safeFit();
-      this.focusTerminal();
-    } else {
+  /**
+   * Bu terminalin ekrandaki durumu.
+   *
+   * "Görünür" ve "odaklı" ayrı iki şey: bölme kipinde birden çok terminal
+   * aynı anda görünür ama yalnızca biri odaklı olur.
+   *
+   * WebGL bağlamını YALNIZCA odaklı terminal tutuyor. Tarayıcı motoru canlı
+   * WebGL bağlamı sayısını sınırlıyor (Chromium'da ~16); sekiz bölme açıkken
+   * her birine bağlam vermek en eskilerinin kaybedilmesine, dolayısıyla
+   * gözle görülür bir sıçramaya yol açıyor. Odaklı olmayan bölmeler xterm'in
+   * DOM oluşturucusuyla çiziliyor: okumak için fazlasıyla yeterli, tek
+   * kayıp hızlı akan çıktıdaki kare sayısı.
+   */
+  setDisplay(visible: boolean, focused: boolean) {
+    if (!visible) {
       this.disableWebgl();
+      return;
     }
+    if (focused) this.enableWebgl();
+    else this.disableWebgl();
+    this.safeFit();
+    if (focused) this.focusTerminal();
+  }
+
+  /** Görünür ve odaklı olmanın çakıştığı sekme kipi için kısayol. */
+  setActive(active: boolean) {
+    this.setDisplay(active, active);
   }
 
   /**
@@ -470,6 +525,13 @@ export class TerminalSession {
         break;
       case "P":
         if (parsed.key === "Cwd" && parsed.value) this.updateCwd(parsed.value);
+        // Kabuk komut onerisini acabildi mi? Acamadiysa arayuz ne
+        // yapilmasi gerektigini soyluyor - sessiz kalmak "uygulama
+        // bozuk" izlenimi veriyordu.
+        if (parsed.key === "Prediction") {
+          this.prediction = parsed.value as PredictionState;
+          this.callbacks.onPrediction?.(this.prediction);
+        }
         break;
       case "X": {
         // NTerminal eklentisi: X;Dur=<ms>. PowerShell'de PSReadLine kancası
@@ -630,6 +692,18 @@ export class TerminalSession {
     }
   }
 
+  hasSelection(): boolean {
+    return this.term.hasSelection();
+  }
+
+  selectAll() {
+    this.term.selectAll();
+  }
+
+  clearSelection() {
+    this.term.clearSelection();
+  }
+
   async copySelection(): Promise<boolean> {
     const text = this.term.getSelection();
     if (!text) return false;
@@ -639,6 +713,26 @@ export class TerminalSession {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Ctrl+C: secim varsa kopyala, yoksa tusu kabuga birak.
+   *
+   * Kopyaladiktan sonra secimi TEMIZLIYORUZ. Aksi halde secim ekranda
+   * durdugu surece Ctrl+C hep kopyalar ve kullanici calisan sureci
+   * durduramaz - terminalde en tehlikeli gerileme bu olurdu.
+   *
+   * "passthrough" = tus kabuga gitmeli (SIGINT). Digerlerinde tus tuketildi:
+   * secim vardi, kullanicinin niyeti kopyalamakti; pano yazilamasa bile
+   * SIGINT gondermek surpriz olur - onun yerine "failed" donup cagirana
+   * kullaniciyi uyarma sansi veriyoruz.
+   */
+  async copyForCtrlC(): Promise<"copied" | "failed" | "passthrough"> {
+    if (!this.settings.behavior.ctrlCCopiesSelection) return "passthrough";
+    if (!this.term.hasSelection()) return "passthrough";
+    const ok = await this.copySelection();
+    this.term.clearSelection();
+    return ok ? "copied" : "failed";
   }
 
   /** Geçmişten seçilen komutu istem satırına yazar; çalıştırmak kullanıcıya kalır. */

@@ -85,7 +85,7 @@ describe("tema okunabilirliği", () => {
   ] as const;
 
   for (const theme of THEMES) {
-    it(`${theme.name}: tüm palet renkleri okunabilir`, () => {
+    it(`${theme.id}: tüm palet renkleri okunabilir`, () => {
       const fixed = getTheme(theme.id);
       const background = fixed.xterm.background!;
 
@@ -98,7 +98,7 @@ describe("tema okunabilirliği", () => {
         const ratio = contrastRatio(color, background);
         expect(
           ratio,
-          `${theme.name} / ${key} = ${color}, karşıtlık ${ratio.toFixed(2)}`,
+          `${theme.id} / ${key} = ${color}, karşıtlık ${ratio.toFixed(2)}`,
         ).toBeGreaterThanOrEqual(MIN_PALETTE_CONTRAST - 0.01);
       }
     });

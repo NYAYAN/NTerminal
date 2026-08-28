@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatDuration, formatWhen, fuzzyScore, shortenPath } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
 import type { Favorite, HistoryEntry } from "../types";
@@ -24,6 +25,7 @@ interface Row {
  * göre sıralanıyor ve klavye tek başına yeterli.
  */
 export function HistoryRecall() {
+  const t = useT();
   const setUi = useStore((s) => s.setUi);
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
@@ -125,9 +127,7 @@ export function HistoryRecall() {
       <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
         <input
           autoFocus
-          placeholder={
-            scopeAll ? "tüm geçmişte ara…" : "bu sekmenin geçmişinde ara… (Ctrl+A: tüm sekmeler)"
-          }
+          placeholder={t(scopeAll ? "recall.placeholderAll" : "recall.placeholderTab")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -163,10 +163,8 @@ export function HistoryRecall() {
           {results.length === 0 && (
             <div className="hint">
               {rows.length === 0
-                ? scopeAll
-                  ? "Henüz kayıtlı komut yok."
-                  : "Bu sekmede henüz komut çalıştırılmadı. Ctrl+A ile tüm geçmişe bakabilirsiniz."
-                : "Eşleşen komut yok."}
+                ? t(scopeAll ? "recall.emptyAll" : "recall.emptyTab")
+                : t("recall.noMatch")}
             </div>
           )}
           {results.map((row, i) => (
@@ -179,7 +177,7 @@ export function HistoryRecall() {
               onDoubleClick={() => apply(row, true)}
             >
               {row.favorite ? (
-                <span className="star" title="favori">
+                <span className="star" title={t("recall.favorite")}>
                   &#9733;
                 </span>
               ) : (
@@ -209,11 +207,15 @@ export function HistoryRecall() {
         </div>
 
         <div className="palette-foot">
-          <span>↑↓ gez</span>
-          <span>Enter çalıştır</span>
-          <span>Tab yalnızca yaz</span>
-          <span>Ctrl+A kapsam: {scopeAll ? "tüm sekmeler" : "bu sekme"}</span>
-          <span>Esc kapat</span>
+          <span>{t("palette.arrows")}</span>
+          <span>{t("recall.enter")}</span>
+          <span>{t("recall.tabKey")}</span>
+          <span>
+            {t("recall.scope", {
+              scope: t(scopeAll ? "recall.scopeAll" : "recall.scopeTab"),
+            })}
+          </span>
+          <span>{t("common.escClose")}</span>
         </div>
       </div>
     </div>

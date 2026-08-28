@@ -2,6 +2,8 @@ import { useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { formatBytes, formatFullDate } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
+import type { MsgKey } from "../lib/messages";
 import { api } from "../lib/ipc";
 import { flushAllState, useStore } from "../store/useStore";
 import type {
@@ -13,10 +15,10 @@ import type {
   ImportResult,
 } from "../types";
 
-const MODE_LABELS: Record<ImportMode, string> = {
-  replace: "Değiştir",
-  merge: "Birleştir",
-  skip: "Atla",
+const MODE_KEYS: Record<ImportMode, MsgKey> = {
+  replace: "transfer.modeReplace",
+  merge: "transfer.modeMerge",
+  skip: "transfer.modeSkip",
 };
 
 function ModeSelect({
@@ -24,11 +26,13 @@ function ModeSelect({
   onChange,
   disabled,
   mergeHint,
+  t,
 }: {
   value: ImportMode;
   onChange: (mode: ImportMode) => void;
   disabled?: boolean;
   mergeHint?: string;
+  t: Translate;
 }) {
   return (
     <div>
@@ -40,7 +44,7 @@ function ModeSelect({
             disabled={disabled}
             onClick={() => onChange(mode)}
           >
-            {MODE_LABELS[mode]}
+            {t(MODE_KEYS[mode])}
           </button>
         ))}
       </div>
@@ -50,6 +54,7 @@ function ModeSelect({
 }
 
 export function TransferDialog() {
+  const t = useT();
   const setUi = useStore((s) => s.setUi);
   const paths = useStore((s) => s.paths);
   const store = useStore.getState;
@@ -91,17 +96,19 @@ export function TransferDialog() {
       if (exportOptions.includeScrollback) await flushAllState();
       else await store().persistNow();
 
-      const suggested = await api.configExportDefaultName().catch(() => "nterminal-ayarlar.json");
+      const suggested = await api
+        .configExportDefaultName()
+        .catch(() => t("transfer.defaultFileName"));
       const target = await save({
-        title: "Yapılandırmayı kaydet",
+        title: t("transfer.saveTitle"),
         defaultPath: suggested,
-        filters: [{ name: "NTerminal yapılandırması", extensions: ["json"] }],
+        filters: [{ name: t("transfer.filterName"), extensions: ["json"] }],
       });
       if (!target) return;
 
       const summary = await api.configExport(target, exportOptions);
       setExportResult(summary);
-      store().toast("Yapılandırma dışa aktarıldı", "ok");
+      store().toast(t("transfer.exported"), "ok");
     } catch (err) {
       store().toast(String(err), "err");
     } finally {
@@ -114,9 +121,9 @@ export function TransferDialog() {
     setImportResult(null);
     try {
       const picked = await open({
-        title: "NTerminal yapılandırması seç",
+        title: t("transfer.pickTitle"),
         multiple: false,
-        filters: [{ name: "NTerminal yapılandırması", extensions: ["json"] }],
+        filters: [{ name: t("transfer.filterName"), extensions: ["json"] }],
       });
       if (typeof picked !== "string") return;
       const info = await api.configImportPreview(picked);
@@ -143,9 +150,7 @@ export function TransferDialog() {
     const changesWorkspace = importOptions.workspace !== "skip";
     if (
       importOptions.workspace === "replace" &&
-      !window.confirm(
-        "Mevcut gruplar ve sekmeler gelen dosyayla değiştirilecek, açık kabuklar kapanacak. Devam edilsin mi?",
-      )
+      !window.confirm(t("transfer.replaceWorkspaceConfirm"))
     ) {
       return;
     }
@@ -161,7 +166,7 @@ export function TransferDialog() {
         // Ayarlar değiştiyse arayüzün bellekteki kopyasını tazele.
         await store().bootstrap();
       }
-      store().toast("Yapılandırma içe alındı", "ok");
+      store().toast(t("transfer.imported"), "ok");
     } catch (err) {
       store().toast(String(err), "err");
     } finally {
@@ -173,7 +178,7 @@ export function TransferDialog() {
     <div className="overlay" onMouseDown={close}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Yapılandırma aktarımı</h2>
+          <h2>{t("transfer.title")}</h2>
           <button className="icon-btn" onClick={close}>
             ×
           </button>
@@ -181,10 +186,10 @@ export function TransferDialog() {
 
         <div className="tabs-strip">
           <button className={tab === "export" ? "on" : ""} onClick={() => setTab("export")}>
-            Dışa aktar
+            {t("transfer.export")}
           </button>
           <button className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>
-            İçe al
+            {t("transfer.import")}
           </button>
         </div>
 
@@ -192,7 +197,7 @@ export function TransferDialog() {
           {tab === "export" && (
             <>
               <div className="section">
-                <h3>Neler aktarılsın?</h3>
+                <h3>{t("transfer.whatToExport")}</h3>
                 <div className="check-row">
                   <input
                     id="exSettings"
@@ -200,9 +205,7 @@ export function TransferDialog() {
                     checked={exportOptions.includeSettings}
                     onChange={(e) => patchExport({ includeSettings: e.target.checked })}
                   />
-                  <label htmlFor="exSettings">
-                    Ayarlar — görünüm, davranış, kabuk profilleri, kısayollar
-                  </label>
+                  <label htmlFor="exSettings">{t("transfer.exSettings")}</label>
                 </div>
                 <div className="check-row">
                   <input
@@ -211,9 +214,7 @@ export function TransferDialog() {
                     checked={exportOptions.includeWorkspace}
                     onChange={(e) => patchExport({ includeWorkspace: e.target.checked })}
                   />
-                  <label htmlFor="exWorkspace">
-                    Çalışma alanı — gruplar, sekmeler ve klasörleri
-                  </label>
+                  <label htmlFor="exWorkspace">{t("transfer.exWorkspace")}</label>
                 </div>
                 <div className="check-row">
                   <input
@@ -222,7 +223,7 @@ export function TransferDialog() {
                     checked={exportOptions.includeHistory}
                     onChange={(e) => patchExport({ includeHistory: e.target.checked })}
                   />
-                  <label htmlFor="exHistory">Komut geçmişi</label>
+                  <label htmlFor="exHistory">{t("transfer.exHistory")}</label>
                 </div>
                 <div className="check-row">
                   <input
@@ -231,7 +232,7 @@ export function TransferDialog() {
                     checked={exportOptions.includeFavorites}
                     onChange={(e) => patchExport({ includeFavorites: e.target.checked })}
                   />
-                  <label htmlFor="exFavorites">Favori komutlar</label>
+                  <label htmlFor="exFavorites">{t("transfer.exFavorites")}</label>
                 </div>
                 <div className="check-row">
                   <input
@@ -241,14 +242,12 @@ export function TransferDialog() {
                     checked={exportOptions.includeScrollback}
                     onChange={(e) => patchExport({ includeScrollback: e.target.checked })}
                   />
-                  <label htmlFor="exScrollback">
-                    Sekmelerin ekran çıktısı (dosyayı belirgin şekilde büyütür)
-                  </label>
+                  <label htmlFor="exScrollback">{t("transfer.exScrollback")}</label>
                 </div>
               </div>
 
               <div className="section">
-                <h3>Taşınabilirlik</h3>
+                <h3>{t("transfer.portability")}</h3>
                 <div className="check-row">
                   <input
                     id="exPortable"
@@ -256,49 +255,47 @@ export function TransferDialog() {
                     checked={exportOptions.portablePaths}
                     onChange={(e) => patchExport({ portablePaths: e.target.checked })}
                   />
-                  <label htmlFor="exPortable">
-                    Yolları makineden bağımsız hale getir
-                  </label>
+                  <label htmlFor="exPortable">{t("transfer.portablePaths")}</label>
                 </div>
                 <p className="dim" style={{ fontSize: 11 }}>
-                  Açıkken <span className="mono">C:\Users\{"{siz}"}\...</span> gibi yollar{" "}
-                  <span className="mono">${"{HOME}"}</span> belirteciyle yazılır ve karşı makinede o
-                  makinenin kendi yollarına açılır. Ayrıca içe alırken kabuk konumları (PowerShell,
-                  Git Bash…) o makinede aranır; bulunamayan profiller rapor edilir.
+                  {t("transfer.portableExplain", {
+                    home: t("transfer.portableHomeExample"),
+                    token: "${HOME}",
+                  })}
                 </p>
               </div>
 
               {exportResult && (
                 <div className="section">
-                  <h3>Sonuç</h3>
+                  <h3>{t("transfer.result")}</h3>
                   <div className="summary-grid">
                     <div className="cell">
                       <div className="n">{exportResult.profiles}</div>
-                      <div className="k">profil</div>
+                      <div className="k">{t("transfer.countProfiles")}</div>
                     </div>
                     <div className="cell">
                       <div className="n">{exportResult.groups}</div>
-                      <div className="k">grup</div>
+                      <div className="k">{t("transfer.countGroups")}</div>
                     </div>
                     <div className="cell">
                       <div className="n">{exportResult.tabs}</div>
-                      <div className="k">sekme</div>
+                      <div className="k">{t("transfer.countTabs")}</div>
                     </div>
                     <div className="cell">
                       <div className="n">{exportResult.history}</div>
-                      <div className="k">komut</div>
+                      <div className="k">{t("transfer.countCommands")}</div>
                     </div>
                     <div className="cell">
                       <div className="n">{exportResult.favorites}</div>
-                      <div className="k">favori</div>
+                      <div className="k">{t("transfer.countFavorites")}</div>
                     </div>
                     <div className="cell">
                       <div className="n">{formatBytes(exportResult.bytes)}</div>
-                      <div className="k">dosya boyutu</div>
+                      <div className="k">{t("transfer.fileSize")}</div>
                     </div>
                   </div>
                   <div className="field">
-                    <label>Dosya</label>
+                    <label>{t("common.file")}</label>
                     <div style={{ display: "flex", gap: 6 }}>
                       <input readOnly className="mono" style={{ flex: 1 }} value={exportResult.path} />
                       <button
@@ -309,7 +306,7 @@ export function TransferDialog() {
                           )
                         }
                       >
-                        Klasörü aç
+                        {t("common.openFolder")}
                       </button>
                     </div>
                   </div>
@@ -321,13 +318,13 @@ export function TransferDialog() {
           {tab === "import" && (
             <>
               <div className="section">
-                <h3>Dosya</h3>
+                <h3>{t("common.file")}</h3>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button className="outline" disabled={busy} onClick={() => void choosePreview()}>
-                    Dosya seç…
+                    {t("transfer.pickFile")}
                   </button>
                   <span className="dim mono" style={{ fontSize: 11 }}>
-                    {preview?.path ?? "henüz seçilmedi"}
+                    {preview?.path ?? t("transfer.notPicked")}
                   </span>
                 </div>
               </div>
@@ -335,48 +332,57 @@ export function TransferDialog() {
               {preview && (
                 <>
                   <div className="section">
-                    <h3>Dosya içeriği</h3>
+                    <h3>{t("transfer.fileContents")}</h3>
                     <div className="summary-grid">
                       <div className="cell">
                         <div className="n">{preview.profiles}</div>
-                        <div className="k">profil</div>
+                        <div className="k">{t("transfer.countProfiles")}</div>
                       </div>
                       <div className="cell">
                         <div className="n">{preview.groups}</div>
-                        <div className="k">grup</div>
+                        <div className="k">{t("transfer.countGroups")}</div>
                       </div>
                       <div className="cell">
                         <div className="n">{preview.tabs}</div>
-                        <div className="k">sekme</div>
+                        <div className="k">{t("transfer.countTabs")}</div>
                       </div>
                       <div className="cell">
                         <div className="n">{preview.history}</div>
-                        <div className="k">komut</div>
+                        <div className="k">{t("transfer.countCommands")}</div>
                       </div>
                       <div className="cell">
                         <div className="n">{preview.favorites}</div>
-                        <div className="k">favori</div>
+                        <div className="k">{t("transfer.countFavorites")}</div>
                       </div>
                       <div className="cell">
                         <div className="n">{preview.scrollback}</div>
-                        <div className="k">ekran çıktısı</div>
+                        <div className="k">{t("transfer.countScrollback")}</div>
                       </div>
                     </div>
                     <p className="dim" style={{ fontSize: 11 }}>
-                      {preview.machine ? `${preview.machine} makinesinde ` : ""}
-                      {formatFullDate(preview.exportedAt)} tarihinde NTerminal {preview.appVersion} ile
-                      oluşturuldu. Yollar {preview.portablePaths ? "taşınabilir" : "mutlak"}.
+                      {t("transfer.madeOn", {
+                        machine: preview.machine
+                          ? t("transfer.onMachine", { machine: preview.machine })
+                          : "",
+                        date: formatFullDate(preview.exportedAt),
+                        version: preview.appVersion,
+                        paths: t(
+                          preview.portablePaths
+                            ? "transfer.pathsPortable"
+                            : "transfer.pathsAbsolute",
+                        ),
+                      })}
                     </p>
                   </div>
 
                   {preview.notes.length > 0 && (
                     <div className="section">
-                      <h3>Bu makine için düzeltmeler ve uyarılar</h3>
+                      <h3>{t("transfer.notes")}</h3>
                       <div className="notes">
                         {preview.notes.map((note, i) => (
                           <div className="note" key={i}>
                             <span className={`tag ${note.level === "fixed" ? "fixed" : "warn"}`}>
-                              {note.level === "fixed" ? "düzeltildi" : "uyarı"}
+                              {t(note.level === "fixed" ? "transfer.noteFixed" : "transfer.noteWarn")}
                             </span>
                             <span>
                               <strong>{note.subject}</strong> — {note.message}
@@ -388,41 +394,57 @@ export function TransferDialog() {
                   )}
 
                   <div className="section">
-                    <h3>Nasıl uygulanacak?</h3>
+                    <h3>{t("transfer.howApplied")}</h3>
                     <div className="field">
-                      <label>Ayarlar {!preview.hasSettings && "(dosyada yok)"}</label>
+                      <label>
+                        {t("transfer.settingsLabel")}{" "}
+                        {!preview.hasSettings && t("transfer.notInFile")}
+                      </label>
                       <ModeSelect
                         value={importOptions.settings}
                         disabled={!preview.hasSettings}
                         onChange={(settings) => setImportOptions((p) => ({ ...p, settings }))}
-                        mergeHint="Gelen tercihler geçerli olur; yerelde olup gelende olmayan profiller korunur."
+                        mergeHint={t("transfer.mergeSettings")}
+                        t={t}
                       />
                     </div>
                     <div className="field">
-                      <label>Gruplar ve sekmeler {!preview.hasWorkspace && "(dosyada yok)"}</label>
+                      <label>
+                        {t("transfer.workspaceLabel")}{" "}
+                        {!preview.hasWorkspace && t("transfer.notInFile")}
+                      </label>
                       <ModeSelect
                         value={importOptions.workspace}
                         disabled={!preview.hasWorkspace}
                         onChange={(workspace) => setImportOptions((p) => ({ ...p, workspace }))}
-                        mergeHint="Gelen gruplar mevcutların yanına eklenir; ad çakışırsa '(gelen)' eki alır."
+                        mergeHint={t("transfer.mergeWorkspace")}
+                        t={t}
                       />
                     </div>
                     <div className="field">
-                      <label>Komut geçmişi {preview.history === 0 && "(dosyada yok)"}</label>
+                      <label>
+                        {t("transfer.historyLabel")}{" "}
+                        {preview.history === 0 && t("transfer.notInFile")}
+                      </label>
                       <ModeSelect
                         value={importOptions.history}
                         disabled={preview.history === 0}
                         onChange={(history) => setImportOptions((p) => ({ ...p, history }))}
-                        mergeHint="Gelen kayıtlar mevcut geçmişe eklenir, aynı kayıt iki kez yazılmaz."
+                        mergeHint={t("transfer.mergeHistory")}
+                        t={t}
                       />
                     </div>
                     <div className="field">
-                      <label>Favori komutlar {preview.favorites === 0 && "(dosyada yok)"}</label>
+                      <label>
+                        {t("transfer.favoritesLabel")}{" "}
+                        {preview.favorites === 0 && t("transfer.notInFile")}
+                      </label>
                       <ModeSelect
                         value={importOptions.favorites}
                         disabled={preview.favorites === 0}
                         onChange={(favorites) => setImportOptions((p) => ({ ...p, favorites }))}
-                        mergeHint="Gelen favoriler mevcutlara eklenir; aynı komut iki kez yazılmaz."
+                        mergeHint={t("transfer.mergeFavorites")}
+                        t={t}
                       />
                     </div>
                     {preview.scrollback > 0 && (
@@ -435,9 +457,7 @@ export function TransferDialog() {
                             setImportOptions((p) => ({ ...p, scrollback: e.target.checked }))
                           }
                         />
-                        <label htmlFor="imScrollback">
-                          Sekmelerin ekran çıktısını da geri yükle
-                        </label>
+                        <label htmlFor="imScrollback">{t("transfer.restoreScrollback")}</label>
                       </div>
                     )}
                   </div>
@@ -446,19 +466,28 @@ export function TransferDialog() {
 
               {importResult && (
                 <div className="section">
-                  <h3>Uygulandı</h3>
+                  <h3>{t("transfer.applied")}</h3>
                   <ul className="dim" style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                    <li>Ayarlar: {importResult.settingsApplied ? "uygulandı" : "atlandı"}</li>
                     <li>
-                      Çalışma alanı:{" "}
-                      {importResult.workspaceApplied
-                        ? `uygulandı (${importResult.groupsAdded} grup)`
-                        : "atlandı"}
+                      {t("transfer.appliedSettings", {
+                        state: t(
+                          importResult.settingsApplied
+                            ? "transfer.stateApplied"
+                            : "transfer.stateSkipped",
+                        ),
+                      })}
                     </li>
-                    <li>Eklenen profil: {importResult.profilesAdded}</li>
-                    <li>Eklenen komut kaydı: {importResult.historyAdded}</li>
-                    <li>Eklenen favori: {importResult.favoritesAdded}</li>
-                    <li>Geri yüklenen ekran çıktısı: {importResult.scrollbackAdded}</li>
+                    <li>
+                      {t("transfer.appliedWorkspace", {
+                        state: importResult.workspaceApplied
+                          ? t("transfer.stateAppliedGroups", { n: importResult.groupsAdded })
+                          : t("transfer.stateSkipped"),
+                      })}
+                    </li>
+                    <li>{t("transfer.addedProfiles", { n: importResult.profilesAdded })}</li>
+                    <li>{t("transfer.addedHistory", { n: importResult.historyAdded })}</li>
+                    <li>{t("transfer.addedFavorites", { n: importResult.favoritesAdded })}</li>
+                    <li>{t("transfer.addedScrollback", { n: importResult.scrollbackAdded })}</li>
                   </ul>
                 </div>
               )}
@@ -472,11 +501,11 @@ export function TransferDialog() {
           </span>
           <span className="spacer" />
           <button className="outline" onClick={close}>
-            Kapat
+            {t("common.close")}
           </button>
           {tab === "export" ? (
             <button className="primary" disabled={busy} onClick={() => void doExport()}>
-              {busy ? "Kaydediliyor…" : "Dosyaya kaydet…"}
+              {t(busy ? "transfer.saving" : "transfer.saveToFile")}
             </button>
           ) : (
             <button
@@ -484,7 +513,7 @@ export function TransferDialog() {
               disabled={busy || !preview}
               onClick={() => void doImport()}
             >
-              {busy ? "Uygulanıyor…" : "Uygula"}
+              {t(busy ? "transfer.applying" : "transfer.apply")}
             </button>
           )}
         </div>
