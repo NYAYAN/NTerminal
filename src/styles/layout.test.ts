@@ -1,0 +1,99 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+/**
+ * Terminal boşluk dolgusunun nerede durduğu bir stil tercihi değil, doğruluk
+ * meselesi — bu yüzden testle bağlı.
+ *
+ * FitAddon satır sayısını şöyle buluyor:
+ *
+ *   available = getComputedStyle(parent).height - (xterm ÖĞESİNİN dolgusu)
+ *   rows      = floor(available / hücreYüksekliği)
+ *
+ * Ebeveynin (`.term-host`) dolgusu bu hesaba girmiyor. Dolgu ebeveyne
+ * konulduğunda fit, gerçek iç alandan daha büyük bir yükseklik görüp fazla
+ * satır üretiyor; son satır — kullanıcının yazdığı satır — durum çubuğunun
+ * altına taşıyor.
+ *
+ * Ölçülen hata: 627px yükseklik / 12px hücre = 52 satır = 624px, gerçek iç
+ * alan 609px → 5px bindirme. Dolgu xterm öğesine taşındığında 50 satır ve
+ * 19px boşluk.
+ */
+const CSS = readFileSync(join(process.cwd(), "src/styles/global.css"), "utf8");
+
+function ruleBody(selector: string): string {
+  // Basit ayrıştırma: `selector {` ile başlayan ilk bloğun gövdesi.
+  const index = CSS.indexOf(`${selector} {`);
+  expect(index, `CSS kuralı bulunamadı: ${selector}`).toBeGreaterThan(-1);
+  const open = CSS.indexOf("{", index);
+  const close = CSS.indexOf("}", open);
+  return CSS.slice(open + 1, close);
+}
+
+function paddingOf(selector: string): string | null {
+  const match = /(?:^|\s|;)padding\s*:\s*([^;]+);/.exec(ruleBody(selector));
+  return match ? match[1].trim() : null;
+}
+
+describe("terminal boşluk dolgusu", () => {
+  it(".term-host dolgu taşımıyor", () => {
+    // Buraya dolgu koymak satır hesabını bozar ve footer yazının üzerine biner.
+    const padding = paddingOf(".term-host");
+    expect(padding, ".term-host dolgu bildirimi bulunamadı").not.toBe(null);
+    expect(
+      padding,
+      ".term-host dolgusu 0 olmalı — dolgu xterm öğesine ait, yoksa FitAddon fazla satır üretir",
+    ).toBe("0");
+  });
+
+  it(".term-host .xterm dolgu taşıyor", () => {
+    const padding = paddingOf(".term-host .xterm");
+    expect(padding, "xterm öğesinde dolgu tanımlı olmalı").not.toBe(null);
+    // Alt dolgu, son satır ile durum çubuğu arasındaki asgari boşluğu belirliyor.
+    const parts = padding!.split(/\s+/);
+    expect(parts.length, `beklenmeyen dolgu biçimi: ${padding}`).toBeGreaterThanOrEqual(3);
+    const bottom = Number.parseFloat(parts[2]);
+    expect(bottom, "alt dolgu en az 6px olmalı: footer yazıya değmesin").toBeGreaterThanOrEqual(6);
+  });
+
+  it("ana ızgara satırları içeriğe göre", () => {
+    // Sabit yükseklikler sekme/durum çubuğunun gerçek ölçüsüyle bir piksel
+    // oynadığında içerik satır sınırını aşıyordu.
+    const body = ruleBody(".main");
+    expect(body).toMatch(/grid-template-rows:\s*auto\s+1fr\s+auto/);
+    expect(body, "min-height:0 olmadan 1fr satır içeriğe göre büyüyüp footer'ı itiyor").toMatch(
+      /min-height:\s*0/,
+    );
+  });
+
+  it("terminal alanı ızgarada büyümüyor", () => {
+    expect(ruleBody(".terminal-area")).toMatch(/min-height:\s*0/);
+  });
+});
+
+/**
+ * xterm.css `.xterm .xterm-viewport`a `background-color: #000` veriyor ve bunu
+ * temayla değiştirmiyor. Viewport `.xterm`in dolgu kutusunu tamamen kapladığı,
+ * metin ise dolgunun içindeki `.xterm-screen`de durduğu için o dolgu halkası
+ * viewport'un arka planını gösteriyor — açık temada terminalin çevresinde
+ * siyah bir çerçeve olarak. Koyu temada siyah üstüne siyah geldiği için
+ * gözden kaçıyordu.
+ */
+describe("terminal arka planı", () => {
+  it("xterm viewport tema arka planını alıyor", () => {
+    const body = ruleBody(".term-host .xterm-viewport");
+    const match = /background-color:\s*([^;]+);/.exec(body);
+    expect(match, "viewport arka planı tanımlı olmalı").not.toBe(null);
+    expect(
+      match![1].trim(),
+      "viewport arka planı tema değişkeninden gelmeli, yoksa xterm.css'in siyahı kalır",
+    ).toBe("var(--term-bg)");
+  });
+
+  it("dolgu halkasının arkasında tema rengi var", () => {
+    // Viewport saydam olsaydı bile arkada doğru renk durmalı.
+    expect(ruleBody(".main")).toMatch(/background:\s*var\(--term-bg\)/);
+  });
+});

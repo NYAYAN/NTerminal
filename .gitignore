@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+
+# Rust derleme çıktısı ve Tauri'nin ürettiği ACL şemaları (build sırasında yeniden yazılır)
+src-tauri/target/
+src-tauri/gen/schemas/
+
+*.local
+*.log
+.env
+.DS_Store

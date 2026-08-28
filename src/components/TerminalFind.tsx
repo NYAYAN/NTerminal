@@ -1,0 +1,126 @@
+import { useEffect, useRef, useState } from "react";
+
+import { useStore } from "../store/useStore";
+
+/**
+ * Terminal içi arama çubuğu (Ctrl+Shift+F).
+ *
+ * xterm'in SearchAddon'ı üzerinden çalışıyor; eşleşme sayısını addon'un
+ * `onDidChangeResults` olayından okuyoruz - kendimiz saymaya kalkarsak
+ * kaydırma tamponundaki satır sayısı yüzünden yavaşlar.
+ */
+export function TerminalFind() {
+  const setUi = useStore((s) => s.setUi);
+  const activeGroupId = useStore((s) => s.activeGroupId);
+  const groups = useStore((s) => s.groups);
+
+  const [query, setQuery] = useState("");
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [results, setResults] = useState<{ index: number; count: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const group = groups.find((g) => g.id === activeGroupId);
+  const tabId = group?.activeTabId ?? group?.tabs[0]?.id ?? null;
+
+  // Eslesme sayaci yalnizca dekorasyonlar acikken bildiriliyor (addon
+  // sozlesmesi), zaten eslesmelerin isaretlenmesini de istiyoruz.
+  const options = {
+    caseSensitive,
+    wholeWord,
+    decorations: {
+      matchBackground: "#3b5070",
+      matchOverviewRuler: "#58a6ff",
+      activeMatchBackground: "#58a6ff",
+      activeMatchColorOverviewRuler: "#79c0ff",
+    },
+  };
+
+  const session = () => useStore.getState().activeSession();
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  // Eşleşme sayacına abone ol. Sekme değişirse yeni oturuma bağlan.
+  useEffect(() => {
+    const current = session();
+    if (!current) return;
+    const disposable = current.search.onDidChangeResults((event) => {
+      setResults({ index: event.resultIndex, count: event.resultCount });
+    });
+    return () => disposable.dispose();
+  }, [tabId]);
+
+  // Arama koşulları değiştikçe canlı ara.
+  useEffect(() => {
+    const current = session();
+    if (!current) return;
+    if (!query) {
+      current.search.clearDecorations();
+      setResults(null);
+      return;
+    }
+    current.search.findNext(query, { ...options, incremental: true });
+  }, [query, caseSensitive, wholeWord, tabId]);
+
+  const close = () => {
+    session()?.search.clearDecorations();
+    setUi({ findOpen: false });
+    session()?.focus();
+  };
+
+  const step = (direction: 1 | -1) => {
+    const current = session();
+    if (!current || !query) return;
+    if (direction === 1) current.search.findNext(query, options);
+    else current.search.findPrevious(query, options);
+  };
+
+  return (
+    <div className="find-bar">
+      <input
+        ref={inputRef}
+        placeholder="terminalde ara…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            step(e.shiftKey ? -1 : 1);
+          } else if (e.key === "Escape") {
+            close();
+          }
+        }}
+      />
+      <span className="count">
+        {query ? (results ? `${results.count === 0 ? 0 : results.index + 1}/${results.count}` : "…") : ""}
+      </span>
+      <button
+        className={caseSensitive ? "icon-btn on" : "icon-btn"}
+        title="Büyük/küçük harf duyarlı"
+        onClick={() => setCaseSensitive((v) => !v)}
+      >
+        Aa
+      </button>
+      <button
+        className={wholeWord ? "icon-btn on" : "icon-btn"}
+        title="Tam sözcük"
+        onClick={() => setWholeWord((v) => !v)}
+      >
+        ab
+      </button>
+      <button className="icon-btn" title="Önceki (Shift+Enter)" onClick={() => step(-1)}>
+        ↑
+      </button>
+      <button className="icon-btn" title="Sonraki (Enter)" onClick={() => step(1)}>
+        ↓
+      </button>
+      <button className="icon-btn" title="Kapat (Esc)" onClick={close}>
+        ×
+      </button>
+    </div>
+  );
+}
