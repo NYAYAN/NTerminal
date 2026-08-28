@@ -1,0 +1,345 @@
+//! Diske yazilan ve arayuzle paylasilan veri modelleri.
+//!
+//! Tum alanlar serde varsayilanlariyla tanimli: eski bir settings.json veya
+//! baska bir makineden gelen .nterminal.json yeni alanlar eklendikten sonra da
+//! okunabilsin diye. Surum alanlari gocler (migration) icin ayrilmis.
+
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+pub const SETTINGS_VERSION: u32 = 1;
+pub const WORKSPACE_VERSION: u32 = 1;
+pub const BUNDLE_VERSION: u32 = 1;
+
+// ---------------------------------------------------------------- profiller
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ShellKind {
+    PowerShell,
+    Pwsh,
+    Cmd,
+    Bash,
+    Wsl,
+    Custom,
+}
+
+impl Default for ShellKind {
+    fn default() -> Self {
+        ShellKind::PowerShell
+    }
+}
+
+impl ShellKind {
+    /// Kabuk entegrasyonu (OSC 133/633) bu tur icin desteklenir mi?
+    pub fn supports_integration(self) -> bool {
+        !matches!(self, ShellKind::Custom)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub kind: ShellKind,
+    /// Calistirilacak exe. Bos birakilirsa kind uzerinden cozulur.
+    #[serde(default)]
+    pub shell: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    #[serde(default = "default_true")]
+    pub shell_integration: bool,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Ice alma sonrasi doldurulur: exe bu makinede bulunamadi.
+    #[serde(default)]
+    pub unavailable: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+// ------------------------------------------------------------------ ayarlar
+
+/// Kapsayici duzeyinde `serde(default)`: eksik alanlar `Default` uygulamasindan
+/// dolduruluyor. Bu sart - yeni bir gorunum alani eklendiginde (ornek:
+/// panel_width) kullanicinin diskte duran settings.json'i o alani icermiyor,
+/// alan bazinda varsayilan olmadan ayristirma tumden dusuyor ve kullanici tum
+/// ayarlarini kaybediyor.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Appearance {
+    pub font_family: String,
+    pub font_size: u16,
+    pub line_height: f32,
+    pub letter_spacing: f32,
+    /// Arayuzde tanimli palet anahtari.
+    pub theme: String,
+    pub cursor_style: String,
+    pub cursor_blink: bool,
+    pub scrollback: u32,
+    pub sidebar_width: u16,
+    /// Sag panelin (gecmis / favoriler) genisligi.
+    pub panel_width: u16,
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Self {
+            font_family: "Cascadia Mono, Consolas, Courier New, monospace".into(),
+            font_size: 14,
+            line_height: 1.2,
+            letter_spacing: 0.0,
+            theme: "nterminal-dark".into(),
+            cursor_style: "bar".into(),
+            cursor_blink: true,
+            scrollback: 10_000,
+            sidebar_width: 240,
+            panel_width: 390,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Behavior {
+    /// Kapatilirken grup/sekme duzenini geri yukle.
+    pub restore_session: bool,
+    /// Sekmelerin ekran ciktisini (scrollback) da geri yukle.
+    pub restore_scrollback: bool,
+    /// Sekme basina kaydedilecek satir sayisi.
+    pub scrollback_save_lines: u32,
+    /// Komut calisirken sekme kapatilmak istenirse onay sor.
+    pub confirm_close_running: bool,
+    pub copy_on_select: bool,
+    pub paste_on_right_click: bool,
+    /// Yeni sekme acilirken aktif sekmenin dizininden basla.
+    pub inherit_cwd: bool,
+    /// Gecmiste tutulacak azami kayit sayisi (asinca en eskiler silinir).
+    pub history_limit: u32,
+    /// Gecmis panelinde ayni komutun tekrarlarini tek satirda topla.
+    pub history_dedupe: bool,
+    /// Kenar cubugunda yalnizca favori gruplari goster.
+    pub show_only_favorite_groups: bool,
+}
+
+impl Default for Behavior {
+    fn default() -> Self {
+        Self {
+            restore_session: true,
+            restore_scrollback: true,
+            scrollback_save_lines: 2_000,
+            confirm_close_running: true,
+            copy_on_select: true,
+            paste_on_right_click: true,
+            inherit_cwd: true,
+            history_limit: 50_000,
+            history_dedupe: false,
+            show_only_favorite_groups: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    #[serde(default = "settings_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub appearance: Appearance,
+    #[serde(default)]
+    pub behavior: Behavior,
+    #[serde(default)]
+    pub profiles: Vec<Profile>,
+    #[serde(default)]
+    pub default_profile_id: String,
+    /// Eylem adi -> kisayol ("newTab" -> "Ctrl+T").
+    #[serde(default)]
+    pub keybindings: BTreeMap<String, String>,
+}
+
+fn settings_version() -> u32 {
+    SETTINGS_VERSION
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            version: SETTINGS_VERSION,
+            appearance: Appearance::default(),
+            behavior: Behavior::default(),
+            profiles: Vec::new(),
+            default_profile_id: String::new(),
+            keybindings: default_keybindings(),
+        }
+    }
+}
+
+pub fn default_keybindings() -> BTreeMap<String, String> {
+    let pairs = [
+        ("newTab", "Ctrl+T"),
+        ("closeTab", "Ctrl+W"),
+        ("nextTab", "Ctrl+Tab"),
+        ("prevTab", "Ctrl+Shift+Tab"),
+        ("newGroup", "Ctrl+Shift+N"),
+        ("commandPalette", "Ctrl+Shift+P"),
+        ("historyPanel", "Ctrl+Shift+H"),
+        ("historySearch", "Ctrl+R"),
+        ("favorites", "Ctrl+Shift+B"),
+        ("settings", "Ctrl+,"),
+        ("renameTab", "Ctrl+Shift+R"),
+        ("toggleLock", "Ctrl+Shift+L"),
+        ("clearTerminal", "Ctrl+Shift+K"),
+        ("findInTerminal", "Ctrl+Shift+F"),
+        ("copy", "Ctrl+Shift+C"),
+        ("paste", "Ctrl+Shift+V"),
+        ("zoomIn", "Ctrl+="),
+        ("zoomOut", "Ctrl+-"),
+        ("zoomReset", "Ctrl+0"),
+    ];
+    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+// -------------------------------------------------------- calisma alani
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabState {
+    pub id: String,
+    /// Kabuktan / OSC 0-2 ile gelen baslik.
+    #[serde(default)]
+    pub title: String,
+    /// Kullanici elle adlandirdiysa bu kazanir.
+    #[serde(default)]
+    pub custom_title: Option<String>,
+    #[serde(default)]
+    pub profile_id: String,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub last_active_at: i64,
+    /// Bu sekmenin ekran ciktisi diskte duruyor mu?
+    #[serde(default)]
+    pub has_scrollback: bool,
+    /// Son calistirilan komut - sekme ipucunda gosterilir.
+    #[serde(default)]
+    pub last_command: Option<String>,
+    /// Kilitli sekme kapatilamaz. Yanlislikla kapatmaya karsi koruma;
+    /// kapatmak icin once kilidin kaldirilmasi gerekiyor.
+    #[serde(default)]
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub collapsed: bool,
+    /// Favori grup. Kenar cubugunda suzgec acikken yalnizca bunlar listelenir.
+    #[serde(default)]
+    pub favorite: bool,
+    /// Bu gruptaki yeni sekmeler icin varsayilan profil.
+    #[serde(default)]
+    pub default_profile_id: Option<String>,
+    /// Bu gruptaki yeni sekmeler icin baslangic dizini.
+    #[serde(default)]
+    pub default_cwd: Option<String>,
+    /// Gruba ozel ortam degiskenleri; profil env degerlerinin ustune biner.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub active_tab_id: Option<String>,
+    #[serde(default)]
+    pub tabs: Vec<TabState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    #[serde(default = "workspace_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub active_group_id: Option<String>,
+    #[serde(default)]
+    pub groups: Vec<Group>,
+    /// Son kaydetme zamani (ms).
+    #[serde(default)]
+    pub saved_at: i64,
+}
+
+fn workspace_version() -> u32 {
+    WORKSPACE_VERSION
+}
+
+impl Default for Workspace {
+    fn default() -> Self {
+        Self {
+            version: WORKSPACE_VERSION,
+            active_group_id: None,
+            groups: Vec::new(),
+            saved_at: 0,
+        }
+    }
+}
+
+// ------------------------------------------------------------------ gecmis
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryEntry {
+    pub id: String,
+    pub command: String,
+    #[serde(default)]
+    pub tab_id: String,
+    #[serde(default)]
+    pub group_id: String,
+    #[serde(default)]
+    pub profile_id: String,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub started_at: i64,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    /// "integration" (OSC 133/633) veya "keystroke" (tus yakalama yedegi).
+    #[serde(default)]
+    pub source: String,
+}
+
+/// Gecmis dosyasi append-only bir gunluk: her satir ya yeni kayit, ya var olan
+/// bir kaydin tamamlanma bilgisi, ya da silme islemi. Boylece her komut sonunda
+/// 50 bin satirlik dosyayi bastan yazmak gerekmiyor.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "lowercase")]
+pub enum HistoryRecord {
+    Add(HistoryEntry),
+    Fin {
+        id: String,
+        #[serde(default)]
+        exit_code: Option<i32>,
+        #[serde(default)]
+        duration_ms: Option<u64>,
+    },
+    Del {
+        ids: Vec<String>,
+    },
+}

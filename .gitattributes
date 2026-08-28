@@ -1,0 +1,14 @@
+# Satır sonları burada bir biçim tercihi değil, çalışma koşulu:
+# nterminal.sh CRLF ile checkout edilirse bash `$'\r': command not found` veriyor
+# ve kabuk entegrasyonu tamamen sessizce ölüyor. cmd betikleri ise tersine CRLF
+# istiyor. Bu yüzden depoda her şey LF, çalışma kopyasında uzantıya göre.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+*.png  binary
+*.ico  binary
+*.icns binary
