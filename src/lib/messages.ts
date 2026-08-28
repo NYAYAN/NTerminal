@@ -81,6 +81,44 @@ export const MESSAGES = {
     "The \"{name}\" group and its {n} tabs will be closed.",
   ],
   "confirm.delete": ["Sil", "Delete"],
+  "confirm.remove": ["Kaldır", "Remove"],
+  "confirm.deleteGroupEmptyMessage": [
+    "\"{name}\" grubu silinecek.",
+    "The \"{name}\" group will be deleted.",
+  ],
+  "confirm.removeFavoriteTitle": ["Favoriden kaldır", "Remove from favorites"],
+  "confirm.removeFavoriteMessage": [
+    "\"{command}\" favorilerden kaldırılacak.",
+    "\"{command}\" will be removed from favorites.",
+  ],
+  "confirm.removeFavoriteDetail": [
+    "Kısa ad, not ve klasör bilgisi de silinir. Komut geçmişte kalmaya devam eder.",
+    "The short name, note and folder are deleted too. The command stays in the history.",
+  ],
+  "confirm.deleteHistoryTitle": ["Geçmişten sil", "Delete from history"],
+  "confirm.deleteHistory.one": [
+    "{n} kayıt geçmişten silinecek.",
+    "{n} record will be deleted from the history.",
+  ],
+  "confirm.deleteHistory.other": [
+    "{n} kayıt geçmişten silinecek.",
+    "{n} records will be deleted from the history.",
+  ],
+  "confirm.deleteProfileTitle": ["Profili sil", "Delete profile"],
+  "confirm.deleteProfileMessage": [
+    "\"{name}\" kabuk profili silinecek.",
+    "The \"{name}\" shell profile will be deleted.",
+  ],
+  "confirm.deleteProfileDetail": [
+    "Bu profille açılmış sekmeler çalışmaya devam eder; yeni sekmeler varsayılan profille açılır.",
+    "Tabs already opened with this profile keep running; new tabs open with the default profile.",
+  ],
+  "confirm.deleteEnvTitle": ["Değişkeni sil", "Delete variable"],
+  "confirm.deleteEnvMessage": [
+    "\"{name}\" ortam değişkeni silinecek.",
+    "The \"{name}\" environment variable will be deleted.",
+  ],
+  "confirm.deleteEnvUnnamed": ["Adsız ortam değişkeni silinecek.", "An unnamed environment variable will be deleted."],
   "confirm.runManyTitle": ["Komutları çalıştır", "Run commands"],
   "confirm.runMany.one": [
     "{n} komut sırayla çalıştırılacak.",
@@ -517,6 +555,11 @@ export const MESSAGES = {
   ],
   "settings.title": ["Ayarlar", "Settings"],
   "settings.general": ["Genel", "General"],
+  "settings.searchPlaceholder": ["ayarlarda ara…", "search settings…"],
+  "settings.searchNoResult": ["Eşleşen ayar yok.", "No matching setting."],
+  "settings.searchClear": ["Aramayı temizle", "Clear search"],
+  "settings.searchCount.one": ["{n} sonuç", "{n} result"],
+  "settings.searchCount.other": ["{n} sonuç", "{n} results"],
   "settings.session": ["Oturum", "Session"],
   "settings.navTerminal": ["Terminal", "Terminal"],
   "settings.navHistory": ["Geçmiş", "History"],

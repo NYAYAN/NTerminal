@@ -63,6 +63,19 @@ yanlışlıkla çarpıya basmaya karşı. Ayardan "yalnızca komut çalışıyor
 sorar. Kilit ve onay birbirinin yerine geçmiyor: onay bir tıklama daha ister,
 kilit kapatmayı tümden reddeder.
 
+**Silme her zaman sorar.** Grup silme, favoriden kaldırma (menüden ya da
+yıldızı kapatarak), geçmişten kayıt silme, geçmişi temizleme, profil silme,
+ortam değişkeni silme ve ayarları sıfırlama — hepsi onay istiyor. Yıldızı
+kapatmak bir anahtar gibi görünüyor ama favoriyi **siliyor**: kısa ad, not ve
+klasör bilgisi de gidiyor, geri tıklamak onları getirmiyor. Boş bir grup da
+soruyor; "boş" olması silmenin geri dönüşü olduğu anlamına gelmiyor.
+
+Ekleme yıkıcı olmadığı için soru sormuyor, ve yapılamayacak bir işlem için de
+sormuyor (son grup, son profil) — olmayacak bir şey için onay istemek
+yanıltıcı. Onay grup silme ve favori kaldırmada **deponun içinde**: silme yolu
+birden fazla olabiliyor (menü, kısayol, komut paleti) ve onayın her birinde
+tekrarlanması kaçınılmaz olarak birinde atlanmasıyla sonuçlanıyor.
+
 Onay penceresi uygulamanın kendi penceresi, `window.confirm` değil: webview'ün
 yerleşik iletişim pencereleri temayı ve dili taşımıyor, ana iş parçacığını
 bloklayabiliyor ve gömülü webview'de hiç görünmeme riski taşıyor. Onay
@@ -402,6 +415,20 @@ yazı tipi, imleç), **Terminal** (kopyala/yapıştır, bağlantılar, komut ön
 **Oturum** (devamlılık, sekme kapatma onayı), **Geçmiş**, **Profiller**,
 **Gruplar**, **Kısayollar**, **Hakkında**.
 
+**Arama.** Bölüm listesinin üstündeki kutuya ayarın adını (ya da ne yaptığını)
+yazınca sonuçlar bölüm adlarıyla listeleniyor; birine tıklamak o bölüme
+götürüyor **ve ilgili satırı kısa süre vurguluyor** — yalnızca bölüme götürmek
+yarım iş, on ayarlı bir bölümde kullanıcı aradığı satırı gözle taramak zorunda
+kalıyor. Arama aksana bakmıyor: "gorunum" yazmak "Görünüm"ü buluyor. Açıklama
+metinleri de taranıyor, çünkü kullanıcı çoğu zaman ayarın adını değil ne
+yaptığını biliyor ("PSReadLine" yalnızca açıklamada geçiyor). Etiket eşleşmeleri
+açıklama eşleşmelerinden önce geliyor.
+
+Arama indeksi elle tutulan bir liste ama sürüklenemiyor: arayüzdeki her ayar
+satırı `data-setting="<anahtar>"` taşıyor ve bir test o anahtarların kümesini
+indeksle birebir karşılaştırıyor. Yeni bir ayar eklenip indekse yazılmazsa test
+düşüyor — aksi hâlde arama onu bulamaz ve bu ancak elle deneyerek görülür.
+
 Pencere bu hâline üç ölçülmüş kusurdan geçerek geldi:
 
 - **Altı bölüm yatay bir şeritteydi** ve iki bölüm birbiriyle ilgisiz ayarları
@@ -417,6 +444,12 @@ Pencere bu hâline üç ölçülmüş kusurdan geçerek geldi:
   kenar kaldı, etiketler ve denetimler.
 - **Pencere içeriğe göre büyüyüp küçülüyordu** (379px ile 590px arası), bölüm
   değiştirmek görsel bir zıplama üretiyordu. Gövde artık sabit yükseklikte.
+- **Bölüm adları ortalanmıştı.** Düğme sistemi yenilenirken temel `button`
+  kuralına `justify-content: center` konulmuştu; düğme bir flex kabı olduğu için
+  bu `text-align: left`i ezdi ve sola dayalı olması gereken her şey ortaya kaydı
+  — bölüm listesi, sağ tık menüsü girdileri, öneri listesi satırları ve "sekme
+  ekle". Merkezleme artık temel kuralda değil, yalnızca içerikten geniş olabilen
+  düğmelerde (`.seg`, panel sekmeleri, pencere altlığı).
 
 ## Düğmeler
 
@@ -588,7 +621,7 @@ bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
 npm test
 ```
 
-- **Arayüz (367 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
+- **Arayüz (412 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
   simetrik olmak zorunda), base64 çözücü (UTF-8 dışı baytlar dahil), kısayol
   eşleştirme, biçimlendirme, bulanık arama, sekme etiketi mantığı, sekme kilidi
   kuralları, sıralama/sürükle-bırak indeks matematiği, grup görünürlük süzgeci,
@@ -628,7 +661,19 @@ npm test
     Bu test bir kez ödenmiş bedelden geliyor: elle `grep` ile tararken dört
     metni kaçırdım, hepsi arada `{}` ya da satır sonu olduğu için.
   - **Ayarlar penceresi** — dokuz bölüm, gezinmenin çalışması, her bölümün en az
-    bir başlığı olması ve **aynı başlığın iki bölümde geçmemesi**.
+    bir başlığı olması, **aynı başlığın iki bölümde geçmemesi** ve arama
+    (sonuçların bölüm adı taşıması, tıklamanın satırı vurgulaması, Enter/Esc,
+    aksansız yazım, eşleşme yok iletisi).
+  - **Ayar arama indeksi** — indeksin arayüzle birebir olması (kaynaktaki
+    `data-setting` anahtarlarıyla karşılaştırılıyor), Türkçe harf sadeleştirme
+    ve sıralama (etiket eşleşmesi açıklamadan önce).
+  - **Düğme hizalaması** — temel `button` kuralının hizalamayı zorlamaması;
+    sola dayalı düğmelerin `text-align: left` taşıması. Kullanıcının ayarlar
+    penceresinde gördüğü gerilemenin testi.
+  - **"Silme her zaman sorar"** — her silme yolu için iki şey: soruluyor mu ve
+    **vazgeçilince silme gerçekten olmuyor mu**. İkincisi kritik; onayı
+    gösterip cevabı yok saymak en kötü durum. Ayrıca eklemenin ve
+    yapılamayacak işlemlerin soru sormaması.
   - **Düğme renkleri** — 4 tema için dolgulu birincil, dolgulu yıkıcı, sessiz
     kırmızı, yeşil rozet ve çerçeveli düğme ≥ 4.5 karşıtlık; odak halkasının
     iki katmanlı olması.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useT } from "../lib/i18n";
+import { useStore } from "../store/useStore";
 
 interface Props {
   value: Record<string, string>;
@@ -64,7 +65,22 @@ export function EnvEditor({ value, onChange }: Props) {
           <button
             className="icon-btn danger"
             title={t("common.delete")}
-            onClick={() => commit(pairs.filter((_, i) => i !== index))}
+            onClick={() => {
+              // Bu da bir "sil": satir hemen kaydediliyor, geri alma yok.
+              void useStore
+                .getState()
+                .askConfirm({
+                  title: t("confirm.deleteEnvTitle"),
+                  message: key.trim()
+                    ? t("confirm.deleteEnvMessage", { name: key.trim() })
+                    : t("confirm.deleteEnvUnnamed"),
+                  confirmLabel: t("confirm.delete"),
+                  danger: true,
+                })
+                .then((ok) => {
+                  if (ok) commit(pairs.filter((_, i) => i !== index));
+                });
+            }}
           >
             ×
           </button>

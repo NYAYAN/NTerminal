@@ -262,25 +262,8 @@ export function GroupSidebar() {
         : t("group.deleteLockedCount", { n: lockedTabs(group.tabs).length }),
       danger: true,
       disabled: groups.length <= 1 || !canDeleteGroup(group),
-      run: () => {
-        if (group.tabs.length === 0) {
-          void store().deleteGroup(group.id);
-          return;
-        }
-        void store()
-          .askConfirm({
-            title: t("confirm.deleteGroupTitle"),
-            message: t("confirm.deleteGroupMessage", {
-              name: group.name,
-              n: group.tabs.length,
-            }),
-            confirmLabel: t("confirm.delete"),
-            danger: true,
-          })
-          .then((ok) => {
-            if (ok) void store().deleteGroup(group.id);
-          });
-      },
+      // Onay deponun icinde: her silme yolu ayni soruyu soruyor.
+      run: () => void store().deleteGroup(group.id),
     },
   ];
 
