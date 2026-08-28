@@ -79,7 +79,13 @@ button {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  /* `justify-content` BILINCLI olarak burada YOK.
+   *
+   * Merkezleme temel kurala konuldugunda dugme bir flex kabi oldugu icin
+   * `text-align: left` ezildi ve sola dayali olmasi gereken her sey ortaya
+   * kaydi: sag tik menusu girdileri, oneri listesi satirlari, "sekme ekle"
+   * ve ayarlar penceresinin bolum listesi. Merkezleme yalnizca icerikten
+   * GENIS olabilen dugmelerde anlamli; onlar asagida tek tek belirtiliyor. */
   gap: 6px;
   white-space: nowrap;
   transition:
@@ -1966,6 +1972,96 @@ input[type="color"] {
   border-right: 1px solid var(--border);
   background: var(--surface);
   overflow-y: auto;
+}
+
+/* Icerikten genis olabilen dugmeler ortalaniyor: bolunmus secim denetimleri
+   (`.seg`), panel kip sekmeleri ve pencere altligindaki eylemler. */
+.seg button,
+.panel-tabs button,
+.modal-foot button {
+  justify-content: center;
+}
+
+/* Arama kutusu bolum listesinin ustunde: dokuz bolum arasinda gezinmek
+   yerine ayarin adini yazmak daha kisa yol. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.settings-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.settings-results-count {
+  padding: 2px 4px 4px;
+  font-size: 10.5px;
+}
+
+/* Sonuc satiri: ustte ayarin adi, altta hangi bolumde oldugu. Bolum adi
+   olmadan kullanici nereye gittigini anlamiyor. */
+.settings-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-result:hover {
+  background: var(--hover);
+}
+
+.settings-result-label {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  /* Uzun etiketler kirilabilir: kutunun genisligi 172px. */
+  white-space: normal;
+}
+
+.settings-result-section {
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+
+/* Aramadan gidilen satirin kisa vurgusu: bolume goturmek yetmiyor, hangi
+   satir oldugu da gorunmeli. */
+.field.found,
+.check-row.found {
+  border-radius: var(--radius);
+  animation: setting-found 1.4s ease-out;
+}
+
+@keyframes setting-found {
+  0%,
+  55% {
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
 }
 
 .settings-nav button {

@@ -184,3 +184,43 @@ describe("öneri listesi", () => {
     expect(body).toMatch(/overflow-y:\s*auto/);
   });
 });
+
+/**
+ * Düğme hizalaması.
+ *
+ * Ölçülmüş bir gerileme: temel `button` kuralına `justify-content: center`
+ * konulduğunda düğme bir flex kabı olduğu için `text-align: left` ezildi ve
+ * sola dayalı olması gereken her şey ortaya kaydı — sağ tık menüsü girdileri,
+ * öneri listesi satırları, "sekme ekle" ve ayarlar penceresinin bölüm listesi.
+ * Kullanıcı bunu ayarlar penceresinde gördü.
+ *
+ * Merkezleme yalnızca içerikten geniş olabilen düğmelerde anlamlı; kararın
+ * temel kuralda değil bileşende olması gerekiyor.
+ */
+describe("düğme hizalaması", () => {
+  it("temel düğme kuralı hizalamayı zorlamıyor", () => {
+    const body = ruleBody("button");
+    expect(
+      body,
+      "temel kural justify-content vermemeli: sola dayalı düğmeleri ezer",
+    ).not.toMatch(/justify-content/);
+  });
+
+  it("sola dayalı düğmeler text-align: left taşıyor", () => {
+    for (const selector of [".ctx-item", ".suggest-row", ".add-tab", ".settings-nav button"]) {
+      expect(ruleBody(selector), `${selector} sola dayalı olmalı`).toMatch(
+        /text-align:\s*left/,
+      );
+    }
+  });
+
+  it("içerikten geniş olabilen düğmeler ortalanıyor", () => {
+    // `.seg`, panel kip sekmeleri ve pencere altlığı: bunlar esneyip
+    // içeriğinden geniş olabiliyor, ortalanmazsa metin sola yapışıyor.
+    const at = CSS.indexOf(".seg button,");
+    expect(at, "ortalama kuralı bulunamadı").toBeGreaterThan(-1);
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule).toMatch(/justify-content:\s*center/);
+    expect(CSS.slice(at, at + 120)).toContain(".modal-foot button");
+  });
+});

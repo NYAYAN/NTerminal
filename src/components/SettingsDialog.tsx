@@ -6,6 +6,7 @@ import { api } from "../lib/ipc";
 import { LANGS, localeTag, tp, useT, type Translate } from "../lib/i18n";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
+import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { THEMES } from "../lib/themes";
 import { useStore } from "../store/useStore";
 import type {
@@ -19,40 +20,6 @@ import type {
 } from "../types";
 import { EnvEditor } from "./EnvEditor";
 
-/**
- * Ayar bölümleri.
- *
- * Altı bölüm yatay bir şeritteydi ve iki bölüm ("Görünüm", "Davranış")
- * birbiriyle ilgisiz ayarları taşıyacak kadar büyümüştü: dil görünümün
- * altındaydı, kopyala/yapıştır ile sekme kapatma onayı aynı "Terminal"
- * başlığı altındaydı ve iki ayrı bölümde aynı başlık iki kez geçiyordu.
- * Ölçüm: tek bir bölümün içeriği 776px, görünür alan 461px.
- *
- * Şimdi dokuz bölüm ve dikey gezinme: her bölüm kaydırmasız sığıyor,
- * başlıklar tekrarlamıyor ve yeni ayar eklemek şeridi taşırmıyor.
- */
-type Section =
-  | "general"
-  | "appearance"
-  | "terminal"
-  | "session"
-  | "history"
-  | "profiles"
-  | "groups"
-  | "keys"
-  | "about";
-
-const SECTIONS: { id: Section; key: MsgKey }[] = [
-  { id: "general", key: "settings.general" },
-  { id: "appearance", key: "settings.appearance" },
-  { id: "terminal", key: "settings.navTerminal" },
-  { id: "session", key: "settings.session" },
-  { id: "history", key: "settings.navHistory" },
-  { id: "profiles", key: "settings.profiles" },
-  { id: "groups", key: "settings.groups" },
-  { id: "keys", key: "settings.keys" },
-  { id: "about", key: "settings.about" },
-];
 
 const VIEW_MODES: { value: ViewMode; key: MsgKey }[] = [
   { value: "tabs", key: "view.tabs" },
@@ -103,6 +70,9 @@ export function SettingsDialog() {
   const [selectedProfileId, setSelectedProfileId] = useState(settings.profiles[0]?.id ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingGroupId ?? groups[0]?.id ?? "");
   const [capturing, setCapturing] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  /** Aramadan gidilen ayar: bulunduğunda kısa bir vurgu alıyor. */
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [historySize, setHistorySize] = useState<string>("");
 
   const store = useStore.getState;
@@ -137,12 +107,20 @@ export function SettingsDialog() {
     setSelectedProfileId(id);
   };
 
-  const removeProfile = () => {
+  const removeProfile = async () => {
     if (!profile) return;
     if (settings.profiles.length <= 1) {
       store().toast(t("settings.atLeastOneProfile"), "err");
       return;
     }
+    const ok = await store().askConfirm({
+      title: t("confirm.deleteProfileTitle"),
+      message: t("confirm.deleteProfileMessage", { name: profile.name }),
+      detail: t("confirm.deleteProfileDetail"),
+      confirmLabel: t("confirm.delete"),
+      danger: true,
+    });
+    if (!ok) return;
     const rest = settings.profiles.filter((p) => p.id !== profile.id);
     void store().setProfiles(rest);
     setSelectedProfileId(rest[0].id);
@@ -184,6 +162,30 @@ export function SettingsDialog() {
     };
   }, [section]);
 
+  /**
+   * Aramadan gidilen ayarı görünür alana getirip kısa süre vurgular.
+   *
+   * Yalnızca bölüme götürmek yetmiyor: bölümde on ayar varsa kullanıcı aradığı
+   * satırı gözle taramak zorunda kalıyor ve arama yarım iş oluyor.
+   */
+  useEffect(() => {
+    if (!highlight) return;
+    const row = document.querySelector<HTMLElement>(`[data-setting="${highlight}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("found");
+    const timer = window.setTimeout(() => {
+      row.classList.remove("found");
+      setHighlight(null);
+    }, 1400);
+    return () => {
+      window.clearTimeout(timer);
+      row.classList.remove("found");
+    };
+  }, [highlight, section]);
+
+  const hits = searchSettings(query, t);
+
   return (
     <div className="overlay" onMouseDown={close}>
       <div className="modal settings" onMouseDown={(e) => e.stopPropagation()}>
@@ -201,16 +203,67 @@ export function SettingsDialog() {
           {/* Dikey gezinme: dokuz bölüm yatay bir şeride sığmıyor ve her
               yeni ayar şeridi biraz daha daraltıyordu. */}
           <nav className="settings-nav">
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                className={section === s.id ? "on" : ""}
-                aria-current={section === s.id}
-                onClick={() => setSection(s.id)}
-              >
-                {t(s.key)}
-              </button>
-            ))}
+            <div className="settings-search">
+              <input
+                value={query}
+                placeholder={t("settings.searchPlaceholder")}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Escape") setQuery("");
+                  // Enter: ilk sonuca git. Arama kutusundan elini çekmeden
+                  // en olası hedefe ulaşmak için.
+                  if (e.key === "Enter" && hits.length > 0) {
+                    setSection(hits[0].section);
+                    setHighlight(hits[0].key);
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  className="icon-btn"
+                  title={t("settings.searchClear")}
+                  onClick={() => setQuery("")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {query ? (
+              <div className="settings-results">
+                {hits.length === 0 && <div className="hint">{t("settings.searchNoResult")}</div>}
+                {hits.length > 0 && (
+                  <div className="settings-results-count dim">
+                    {tp("settings.searchCount", hits.length)}
+                  </div>
+                )}
+                {hits.map((hit) => (
+                  <button
+                    key={`${hit.section}:${hit.key}`}
+                    className="settings-result"
+                    onClick={() => {
+                      setSection(hit.section);
+                      setHighlight(hit.key);
+                    }}
+                  >
+                    <span className="settings-result-label">{hit.label}</span>
+                    <span className="settings-result-section">{hit.sectionLabel}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  className={section === s.id ? "on" : ""}
+                  aria-current={section === s.id}
+                  onClick={() => setSection(s.id)}
+                >
+                  {t(s.key)}
+                </button>
+              ))
+            )}
           </nav>
 
           <div className="modal-body">
@@ -218,7 +271,7 @@ export function SettingsDialog() {
             <>
               <div className="section">
                 <h3>{t("settings.language")}</h3>
-                <div className="field">
+                <div className="field" data-setting="settings.languageLabel">
                   <label>{t("settings.languageLabel")}</label>
                   <select
                     value={settings.language}
@@ -236,7 +289,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("view.heading")}</h3>
-                <div className="field">
+                <div className="field" data-setting="view.label">
                   <label>{t("view.label")}</label>
                   <div className="seg">
                     {VIEW_MODES.map((mode) => (
@@ -264,7 +317,7 @@ export function SettingsDialog() {
             <>
               <div className="section">
                 <h3>{t("settings.theme")}</h3>
-                <div className="field">
+                <div className="field" data-setting="settings.colorTheme">
                   <label>{t("settings.colorTheme")}</label>
                   <select
                     value={settings.appearance.theme}
@@ -281,7 +334,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("settings.font")}</h3>
-                <div className="field">
+                <div className="field" data-setting="settings.fontFamily">
                   <label>{t("settings.fontFamily")}</label>
                   <input
                     value={settings.appearance.fontFamily}
@@ -289,7 +342,7 @@ export function SettingsDialog() {
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.fontSize">
                   <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
                   <input
                     type="range"
@@ -301,7 +354,7 @@ export function SettingsDialog() {
                     }
                   />
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.lineHeightLabel">
                   <label>
                     {t("settings.lineHeightLabel", {
                       n: settings.appearance.lineHeight.toFixed(2),
@@ -318,7 +371,7 @@ export function SettingsDialog() {
                     }
                   />
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.letterSpacingLabel">
                   <label>
                     {t("settings.letterSpacingLabel", { n: settings.appearance.letterSpacing })}
                   </label>
@@ -337,7 +390,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("settings.cursorScroll")}</h3>
-                <div className="field">
+                <div className="field" data-setting="settings.cursorStyle">
                   <label>{t("settings.cursorStyle")}</label>
                   <select
                     value={settings.appearance.cursorStyle}
@@ -352,7 +405,7 @@ export function SettingsDialog() {
                     <option value="underline">{t("settings.cursorUnderline")}</option>
                   </select>
                 </div>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.cursorBlink">
                   <input
                     id="cursorBlink"
                     type="checkbox"
@@ -361,7 +414,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="cursorBlink">{t("settings.cursorBlink")}</label>
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.scrollbackLines">
                   <label>{t("settings.scrollbackLines")}</label>
                   <input
                     type="number"
@@ -384,7 +437,7 @@ export function SettingsDialog() {
             <>
               <div className="section">
                 <h3>{t("settings.copyPaste")}</h3>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.copyOnSelect">
                   <input
                     id="copyOnSelect"
                     type="checkbox"
@@ -393,7 +446,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="copyOnSelect">{t("settings.copyOnSelect")}</label>
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.rightClick">
                   <label>{t("settings.rightClick")}</label>
                   <select
                     value={settings.behavior.rightClickAction}
@@ -408,7 +461,7 @@ export function SettingsDialog() {
                     <option value="paste">{t("settings.rightClickPaste")}</option>
                   </select>
                 </div>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.ctrlCCopies">
                   <input
                     id="ctrlCCopiesSelection"
                     type="checkbox"
@@ -424,7 +477,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("settings.links")}</h3>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.highlightLinks">
                   <input
                     id="highlightLinks"
                     type="checkbox"
@@ -440,7 +493,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("settings.prediction")}</h3>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.appSuggestions">
                   <input
                     id="appSuggestions"
                     type="checkbox"
@@ -452,7 +505,7 @@ export function SettingsDialog() {
                   <label htmlFor="appSuggestions">{t("settings.appSuggestions")}</label>
                 </div>
                 <div className="hintline">{t("settings.appSuggestionsHint")}</div>
-                <div className="field">
+                <div className="field" data-setting="settings.predictionShell">
                   <label>{t("settings.predictionShell")}</label>
                   <select
                     value={settings.behavior.shellPrediction}
@@ -476,7 +529,7 @@ export function SettingsDialog() {
             <>
               <div className="section">
                 <h3>{t("settings.sessionRestore")}</h3>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.restoreSessionLabel">
                   <input
                     id="restoreSession"
                     type="checkbox"
@@ -487,7 +540,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="restoreSession">{t("settings.restoreSessionLabel")}</label>
                 </div>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.restoreScrollbackLabel">
                   <input
                     id="restoreScrollback"
                     type="checkbox"
@@ -498,7 +551,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="restoreScrollback">{t("settings.restoreScrollbackLabel")}</label>
                 </div>
-                <div className="field">
+                <div className="field" data-setting="settings.scrollbackPerTab">
                   <label>{t("settings.scrollbackPerTab")}</label>
                   <input
                     type="number"
@@ -513,7 +566,7 @@ export function SettingsDialog() {
                   />
                   <div className="hintline">{t("settings.scrollbackPerTabHint")}</div>
                 </div>
-                <div className="check-row">
+                <div className="check-row" data-setting="settings.inheritCwd">
                   <input
                     id="inheritCwd"
                     type="checkbox"
@@ -526,7 +579,7 @@ export function SettingsDialog() {
 
               <div className="section">
                 <h3>{t("settings.closeTabSection")}</h3>
-                <div className="field">
+                <div className="field" data-setting="settings.confirmCloseTab">
                   <label>{t("settings.confirmCloseTab")}</label>
                   <select
                     value={settings.behavior.confirmCloseTab}
@@ -549,7 +602,7 @@ export function SettingsDialog() {
           {section === "history" && (
             <div className="section">
               <h3>{t("settings.history")}</h3>
-              <div className="field">
+              <div className="field" data-setting="settings.historyLimit">
                 <label>{t("settings.historyLimit")}</label>
                 <input
                   type="number"
@@ -568,7 +621,7 @@ export function SettingsDialog() {
                   })}
                 </div>
               </div>
-              <div className="check-row">
+              <div className="check-row" data-setting="settings.historyDedupeDefault">
                 <input
                   id="historyDedupe"
                   type="checkbox"
@@ -613,7 +666,7 @@ export function SettingsDialog() {
                   >
                     {t("settings.scan")}
                   </button>
-                  <button className="danger" onClick={removeProfile}>
+                  <button className="danger" onClick={() => void removeProfile()}>
                     {t("settings.removeProfile")}
                   </button>
                 </div>

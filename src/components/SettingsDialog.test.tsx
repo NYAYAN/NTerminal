@@ -194,3 +194,168 @@ describe("ayarlar penceresi", () => {
     expect(container.querySelector(".settings-nav button.on")!.textContent!.trim()).toBe("Gruplar");
   });
 });
+
+describe("ayarlarda arama", () => {
+  const input = (c: HTMLElement) =>
+    c.querySelector(".settings-search input") as HTMLInputElement;
+  const results = (c: HTMLElement) => [...c.querySelectorAll(".settings-result")];
+
+  it("arama kutusu var", () => {
+    const { container } = render(<SettingsDialog />);
+    expect(input(container), "arama kutusu bulunamadı").not.toBe(null);
+  });
+
+  it("yazmak bölüm listesini sonuçlarla değiştiriyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    expect(navLabels(container)).toContain("Genel");
+
+    fireEvent.change(input(container), { target: { value: "tema" } });
+    await settle();
+
+    expect(results(container).length, "sonuç çıkmadı").toBeGreaterThan(0);
+    // Bölüm listesi yerini sonuçlara bırakmalı.
+    expect(navLabels(container)).not.toContain("Genel");
+  });
+
+  it("sonuç hem ayarın adını hem bölümünü gösteriyor", async () => {
+    // Bölüm adı olmadan kullanıcı nereye gittiğini anlamıyor.
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "tema" } });
+    await settle();
+    const first = results(container)[0];
+    expect(first.querySelector(".settings-result-label")!.textContent).toBe("Renk teması");
+    expect(first.querySelector(".settings-result-section")!.textContent).toBe("Görünüm");
+  });
+
+  it("sonuca tıklamak bölüme götürüyor ve satırı vurguluyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "sağ tık" } });
+    await settle();
+    fireEvent.click(results(container)[0]);
+    await settle();
+
+    // Terminal bölümü açılmalı.
+    expect(headings(container)).toContain("Kopyala ve yapıştır");
+    // Ve aradığı satır vurgulanmalı: yalnızca bölüme götürmek yarım iş.
+    const row = container.querySelector('[data-setting="settings.rightClick"]');
+    expect(row, "ayar satırı bulunamadı").not.toBe(null);
+    expect(row!.classList.contains("found"), "satır vurgulanmadı").toBe(true);
+  });
+
+  it("Enter ilk sonuca gidiyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "tema" } });
+    await settle();
+    fireEvent.keyDown(input(container), { key: "Enter" });
+    await settle();
+    expect(headings(container)).toContain("Tema");
+  });
+
+  it("Esc aramayı temizliyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "tema" } });
+    await settle();
+    fireEvent.keyDown(input(container), { key: "Escape" });
+    await settle();
+    expect(input(container).value).toBe("");
+    expect(navLabels(container)).toContain("Genel");
+  });
+
+  it("temizle düğmesi yalnızca sorgu varken görünüyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    expect(container.querySelector(".settings-search .icon-btn")).toBe(null);
+    fireEvent.change(input(container), { target: { value: "x" } });
+    await settle();
+    expect(container.querySelector(".settings-search .icon-btn")).not.toBe(null);
+  });
+
+  it("eşleşme yoksa bunu söylüyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "kubernetes" } });
+    await settle();
+    expect(results(container)).toHaveLength(0);
+    expect(container.querySelector(".settings-results .hint")!.textContent).toBe(
+      "Eşleşen ayar yok.",
+    );
+  });
+
+  it("aksansız yazım da buluyor", async () => {
+    // Aksanlı harfe basmak zorunda kalmak arama kutusunu kullanılmaz yapıyor.
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(input(container), { target: { value: "gorunum" } });
+    await settle();
+    expect(results(container).length).toBeGreaterThan(0);
+  });
+});
+
+describe("profil silme", () => {
+  it("onay soruyor ve vazgeçince silmiyor", async () => {
+    // Kullanıcının kuralı: her silmede sor. Profil silmek geri dönüşü olmayan
+    // bir kayıp (exe yolu, argümanlar, ortam değişkenleri).
+    const asked: string[] = [];
+    useStore.setState({
+      askConfirm: async (request) => {
+        asked.push(request.message);
+        return false;
+      },
+      settings: {
+        ...useStore.getState().settings,
+        profiles: [
+          ...useStore.getState().settings.profiles,
+          {
+            id: "p2",
+            name: "Git Bash",
+            kind: "bash",
+            shell: "bash.exe",
+            args: [],
+            cwd: null,
+            env: {},
+            shellIntegration: true,
+            color: null,
+            icon: null,
+            unavailable: false,
+          },
+        ],
+      },
+    });
+
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click([...container.querySelectorAll(".settings-nav button")][5]); // Profiller
+    await settle();
+
+    const remove = [...container.querySelectorAll(".modal-body button.danger")].find((b) =>
+      b.textContent?.trim() === "Sil",
+    )!;
+    expect(remove, "profil silme düğmesi bulunamadı").toBeTruthy();
+    fireEvent.click(remove);
+    await settle();
+
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain("PowerShell 7");
+    // Vazgeçildi: profil listesi olduğu gibi kalmalı.
+    expect(useStore.getState().settings.profiles).toHaveLength(2);
+  });
+
+  it("tek profil kalmışsa soru sorulmuyor", async () => {
+    // Yapılamayacak bir işlem için soru sormak kullanıcıyı yanıltır.
+    const asked: string[] = [];
+    useStore.setState({
+      askConfirm: async (request) => {
+        asked.push(request.message);
+        return true;
+      },
+    });
+
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click([...container.querySelectorAll(".settings-nav button")][5]);
+    await settle();
+    const remove = [...container.querySelectorAll(".modal-body button.danger")].find((b) =>
+      b.textContent?.trim() === "Sil",
+    )!;
+    fireEvent.click(remove);
+    await settle();
+
+    expect(asked).toEqual([]);
+    expect(useStore.getState().settings.profiles).toHaveLength(1);
+  });
+});

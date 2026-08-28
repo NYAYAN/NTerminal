@@ -137,6 +137,13 @@ export function HistoryPanel() {
 
   const deleteSelected = async () => {
     if (selectedEntries.length === 0) return;
+    const ok = await store().askConfirm({
+      title: t("confirm.deleteHistoryTitle"),
+      message: tp("confirm.deleteHistory", selectedEntries.length),
+      confirmLabel: t("confirm.delete"),
+      danger: true,
+    });
+    if (!ok) return;
     const removed = await api.historyDelete(selectedEntries.map((e) => e.id)).catch(() => 0);
     setSelected(new Set());
     refresh();
@@ -204,7 +211,17 @@ export function HistoryPanel() {
         label: t("menu.deleteFromHistory"),
         danger: true,
         run: () => {
-          void api.historyDelete([entry.id]).then(() => refresh());
+          void store()
+            .askConfirm({
+              title: t("confirm.deleteHistoryTitle"),
+              message: tp("confirm.deleteHistory", 1),
+              detail: entry.command,
+              confirmLabel: t("confirm.delete"),
+              danger: true,
+            })
+            .then((ok) => {
+              if (ok) void api.historyDelete([entry.id]).then(() => refresh());
+            });
         },
       },
     ];

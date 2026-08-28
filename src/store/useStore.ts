@@ -480,6 +480,22 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
+    // Onay BURADA, cagiran bilesende degil: silme yolu birden fazla olabilir
+    // (menu, kisayol, komut paleti) ve onayin her birinde tekrarlanmasi
+    // kacinilmaz olarak birinde atlanmasiyla sonuclanir.
+    const ok = await get().askConfirm({
+      title: t("confirm.deleteGroupTitle"),
+      message:
+        group.tabs.length === 0
+          ? t("confirm.deleteGroupEmptyMessage", { name: group.name })
+          : t("confirm.deleteGroupMessage", { name: group.name, n: group.tabs.length }),
+      confirmLabel: t("confirm.delete"),
+      danger: true,
+    });
+    if (!ok) return;
+    // Onay beklerken grup silinmis olabilir.
+    if (!get().groups.some((g) => g.id === id)) return;
+
     for (const tab of group.tabs) {
       const session = sessions.get(tab.id);
       if (session) {
@@ -986,6 +1002,18 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async removeFavorite(id) {
+    const favorite = get().favorites.find((f) => f.id === id);
+    if (!favorite) return;
+    const ok = await get().askConfirm({
+      title: t("confirm.removeFavoriteTitle"),
+      message: t("confirm.removeFavoriteMessage", {
+        command: favorite.label || favorite.command,
+      }),
+      detail: t("confirm.removeFavoriteDetail"),
+      confirmLabel: t("confirm.remove"),
+      danger: true,
+    });
+    if (!ok) return;
     await api.favoritesRemove([id]).catch(() => 0);
     await get().loadFavorites();
   },
@@ -995,6 +1023,17 @@ export const useStore = create<Store>((set, get) => ({
     const trimmed = command.trim();
     if (!trimmed) return;
     if (get().isFavorite(trimmed)) {
+      // Yildiz bir anahtar gibi gorunuyor ama kapatmak favoriyi SILIYOR:
+      // kisa ad, not ve klasor bilgisi de gidiyor. Geri tiklamak komutu
+      // yeniden ekliyor ama o bilgileri getirmiyor.
+      const ok = await get().askConfirm({
+        title: t("confirm.removeFavoriteTitle"),
+        message: t("confirm.removeFavoriteMessage", { command: trimmed }),
+        detail: t("confirm.removeFavoriteDetail"),
+        confirmLabel: t("confirm.remove"),
+        danger: true,
+      });
+      if (!ok) return;
       await api.favoritesRemoveByCommand(trimmed).catch(() => 0);
       get().toast(t("store.favoriteRemoved"), "info");
     } else {
