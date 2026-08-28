@@ -20,10 +20,12 @@ küçük bir işaretle belirtilir; boş bırakmak adı sıfırlar, başlık yeni
 klasör/kabuk adından türetilir. Aynı işlem kenar çubuğundaki sekme satırında da
 geçerli. Gruplar da aynı şekilde adlandırılıyor.
 
-**Grup düzeni.** Kenar çubuğunun başlığından tüm grupları tek tuşla katlayıp
-açabilirsiniz (biri bile açıksa hepsi katlanır, hepsi katlıysa hepsi açılır).
-Gruplar favori işaretlenebilir (sağ tık → *Favori Gruba Ekle* ya da satırdaki
-yıldız) ve ★ süzgeciyle yalnızca favoriler listelenir — çok grupla çalışırken
+**Grup düzeni.** Kenar çubuğunun başlığındaki **Tümünü Kapat** / **Tümünü Aç**
+düğmesi bütün grupları tek tuşla toplar veya açar (biri bile açıksa hepsi
+kapanır, hepsi kapalıysa hepsi açılır). Aynı eylem grup sağ tık menüsünde de
+var. Gruplar favori işaretlenebilir (sağ tık → *Favori Gruba Ekle* ya da
+satırdaki yıldız) ve yıldız süzgeciyle yalnızca favoriler listelenir — çok
+grupla çalışırken
 listeyi kısaltmak için. Süzgeç açıkken **etkin grup favori olmasa da listede
 kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz.
 
@@ -315,13 +317,15 @@ dışa aktarılır.
 | `Ctrl+Shift+P` | Komut paleti |
 | `Ctrl+Shift+R` | Sekmeyi yeniden adlandır |
 | `Ctrl+Shift+L` | Sekme kilidini aç/kapat |
-
-Kenar çubuğu başlığındaki ★ favori süzgecini, ⌃/⌄ tüm grupları katlar/açar.
 | `Ctrl+Shift+K` | Terminali temizle |
 | `Ctrl+Shift+F` | Terminalde ara |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Kopyala / yapıştır |
 | `Ctrl+,` | Ayarlar |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Yazıyı büyült / küçült / sıfırla |
+
+Kenar çubuğu başlığındaki üç düğme sırayla: yıldız favori grup süzgecini açıp
+kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Tümünü Kapat** /
+**Tümünü Aç**, artı yeni grup ekler.
 
 Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
 açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.
