@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 
+import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { sessions, useStore } from "../store/useStore";
 
 export function StatusBar() {
+  const t = useT();
+  const lang = useLang();
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const profiles = useStore((s) => s.settings.profiles);
   const running = useStore((s) => s.running);
   const paths = useStore((s) => s.paths);
   const restored = useStore((s) => s.restoredSession);
+  // Oturum nesnesi React durumunda degil; bu sayac degisince yeniden ciziyoruz.
+  useStore((s) => s.statusTick);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((t) => t.id === group.activeTabId) ?? group?.tabs[0];
@@ -53,7 +58,7 @@ export function StatusBar() {
       {tab?.cwd && (
         <span
           className="item cwd"
-          title={`${tab.cwd}\n(Dosya Gezgini'nde açmak için tıklayın)`}
+          title={`${tab.cwd}\n${t("status.revealHint")}`}
           style={{ cursor: "pointer" }}
           onClick={() => void api.revealInExplorer(tab.cwd!).catch(() => {})}
         >
@@ -63,47 +68,68 @@ export function StatusBar() {
 
       <span className="spacer" />
 
-      {tab && running[tab.id] && <span className="pill">komut çalışıyor</span>}
+      {tab && running[tab.id] && <span className="pill">{t("status.running")}</span>}
 
       {session &&
         (session.integration ? (
-          <span className="pill ok" title="Kabuk entegrasyonu etkin: komut metni ve çıkış kodu kabuktan geliyor">
-            entegrasyon
+          <span className="pill ok" title={t("status.integrationOnTitle")}>
+            {t("status.integrationOn")}
           </span>
         ) : (
           <span
             className="pill warn"
-            title="Kabuk entegrasyonu yok: komutlar ekran tamponundan okunuyor, çıkış kodu bilinmiyor"
+            title={t("status.integrationOffTitle")}
           >
-            entegrasyon yok
+            {t("status.integrationOff")}
           </span>
         ))}
 
+      {session && session.prediction !== "unknown" && (
+        <span
+          className={session.prediction === "unsupported" ? "pill warn" : "pill"}
+          title={
+            session.prediction === "unsupported"
+              ? t("status.predictionUnsupportedTitle")
+              : session.prediction === "off"
+                ? t("status.predictionOffTitle")
+                : t("status.predictionOnTitle", { view: session.prediction })
+          }
+        >
+          {session.prediction === "unsupported"
+            ? t("status.predictionUnsupported")
+            : session.prediction === "off"
+              ? t("status.predictionOff")
+              : t("status.predictionOn")}
+        </span>
+      )}
+
       {session?.pid != null && (
-        <span className="item" title="Kabuk süreç kimliği">
+        <span className="item" title={t("status.pidTitle")}>
           pid {session.pid}
         </span>
       )}
 
       {historyCount !== null && (
-        <span className="item" title="Kayıtlı komut sayısı">
-          {historyCount.toLocaleString("tr-TR")} komut
+        <span className="item" title={t("status.commandsTitle")}>
+          {tp("status.commands", historyCount, {
+            n: historyCount.toLocaleString(localeTag(lang)),
+          })}
         </span>
       )}
 
-      <span className="item" title="Toplam sekme">
-        {totalTabs} sekme
+      <span className="item" title={t("status.tabsTitle")}>
+        {tp("status.tabs", totalTabs)}
       </span>
 
       {paths?.portable && (
-        <span className="pill" title={`Ayarlar exe'nin yanındaki klasörde: ${paths.root}`}>
-          taşınabilir
+        <span className="pill" title={t("status.portableTitle", { path: paths.root })}>
+          {t("status.portable")}
         </span>
       )}
 
       {restored && (
-        <span className="pill" title="Önceki oturumun grup ve sekme düzeni geri yüklendi">
-          oturum geri yüklendi
+        <span className="pill" title={t("status.restoredTitle")}>
+          {t("status.restored")}
         </span>
       )}
     </div>

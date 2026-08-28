@@ -90,6 +90,11 @@ pub struct Appearance {
     pub sidebar_width: u16,
     /// Sag panelin (gecmis / favoriler) genisligi.
     pub panel_width: u16,
+    /// Terminal alani nasil gosterilsin: "tabs" | "panes".
+    ///
+    /// "tabs" tek terminal, "panes" etkin grubun tum sekmelerini doseyerek
+    /// ayni ekranda gosterir.
+    pub view_mode: String,
 }
 
 impl Default for Appearance {
@@ -105,6 +110,7 @@ impl Default for Appearance {
             scrollback: 10_000,
             sidebar_width: 240,
             panel_width: 390,
+            view_mode: "tabs".into(),
         }
     }
 }
@@ -118,10 +124,24 @@ pub struct Behavior {
     pub restore_scrollback: bool,
     /// Sekme basina kaydedilecek satir sayisi.
     pub scrollback_save_lines: u32,
-    /// Komut calisirken sekme kapatilmak istenirse onay sor.
-    pub confirm_close_running: bool,
+    /// Sekme kapatilirken onay sor: "always" | "running" | "never".
+    ///
+    /// Varsayilan "always": kapatma dugmesi kapatma isleminden geri donusu
+    /// olmayan tek tiklik bir yol aciyordu. Kilitli sekmeler bu ayardan
+    /// bagimsiz olarak hic kapanmiyor - kilit daha guclu koruma.
+    pub confirm_close_tab: String,
     pub copy_on_select: bool,
-    pub paste_on_right_click: bool,
+    /// Terminalde sag tik ne yapsin: "menu" | "paste" | "copyPaste".
+    ///
+    /// Varsayilan "menu". Eskiden sag tik kosulsuz yapistiriyordu; metin secip
+    /// kopyalamak isteyen kullanici sag tikladiginda istem satirina panonun
+    /// icerigi dokuluyordu. "copyPaste" Windows Terminal davranisi: secim
+    /// varsa kopyalar, yoksa yapistirir.
+    pub right_click_action: String,
+    /// Ctrl+C secim varken kopyalasin. Secim yoksa tus kabuga gecer, yani
+    /// SIGINT'i kaybetmiyoruz; kopyalamadan sonra secim temizlendigi icin
+    /// ikinci Ctrl+C her zaman kabuga gider.
+    pub ctrl_c_copies_selection: bool,
     /// Yeni sekme acilirken aktif sekmenin dizininden basla.
     pub inherit_cwd: bool,
     /// Gecmiste tutulacak azami kayit sayisi (asinca en eskiler silinir).
@@ -130,6 +150,12 @@ pub struct Behavior {
     pub history_dedupe: bool,
     /// Kenar cubugunda yalnizca favori gruplari goster.
     pub show_only_favorite_groups: bool,
+    /// Kabuk komut onerisi: "off" | "inline" | "list".
+    ///
+    /// Kabuga NTERMINAL_PREDICTION ile bildiriliyor; PowerShell tarafinda
+    /// PSReadLine tahminini aciyor. "off" = dokunma (kullanicinin kendi
+    /// profil ayari gecerli kalsin).
+    pub shell_prediction: String,
 }
 
 impl Default for Behavior {
@@ -138,13 +164,15 @@ impl Default for Behavior {
             restore_session: true,
             restore_scrollback: true,
             scrollback_save_lines: 2_000,
-            confirm_close_running: true,
+            confirm_close_tab: "always".into(),
             copy_on_select: true,
-            paste_on_right_click: true,
+            right_click_action: "menu".into(),
+            ctrl_c_copies_selection: true,
             inherit_cwd: true,
             history_limit: 50_000,
             history_dedupe: false,
             show_only_favorite_groups: false,
+            shell_prediction: "list".into(),
         }
     }
 }
@@ -165,6 +193,13 @@ pub struct Settings {
     /// Eylem adi -> kisayol ("newTab" -> "Ctrl+T").
     #[serde(default)]
     pub keybindings: BTreeMap<String, String>,
+    /// Arayuz dili: "tr" | "en". Bilinmeyen deger arayuzde "tr" sayiliyor.
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "tr".into()
 }
 
 fn settings_version() -> u32 {
@@ -180,6 +215,7 @@ impl Default for Settings {
             profiles: Vec::new(),
             default_profile_id: String::new(),
             keybindings: default_keybindings(),
+            language: default_language(),
         }
     }
 }
@@ -198,6 +234,7 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("settings", "Ctrl+,"),
         ("renameTab", "Ctrl+Shift+R"),
         ("toggleLock", "Ctrl+Shift+L"),
+        ("toggleViewMode", "Ctrl+Shift+E"),
         ("clearTerminal", "Ctrl+Shift+K"),
         ("findInTerminal", "Ctrl+Shift+F"),
         ("copy", "Ctrl+Shift+C"),

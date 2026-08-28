@@ -78,6 +78,8 @@ export const api = {
     invoke<ImportResult>("config_import_apply", { path, options }),
 
   revealInExplorer: (path: string) => invoke<void>("reveal_in_explorer", { path }),
+  /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
+  openExternal: (url: string) => invoke<void>("open_external", { url }),
 };
 
 // PTY çıktısı base64 geliyor: terminal akışı geçerli UTF-8 olmak zorunda değil

@@ -276,16 +276,43 @@ input[type="color"] {
 
 /* --- grup */
 
+/* Grup rengi yalnizca ince bir seritte degil ARKA PLANDA da gorunuyor:
+ * kenar cubugunda onlarca grup varken rengin 3px'lik bir cizgide kalmasi
+ * "renginden tani" isini yapmiyordu.
+ *
+ * Karisim her zaman bir YUZEYIN uzerinde yapiliyor (`var(--surface-alt)`),
+ * saydamin uzerinde degil. Saydamla karistirmak rengi oldugu gibi birakip
+ * alfa dusurmek demek; ust uste binen katmanlarda (grup + satir vurgusu)
+ * beklenmedik koyulasma ve okunabilirlik kaybi cikiyor. */
 .group {
   --group-color: var(--accent);
   margin-bottom: 5px;
   border-radius: var(--radius-lg);
   border: 1px solid transparent;
+  background: color-mix(in srgb, var(--group-color) 7%, var(--surface-alt));
 }
 
 .group.active {
-  background: var(--sunken);
-  border-color: color-mix(in srgb, var(--group-color) 26%, transparent);
+  background: color-mix(in srgb, var(--group-color) 13%, var(--surface-alt));
+  border-color: color-mix(in srgb, var(--group-color) 45%, transparent);
+}
+
+/* Renkli arka plan uzerinde SOLUK metin.
+ *
+ * `--text-dim` sabit bir renk; arka plan renklendikce ona karsi karsitligi
+ * dusuyor. Olculen en kotu durumlar: Solarized Acik + siyah grup rengi 2.12,
+ * koyu tema + beyaz grup rengi 2.26 - okunmuyordu. Soluk metni ana metinden
+ * turetince oran arka plandan bagimsiz olarak yukseliyor, hiyerarsi de
+ * korunuyor (hala ana metinden soluk). */
+.group .group-count,
+.group .tab-row-sub {
+  color: color-mix(in srgb, var(--text) 45%, var(--text-dim));
+}
+
+/* Sekme listesi bir tik daha soluk: baslik satiri one cikmali. */
+.group.active .group-tabs {
+  background: color-mix(in srgb, var(--group-color) 4%, transparent);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .group-row {
@@ -300,7 +327,7 @@ input[type="color"] {
 }
 
 .group-row:hover {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--group-color) 12%, var(--hover));
 }
 
 /* Sol kenardaki renk şeridi: grup rengini noktadan daha okunur biçimde
@@ -399,6 +426,39 @@ input[type="color"] {
 .swatch.on {
   outline: 2px solid var(--text);
   outline-offset: 1px;
+}
+
+/* Ozel renk: native renk secici. Girdinin kendisi gorunmuyor, tiklama
+   alanini etiket tasiyor; boylece hazir renklerle ayni yuvarlak bicimde
+   duruyor. Konik degrade "serbest renk" isaretinin yerlesik karsiligi. */
+.swatch.custom {
+  display: inline-block;
+  cursor: pointer;
+  background: conic-gradient(#ff7b72, #d29922, #3fb950, #39c5cf, #58a6ff, #bc8cff, #ff7b72);
+}
+
+.swatch.custom input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Rengi kaldir: capraz cizgili bos daire. */
+.swatch.clear {
+  cursor: pointer;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 45%,
+      var(--text-dim) 45%,
+      var(--text-dim) 55%,
+      transparent 55%
+    ),
+    var(--surface);
 }
 
 /* --- kenar çubuğundaki sekmeler */
@@ -594,6 +654,8 @@ input[type="color"] {
 
 .tabbar {
   grid-area: tabbar;
+  --group-color: var(--accent);
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 4px;
@@ -601,6 +663,21 @@ input[type="color"] {
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
   min-width: 0;
+}
+
+/* Etkin grubun rengi sekme cubugunun altinda ince bir cizgi olarak: kenar
+   cubugu kapaliyken de hangi grupta oldugunuz gorunuyor. Border yerine
+   ::after, cunku border kutuyu buyutup terminal satir hesabini kaydirir. */
+.tabbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--group-color);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 /* Sekmeler kayar, eylem dugmeleri sabit kalir: 20 sekme acikken "+" dugmesini
@@ -626,6 +703,52 @@ input[type="color"] {
   gap: 1px;
   padding-bottom: 4px;
   flex: none;
+}
+
+.tabbar-sep {
+  flex: none;
+  width: 1px;
+  height: 15px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+/* Gorunum kipi secimi: iki durumlu tek dugme yerine iki ayri dugme, boylece
+   hangi kipin etkin oldugu tiklamadan once gorunuyor. */
+.seg-mini {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.seg-mini button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.seg-mini button svg {
+  display: block;
+  flex: none;
+}
+
+.seg-mini button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.seg-mini button.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
 }
 
 .tab {
@@ -767,7 +890,7 @@ input[type="color"] {
  * Gosterge bir dugme DEGIL ve tiklanabilir gorunmuyor: ayni konumda
  * tiklanabilir bir kilit olsa kullanici carpi sanip basiyor, kilit kalkiyor,
  * ikinci tikta sekme kapaniyordu. Tiklama sekmeye gecip kaliyor (zararsiz),
- * kilit yalnizca sag tik > Kilit Kapat veya Ctrl+Shift+L ile kalkiyor. */
+ * kilit yalnizca sag tik > Kilidi Ac veya Ctrl+Shift+L ile kalkiyor. */
 .tab-lock,
 .tab-row-lock {
   flex: none;
@@ -800,23 +923,139 @@ input[type="color"] {
   overflow: hidden;
 }
 
-.term-host {
+/* Bolme kabugu.
+ *
+ * Iki gorunum kipinde de AYNI DOM yapisi cikiyor: sekme kipinde bolme tum
+ * alani kapliyor ve basligi gizli, bolme kipinde izgara hucresi olup basligi
+ * gorunuyor. Yapiyi kipe gore degistirmek xterm'i kirardi: term.open() bir
+ * ornek icin yalnizca bir kez cagrilabiliyor, React DOM dugumunu yeniden
+ * olusturursa terminal bir daha cizilmez. Fark yalnizca CSS'te. */
+.pane {
   position: absolute;
   inset: 0;
-  /* Dolgu BURADA olmamali - bkz. asagidaki .xterm kurali. */
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-.term-host[data-visible="false"] {
+.pane[data-visible="false"] {
   /* Gizli sekmeler düzende kalıyor: `display:none` yapsak xterm boyut hesabı
-     sıfırlanır ve sekmeye dönüldüğünde satırlar kayar. */
+     sıfırlanır ve sekmeye dönüldüğünde satırlar kayar. Mutlak konumda
+     kaldiklari icin izgara akisina da girmiyorlar - bos hucre uretmiyorlar. */
   visibility: hidden;
   pointer-events: none;
   z-index: 0;
 }
 
-.term-host[data-visible="true"] {
+.pane[data-visible="true"] {
   z-index: 1;
+}
+
+/* Bolme basligi yalnizca bolme kipinde gorunuyor. */
+.pane-head {
+  display: none;
+}
+
+.term-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  /* Dolgu BURADA olmamali - bkz. asagidaki .xterm kurali. */
+  padding: 0;
+}
+
+/* ------------------------------------------------------------ bolme kipi */
+
+.terminal-area[data-view="panes"] {
+  display: grid;
+  /* 1px bosluk + kapsayici arka plani = bolmeler arasi ince ayirici. */
+  gap: 1px;
+  background: var(--border);
+}
+
+.terminal-area[data-view="panes"] > .pane[data-visible="true"] {
+  position: relative;
+  inset: auto;
+  background: var(--term-bg);
+  /* Kenarlik yerine outline: border kutuyu buyutup xterm'in satir hesabini
+     kaydirirdi (bkz. layout.test.ts). outline duzenden yer almiyor. */
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+}
+
+.terminal-area[data-view="panes"] > .pane[data-focused="true"] {
+  outline-color: var(--accent);
+}
+
+.terminal-area[data-view="panes"] .pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
+  padding: 3px 4px 3px 8px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.terminal-area[data-view="panes"] > .pane[data-focused="true"] .pane-head {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-alt));
+}
+
+.pane-badge {
+  flex: none;
+  font-family: var(--mono-font);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.pane-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.pane[data-focused="true"] .pane-title {
+  font-weight: 600;
+}
+
+.pane-close,
+.pane-lock {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+/* Kilit gostergesi bir dugme DEGIL; sekme cubugundakiyle ayni gerekce. */
+.pane-lock {
+  cursor: default;
+}
+
+.pane-close {
+  cursor: pointer;
+}
+
+.pane-close:hover {
+  background: color-mix(in srgb, var(--err) 22%, transparent);
+  color: var(--err);
 }
 
 /* Bosluk dolgusu bilincli olarak xterm ogesinin KENDISINDE.
@@ -853,6 +1092,31 @@ input[type="color"] {
  */
 .term-host .xterm-viewport {
   background-color: var(--term-bg);
+}
+
+/* Baglanti uzerinde imlec: WebLinksAddon'un `hover`/`leave` geri cagrilari
+   bu sinifi ekleyip kaldiriyor. xterm baglantiyi kendisi alti cizili
+   gosteriyor; eksik olan tek sey imlecin tiklanabilirligi belli etmesiydi. */
+.term-host.link-hover .xterm-screen {
+  cursor: pointer;
+}
+
+/* Kabuk kapandiginda terminalin altinda cikan seritte satir ici stil
+   yerine sinif kullaniyoruz; boylece tema degiskenleri tek yerden geliyor. */
+.term-exited {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 3;
 }
 
 .empty-state {

@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../lib/ipc";
+import { tSplit, useT } from "../lib/i18n";
+import { prettyCombo } from "../lib/keys";
+import { shellBadge, tabLabel } from "../lib/labels";
+import { normalizeViewMode, paneGrid, visibleTabIds } from "../lib/panes";
+import { canCloseTab, isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
+import type { TerminalSession } from "../terminal/TerminalSession";
+import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 import { TerminalFind } from "./TerminalFind";
 
 /**
@@ -12,7 +19,17 @@ import { TerminalFind } from "./TerminalFind";
  * `visibility: hidden` ile saklanıyor ama düzenden çıkarılmıyor: `display:none`
  * yapsak xterm'in ölçüm hesabı sıfırlanır ve sekmeye dönüldüğünde satırlar kayar.
  */
-function TerminalHost({ tabId, epoch, visible }: { tabId: string; epoch: number; visible: boolean }) {
+function TerminalHost({
+  tabId,
+  epoch,
+  visible,
+  focused,
+}: {
+  tabId: string;
+  epoch: number;
+  visible: boolean;
+  focused: boolean;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
   const booted = useRef(false);
 
@@ -44,28 +61,35 @@ function TerminalHost({ tabId, epoch, visible }: { tabId: string; epoch: number;
       if (cancelled) return;
 
       await session.start(restore);
-      if (!cancelled) session.setActive(visible);
+      if (!cancelled) session.setDisplay(visible, focused);
     })();
 
     return () => {
       cancelled = true;
     };
-    // visible bilerek bağımlılık değil: ilk kurulumda kullanılıyor, sonrası
-    // aşağıdaki setActive efektinden yönetiliyor.
+    // visible/focused bilerek bağımlılık değil: ilk kurulumda kullanılıyor,
+    // sonrası aşağıdaki setDisplay efektinden yönetiliyor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId, epoch]);
 
-  return <div className="term-host" data-visible={visible} ref={ref} />;
+  return <div className="term-host" data-tab-id={tabId} ref={ref} />;
 }
 
 export function TerminalArea() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const exited = useStore((s) => s.exited);
+  const running = useStore((s) => s.running);
+  const profiles = useStore((s) => s.settings.profiles);
   const findOpen = useStore((s) => s.ui.findOpen);
   const sessionEpoch = useStore((s) => s.sessionEpoch);
+  const rightClickAction = useStore((s) => s.settings.behavior.rightClickAction);
+  const keys = useStore((s) => s.settings.keybindings);
+  const viewMode = normalizeViewMode(useStore((s) => s.settings.appearance.viewMode));
 
+  const t = useT();
   const [mounted, setMounted] = useState<string[]>([]);
+  const menu = useContextMenu();
 
   const activeGroup = groups.find((g) => g.id === activeGroupId);
   const activeTabId = activeGroup?.activeTabId ?? activeGroup?.tabs[0]?.id ?? null;
@@ -75,85 +99,260 @@ export function TerminalArea() {
     [groups],
   );
 
-  // Aktif sekmeyi listeye ekle, kapatılanları çıkar. Bir kez bağlanan sekme
-  // bağlı kalıyor: geri dönüldüğünde tampon ve kaydırma konumu korunsun.
+  // Bu kipte görünmesi gereken sekmeler. Sekme kipinde bir tane, bölme
+  // kipinde grubun tamamı.
+  const visibleIds = useMemo(
+    () => visibleTabIds(activeGroup, viewMode),
+    [activeGroup, viewMode],
+  );
+  const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
+
+  // Görünmesi gereken sekmeleri listeye ekle, kapatılanları çıkar. Bir kez
+  // bağlanan sekme bağlı kalıyor: geri dönüldüğünde tampon ve kaydırma konumu
+  // korunsun.
   useEffect(() => {
     setMounted((prev) => {
-      const filtered = prev.filter((id) => liveTabIds.has(id));
-      const next =
-        activeTabId && !filtered.includes(activeTabId) ? [...filtered, activeTabId] : filtered;
+      const next = prev.filter((id) => liveTabIds.has(id));
+      for (const id of visibleIds) if (!next.includes(id)) next.push(id);
       const same = next.length === prev.length && next.every((id, i) => id === prev[i]);
       return same ? prev : next;
     });
-  }, [activeTabId, liveTabIds]);
+  }, [visibleIds, liveTabIds]);
 
-  // WebGL bağlamını ve odağı yalnızca görünen terminal tutsun.
+  /**
+   * Çizim sırası.
+   *
+   * Izgarada hücreler DOM sırasına göre doluyor, `mounted` ise bağlanma
+   * sırasında — yani kullanıcının sekmeleri hangi sırada ziyaret ettiğine göre.
+   * Bölmeleri o sırayla çizmek onları sekme çubuğundaki sıradan bağımsız,
+   * rastgele görünen bir düzene sokuyordu. Etkin grubun sekmeleri kendi
+   * sırasında öne, geri kalan (gizli) barındırıcılar arkaya.
+   */
+  const ordered = useMemo(() => {
+    const groupIds = activeGroup ? activeGroup.tabs.map((t) => t.id) : [];
+    const inGroup = groupIds.filter((id) => mounted.includes(id));
+    const rest = mounted.filter((id) => !groupIds.includes(id));
+    return [...inGroup, ...rest];
+  }, [mounted, activeGroup]);
+
+  // WebGL bağlamını ve odağı dağıt: görünür olan çizilir, odaklı olan yazılır.
   useEffect(() => {
     for (const [id, session] of sessions) {
-      session.setActive(id === activeTabId);
+      session.setDisplay(visibleSet.has(id), id === activeTabId);
     }
-  }, [activeTabId, mounted]);
+  }, [visibleSet, activeTabId, mounted]);
+
+  const grid = paneGrid(visibleIds.length);
+  // Tek sekmede de bolme kipini gosteriyoruz: aksi halde kipi degistiren
+  // kullanici hicbir sey olmamis gibi gorup anahtarin bozuk oldugunu sanar.
+  const panes = viewMode === "panes" && visibleIds.length > 0;
+  const lastVisibleId = visibleIds[visibleIds.length - 1] ?? null;
+
+  /** Sağ tıklanan terminali bul: tıklama hangi barındırıcının içindeyse o. */
+  const sessionAt = (target: HTMLElement | null): { id: string; session: TerminalSession } | null => {
+    const host = target?.closest<HTMLElement>(".term-host");
+    const id = host?.dataset.tabId ?? activeTabId;
+    if (!id) return null;
+    const session = sessions.get(id);
+    return session ? { id, session } : null;
+  };
+
+  const copy = (session: TerminalSession) => {
+    void session.copySelection().then((ok) => {
+      if (ok) session.clearSelection();
+      else useStore.getState().toast(t("common.clipboardFailed"), "err");
+    });
+  };
+
+  const terminalEntries = (id: string, session: TerminalSession): MenuEntry[] => {
+    const store = useStore.getState();
+    const tab = store.groups.flatMap((g) => g.tabs).find((t) => t.id === id);
+    return [
+      {
+        kind: "item",
+        label: t("term.copy"),
+        hint: prettyCombo(keys.copy ?? ""),
+        disabled: !session.hasSelection(),
+        run: () => copy(session),
+      },
+      {
+        kind: "item",
+        label: t("term.paste"),
+        hint: prettyCombo(keys.paste ?? ""),
+        run: () => void session.paste(),
+      },
+      { kind: "separator" },
+      { kind: "item", label: t("term.selectAll"), run: () => session.selectAll() },
+      {
+        kind: "item",
+        label: t("term.clear"),
+        hint: prettyCombo(keys.clearTerminal ?? ""),
+        run: () => session.clear(),
+      },
+      {
+        kind: "item",
+        label: t("term.find"),
+        hint: prettyCombo(keys.findInTerminal ?? ""),
+        run: () => store.setUi({ findOpen: true }),
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: t(viewMode === "panes" ? "term.toTabs" : "term.toPanes"),
+        hint: prettyCombo(keys.toggleViewMode ?? ""),
+        run: () => void store.toggleViewMode(),
+      },
+      { kind: "item", label: t("common.restartShell"), run: () => void store.restartTab(id) },
+      ...(tab?.cwd
+        ? [
+            {
+              kind: "item" as const,
+              label: t("common.revealFolder"),
+              run: () => void api.revealInExplorer(tab.cwd!).catch(() => {}),
+            },
+          ]
+        : []),
+    ];
+  };
+
+  /**
+   * Terminalde sağ tık.
+   *
+   * Eskiden koşulsuz yapıştırıyordu: kullanıcı metin seçip sağ tıkladığında
+   * panonun içeriği istem satırına dökülüyordu — kopyalamak isteyen için tam
+   * ters sonuç. Artık varsayılan menü; yapıştırmayı isteyen ayardan seçebilir.
+   */
+  const handleContextMenu = (event: React.MouseEvent) => {
+    const found = sessionAt(event.target as HTMLElement | null);
+    if (!found) return;
+    const { id, session } = found;
+
+    if (rightClickAction === "paste") {
+      event.preventDefault();
+      void session.paste();
+      return;
+    }
+    if (rightClickAction === "copyPaste") {
+      event.preventDefault();
+      if (session.hasSelection()) copy(session);
+      else void session.paste();
+      return;
+    }
+    menu.open(event, terminalEntries(id, session));
+  };
 
   if (!activeGroup || activeGroup.tabs.length === 0) {
+    // Kısayolun kendisi çeviriden değil ayarlardan geliyor; kullanıcı yeniden
+    // atadıysa ipucu da onu göstersin.
+    const [hintBefore, hintAfter] = tSplit("term.openHint", "keys");
     return (
       <div className="empty-state">
-        <p>Bu grupta sekme yok.</p>
+        <p>{t("term.noTabs")}</p>
         <p>
-          <kbd>Ctrl</kbd> + <kbd>T</kbd> ile yeni sekme açın.
+          {hintBefore}
+          <kbd>{prettyCombo(keys.newTab ?? "Ctrl+T")}</kbd>
+          {hintAfter}
         </p>
         <button className="primary" onClick={() => useStore.getState().addTab()}>
-          Yeni sekme
+          {t("term.newTab")}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="terminal-area">
-      {mounted.map((tabId) => (
-        <TerminalHost
-          key={`${tabId}:${sessionEpoch[tabId] ?? 0}`}
-          tabId={tabId}
-          epoch={sessionEpoch[tabId] ?? 0}
-          visible={tabId === activeTabId}
-        />
-      ))}
+    <div
+      className="terminal-area"
+      data-view={panes ? "panes" : "tabs"}
+      style={
+        panes
+          ? {
+              // minmax(0, 1fr): 1fr tek başına içeriğin altına inmiyor, terminal
+              // de içerik olarak geniş — bölmeler taşardı.
+              gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`,
+            }
+          : undefined
+      }
+      onContextMenu={handleContextMenu}
+    >
+      {ordered.map((tabId) => {
+        const tab = activeGroup.tabs.find((t) => t.id === tabId);
+        const visible = visibleSet.has(tabId);
+        const focused = tabId === activeTabId;
+        const last = visible && tabId === lastVisibleId;
+
+        return (
+          <div
+            key={`${tabId}:${sessionEpoch[tabId] ?? 0}`}
+            className="pane"
+            data-visible={visible}
+            data-focused={focused}
+            style={panes && last && grid.lastSpan > 1 ? { gridColumn: `span ${grid.lastSpan}` } : undefined}
+            onMouseDown={() => {
+              // Odak tıklamayı izliyor: bölme kipinde yazdığınız yer etkin
+              // sekme olmalı, yoksa durum çubuğu ve geçmiş paneli başka bir
+              // sekmeyi gösterir.
+              if (tabId !== activeTabId) useStore.getState().setActiveTab(tabId);
+            }}
+          >
+            {tab && (
+              <div className="pane-head">
+                <span className="pane-badge">
+                  {shellBadge(profiles.find((p) => p.id === tab.profileId))}
+                </span>
+                <span className="pane-title">{tabLabel(tab)}</span>
+                {running[tabId] && <span className="tab-dot busy" title={t("pane.running")} />}
+                {exited[tabId] && <span className="tab-dot dead" title={t("pane.exited")} />}
+                {isLocked(tab) ? (
+                  <span className="pane-lock" title={t("pane.locked")}>
+                    🔒
+                  </span>
+                ) : (
+                  <button
+                    className="pane-close"
+                    title={t("term.closeTab")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (canCloseTab(tab)) void useStore.getState().closeTab(tabId);
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+            <TerminalHost
+              tabId={tabId}
+              epoch={sessionEpoch[tabId] ?? 0}
+              visible={visible}
+              focused={focused}
+            />
+          </div>
+        );
+      })}
 
       {findOpen && <TerminalFind />}
 
       {activeTabId && exited[activeTabId] && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            background: "var(--surface-alt)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: "7px 12px",
-            zIndex: 3,
-            boxShadow: "0 8px 24px rgba(0,0,0,.45)",
-          }}
-        >
-          <span className="dim">Bu sekmedeki kabuk kapandı.</span>
+        <div className="term-exited">
+          <span className="dim">{t("term.exited")}</span>
           <button
             className="primary"
             onClick={() => void useStore.getState().restartTab(activeTabId)}
           >
-            Yeniden başlat
+            {t("term.restart")}
           </button>
           <button
             className="outline"
             onClick={() => void useStore.getState().closeTab(activeTabId)}
           >
-            Sekmeyi kapat
+            {t("term.closeTab")}
           </button>
         </div>
       )}
+
+      {menu.state && <ContextMenu state={menu.state} onClose={menu.close} />}
     </div>
   );
 }

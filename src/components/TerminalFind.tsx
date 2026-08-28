@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "../lib/i18n";
 import { useStore } from "../store/useStore";
 
 /**
@@ -10,6 +11,7 @@ import { useStore } from "../store/useStore";
  * kaydırma tamponundaki satır sayısı yüzünden yavaşlar.
  */
 export function TerminalFind() {
+  const t = useT();
   const setUi = useStore((s) => s.setUi);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const groups = useStore((s) => s.groups);
@@ -82,7 +84,7 @@ export function TerminalFind() {
     <div className="find-bar">
       <input
         ref={inputRef}
-        placeholder="terminalde ara…"
+        placeholder={t("find.placeholder")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
@@ -100,25 +102,25 @@ export function TerminalFind() {
       </span>
       <button
         className={caseSensitive ? "icon-btn on" : "icon-btn"}
-        title="Büyük/küçük harf duyarlı"
+        title={t("find.caseSensitive")}
         onClick={() => setCaseSensitive((v) => !v)}
       >
         Aa
       </button>
       <button
         className={wholeWord ? "icon-btn on" : "icon-btn"}
-        title="Tam sözcük"
+        title={t("find.wholeWord")}
         onClick={() => setWholeWord((v) => !v)}
       >
         ab
       </button>
-      <button className="icon-btn" title="Önceki (Shift+Enter)" onClick={() => step(-1)}>
+      <button className="icon-btn" title={t("find.prev")} onClick={() => step(-1)}>
         ↑
       </button>
-      <button className="icon-btn" title="Sonraki (Enter)" onClick={() => step(1)}>
+      <button className="icon-btn" title={t("find.next")} onClick={() => step(1)}>
         ↓
       </button>
-      <button className="icon-btn" title="Kapat (Esc)" onClick={close}>
+      <button className="icon-btn" title={t("find.close")} onClick={close}>
         ×
       </button>
     </div>

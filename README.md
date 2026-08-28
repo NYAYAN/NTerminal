@@ -1,7 +1,8 @@
 # NTerminal
 
 Windows için gruplanabilir sekmeli terminal. Gruplar, gruba bağlı sekmeler,
-oturum devamlılığı, komut geçmişi ve ayarların makineler arası taşınması.
+sekme ya da bölme görünümü, oturum devamlılığı, komut geçmişi, Türkçe/İngilizce
+arayüz ve ayarların makineler arası taşınması.
 
 Tauri 2 (Rust / ConPTY) + xterm.js 6 üzerine kurulu.
 
@@ -42,6 +43,12 @@ tıkla aşılabilen bir kilidin koruma değeri olmaz, kapatmak için önce kilid
 kaldırmak gerekiyor. Kilit durumu çalışma alanıyla birlikte kaydedilir ve
 aktarıma dahildir.
 
+**Kapatma onayı.** Sekme kapatılırken varsayılan olarak onay sorulur —
+yanlışlıkla çarpıya basmaya karşı. Ayardan "yalnızca komut çalışıyorsa" ya da
+"hiç sorma" seçilebilir. *Diğerlerini kapat* sekme başına değil tek bir onay
+sorar. Kilit ve onay birbirinin yerine geçmiyor: onay bir tıklama daha ister,
+kilit kapatmayı tümden reddeder.
+
 **Favori komutlar.** Sık kullandığınız komutlar yıldızlanıp ayrı bir listede
 tutulur — geçmişten ayrı, çünkü geçmiş otomatik birikip sınır aşılınca budanıyor.
 Favoriye kısa bir ad, not, klasör ve "yalnızca şu grupta görünsün" kısıtı
@@ -63,6 +70,50 @@ zamanıyla kaydedilir. Sağdaki panelde bu sekmenin / bu grubun / tümünün ge�
 aranabilir, başarılı-hatalı filtrelenebilir, tekrarlar gizlenebilir. Satırlar
 seçilip istem satırına yazılabilir, çalıştırılabilir, kopyalanabilir veya
 silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a bas.
+
+**Görünüm: sekme ya da bölme.** Sekme çubuğundaki iki düğme (ya da
+`Ctrl+Shift+E`) terminal alanını iki kip arasında değiştirir. **Sekmeler** kipinde
+aynı anda tek terminal görünür. **Bölmeler** kipinde etkin grubun bütün sekmeleri
+döşenir: her bölmenin üstünde kabuk kodu ve sekme adıyla ince bir başlık, odaklı
+bölmenin çevresinde vurgu rengi, tıkladığınız bölme etkin sekme olur. Izgara
+bölme sayısına göre kuruluyor (2 → yan yana, 3 → üstte iki + altta bir geniş,
+7 → 3×3'ün son satırı tam genişlik) ve boş hücre bırakmıyor.
+
+> Bölme kipi grubun **her** sekmesinin kabuğunu başlatır — "hepsini yan yana
+> göster" demenin karşılığı bu. Grubu küçük tutmak kullanıcının elinde.
+
+**Dil.** Arayüz Türkçe ve İngilizce. Ayarlar → Görünüm → Dil ile değişir, anında
+uygulanır; tarih/saat ve sayı biçimleri de dille birlikte değişir. Dil ayarı dışa
+aktarılan dosyaya dahildir.
+
+**Grup renkleri.** Her grubun rengi yalnızca ince bir şeritte değil arka planda
+da görünür — kenar çubuğunda onlarca grup varken renginden tanımak için. Renk
+sağ tık → *Rengi değiştir* ile hazır renklerden, özel renk seçiciyle ya da
+Ayarlar → Gruplar → Renk'ten verilir; kaldırılabilir. Etkin grubun rengi sekme
+çubuğunun altındaki çizgide de görünüyor, böylece kenar çubuğu kapalıyken de
+hangi gruptasınız belli oluyor. Karışım oranları okunabilirlik sınırıyla
+bağlıdır (bkz. Testler).
+
+**Kopyala / yapıştır.** Terminalde sağ tık **menü** açar: kopyala, yapıştır,
+tümünü seç, temizle, ara, görünüm kipi, kabuğu yeniden başlat, klasörü Gezgin'de
+aç. Eskiden koşulsuz yapıştırıyordu — metin seçip sağ tıklayan kullanıcı için tam
+ters sonuç. Ayardan "seçim varsa kopyala, yoksa yapıştır" ya da "her zaman
+yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğa SIGINT
+olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
+zaman komutu durdurur**.
+
+**Bağlantılar.** Terminaldeki URL'ler tıklanabilir ve işletim sisteminin
+varsayilan tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open`
+çağırmak; Tauri webview'ünde bu hiçbir şey yapmadığı için linkler sessizce
+çalışmıyordu.) Yalnızca `http`/`https` açılır ve url kabuktan geçirilmez.
+
+**Komut önerisi.** Daha önce çalıştırdığınız komutlar yazarken önerilir:
+istemin altında yukarı/aşağı okla seçilen bir liste ya da satır içi soluk
+"hayalet metin". Öneriyi **kabuk** çiziyor (PSReadLine tahmini) — uygulama
+tarafında çizmek kabuğun kendi satır düzenleyicisiyle (imleç, yeniden çizim,
+sekme tamamlama, geçmiş gezinme) yarışmak demek. PSReadLine 2.2+ gerekiyor;
+sürüm yetmiyorsa durum çubuğunda **öneri yok** rozeti çıkar ve üzerine
+gelindiğinde ne yapılacağını söyler.
 
 **Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
 Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
@@ -316,7 +367,8 @@ dışa aktarılır.
 | `Ctrl+Shift+B` | Favori komutlar |
 | `Ctrl+Shift+P` | Komut paleti |
 | `Ctrl+Shift+R` | Sekmeyi yeniden adlandır |
-| `Ctrl+Shift+L` | Sekme kilidini aç/kapat |
+| `Ctrl+Shift+L` | Sekmeyi kilitle / kilidi aç |
+| `Ctrl+Shift+E` | Sekme / bölme görünümü |
 | `Ctrl+Shift+K` | Terminali temizle |
 | `Ctrl+Shift+F` | Terminalde ara |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Kopyala / yapıştır |
@@ -325,7 +377,12 @@ dışa aktarılır.
 
 Kenar çubuğu başlığındaki üç düğme sırayla: yıldız favori grup süzgecini açıp
 kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Tümünü Kapat** /
-**Tümünü Aç**, artı yeni grup ekler.
+**Tümünü Aç**, artı yeni grup ekler. Sekme çubuğunun sağındaki iki düğme sekme /
+bölme görünümünü seçer.
+
+`Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
+gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan
+komutu durdurur.
 
 Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
 açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.
@@ -342,6 +399,9 @@ src/                          arayüz (React + TypeScript)
   lib/contrast.ts               palet okunabilirlik süzgeci (WCAG karşıtlık)
   lib/labels.ts                 sekme adı / kabuk kodu / ikincil satır mantığı
   lib/ipc.ts                    Rust komutlarının tek geçiş noktası
+  lib/i18n.ts                   dil motoru (t, çoğul, dil değişince yeniden çizim)
+  lib/messages.ts               arayüz metinleri: [Türkçe, English]
+  lib/panes.ts                  bölme ızgarası ve görünüm kipi mantığı
 src-tauri/
   src/pty.rs                    ConPTY oturumları, çıktı toplama
   src/history.rs                komut geçmişi deposu (JSONL günlük)
@@ -413,25 +473,49 @@ bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
 npm test
 ```
 
-- **Arayüz (81 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
+- **Arayüz (202 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
   simetrik olmak zorunda), base64 çözücü (UTF-8 dışı baytlar dahil), kısayol
   eşleştirme, biçimlendirme, bulanık arama, sekme etiketi mantığı, sekme kilidi
   kuralları, sıralama/sürükle-bırak indeks matematiği, grup görünürlük süzgeci,
-  tüm temalar için palet karşıtlık güvencesi ve terminal boşluk dolgusunun doğru
-  yerde durduğunu doğrulayan düzen değişmezi.
-- **Rust birim (48 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
+  bölme ızgarası matematiği (her bölme ızgaraya sığmalı, boş hücre kalmamalı),
+  tüm temalar için palet karşıtlık güvencesi, düzen değişmezleri (dolgunun doğru
+  yerde durması, gizli bölmenin düzenden çıkmaması, bölme çerçevesinin `border`
+  değil `outline` olması) ve iki ölçülü değişmez:
+  - **Sözlük** — her metnin iki dili var mı, çoğul anahtarları çift mi, yer
+    tutucular iki dilde aynı mı (İngilizcede `{n}` yazıp Türkçede unutmak
+    kullanıcıya sayı göstermeyen bir cümle bırakır).
+  - **Grup rengi okunabilirliği** — karışım oranları CSS'ten okunup aynı hesap
+    testte yapılıyor; 4 tema × 11 grup rengi (saf siyah/beyaz dahil) için grup
+    adı ≥ 4.5, soluk metin ≥ 3.0 karşıtlık. Oran yükseltilirse test düşüyor.
+    Ölçülen ilk hâli 2.12'ye kadar iniyordu — arka plan renklendikçe sabit
+    renkli soluk metin kayboluyordu.
+- **Rust birim (51 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
   yeniden okuma, bozuk satıra dayanıklılık, sıkıştırma), yol taşınabilirliği
   (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,
   kabuk başlatma argümanları, Windows sürüm okuma, favori deposu (sıralama,
   yinelenen komut, bozuk dosyaya dayanıklılık) ve **dışa aktar → başka makine
   gibi oku → uygula** zincirinin tamamı.
-- **Uçtan uca (6 test)** — gerçek ConPTY içinde gerçek PowerShell, bash ve
+- **Uçtan uca (8 test)** — gerçek ConPTY içinde gerçek PowerShell, bash ve
   cmd.exe başlatıp OSC işaretlerini okuyor: istem işaretleri, komut metni, çıkış
   kodu `0` ve yerel uygulamanın `3`'ü, hatadan sonra tekrar `0`, noktalı virgül
   kaçışı, klasör bildirimi. Bash testi ayrıca iki şeyi kilitliyor: ilk bildirilen
   komut kullanıcının komutu olmalı (başlangıç betiğinin satırı değil) ve bir boru
   hattı tek kayıt açmalı. Ayrı bir test de boş satırda Enter'a basmanın önceki
   komutu ikinci kez kaydetmediğini doğruluyor.
+
+  Son iki test sonradan eklendi:
+  - **Renk** — `ng serve` / `dotnet run` gibi araçlar rengi kendileri üretiyor;
+    bizim işimiz yalnızca ANSI'yi geçirmek değil, onlara "renk üretebilirsin"
+    demek. Test gerçek ConPTY içinde gerçek Node'a soruyor: `isTTY` doğru mu,
+    `getColorDepth()` kaç, `TERM` ve `COLORTERM` çocuğa ulaşıyor mu. Ölçülen
+    değer 24 (truecolor). Testin ANSI temizleyicisine ihtiyaç duyması kanıtın
+    kendisi: Node renk desteği gördüğü için çıktısını kendiliğinden renkliyor.
+  - **Öneri isteği entegrasyonu bozmuyor** — PSReadLine 2.0
+    `-PredictionSource` parametresini tanımıyor. Betik bunu yakalamazsa
+    yüklenirken hata verir ve entegrasyonun **tamamı** (geçmiş, çıkış kodu,
+    dizin) sessizce ölür; kullanıcı yalnızca "geçmiş boş" görür. Test tahmini
+    desteklemeyen kabukla çalışıyor: önemli olan önerinin görünmesi değil,
+    isteğin zarar vermemesi.
 
 Entegrasyon testleri ConPTY'nin açılışta gönderdiği `ESC[6n` imleç konumu
 sorgusunu elle yanıtlıyor — gerçek uygulamada bunu xterm.js kendiliğinden
@@ -442,6 +526,14 @@ yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
 ## Bilinen sınırlar
 
 - Kabuk süreçleri uygulamayla kapanır; arka planda canlı oturum tutulmuyor.
+- Komut önerisi (hayalet metin / liste) kabuğa bağlı: PSReadLine 2.2+ gerekiyor.
+  Windows PowerShell 5.1'in getirdiği 2.0 desteklemiyor; `Install-Module
+  PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck` ile güncellenir.
+  cmd ve bash'te karşılığı yok — orada `Ctrl+R` geçmiş araması kullanılıyor.
+- Renksiz çıktıdaki bağlantılar tıklanabilir ama kalıcı olarak renklendirilmiyor:
+  xterm bunu ancak satır başına dekorasyonla yapıyor ve yoğun çıktıda maliyeti
+  yüksek. Renk üreten araçların (Vite, Angular CLI) bağlantıları kendi renginde
+  görünüyor.
 - `cmd.exe` için çıkış kodu bildirilemiyor (yukarıda anlatıldı).
 - Bölünmüş bölme (split pane) yok; ayrım gruplar ve sekmeler üzerinden.
 - Yalnızca Windows: ConPTY ve kabuk tespiti Windows'a özgü.

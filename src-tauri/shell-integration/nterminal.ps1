@@ -162,5 +162,50 @@ if (Get-Command -Name PSConsoleHostReadLine -CommandType Function -ErrorAction S
     }
 }
 
+# --- komut onerileri (PSReadLine tahmini) -----------------------------------
+#
+# Daha once calistirilan komutlari yazarken onerme isi PowerShell'de yerlesik:
+# PSReadLine 2.2+ (PowerShell 7.2+) iki gorunum sunuyor
+#   InlineView - imlecin devaminda soluk "hayalet metin"
+#   ListView   - istemin altinda liste; yukari/asagi oklariyla seciliyor
+#
+# Bunu KABUGA BIRAKMAK bilincli bir karar. Oneriyi uygulama tarafinda cizmek,
+# kabugun kendi satir duzenleyicisiyle (imlec konumu, yeniden cizim, secim,
+# sekme tamamlama) yarismak demek: kabuk kendi satirini biliyor, uygulama
+# yalnizca ekran tamponunu goruyor. Ustune ok tuslarini yakalamak kabugun
+# kendi gecmis gezinmesini bozar.
+#
+# NTERMINAL_PREDICTION yok ya da 'off' ise HIC dokunmuyoruz; kullanicinin
+# kendi profilindeki ayar gecerli kalir.
+$Global:__NTermPredict = $env:NTERMINAL_PREDICTION
+if ([string]::IsNullOrEmpty($Global:__NTermPredict) -or $Global:__NTermPredict -eq 'off') {
+    __NTermOsc '633;P;Prediction=off'
+} else {
+    # Durum arayuze bildiriliyor. Sebebi: destek yoksa oneri hic
+    # gorunmuyor ve kullanici bunu uygulamanin hatasi saniyor. Arayuz
+    # 'unsupported' gorunce ne yapilmasi gerektigini soyluyor.
+    $state = 'unsupported'
+    try {
+        $psrl = Get-Command Set-PSReadLineOption -ErrorAction Stop
+        if ($psrl.Parameters.ContainsKey('PredictionSource')) {
+            Set-PSReadLineOption -PredictionSource History -ErrorAction Stop
+            $state = 'inline'
+            if ($psrl.Parameters.ContainsKey('PredictionViewStyle')) {
+                if ($Global:__NTermPredict -eq 'inline') {
+                    Set-PSReadLineOption -PredictionViewStyle InlineView -ErrorAction Stop
+                } else {
+                    Set-PSReadLineOption -PredictionViewStyle ListView -ErrorAction Stop
+                    $state = 'list'
+                }
+            }
+        }
+    } catch {
+        # PSReadLine 2.0 (Windows PowerShell 5.1) tahmini desteklemiyor.
+        # Entegrasyonun geri kalani calismaya devam etmeli.
+        $state = 'unsupported'
+    }
+    __NTermOsc ('633;P;Prediction=' + $state)
+}
+
 # Ilk istem icin dizin bilgisini hemen gonder.
 __NTermReportCwd

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { fuzzyScore } from "../lib/format";
+import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
 import { useStore } from "../store/useStore";
@@ -20,6 +21,7 @@ export function CommandPalette() {
   const profiles = useStore((s) => s.settings.profiles);
   const keybindings = useStore((s) => s.settings.keybindings);
   const favorites = useStore((s) => s.favorites);
+  const t = useT();
 
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
@@ -31,7 +33,7 @@ export function CommandPalette() {
     const list: Action[] = [
       {
         id: "newTab",
-        label: "Yeni sekme",
+        label: t("term.newTab"),
         keybinding: keybindings.newTab,
         run: () => {
           close();
@@ -40,7 +42,7 @@ export function CommandPalette() {
       },
       {
         id: "newGroup",
-        label: "Yeni grup",
+        label: t("action.newGroup"),
         keybinding: keybindings.newGroup,
         run: () => {
           close();
@@ -49,7 +51,7 @@ export function CommandPalette() {
       },
       {
         id: "closeTab",
-        label: "Etkin sekmeyi kapat",
+        label: t("palette.closeActiveTab"),
         keybinding: keybindings.closeTab,
         run: () => {
           close();
@@ -59,7 +61,7 @@ export function CommandPalette() {
       },
       {
         id: "renameTab",
-        label: "Sekmeyi yeniden adlandır",
+        label: t("palette.renameTab"),
         keybinding: keybindings.renameTab,
         run: () => {
           const active = store().activeTab();
@@ -69,7 +71,7 @@ export function CommandPalette() {
       },
       {
         id: "restartTab",
-        label: "Sekmedeki kabuğu yeniden başlat",
+        label: t("palette.restartShell"),
         run: () => {
           const active = store().activeTab();
           close();
@@ -78,7 +80,7 @@ export function CommandPalette() {
       },
       {
         id: "clear",
-        label: "Terminali temizle",
+        label: t("term.clear"),
         keybinding: keybindings.clearTerminal,
         run: () => {
           close();
@@ -87,7 +89,7 @@ export function CommandPalette() {
       },
       {
         id: "history",
-        label: "Komut geçmişi panelini aç/kapat",
+        label: t("palette.toggleHistory"),
         keybinding: keybindings.historyPanel,
         run: () => {
           close();
@@ -96,7 +98,7 @@ export function CommandPalette() {
       },
       {
         id: "recall",
-        label: "Geçmişte hızlı arama",
+        label: t("palette.historySearch"),
         keybinding: keybindings.historySearch,
         run: () => {
           close();
@@ -105,7 +107,7 @@ export function CommandPalette() {
       },
       {
         id: "settings",
-        label: "Ayarlar",
+        label: t("app.settings"),
         keybinding: keybindings.settings,
         run: () => {
           close();
@@ -114,7 +116,7 @@ export function CommandPalette() {
       },
       {
         id: "favorites",
-        label: "Favori komutlar panelini ac",
+        label: t("palette.favorites"),
         keybinding: keybindings.favorites,
         run: () => {
           close();
@@ -123,7 +125,7 @@ export function CommandPalette() {
       },
       {
         id: "transfer",
-        label: "Ayarları içe / dışa aktar",
+        label: t("palette.transfer"),
         run: () => {
           close();
           setUi({ transferOpen: true });
@@ -131,11 +133,20 @@ export function CommandPalette() {
       },
       {
         id: "reveal",
-        label: "Etkin sekmenin klasörünü Dosya Gezgini'nde aç",
+        label: t("palette.reveal"),
         run: () => {
           close();
           const cwd = store().activeSession()?.cwd;
           if (cwd) void api.revealInExplorer(cwd).catch(() => {});
+        },
+      },
+      {
+        id: "toggleViewMode",
+        label: t("palette.toggleView"),
+        keybinding: keybindings.toggleViewMode,
+        run: () => {
+          close();
+          void store().toggleViewMode();
         },
       },
     ];
@@ -157,12 +168,12 @@ export function CommandPalette() {
     for (const profile of profiles) {
       list.push({
         id: `profile:${profile.id}`,
-        label: `Yeni sekme: ${profile.name}`,
-        hint: profile.unavailable ? "bu makinede yok" : profile.shell,
+        label: t("palette.newTabProfile", { name: profile.name }),
+        hint: profile.unavailable ? t("palette.profileMissing") : profile.shell,
         run: () => {
           close();
           if (profile.unavailable) {
-            store().toast(`${profile.name} bu makinede kullanılamıyor`, "err");
+            store().toast(t("tab.profileUnavailable", { name: profile.name }), "err");
             return;
           }
           store().addTab({ profileId: profile.id });
@@ -173,8 +184,8 @@ export function CommandPalette() {
     for (const group of groups) {
       list.push({
         id: `group:${group.id}`,
-        label: `Gruba geç: ${group.name}`,
-        hint: `${group.tabs.length} sekme`,
+        label: t("palette.switchGroup", { name: group.name }),
+        hint: tp("status.tabs", group.tabs.length),
         run: () => {
           close();
           store().setActiveGroup(group.id);
@@ -183,7 +194,9 @@ export function CommandPalette() {
       for (const tab of group.tabs) {
         list.push({
           id: `tab:${tab.id}`,
-          label: `Sekmeye geç: ${tab.customTitle ?? tab.title ?? tab.cwd ?? tab.id}`,
+          label: t("palette.switchTab", {
+            name: tab.customTitle ?? tab.title ?? tab.cwd ?? tab.id,
+          }),
           hint: group.name,
           run: () => {
             close();
@@ -194,7 +207,7 @@ export function CommandPalette() {
     }
 
     return list;
-  }, [groups, profiles, keybindings, favorites, setUi]);
+  }, [groups, profiles, keybindings, favorites, setUi, t]);
 
   const results = useMemo(() => {
     const needle = query.trim();
@@ -224,7 +237,7 @@ export function CommandPalette() {
       <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
         <input
           autoFocus
-          placeholder="eylem, grup, sekme veya profil ara…"
+          placeholder={t("palette.placeholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -244,7 +257,7 @@ export function CommandPalette() {
           }}
         />
         <div className="palette-list" ref={listRef}>
-          {results.length === 0 && <div className="hint">Eşleşen eylem yok.</div>}
+          {results.length === 0 && <div className="hint">{t("palette.noMatch")}</div>}
           {results.map((action, i) => (
             <div
               key={action.id}
@@ -260,9 +273,9 @@ export function CommandPalette() {
           ))}
         </div>
         <div className="palette-foot">
-          <span>↑↓ gez</span>
-          <span>Enter uygula</span>
-          <span>Esc kapat</span>
+          <span>{t("palette.arrows")}</span>
+          <span>{t("palette.enter")}</span>
+          <span>{t("common.escClose")}</span>
         </div>
       </div>
     </div>

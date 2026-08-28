@@ -1,9 +1,12 @@
+import { localeTag, t } from "./i18n";
+
 /** Geçmiş listesinde okunabilir zaman: bugünse saat, dünse "dün", öncesi tarih. */
 export function formatWhen(ms: number): string {
   if (!ms) return "";
   const date = new Date(ms);
   const now = new Date();
-  const time = date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  const locale = localeTag();
+  const time = date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 
   const sameDay =
     date.getFullYear() === now.getFullYear() &&
@@ -17,32 +20,33 @@ export function formatWhen(ms: number): string {
     date.getFullYear() === yesterday.getFullYear() &&
     date.getMonth() === yesterday.getMonth() &&
     date.getDate() === yesterday.getDate();
-  if (isYesterday) return `dün ${time}`;
+  if (isYesterday) return t("unit.yesterday", { time });
 
-  return `${date.toLocaleDateString("tr-TR", { day: "numeric", month: "short" })} ${time}`;
+  return `${date.toLocaleDateString(locale, { day: "numeric", month: "short" })} ${time}`;
 }
 
 export function formatFullDate(ms: number): string {
   if (!ms) return "";
-  return new Date(ms).toLocaleString("tr-TR");
+  return new Date(ms).toLocaleString(localeTag());
 }
 
 export function formatDuration(ms: number | null): string {
   if (ms === null || ms === undefined) return "";
-  if (ms < 1000) return `${ms} ms`;
+  if (ms < 1000) return t("unit.ms", { n: ms });
   if (ms < 60_000) {
     const s = ms / 1000;
-    return `${s < 10 ? s.toFixed(1) : Math.round(s)} sn`;
+    return t("unit.sec", { n: s < 10 ? s.toFixed(1) : Math.round(s) });
   }
   const totalSeconds = Math.round(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes < 60) return `${minutes} dk ${seconds} sn`;
+  if (minutes < 60) return t("unit.minSec", { m: minutes, s: seconds });
   const hours = Math.floor(minutes / 60);
-  return `${hours} sa ${minutes % 60} dk`;
+  return t("unit.hourMin", { h: hours, m: minutes % 60 });
 }
 
 export function formatBytes(bytes: number): string {
+  // Birimler her iki dilde de aynı; yerelleştirilecek bir şey yok.
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

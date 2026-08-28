@@ -22,6 +22,21 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 /// Cikti toplama penceresi. 6 ms goze gorunmez ama olay sayisini ~50 kat azaltir.
+/// Cocuk surece bildirilen terminal yetenekleri.
+///
+/// Renk kararini bunlar veriyor. Node tabanli araclar (Angular CLI, Vite,
+/// chalk, supports-color) `process.stdout.getColorDepth()` uzerinden karar
+/// veriyor; o da once stdout'un gercek bir TTY olmasina, sonra COLORTERM ve
+/// TERM'e bakiyor. ConPTY TTY'yi sagliyor, bu iki degisken de renk
+/// DERINLIGINI belirliyor: COLORTERM=truecolor olmadan pek cok arac 16 renge
+/// duser, TERM hic yoksa rengi tumden kapatir.
+///
+/// Sabit olarak duruyor ki entegrasyon testi ayni degerlerle olcum yapabilsin.
+pub const TERMINAL_ENV: [(&str, &str); 2] = [
+    ("TERM", "xterm-256color"),
+    ("COLORTERM", "truecolor"),
+];
+
 const COALESCE_WINDOW: Duration = Duration::from_millis(6);
 /// Tek olayda gonderilecek azami bayt.
 const MAX_CHUNK: usize = 128 * 1024;
@@ -143,10 +158,14 @@ impl PtyManager {
         for (k, v) in &spec.env {
             cmd.env(k, v);
         }
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
+        for (k, v) in TERMINAL_ENV {
+            cmd.env(k, v);
+        }
         cmd.env("TERM_PROGRAM", "NTerminal");
         cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+        // NTERMINAL_PREDICTION arayuzden spec.env icinde geliyor (yukarida
+        // yaziliyor): ayar Behavior.shell_prediction, kabuk betigi onu okuyup
+        // PSReadLine tahminini aciyor.
         cmd.env("NTERMINAL", "1");
         cmd.env("NTERMINAL_SESSION", &spec.id);
         if integration {

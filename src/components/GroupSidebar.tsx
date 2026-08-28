@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "../lib/i18n";
+import { prettyCombo } from "../lib/keys";
 import { api } from "../lib/ipc";
 import { hasCustomTitle, shellBadge, tabLabel, tabSubtitle, tabTooltip } from "../lib/labels";
 import {
@@ -36,6 +38,7 @@ type Editing = { kind: "group" | "tab"; id: string } | null;
 type DropTarget = { groupId: string; index: number } | null;
 
 export function GroupSidebar() {
+  const t = useT();
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const running = useStore((s) => s.running);
@@ -45,6 +48,8 @@ export function GroupSidebar() {
   const onlyFavorites = useStore((s) => s.settings.behavior.showOnlyFavoriteGroups);
   const patchAppearance = useStore((s) => s.patchAppearance);
   const patchBehavior = useStore((s) => s.patchBehavior);
+  const keybindings = useStore((s) => s.settings.keybindings);
+  const key = (action: string) => prettyCombo(keybindings[action] ?? "");
   const store = useStore.getState;
 
   const [editing, setEditing] = useState<Editing>(null);
@@ -169,45 +174,50 @@ export function GroupSidebar() {
   // ------------------------------------------------------------------ menüler
 
   const groupMenu = (group: Group, index: number): MenuEntry[] => [
-    { kind: "item", label: "Adı değiştir…", hint: "çift tık", run: () => startEditGroup(group) },
     {
       kind: "item",
-      label: group.favorite ? "Favori Gruptan Çıkar" : "Favori Gruba Ekle",
+      label: t("common.rename"),
+      hint: t("common.doubleClick"),
+      run: () => startEditGroup(group),
+    },
+    {
+      kind: "item",
+      label: t(group.favorite ? "group.removeFavoriteMenu" : "group.addFavoriteMenu"),
       run: () => store().toggleGroupFavorite(group.id),
     },
-    { kind: "item", label: "Rengi değiştir", run: () => setColorFor(group.id) },
+    { kind: "item", label: t("group.changeColor"), run: () => setColorFor(group.id) },
     {
       kind: "item",
-      label: "Grup ayarları…",
+      label: t("group.settings"),
       run: () => store().setUi({ settingsOpen: true, editingGroupId: group.id }),
     },
     { kind: "separator" },
     {
       kind: "item",
-      label: "Bu gruba yeni sekme",
-      hint: "Ctrl+T",
+      label: t("group.newTabHere"),
+      hint: key("newTab"),
       run: () => store().addTab({ groupId: group.id }),
     },
     {
       kind: "item",
-      label: group.collapsed ? "Grubu Aç" : "Grubu Kapat",
+      label: t(group.collapsed ? "group.expand" : "group.collapse"),
       run: () => store().updateGroup(group.id, { collapsed: !group.collapsed }),
     },
     {
       kind: "item",
-      label: allCollapsed ? "Tümünü Aç" : "Tümünü Kapat",
+      label: t(allCollapsed ? "group.expandAll" : "group.collapseAll"),
       run: () => store().toggleAllCollapsed(),
     },
     { kind: "separator" },
     {
       kind: "item",
-      label: "Yukarı taşı",
+      label: t("common.moveUp"),
       disabled: index === 0,
       run: () => store().moveGroup(group.id, -1),
     },
     {
       kind: "item",
-      label: "Aşağı taşı",
+      label: t("common.moveDown"),
       disabled: index === groups.length - 1,
       run: () => store().moveGroup(group.id, 1),
     },
@@ -215,15 +225,15 @@ export function GroupSidebar() {
     {
       kind: "item",
       label: canDeleteGroup(group)
-        ? "Grubu sil"
-        : `Grubu sil (${lockedTabs(group.tabs).length} kilitli sekme)`,
+        ? t("group.delete")
+        : t("group.deleteLockedCount", { n: lockedTabs(group.tabs).length }),
       danger: true,
       disabled: groups.length <= 1 || !canDeleteGroup(group),
       run: () => {
         if (
           group.tabs.length === 0 ||
           window.confirm(
-            `"${group.name}" grubunu ve ${group.tabs.length} sekmesini kapatmak istiyor musunuz?`,
+            t("group.deleteConfirm", { name: group.name, n: group.tabs.length }),
           )
         ) {
           void store().deleteGroup(group.id);
@@ -237,15 +247,15 @@ export function GroupSidebar() {
     return [
       {
         kind: "item",
-        label: hasCustomTitle(tab) ? "Adı değiştir…" : "Ad ver…",
-        hint: "çift tık",
+        label: t(hasCustomTitle(tab) ? "menu.rename" : "menu.giveName"),
+        hint: t("common.doubleClick"),
         run: () => startEditTab(tab),
       },
       ...(hasCustomTitle(tab)
         ? [
             {
               kind: "item" as const,
-              label: "Adı sıfırla",
+              label: t("menu.resetName"),
               run: () => store().updateTab(tab.id, { customTitle: null }),
             },
           ]
@@ -253,16 +263,16 @@ export function GroupSidebar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: isLocked(tab) ? "Kilit Kapat" : "Kilit Aç",
+        label: t(isLocked(tab) ? "menu.unlock" : "menu.lock"),
         run: () => store().toggleTabLock(tab.id),
       },
       { kind: "separator" },
-      { kind: "item", label: "Kabuğu yeniden başlat", run: () => void store().restartTab(tab.id) },
+      { kind: "item", label: t("common.restartShell"), run: () => void store().restartTab(tab.id) },
       ...(tab.cwd
         ? [
             {
               kind: "item" as const,
-              label: "Klasörü Gezgin'de aç",
+              label: t("common.revealFolder"),
               run: () => void api.revealInExplorer(tab.cwd!).catch(() => {}),
             },
           ]
@@ -270,20 +280,20 @@ export function GroupSidebar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: "Yukarı taşı",
+        label: t("common.moveUp"),
         disabled: index === 0,
         run: () => store().moveTab(tab.id, -1),
       },
       {
         kind: "item",
-        label: "Aşağı taşı",
+        label: t("common.moveDown"),
         disabled: index === group.tabs.length - 1,
         run: () => store().moveTab(tab.id, 1),
       },
       ...(others.length > 0
         ? [
             { kind: "separator" as const },
-            { kind: "header" as const, label: "Gruba taşı" },
+            { kind: "header" as const, label: t("menu.moveToGroup") },
             ...others.map((g) => ({
               kind: "item" as const,
               label: g.name,
@@ -294,7 +304,7 @@ export function GroupSidebar() {
       { kind: "separator" },
       {
         kind: "item",
-        label: isLocked(tab) ? "Sekmeyi kapat (kilitli)" : "Sekmeyi kapat",
+        label: t(isLocked(tab) ? "menu.closeTabLocked" : "menu.closeTab"),
         danger: true,
         disabled: isLocked(tab),
         run: () => void store().closeTab(tab.id),
@@ -307,14 +317,14 @@ export function GroupSidebar() {
   return (
     <aside className="sidebar" style={{ width: sidebarWidth }}>
       <div className="sidebar-head">
-        <span>Gruplar</span>
+        <span>{t("group.heading")}</span>
         <span className="sidebar-head-actions">
           <button
             className={onlyFavorites ? "icon-btn on" : "icon-btn"}
             title={
               onlyFavorites
-                ? `Tüm grupları göster (${groups.length})`
-                : `Yalnızca favori grupları göster (${favoriteCount})`
+                ? t("group.showAll", { n: groups.length })
+                : t("group.showFavoritesOnly", { n: favoriteCount })
             }
             onClick={() => void patchBehavior({ showOnlyFavoriteGroups: !onlyFavorites })}
           >
@@ -322,14 +332,14 @@ export function GroupSidebar() {
           </button>
           <button
             className="icon-btn"
-            title={allCollapsed ? "Tümünü Aç" : "Tümünü Kapat"}
+            title={t(allCollapsed ? "group.expandAll" : "group.collapseAll")}
             onClick={() => store().toggleAllCollapsed()}
           >
             {allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}
           </button>
           <button
             className="icon-btn"
-            title="Yeni grup (Ctrl+Shift+N)"
+            title={t("app.newGroupTitle", { keys: key("newGroup") })}
             onClick={() => store().addGroup()}
           >
             <PlusIcon />
@@ -340,7 +350,7 @@ export function GroupSidebar() {
       <div className="sidebar-scroll" onDragEnd={endDrag}>
         {onlyFavorites && favoriteCount === 0 && (
           <div className="hint">
-            {"Favori grup yok.\nBir grubun üzerinde sağ tık → Favori Gruba Ekle."}
+            {t("group.noFavorites")}
           </div>
         )}
 
@@ -371,7 +381,7 @@ export function GroupSidebar() {
                 <span className="group-rail" />
                 <button
                   className="group-caret"
-                  title={group.collapsed ? "Grubu Aç" : "Grubu Kapat"}
+                  title={t(group.collapsed ? "group.expand" : "group.collapse")}
                   onClick={(e) => {
                     e.stopPropagation();
                     store().updateGroup(group.id, { collapsed: !group.collapsed });
@@ -381,23 +391,23 @@ export function GroupSidebar() {
                 </button>
 
                 {editing?.kind === "group" && editing.id === group.id ? (
-                  renameInput("grup adı")
+                  renameInput(t("group.namePlaceholder"))
                 ) : (
                   <>
                     {group.favorite && (
-                      <span className="group-star" title="favori grup">
+                      <span className="group-star" title={t("group.favoriteMark")}>
                         <StarIcon size={11} />
                       </span>
                     )}
                     <span className="group-name">{group.name}</span>
                     {groupRunning && (
-                      <span className="tab-dot busy" title="bu grupta komut çalışıyor" />
+                      <span className="tab-dot busy" title={t("group.busy")} />
                     )}
                     <span className="group-count">{group.tabs.length}</span>
                     <span className="group-actions">
                       <button
                         className="icon-btn"
-                        title={group.favorite ? "Favori gruptan çıkar" : "Favori gruba ekle"}
+                        title={t(group.favorite ? "group.removeFavorite" : "group.addFavorite")}
                         onClick={(e) => {
                           e.stopPropagation();
                           store().toggleGroupFavorite(group.id);
@@ -407,7 +417,7 @@ export function GroupSidebar() {
                       </button>
                       <button
                         className="icon-btn"
-                        title="Bu gruba yeni sekme"
+                        title={t("group.newTabHere")}
                         onClick={(e) => {
                           e.stopPropagation();
                           store().addTab({ groupId: group.id });
@@ -417,7 +427,7 @@ export function GroupSidebar() {
                       </button>
                       <button
                         className="icon-btn"
-                        title="Grup menüsü"
+                        title={t("group.menuTitle")}
                         onClick={(e) => menu.open(e, groupMenu(group, groupIndex))}
                       >
                         ⋯
@@ -441,7 +451,26 @@ export function GroupSidebar() {
                       }}
                     />
                   ))}
-                  <button className="icon-btn" title="Kapat" onClick={() => setColorFor(null)}>
+                  <label className="swatch custom" title={t("group.customColor")}>
+                    <input
+                      type="color"
+                      value={group.color ?? "#58a6ff"}
+                      onChange={(e) => store().updateGroup(group.id, { color: e.target.value })}
+                    />
+                  </label>
+                  <button
+                    className="swatch clear"
+                    title={t("group.clearColor")}
+                    onClick={() => {
+                      store().updateGroup(group.id, { color: null });
+                      setColorFor(null);
+                    }}
+                  />
+                  <button
+                    className="icon-btn"
+                    title={t("group.colorClose")}
+                    onClick={() => setColorFor(null)}
+                  >
                     ×
                   </button>
                 </div>
@@ -497,13 +526,13 @@ export function GroupSidebar() {
                         </span>
 
                         {isEditing ? (
-                          renameInput("sekme adı")
+                          renameInput(t("tab.namePlaceholder"))
                         ) : (
                           <span className="tab-row-body">
                             <span className="tab-row-title">
                               {tabLabel(tab)}
                               {hasCustomTitle(tab) && (
-                                <span className="tab-pin" title="elle adlandırıldı">
+                                <span className="tab-pin" title={t("tab.renamed")}>
                                   ·
                                 </span>
                               )}
@@ -519,14 +548,14 @@ export function GroupSidebar() {
                           (isLocked(tab) ? (
                             <span
                               className="tab-row-lock"
-                              title="Kilitli - sag tik > Kilit Kapat (ya da Ctrl+Shift+L)"
+                              title={t("tab.lockedTitle", { keys: key("toggleLock") })}
                             >
                               🔒
                             </span>
                           ) : (
                             <button
                               className="tab-row-close"
-                              title="Sekmeyi kapat"
+                              title={t("menu.closeTab")}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void store().closeTab(tab.id);
@@ -536,7 +565,7 @@ export function GroupSidebar() {
                             </button>
                           ))}
                         {session?.pid == null && !exited[tab.id] && !running[tab.id] && (
-                          <span className="tab-row-idle" title="henüz açılmadı" />
+                          <span className="tab-row-idle" title={t("tab.notStarted")} />
                         )}
                       </div>
                     );
@@ -569,11 +598,11 @@ export function GroupSidebar() {
                       farklı: rozet kutusu yok, yarım yükseklikte, küçük ve soluk. */}
                   <button
                     className={group.tabs.length === 0 ? "add-tab prominent" : "add-tab"}
-                    title="Bu gruba yeni sekme (Ctrl+T)"
+                    title={t("group.newTabHereTitle", { keys: key("newTab") })}
                     onClick={() => store().addTab({ groupId: group.id })}
                   >
                     <span className="add-tab-plus">+</span>
-                    <span>sekme ekle</span>
+                    <span>{t("group.addTab")}</span>
                   </button>
                 </div>
               )}

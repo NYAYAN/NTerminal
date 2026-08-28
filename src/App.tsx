@@ -10,7 +10,8 @@ import { StatusBar } from "./components/StatusBar";
 import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
-import { matchCombo } from "./lib/keys";
+import { useT } from "./lib/i18n";
+import { matchCombo, prettyCombo } from "./lib/keys";
 import { flushAllState, useStore } from "./store/useStore";
 
 export function App() {
@@ -23,6 +24,9 @@ export function App() {
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
   const appVersion = useStore((s) => s.appVersion);
+
+  const t = useT();
+  const key = (action: string) => prettyCombo(settings.keybindings[action] ?? "");
 
   const [closing, setClosing] = useState(false);
   const bootstrapped = useRef(false);
@@ -111,6 +115,27 @@ export function App() {
         fn();
       };
 
+      // Ctrl+C terminalde iki isi de yapmak zorunda: secim varsa kopyalar,
+      // yoksa kabuga SIGINT olarak gecer. Karar SENKRON veriliyor
+      // (hasSelection senkron) cunku preventDefault'u burada vermek sart -
+      // asenkron bekleseydik tus xterm'e ulasip  gonderilirdi.
+      if (
+        inTerminal &&
+        event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "c" &&
+        session &&
+        store.settings.behavior.ctrlCCopiesSelection &&
+        session.hasSelection()
+      ) {
+        return run(() => {
+          void session.copyForCtrlC().then((result) => {
+            if (result === "failed") store.toast(t("common.clipboardFailed"), "err");
+          });
+        });
+      }
+
       if (matchCombo(event, keys.newTab)) return run(() => store.addTab());
       if (matchCombo(event, keys.closeTab)) {
         const active = store.activeTab();
@@ -130,6 +155,7 @@ export function App() {
         const active = store.activeTab();
         if (active) return run(() => store.setUi({ renamingTabId: active.tab.id }));
       }
+      if (matchCombo(event, keys.toggleViewMode)) return run(() => void store.toggleViewMode());
       if (matchCombo(event, keys.toggleLock)) {
         const active = store.activeTab();
         if (active) return run(() => store.toggleTabLock(active.tab.id));
@@ -167,28 +193,14 @@ export function App() {
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [ready, settings.keybindings]);
 
-  // Sağ tık ile yapıştırma: xterm'in kendi menüsü yok, biz sağlıyoruz.
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      if (!settings.behavior.pasteOnRightClick) return;
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest(".term-host")) return;
-      event.preventDefault();
-      const session = useStore.getState().activeSession();
-      void session?.paste();
-    };
-    window.addEventListener("contextmenu", handler);
-    return () => window.removeEventListener("contextmenu", handler);
-  }, [settings.behavior.pasteOnRightClick]);
-
   if (!ready) {
-    return <div className="hint">NTerminal yükleniyor…</div>;
+    return <div className="hint">{t("app.loading")}</div>;
   }
 
   if (bootError) {
     return (
       <div className="hint">
-        <p className="err-text">NTerminal başlatılamadı</p>
+        <p className="err-text">{t("app.bootFailed")}</p>
         <p className="mono">{bootError}</p>
       </div>
     );
@@ -202,20 +214,24 @@ export function App() {
           NTerminal
           <span className="version">{appVersion}</span>
         </div>
-        <button className="icon-btn" title="Yeni sekme (Ctrl+T)" onClick={() => useStore.getState().addTab()}>
-          + Sekme
+        <button
+          className="icon-btn"
+          title={t("app.newTabTitle", { keys: key("newTab") })}
+          onClick={() => useStore.getState().addTab()}
+        >
+          {t("app.newTab")}
         </button>
         <button
           className="icon-btn"
-          title="Yeni grup (Ctrl+Shift+N)"
+          title={t("app.newGroupTitle", { keys: key("newGroup") })}
           onClick={() => useStore.getState().addGroup()}
         >
-          + Grup
+          {t("app.newGroup")}
         </button>
         <div className="drag" data-tauri-drag-region />
         <button
           className={ui.historyOpen && ui.panelMode === "history" ? "icon-btn on" : "icon-btn"}
-          title="Komut geçmişi (Ctrl+Shift+H)"
+          title={t("app.historyTitle", { keys: key("historyPanel") })}
           onClick={() =>
             setUi(
               ui.historyOpen && ui.panelMode === "history"
@@ -224,11 +240,11 @@ export function App() {
             )
           }
         >
-          Geçmiş
+          {t("app.history")}
         </button>
         <button
           className={ui.historyOpen && ui.panelMode === "favorites" ? "icon-btn on" : "icon-btn"}
-          title="Favori komutlar (Ctrl+Shift+B)"
+          title={t("app.favoritesTitle", { keys: key("favorites") })}
           onClick={() =>
             setUi(
               ui.historyOpen && ui.panelMode === "favorites"
@@ -237,17 +253,22 @@ export function App() {
             )
           }
         >
-          ★ Favoriler
+          {"★ "}
+          {t("app.favorites")}
         </button>
         <button
           className="icon-btn"
-          title="Ayarları içe/dışa aktar"
+          title={t("app.transferTitle")}
           onClick={() => setUi({ transferOpen: true })}
         >
-          Aktar
+          {t("app.transfer")}
         </button>
-        <button className="icon-btn" title="Ayarlar (Ctrl+,)" onClick={() => setUi({ settingsOpen: true })}>
-          Ayarlar
+        <button
+          className="icon-btn"
+          title={t("app.settingsTitle", { keys: key("settings") })}
+          onClick={() => setUi({ settingsOpen: true })}
+        >
+          {t("app.settings")}
         </button>
       </div>
 
@@ -267,7 +288,7 @@ export function App() {
 
       {ui.toast && <div className={`toast ${ui.toast.tone}`}>{ui.toast.text}</div>}
 
-      {closing && <div className="toast">Durum kaydediliyor…</div>}
+      {closing && <div className="toast">{t("app.savingState")}</div>}
     </div>
   );
 }

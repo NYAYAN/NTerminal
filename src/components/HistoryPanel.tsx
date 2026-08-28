@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatDuration, formatFullDate, formatWhen, shortenPath } from "../lib/format";
+import { localeTag, tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import type { MsgKey } from "../lib/messages";
 import { sessions, useStore, type HistoryScope } from "../store/useStore";
 import type { HistoryEntry, HistoryFilter } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 
 type Outcome = "all" | "ok" | "err";
 
-const SCOPE_LABELS: Record<HistoryScope, string> = {
-  tab: "Bu sekme",
-  group: "Bu grup",
-  all: "Tümü",
+const SCOPE_KEYS: Record<HistoryScope, MsgKey> = {
+  tab: "history.scopeTab",
+  group: "history.scopeGroup",
+  all: "history.scopeAll",
 };
 
 /**
@@ -19,6 +21,7 @@ const SCOPE_LABELS: Record<HistoryScope, string> = {
  * burada yalnızca denetimler, liste ve alt eylem çubuğu var.
  */
 export function HistoryPanel() {
+  const t = useT();
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const scope = useStore((s) => s.ui.historyScope);
@@ -97,7 +100,7 @@ export function HistoryPanel() {
 
   const insert = (command: string, execute: boolean) => {
     if (!session) {
-      store().toast("Etkin bir terminal yok", "err");
+      store().toast(t("history.noActiveTerminal"), "err");
       return;
     }
     session.insertCommand(command, execute);
@@ -108,9 +111,9 @@ export function HistoryPanel() {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      store().toast(`${commands.length} komut kopyalandı`, "ok");
+      store().toast(tp("history.copied", commands.length), "ok");
     } catch {
-      store().toast("Panoya yazılamadı", "err");
+      store().toast(t("history.clipboardFailed"), "err");
     }
   };
 
@@ -120,9 +123,7 @@ export function HistoryPanel() {
       insert(selectedEntries[0].command, true);
       return;
     }
-    const ok = window.confirm(
-      `${selectedEntries.length} komut sırayla çalıştırılacak. Devam edilsin mi?`,
-    );
+    const ok = window.confirm(t("history.runManyConfirm", { n: selectedEntries.length }));
     if (!ok) return;
     // Liste en yeniden eskiye sıralı; çalıştırma sırası kronolojik olmalı.
     for (const entry of [...selectedEntries].reverse()) {
@@ -135,12 +136,12 @@ export function HistoryPanel() {
     const removed = await api.historyDelete(selectedEntries.map((e) => e.id)).catch(() => 0);
     setSelected(new Set());
     refresh();
-    store().toast(`${removed} kayıt silindi`, "ok");
+    store().toast(tp("history.deleted", removed), "ok");
   };
 
   const clearScope = async () => {
-    const label = SCOPE_LABELS[scope].toLowerCase();
-    if (!window.confirm(`"${label}" kapsamındaki tüm komut geçmişi silinecek. Emin misiniz?`)) return;
+    const label = t(SCOPE_KEYS[scope]).toLocaleLowerCase(localeTag());
+    if (!window.confirm(t("history.clearScopeConfirm", { scope: label }))) return;
     const removed = await api
       .historyClear({
         tabId: filter.tabId,
@@ -151,32 +152,37 @@ export function HistoryPanel() {
       .catch(() => 0);
     setSelected(new Set());
     refresh();
-    store().toast(`${removed} kayıt silindi`, "ok");
+    store().toast(tp("history.deleted", removed), "ok");
   };
 
   const entriesFor = (entry: HistoryEntry): MenuEntry[] => {
     const isFav = favoriteCommands.has(entry.command);
     return [
-      { kind: "item", label: "Çalıştır", run: () => insert(entry.command, true) },
-      { kind: "item", label: "İstem satırına yaz", hint: "çift tık", run: () => insert(entry.command, false) },
+      { kind: "item", label: t("common.run"), run: () => insert(entry.command, true) },
+      {
+        kind: "item",
+        label: t("menu.insertAtPrompt"),
+        hint: t("common.doubleClick"),
+        run: () => insert(entry.command, false),
+      },
       { kind: "separator" },
       {
         kind: "item",
-        label: isFav ? "Favoriden kaldır" : "Favorilere ekle",
+        label: t(isFav ? "menu.removeFavorite" : "menu.addFavorite"),
         run: () => void store().toggleFavorite(entry.command),
       },
       {
         kind: "item",
-        label: "Favoriler panelinde göster",
+        label: t("menu.showInFavorites"),
         run: () => setUi({ panelMode: "favorites" }),
       },
       { kind: "separator" },
-      { kind: "item", label: "Komutu kopyala", run: () => void copy([entry.command]) },
+      { kind: "item", label: t("common.copyCommand"), run: () => void copy([entry.command]) },
       ...(entry.cwd
         ? [
             {
               kind: "item" as const,
-              label: "Klasörü Gezgin'de aç",
+              label: t("common.revealFolder"),
               run: () => void api.revealInExplorer(entry.cwd!).catch(() => {}),
             },
           ]
@@ -184,7 +190,7 @@ export function HistoryPanel() {
       { kind: "separator" },
       {
         kind: "item",
-        label: "Geçmişten sil",
+        label: t("menu.deleteFromHistory"),
         danger: true,
         run: () => {
           void api.historyDelete([entry.id]).then(() => refresh());
@@ -197,7 +203,7 @@ export function HistoryPanel() {
     <>
       <div className="panel-controls column">
         <div className="seg full">
-          {(Object.keys(SCOPE_LABELS) as HistoryScope[]).map((key) => (
+          {(Object.keys(SCOPE_KEYS) as HistoryScope[]).map((key) => (
             <button
               key={key}
               className={scope === key ? "on" : ""}
@@ -206,13 +212,13 @@ export function HistoryPanel() {
                 setSelected(new Set());
               }}
             >
-              {SCOPE_LABELS[key]}
+              {t(SCOPE_KEYS[key])}
             </button>
           ))}
         </div>
 
         <input
-          placeholder="komut veya dizin ara…"
+          placeholder={t("history.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -221,18 +227,18 @@ export function HistoryPanel() {
         <div className="row">
           <div className="seg">
             <button className={outcome === "all" ? "on" : ""} onClick={() => setOutcome("all")}>
-              Hepsi
+              {t("history.outcomeAll")}
             </button>
             <button className={outcome === "ok" ? "on" : ""} onClick={() => setOutcome("ok")}>
-              Başarılı
+              {t("history.outcomeOk")}
             </button>
             <button className={outcome === "err" ? "on" : ""} onClick={() => setOutcome("err")}>
-              Hatalı
+              {t("history.outcomeErr")}
             </button>
           </div>
           <label className="check-row" style={{ marginLeft: "auto", padding: 0 }}>
             <input type="checkbox" checked={dedupe} onChange={(e) => setDedupe(e.target.checked)} />
-            <span className="dim">tekrarları gizle</span>
+            <span className="dim">{t("history.hideDupes")}</span>
           </label>
         </div>
       </div>
@@ -241,10 +247,8 @@ export function HistoryPanel() {
         {entries.length === 0 && (
           <div className="hint">
             {query.trim()
-              ? "Bu aramaya uyan komut yok."
-              : scope === "tab"
-                ? "Bu sekmede henüz komut çalıştırılmadı.\nKomutlar çalıştıkça burada birikir."
-                : "Kayıtlı komut yok."}
+              ? t("history.noSearchMatch")
+              : t(scope === "tab" ? "history.emptyTab" : "history.empty")}
           </div>
         )}
 
@@ -253,25 +257,32 @@ export function HistoryPanel() {
           const isFav = favoriteCommands.has(entry.command);
           const badge =
             entry.exitCode === null
-              ? { cls: "run", text: entry.durationMs === null ? "çalışıyor" : "?" }
+              ? { cls: "run", text: entry.durationMs === null ? t("history.running") : "?" }
               : entry.exitCode === 0
                 ? { cls: "ok", text: formatDuration(entry.durationMs) || "0" }
-                : { cls: "err", text: `çıkış ${entry.exitCode}` };
+                : { cls: "err", text: t("history.exitCode", { code: entry.exitCode }) };
 
           return (
             <div
               key={entry.id}
               className={isSelected ? "hitem sel" : "hitem"}
-              title={`${entry.command}\n\n${formatFullDate(entry.startedAt)}\n${entry.cwd ?? ""}\nsüre: ${
-                formatDuration(entry.durationMs) || "bilinmiyor"
-              }\nkaynak: ${entry.source}`}
+              title={[
+                entry.command,
+                "",
+                formatFullDate(entry.startedAt),
+                entry.cwd ?? "",
+                t("history.duration", {
+                  value: formatDuration(entry.durationMs) || t("history.unknown"),
+                }),
+                t("history.source", { source: entry.source }),
+              ].join("\n")}
               onClick={(e) => toggleSelect(entry.id, e.ctrlKey || e.metaKey || e.shiftKey)}
               onDoubleClick={() => insert(entry.command, false)}
               onContextMenu={(e) => menu.open(e, entriesFor(entry))}
             >
               <button
                 className={isFav ? "hstar on" : "hstar"}
-                title={isFav ? "Favoriden kaldır" : "Favorilere ekle"}
+                title={t(isFav ? "menu.removeFavorite" : "menu.addFavorite")}
                 onClick={(e) => {
                   e.stopPropagation();
                   void store().toggleFavorite(entry.command);
@@ -292,45 +303,51 @@ export function HistoryPanel() {
 
       <div className="panel-foot">
         <span>
-          {selected.size > 0 ? `${selected.size} seçili / ` : ""}
-          {entries.length < total ? `${entries.length} / ${total}` : total} kayıt
+          {selected.size > 0 ? t("history.selectedPrefix", { n: selected.size }) : ""}
+          {tp("history.records", total, {
+            value: entries.length < total ? `${entries.length} / ${total}` : total,
+          })}
         </span>
         <span style={{ flex: 1 }} />
         <button
           className="outline"
           disabled={selected.size !== 1}
-          title="Komutu istem satırına yaz (çalıştırmaz)"
+          title={t("history.insertTitle")}
           onClick={() => insert(selectedEntries[0].command, false)}
         >
-          Yaz
+          {t("history.btnInsert")}
         </button>
         <button
           className="primary"
           disabled={selected.size === 0}
-          title="Seçili komutları çalıştır"
+          title={t("history.runTitle")}
           onClick={runSelected}
         >
-          Çalıştır
+          {t("history.btnRun")}
         </button>
         <button
           className="outline"
-          title="Panoya kopyala"
+          title={t("history.copyTitle")}
           onClick={() =>
             void copy((selectedEntries.length > 0 ? selectedEntries : entries).map((e) => e.command))
           }
         >
-          Kopyala
+          {t("history.btnCopy")}
         </button>
         <button
           className="danger"
           disabled={selected.size === 0}
-          title="Seçili kayıtları geçmişten sil"
+          title={t("history.deleteTitle")}
           onClick={() => void deleteSelected()}
         >
-          Sil
+          {t("history.btnDelete")}
         </button>
-        <button className="danger" title="Bu kapsamdaki geçmişi temizle" onClick={() => void clearScope()}>
-          Temizle
+        <button
+          className="danger"
+          title={t("history.clearScopeTitle")}
+          onClick={() => void clearScope()}
+        >
+          {t("history.btnClear")}
         </button>
       </div>
 
