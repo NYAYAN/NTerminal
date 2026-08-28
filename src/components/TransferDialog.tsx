@@ -148,11 +148,14 @@ export function TransferDialog() {
   const doImport = async () => {
     if (!preview) return;
     const changesWorkspace = importOptions.workspace !== "skip";
-    if (
-      importOptions.workspace === "replace" &&
-      !window.confirm(t("transfer.replaceWorkspaceConfirm"))
-    ) {
-      return;
+    if (importOptions.workspace === "replace") {
+      const ok = await store().askConfirm({
+        title: t("confirm.replaceWorkspaceTitle"),
+        message: t("confirm.replaceWorkspaceMessage"),
+        confirmLabel: t("confirm.apply"),
+        danger: true,
+      });
+      if (!ok) return;
     }
 
     setBusy(true);

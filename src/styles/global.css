@@ -286,6 +286,9 @@ input[type="color"] {
  * beklenmedik koyulasma ve okunabilirlik kaybi cikiyor. */
 .group {
   --group-color: var(--accent);
+  /* Birakma isareti (::before) buna gore konumlaniyor; relative olmadan
+     .sidebar'a tutunup yanlis yerde ciziliyordu. */
+  position: relative;
   margin-bottom: 5px;
   border-radius: var(--radius-lg);
   border: 1px solid transparent;
@@ -324,6 +327,40 @@ input[type="color"] {
   padding: 0 5px 0 11px;
   border-radius: var(--radius-lg);
   cursor: pointer;
+}
+
+/* Grup surukleme: birakma yeri ince bir cizgiyle gosteriliyor.
+   Sekme birakma isaretiyle ayni gorsel dil (data-drop), farkli oznitelik
+   cunku ikisi ayni anda etkin olabiliyor. */
+.group[data-group-drop]::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  z-index: 2;
+}
+
+.group[data-group-drop="before"]::before {
+  top: -2px;
+}
+
+.group[data-group-drop="after"]::before {
+  bottom: -2px;
+}
+
+.group.dragging {
+  opacity: 0.45;
+}
+
+.group-row {
+  cursor: grab;
+}
+
+.group-row:active {
+  cursor: grabbing;
 }
 
 .group-row:hover {
@@ -631,6 +668,85 @@ input[type="color"] {
   font-size: 12.5px;
 }
 
+/* ----------------------------------------------------------- komut onerisi */
+
+.suggest-bar {
+  grid-area: suggest;
+  border-top: 1px solid var(--border);
+  background: var(--surface-alt);
+  min-width: 0;
+}
+
+/* Ters siralama: en yeni komut en ALTTA, istem satirina en yakin. Kabuk
+   aliskanligiyla "yukari = daha eski" tutarli kalsin. */
+.suggest-list {
+  display: flex;
+  flex-direction: column-reverse;
+  /* Bes satir + kaydirma. Sekiz satirda cubuk 191px oluyordu, yani 627px'lik
+     terminalin ucte biri; oneri listesi calisma alanini bu kadar yememeli. */
+  max-height: 112px;
+  overflow-y: auto;
+}
+
+.suggest-row {
+  display: block;
+  width: 100%;
+  padding: 3px 10px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.suggest-row:hover {
+  background: var(--hover);
+}
+
+.suggest-row.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+
+/* Yazilan kisim soluk, onerinin devami belirgin: "bunu yazdiniz, su
+   eklenecek" ayrimi gorunsun. */
+.suggest-typed {
+  opacity: 0.55;
+}
+
+/* Onerinin eklenecek kismi ANA METIN renginde.
+ *
+ * Once vurgu rengiydi; secili satirin arka plani da vurgu renginin acik bir
+ * karisimi oldugu icin renk rengin uzerine geliyordu ve karsitlik Solarized
+ * Acik'ta 2.54'e kadar iniyordu - listenin en onemli metni en okunmaz olani
+ * olmustu. Vurgu rengi artik yalnizca arka plan tonu ve sol kenar cizgisinde:
+ * secili satir orada belli oluyor, metin ise her temada okunur kaliyor. */
+.suggest-rest {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.suggest-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px 4px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+}
+
+.suggest-foot .spacer {
+  flex: 1;
+}
+
 /* --------------------------------------------------------------- ana alan */
 
 .main {
@@ -639,11 +755,15 @@ input[type="color"] {
   /* Satirlar icerige gore: sabit yukseklikler sekme cubugunun ve durum
      cubugunun gercek olculeriyle bir piksel oynadiginda icerik satir
      sinirini asiyordu. `auto` bunu tumden ortadan kaldiriyor. */
-  grid-template-rows: auto 1fr auto;
+  /* Oneri cubugu ayri bir `auto` satir: gorunmedigi zaman yuksekligi
+     sifir, gorundugunde terminali yukari itiyor. Terminalin ustune
+     bindirmek istem satirini kapatirdi. */
+  grid-template-rows: auto 1fr auto auto;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "tabbar tabbar"
     "terminal panel"
+    "suggest suggest"
     "status status";
   min-width: 0;
   min-height: 0;
@@ -1626,6 +1746,43 @@ input[type="color"] {
 
 .modal.narrow {
   width: min(620px, 92vw);
+}
+
+/* Onay penceresi: normal kipten dar ve ortalanmis.
+ *
+ * z-index 100'un uzerinde (110): onay bir ayar penceresinin ustunden de
+ * sorulabiliyor (ornek: Ayarlari sifirla), altinda kalirsa gorunmez. */
+.modal.confirm {
+  width: min(440px, 90vw);
+  max-height: none;
+}
+
+.overlay:has(> .modal.confirm) {
+  align-items: center;
+  padding-top: 0;
+  z-index: 110;
+}
+
+.modal.confirm .modal-body {
+  padding: 14px;
+}
+
+.confirm-message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirm-detail {
+  margin: 9px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Odakli dugme belli olmali: Enter'in ne yapacagi gorunsun. */
+.modal.confirm .modal-foot button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .modal-head {

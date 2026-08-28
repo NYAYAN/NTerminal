@@ -57,6 +57,8 @@ export function GroupSidebar() {
   const [colorFor, setColorFor] = useState<string | null>(null);
   const [dragTabId, setDragTabId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
+  const [dragGroupId, setDragGroupId] = useState<string | null>(null);
+  const [dropGroupAt, setDropGroupAt] = useState<number | null>(null);
   const menu = useContextMenu();
   const dragWidth = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -138,13 +140,44 @@ export function GroupSidebar() {
   const endDrag = () => {
     setDragTabId(null);
     setDropTarget(null);
+    setDragGroupId(null);
+    setDropGroupAt(null);
   };
 
   const applyDrop = () => {
     if (dragTabId && dropTarget) {
       store().moveTabTo(dragTabId, dropTarget.groupId, dropTarget.index);
+    } else if (dragGroupId && dropGroupAt !== null) {
+      store().moveGroupTo(dragGroupId, dropGroupAt);
     }
     endDrag();
+  };
+
+  /**
+   * Grup üzerinde grup sürüklenirken: imleç üst yarıdaysa öncesine,
+   * alt yarıdaysa sonrasına.
+   *
+   * Hedef indeks TÜM grup listesine göre hesaplanıyor, ekranda görünen
+   * sıraya göre değil: favori süzgeci açıkken liste kısalıyor ve görünen
+   * indeksle taşımak grupları yanlış yere koyar.
+   */
+  const overGroupRow = (event: React.DragEvent, group: Group) => {
+    if (!dragGroupId || dragGroupId === group.id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = groups.findIndex((g) => g.id === group.id);
+    if (index === -1) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    setDropGroupAt(dropIndex(index, after));
+  };
+
+  const groupDropMark = (group: Group): "before" | "after" | undefined => {
+    if (dropGroupAt === null || dragGroupId === group.id) return undefined;
+    const index = groups.findIndex((g) => g.id === group.id);
+    if (dropGroupAt === index) return "before";
+    if (dropGroupAt === index + 1) return "after";
+    return undefined;
   };
 
   /** Sekme satırı üzerinde: imleç üst yarıdaysa öncesine, alt yarıdaysa sonrasına. */
@@ -230,14 +263,23 @@ export function GroupSidebar() {
       danger: true,
       disabled: groups.length <= 1 || !canDeleteGroup(group),
       run: () => {
-        if (
-          group.tabs.length === 0 ||
-          window.confirm(
-            t("group.deleteConfirm", { name: group.name, n: group.tabs.length }),
-          )
-        ) {
+        if (group.tabs.length === 0) {
           void store().deleteGroup(group.id);
+          return;
         }
+        void store()
+          .askConfirm({
+            title: t("confirm.deleteGroupTitle"),
+            message: t("confirm.deleteGroupMessage", {
+              name: group.name,
+              n: group.tabs.length,
+            }),
+            confirmLabel: t("confirm.delete"),
+            danger: true,
+          })
+          .then((ok) => {
+            if (ok) void store().deleteGroup(group.id);
+          });
       },
     },
   ];
@@ -363,18 +405,42 @@ export function GroupSidebar() {
 
           return (
             <section
-              className={`group${isActiveGroup ? " active" : ""}${isDropGroup ? " droppable" : ""}`}
+              className={`group${isActiveGroup ? " active" : ""}${
+                isDropGroup ? " droppable" : ""
+              }${dragGroupId === group.id ? " dragging" : ""}`}
               key={group.id}
               style={{ ["--group-color" as string]: color }}
+              data-group-drop={groupDropMark(group)}
+              onDragOver={(e) => overGroupRow(e, group)}
+              onDrop={(e) => {
+                if (!dragGroupId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                applyDrop();
+              }}
             >
               <header
                 className="group-row"
+                // Adlandırma sırasında sürükleme kapalı: metin seçmek isteyen
+                // kullanıcı grubu taşımasın.
+                draggable={!(editing?.kind === "group" && editing.id === group.id)}
                 onClick={() => store().setActiveGroup(group.id)}
                 onDoubleClick={() => startEditGroup(group)}
                 onContextMenu={(e) => menu.open(e, groupMenu(group, groupIndex))}
-                onDragOver={(e) => overGroup(e, group)}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", group.id);
+                  setDragGroupId(group.id);
+                }}
+                onDragOver={(e) => {
+                  // Iki sürükleme türü aynı hedefe geliyor: sekme sürükleniyorsa
+                  // grubun sonuna ekle, grup sürükleniyorsa sırayı değiştir.
+                  if (dragGroupId) overGroupRow(e, group);
+                  else overGroup(e, group);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   applyDrop();
                 }}
               >

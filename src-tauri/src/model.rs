@@ -90,6 +90,13 @@ pub struct Appearance {
     pub sidebar_width: u16,
     /// Sag panelin (gecmis / favoriler) genisligi.
     pub panel_width: u16,
+    /// Ciktidaki baglantilari renkli goster.
+    ///
+    /// Kapatilabilir olmasi bilincli: renklendirme her cizimde gorunur
+    /// satirlari tarayip xterm dekorasyonu kaydediyor. Cok yogun cikti
+    /// ureten islerde (buyuk derleme kayitlari) bu maliyeti istemeyen
+    /// kullanici kapatabilmeli.
+    pub highlight_links: bool,
     /// Terminal alani nasil gosterilsin: "tabs" | "panes".
     ///
     /// "tabs" tek terminal, "panes" etkin grubun tum sekmelerini doseyerek
@@ -110,6 +117,7 @@ impl Default for Appearance {
             scrollback: 10_000,
             sidebar_width: 240,
             panel_width: 390,
+            highlight_links: true,
             view_mode: "tabs".into(),
         }
     }
@@ -150,6 +158,12 @@ pub struct Behavior {
     pub history_dedupe: bool,
     /// Kenar cubugunda yalnizca favori gruplari goster.
     pub show_only_favorite_groups: bool,
+    /// Uygulama tarafi komut onerisi.
+    ///
+    /// Kabuk tahmininden (shell_prediction) BAGIMSIZ: o PSReadLine 2.2+
+    /// gerektiriyor ve cmd/bash'te karsiligi yok. Bu ise gecmisimizden
+    /// besleniyor, her kabukta calisiyor ve yukari/asagi okla seciliyor.
+    pub app_suggestions: bool,
     /// Kabuk komut onerisi: "off" | "inline" | "list".
     ///
     /// Kabuga NTERMINAL_PREDICTION ile bildiriliyor; PowerShell tarafinda
@@ -172,6 +186,7 @@ impl Default for Behavior {
             history_limit: 50_000,
             history_dedupe: false,
             show_only_favorite_groups: false,
+            app_suggestions: true,
             shell_prediction: "list".into(),
         }
     }

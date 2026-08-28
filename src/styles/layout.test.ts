@@ -70,11 +70,33 @@ describe("terminal boşluk dolgusu", () => {
   it("ana ızgara satırları içeriğe göre", () => {
     // Sabit yükseklikler sekme/durum çubuğunun gerçek ölçüsüyle bir piksel
     // oynadığında içerik satır sınırını aşıyordu.
+    //
+    // Satırlar: sekme çubuğu, terminal (1fr), öneri çubuğu, durum çubuğu.
+    // Öneri çubuğu görünmediğinde `auto` satır sıfır yükseklikte kalıyor;
+    // terminalin ÜSTÜNE bindirmek istem satırını kapatırdı.
     const body = ruleBody(".main");
-    expect(body).toMatch(/grid-template-rows:\s*auto\s+1fr\s+auto/);
+    const match = /grid-template-rows:\s*([^;]+);/.exec(body);
+    expect(match, "grid-template-rows tanımlı olmalı").not.toBe(null);
+    const rows = match![1].trim().split(/\s+/);
+    expect(rows.filter((r) => r === "1fr"), "tam olarak bir esneyen satır olmalı").toHaveLength(1);
+    expect(rows.indexOf("1fr"), "esneyen satır terminal satırı olmalı").toBe(1);
+    for (const row of rows) {
+      expect(["auto", "1fr"]).toContain(row);
+    }
     expect(body, "min-height:0 olmadan 1fr satır içeriğe göre büyüyüp footer'ı itiyor").toMatch(
       /min-height:\s*0/,
     );
+  });
+
+  it("ızgara alanları satır sayısıyla uyumlu", () => {
+    // Alan adı sayısı satır sayısıyla tutmazsa tarayıcı tüm şablonu yok
+    // sayıyor ve düzen sessizce blok akışına düşüyor.
+    const body = ruleBody(".main");
+    const rows = /grid-template-rows:\s*([^;]+);/.exec(body)![1].trim().split(/\s+/);
+    const areas = /grid-template-areas:\s*([^;]+);/.exec(body)![1];
+    const areaRows = [...areas.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(areaRows).toHaveLength(rows.length);
+    expect(areaRows.some((r) => r.includes("suggest")), "öneri çubuğunun alanı yok").toBe(true);
   });
 
   it("terminal alanı ızgarada büyümüyor", () => {
@@ -140,5 +162,25 @@ describe("bölme kipi", () => {
     const source = readFileSync(join(process.cwd(), "src/components/TerminalArea.tsx"), "utf8");
     expect(source).toMatch(/gridTemplateColumns:\s*`repeat\(\$\{grid\.cols\}, minmax\(0, 1fr\)\)`/);
     expect(source).toMatch(/gridTemplateRows:\s*`repeat\(\$\{grid\.rows\}, minmax\(0, 1fr\)\)`/);
+  });
+});
+
+/**
+ * Öneri listesi ters sırada çiziliyor: en yeni komut en ALTTA, istem satırına
+ * en yakın. Sebebi kabuk alışkanlığı — "yukarı ok = daha eski". Sıralamayı
+ * düzeltmek CSS'in işi (`column-reverse`); JavaScript tarafı listeyi her zaman
+ * en yeniden eskiye veriyor. İkisinden biri değişirse yön ters döner ve yukarı
+ * ok daha YENİ komuta gider.
+ */
+describe("öneri listesi", () => {
+  it("en yeni öneri altta", () => {
+    expect(ruleBody(".suggest-list")).toMatch(/flex-direction:\s*column-reverse/);
+  });
+
+  it("liste yükseklik sınırı ve kaydırma var", () => {
+    // Sınır olmadan uzun liste terminali ekrandan atıyor.
+    const body = ruleBody(".suggest-list");
+    expect(body).toMatch(/max-height:\s*\d/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
   });
 });

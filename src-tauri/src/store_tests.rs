@@ -68,6 +68,7 @@ fn eski_ayar_dosyasi_eksik_alanlarla_okunabilir() {
     // Yeni alanlar varsayilanla dolmus olmali.
     assert_eq!(settings.appearance.panel_width, 390);
     assert_eq!(settings.appearance.view_mode, "tabs");
+    assert!(settings.appearance.highlight_links);
     assert!(!settings.behavior.history_dedupe);
 
     // Kaldirilan alan (pasteOnRightClick) yoksayilmali; yerine gelen alanlar
@@ -76,6 +77,7 @@ fn eski_ayar_dosyasi_eksik_alanlarla_okunabilir() {
     assert!(settings.behavior.ctrl_c_copies_selection);
     assert_eq!(settings.behavior.confirm_close_tab, "always");
     assert_eq!(settings.behavior.shell_prediction, "list");
+    assert!(settings.behavior.app_suggestions);
 
     // Eksik kisayollar da tamamlanmali.
     assert!(settings.keybindings.contains_key("favorites"));
@@ -125,9 +127,11 @@ fn bos_bolumler_varsayilanla_dolar() {
     assert_eq!(settings.appearance.font_size, 14);
     assert_eq!(settings.appearance.panel_width, 390);
     assert_eq!(settings.appearance.view_mode, "tabs");
+    assert!(settings.appearance.highlight_links);
     assert!(settings.behavior.restore_session);
     assert_eq!(settings.behavior.right_click_action, "menu");
     assert!(settings.behavior.ctrl_c_copies_selection);
     assert_eq!(settings.behavior.confirm_close_tab, "always");
     assert_eq!(settings.behavior.shell_prediction, "list");
+    assert!(settings.behavior.app_suggestions);
 }

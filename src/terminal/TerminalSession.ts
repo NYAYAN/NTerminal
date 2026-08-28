@@ -9,6 +9,8 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { api, onPtyData, onPtyExit } from "../lib/ipc";
 import { t } from "../lib/i18n";
+import { linkCellRanges, type CellLike } from "../lib/links";
+import { acceptKeys } from "../lib/suggest";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { getTheme } from "../lib/themes";
 import type { Settings } from "../types";
@@ -39,6 +41,8 @@ export interface SessionCallbacks {
   onLinkFailed?: (uri: string) => void;
   /** Kabuk komut önerisini açabildi mi. */
   onPrediction?: (state: PredictionState) => void;
+  /** İstem satırında yazılmakta olan metin değişti. */
+  onInput?: (state: { prefix: string; full: string }) => void;
 }
 
 export interface SessionInit {
@@ -54,6 +58,24 @@ export interface SessionInit {
 }
 
 /** Enter'dan sonra kabuk entegrasyonunun 133;C göndermesi için beklenen süre. */
+/**
+ * Bağlantı renklendirmesi erteleme penceresi (ms).
+ *
+ * Gözle fark edilmeyecek kadar kısa, `onRender` fırtınasını kesecek kadar
+ * uzun. Yoğun çıktıda (derleme kayıtları) çizim başına tarama yapmak
+ * gereksiz.
+ */
+const LINK_HIGHLIGHT_DELAY = 90;
+
+/**
+ * Yazılan metni okuma gecikmesi (ms).
+ *
+ * Tuşa basıldığı anda ekran tamponu HENÜZ o karakteri içermiyor: karakter
+ * kabuğa gidiyor, kabuk yansıtıyor, sonra tamponda görünüyor. Hemen okumak
+ * bir karakter geride kalmış bir ön ek veriyor ve öneri yanlış çıkıyor.
+ */
+const INPUT_NOTIFY_DELAY = 70;
+
 const INTEGRATION_GRACE_MS = 220;
 
 export class TerminalSession {
@@ -68,6 +90,10 @@ export class TerminalSession {
   private webgl: WebglAddon | null = null;
   /** Kabuğun bildirdiği komut önerisi durumu; durum çubuğu gösteriyor. */
   prediction: PredictionState = "unknown";
+  /** Bağlantı renklendirmesi için kaydedilen imleç ve dekorasyonlar. */
+  private linkDecorations: IDisposable[] = [];
+  private linkTimer: number | null = null;
+  private inputTimer: number | null = null;
 
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -331,6 +357,10 @@ export class TerminalSession {
     this.term.options.scrollback = settings.appearance.scrollback;
     this.term.options.theme = theme.xterm;
     this.safeFit();
+    // Vurgu rengi temayla degisiyor ve renklendirme kapatilabiliyor: ikisi de
+    // mevcut dekorasyonlari gecersiz kiliyor.
+    this.clearLinkDecorations();
+    this.scheduleLinkHighlight();
   }
 
   /** Diske yazılacak ekran çıktısı. */
@@ -365,6 +395,89 @@ export class TerminalSession {
     }
   }
 
+  // ------------------------------------------------- bağlantı renklendirmesi
+
+  /**
+   * Bağlantıları renklendirmeyi ertele.
+   *
+   * `onRender` yoğun çıktıda saniyede onlarca kez tetikleniyor; her seferinde
+   * görünür satırları taramak gözle görülür bir maliyet. Bu pencere gecikmesi
+   * fark edilmiyor ama işi bir kat azaltıyor.
+   */
+  private scheduleLinkHighlight() {
+    if (this.linkTimer !== null) return;
+    this.linkTimer = window.setTimeout(() => {
+      this.linkTimer = null;
+      this.refreshLinkHighlight();
+    }, LINK_HIGHLIGHT_DELAY);
+  }
+
+  private clearLinkDecorations() {
+    for (const item of this.linkDecorations) item.dispose();
+    this.linkDecorations = [];
+  }
+
+  /**
+   * Görünür satırlardaki bağlantıları vurgu renginde boyar.
+   *
+   * Neden yalnızca görünür satırlar: dekorasyon bir imlece (marker) bağlı ve
+   * imleç tampon satırıyla yaşıyor. On binlerce satırlık kaydırma tamponunun
+   * tamamına dekorasyon kaydetmek belleği ve çizimi boğar. Görünür pencere
+   * kaydırmayla birlikte yeniden hesaplanıyor.
+   *
+   * Neden iki aşamalı tarama: hücre hücre okumak pahalı (satır × sütun). Önce
+   * `translateToString` ile hızlı bir eleme yapıp yalnızca aday satırlarda
+   * hücrelere iniyoruz — tipik çıktıda satırların çoğunda bağlantı yok.
+   */
+  private refreshLinkHighlight() {
+    this.clearLinkDecorations();
+    if (!this.settings.appearance.highlightLinks) return;
+
+    const theme = getTheme(this.settings.appearance.theme);
+    // Dekorasyon yalnızca `#RRGGBB` kabul ediyor; tema renkleri bu biçimde.
+    const color = theme.ui.accent;
+
+    const buffer = this.term.buffer.active;
+    // registerMarker imleç satırına GÖRE çalışıyor; hedef satırı ona çeviriyoruz.
+    const anchorLine = buffer.baseY + buffer.cursorY;
+
+    for (let row = 0; row < this.term.rows; row++) {
+      const absolute = buffer.viewportY + row;
+      const line = buffer.getLine(absolute);
+      if (!line) continue;
+
+      const quick = line.translateToString(true);
+      if (!quick.includes("://") && !quick.toLowerCase().includes("www.")) continue;
+
+      const cells: CellLike[] = [];
+      let probe = undefined as ReturnType<typeof line.getCell>;
+      for (let x = 0; x < line.length; x++) {
+        probe = line.getCell(x, probe);
+        cells.push({ chars: probe?.getChars() ?? "", width: probe?.getWidth() ?? 1 });
+      }
+
+      const ranges = linkCellRanges(cells);
+      if (ranges.length === 0) continue;
+
+      const marker = this.term.registerMarker(absolute - anchorLine);
+      if (!marker) continue;
+      this.linkDecorations.push(marker);
+
+      for (const range of ranges) {
+        const decoration = this.term.registerDecoration({
+          marker,
+          x: range.x,
+          width: range.width,
+          foregroundColor: color,
+          // 'bottom': seçimin ALTINDA çiziliyor, böylece metni seçtiğinizde
+          // seçim vurgusu okunur kalıyor.
+          layer: "bottom",
+        });
+        if (decoration) this.linkDecorations.push(decoration);
+      }
+    }
+  }
+
   async dispose(killShell: boolean) {
     if (this.fallbackTimer !== null) window.clearTimeout(this.fallbackTimer);
     // Yarım kalmış bir komut varsa geçmişte "çalışıyor" olarak asılı kalmasın.
@@ -382,6 +495,11 @@ export class TerminalSession {
       }
     }
     this.unlisteners = [];
+    if (this.linkTimer !== null) window.clearTimeout(this.linkTimer);
+    this.linkTimer = null;
+    if (this.inputTimer !== null) window.clearTimeout(this.inputTimer);
+    this.inputTimer = null;
+    this.clearLinkDecorations();
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
     this.resizeObserver?.disconnect();
@@ -407,6 +525,10 @@ export class TerminalSession {
       }),
       this.term.onBell(() => this.callbacks.onBell?.()),
       this.term.onSelectionChange(() => this.handleSelectionChange()),
+      // Bağlantı renklendirmesi görünür satırlara bakıyor; hem yeni çıktı
+      // hem kaydırma görünür satırları değiştiriyor.
+      this.term.onRender(() => this.scheduleLinkHighlight()),
+      this.term.onScroll(() => this.scheduleLinkHighlight()),
     );
 
     // OSC 133: anlamsal istem işaretleri (prompt / komut / çıkış kodu)
@@ -456,6 +578,73 @@ export class TerminalSession {
     }
 
     void api.ptyWrite(this.tabId, data).catch(() => {});
+
+    // Enter'da öneri anlamsız: satır kabuğa gitti.
+    if (data.includes("\r")) this.notifyInput({ prefix: "", full: "" });
+    else this.scheduleInputNotify();
+  }
+
+  // ------------------------------------------------------ komut önerisi
+
+  private notifyInput(state: { prefix: string; full: string }) {
+    if (this.inputTimer !== null) {
+      window.clearTimeout(this.inputTimer);
+      this.inputTimer = null;
+    }
+    this.callbacks.onInput?.(state);
+  }
+
+  private scheduleInputNotify() {
+    if (this.inputTimer !== null) return;
+    this.inputTimer = window.setTimeout(() => {
+      this.inputTimer = null;
+      this.callbacks.onInput?.(this.readInputState());
+    }, INPUT_NOTIFY_DELAY);
+  }
+
+  /**
+   * İstem satırında yazılmakta olan metin.
+   *
+   * `prefix` imlece kadar, `full` satırın sonuna kadar. İkisi ayrı çünkü
+   * öneri ön eke göre üretiliyor ama kabul etmek satırın tamamını
+   * değiştiriyor: imleç ortadaysa öneri gösterilmemeli (bkz. canSuggest).
+   */
+  readInputState(): { prefix: string; full: string } {
+    const mark = this.promptEndMark;
+    // Komut çalışırken istem yok: okunacak bir girdi de yok.
+    if (!mark || this.running || this.exited) return { prefix: "", full: "" };
+
+    const buf = this.term.buffer.active;
+    const endY = buf.baseY + buf.cursorY;
+    if (endY < mark.y) return { prefix: "", full: "" };
+
+    let prefix = "";
+    let full = "";
+    for (let y = mark.y; y <= endY; y++) {
+      const line = buf.getLine(y);
+      if (!line) break;
+      const start = y === mark.y ? mark.x : 0;
+      if (y === endY) {
+        prefix += line.translateToString(false, start, buf.cursorX);
+        full += line.translateToString(true, start);
+      } else {
+        // Aradaki satırlar kaydırma nedeniyle tam genişlikte; kırpılmamalı.
+        const whole = line.translateToString(false, start);
+        prefix += whole;
+        full += whole;
+      }
+    }
+    return { prefix, full };
+  }
+
+  /** Seçilen öneriyi istem satırına yazar. */
+  acceptSuggestion(suggestion: string) {
+    if (this.exited) return;
+    const { full } = this.readInputState();
+    const keys = acceptKeys(full, suggestion);
+    if (!keys) return;
+    void api.ptyWrite(this.tabId, keys).catch(() => {});
+    this.notifyInput({ prefix: suggestion, full: suggestion });
   }
 
   private handleSelectionChange() {

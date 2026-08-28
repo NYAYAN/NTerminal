@@ -32,8 +32,17 @@ kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz.
 
 **Sürükle-bırak.** Sekmeler hem sekme çubuğunda hem kenar çubuğunda
 sürüklenerek yeniden sıralanır. Kenar çubuğunda bir sekmeyi başka bir grubun
-üstüne bırakmak onu o gruba taşır. Bırakma konumu ince bir çizgiyle gösteriliyor;
-imleç öğenin ilk yarısındaysa öncesine, ikinci yarısındaysa sonrasına bırakılır.
+üstüne bırakmak onu o gruba taşır. **Gruplar da** başlıklarından tutulup
+sürüklenerek sıralanır. Bırakma konumu ince bir çizgiyle gösteriliyor; imleç
+öğenin ilk yarısındaysa öncesine, ikinci yarısındaysa sonrasına bırakılır.
+Aynı hedefe iki tür sürükleme geldiği için (sekme mi grup mu) hangisinin
+taşındığı ayrı izleniyor; sekme sürüklerken grup sırası değişmiyor.
+
+> Sürükle-bırak Tauri'nin `dragDropEnabled` ayarı kapalı olmadan **çalışmıyor**:
+> açıkken webview'e işletim sistemi düzeyinde bir dosya-bırakma yakalayıcısı
+> takılıyor ve o yakalayıcı sayfa içindeki HTML5 sürükleme olaylarını yutuyor.
+> Kodda hiçbir belirti vermeyen bir sessizlik; bu yüzden yapılandırma testle
+> bağlı (`src/lib/tauriConfig.test.ts`).
 
 **Sekme kilidi.** Sürekli açık kalması gereken sekmeler kilitlenebilir
 (`Ctrl+Shift+L` ya da sağ tık → *Kilitli*). Kilitli sekmede kapatma düğmesinin
@@ -48,6 +57,13 @@ yanlışlıkla çarpıya basmaya karşı. Ayardan "yalnızca komut çalışıyor
 "hiç sorma" seçilebilir. *Diğerlerini kapat* sekme başına değil tek bir onay
 sorar. Kilit ve onay birbirinin yerine geçmiyor: onay bir tıklama daha ister,
 kilit kapatmayı tümden reddeder.
+
+Onay penceresi uygulamanın kendi penceresi, `window.confirm` değil: webview'ün
+yerleşik iletişim pencereleri temayı ve dili taşımıyor, ana iş parçacığını
+bloklayabiliyor ve gömülü webview'de hiç görünmeme riski taşıyor. Onay
+penceresinin görünmemesi korumanın tümden kaybı demek — o yüzden davranışı
+testle bağlı: karar çağırana doğru ulaşıyor mu, ikinci bir istek gelince ilk
+bekleyen asılı kalıyor mu, Esc/Enter ne yapıyor.
 
 **Favori komutlar.** Sık kullandığınız komutlar yıldızlanıp ayrı bir listede
 tutulur — geçmişten ayrı, çünkü geçmiş otomatik birikip sınır aşılınca budanıyor.
@@ -102,18 +118,38 @@ yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğ
 olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
 zaman komutu durdurur**.
 
-**Bağlantılar.** Terminaldeki URL'ler tıklanabilir ve işletim sisteminin
-varsayilan tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open`
-çağırmak; Tauri webview'ünde bu hiçbir şey yapmadığı için linkler sessizce
+**Bağlantılar.** Terminaldeki URL'ler **vurgu renginde** görünür, üzerine
+gelindiğinde imleç değişir ve tıklanınca işletim sisteminin varsayılan
+tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open` çağırmak;
+Tauri webview'ünde bu hiçbir şey yapmadığı için linkler sessizce
 çalışmıyordu.) Yalnızca `http`/`https` açılır ve url kabuktan geçirilmez.
 
-**Komut önerisi.** Daha önce çalıştırdığınız komutlar yazarken önerilir:
-istemin altında yukarı/aşağı okla seçilen bir liste ya da satır içi soluk
-"hayalet metin". Öneriyi **kabuk** çiziyor (PSReadLine tahmini) — uygulama
-tarafında çizmek kabuğun kendi satır düzenleyicisiyle (imleç, yeniden çizim,
-sekme tamamlama, geçmiş gezinme) yarışmak demek. PSReadLine 2.2+ gerekiyor;
-sürüm yetmiyorsa durum çubuğunda **öneri yok** rozeti çıkar ve üzerine
-gelindiğinde ne yapılacağını söyler.
+Renklendirme xterm'in dekorasyon API'siyle yapılıyor ve **yalnızca görünür
+satırlara** uygulanıyor: dekorasyon tampon satırına bağlı bir imleçle yaşıyor,
+on binlerce satırlık kaydırma tamponunun tamamına kaydetmek belleği ve çizimi
+boğardı. Tarama iki aşamalı — önce satır metninde hızlı bir eleme, sonra
+yalnızca aday satırlarda hücre hücre okuma; tipik çıktıda satırların çoğunda
+bağlantı yok. Çok yoğun çıktı üreten işlerde ayardan kapatılabilir.
+
+**Komut önerisi.** Daha önce çalıştırdığınız komutlar yazarken önerilir.
+İki bağımsız kaynak var:
+
+*Uygulamanın kendi geçmişi (her kabukta).* Yazdıkça istemin altında bir liste
+açılır: **↑↓** seçer, **→** kabul eder, **Esc** kapatır. Liste yalnızca en az
+iki karakter yazıldığında, eşleşme varken ve imleç satır sonundayken açılıyor —
+bu üç koşul özelliğin güvenliği: boş satırda liste kapalı olduğu için ok tuşları
+kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıyor;
+öneri yazılanla tam olarak başlıyorsa yalnızca kalanı ekliyor (hiçbir şey
+silinmiyor). Kaynak uygulamanın geçmişi olduğu için sekmeler ve kabuklar arası
+çalışıyor.
+
+*Kabuğun kendi tahmini (PSReadLine).* Satır içi soluk "hayalet metin" ya da
+istemin altında liste. Bunu kabuğa bırakmak bilinçli: öneriyi ekran tamponuna
+yazmak kabuğun satır düzenleyicisiyle (imleç, yeniden çizim, sekme tamamlama)
+yarışmak demek. PSReadLine 2.2+ gerekiyor; sürüm yetmiyorsa durum çubuğunda
+**öneri yok** rozeti çıkar ve üzerine gelindiğinde ne yapılacağını söyler.
+
+İkisi birlikte de kullanılabilir; ayrı ayrı kapatılabilir.
 
 **Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
 Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
@@ -402,6 +438,8 @@ src/                          arayüz (React + TypeScript)
   lib/i18n.ts                   dil motoru (t, çoğul, dil değişince yeniden çizim)
   lib/messages.ts               arayüz metinleri: [Türkçe, English]
   lib/panes.ts                  bölme ızgarası ve görünüm kipi mantığı
+  lib/links.ts                  çıktıda bağlantı bulma, hücre indeksi eşlemesi
+  lib/suggest.ts                komut önerisi sıralaması ve kabul dizisi
 src-tauri/
   src/pty.rs                    ConPTY oturumları, çıktı toplama
   src/history.rs                komut geçmişi deposu (JSONL günlük)
@@ -461,6 +499,29 @@ geçirildi: sabit 34 px, sekme çubuğunun gerçek 35 px'inden küçüktü.
 `visibility:hidden` ile saklanıyor ama düzende kalıyor; `display:none` xterm'in
 ölçüm hesabını sıfırlıyor ve sekmeye dönüldüğünde satırlar kayıyor.
 
+**Sürükle-bırak yapılandırmaya bağlı.** Sıralama matematiğinin testleri
+geçiyordu, kod doğruydu, ama paketlenmiş uygulamada sürükleme hiç çalışmıyordu.
+Sebep koddan bağımsızdı: Tauri'nin `dragDropEnabled` ayarı varsayılan olarak
+açık ve açıkken webview'in sürükleme olaylarını işletim sistemi katmanı
+yutuyor. Derleme geçiyor, test geçiyor, hata çıkmıyor — yalnızca özellik
+çalışmıyor. Bu yüzden yapılandırmanın kendisi testle bağlı.
+
+**Öneri terminalin üstüne binmiyor, onu küçültüyor.** Öneri listesi ızgarada
+ayrı bir satır. Terminalin üstüne bindirmek istem satırını — yani tam olarak
+yazdığınız yeri — kapatırdı. Liste en fazla beş öneri gösteriyor: sekizde çubuk
+191px oluyordu, 627px'lik bir terminalin üçte biri.
+
+**Öneri listesi ters sırada.** En yeni komut en altta, istem satırına en yakın.
+Kabuk alışkanlığıyla "yukarı ok = daha eski" tutarlı kalsın diye; sıralamayı
+CSS `column-reverse` yapıyor, JavaScript tarafı listeyi her zaman en yeniden
+eskiye veriyor.
+
+**Renkli yüzeylerde soluk metin ana metinden türetiliyor.** Grup rengi arka
+plana vurunca `--text-dim` gibi sabit bir rengin karşıtlığı düşüyor: ölçülen en
+kötü değer 2.12'ydi (Solarized Açık + siyah grup rengi). Aynı hata öneri
+listesinde de çıktı — seçili satırın metni vurgu renginde, arka planı vurgu
+tonluydu; 2.54. İkisi de artık ana metinden türetiliyor ve oranlar testle bağlı.
+
 **WebGL yalnızca etkin terminalde.** Her sekme kendi WebGL bağlamını tutsa
 tarayıcının bağlam sınırına çarpardık. Sekme değişince bağlam bırakılıyor;
 bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
@@ -473,7 +534,7 @@ bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
 npm test
 ```
 
-- **Arayüz (202 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
+- **Arayüz (321 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
   simetrik olmak zorunda), base64 çözücü (UTF-8 dışı baytlar dahil), kısayol
   eşleştirme, biçimlendirme, bulanık arama, sekme etiketi mantığı, sekme kilidi
   kuralları, sıralama/sürükle-bırak indeks matematiği, grup görünürlük süzgeci,
@@ -484,11 +545,29 @@ npm test
   - **Sözlük** — her metnin iki dili var mı, çoğul anahtarları çift mi, yer
     tutucular iki dilde aynı mı (İngilizcede `{n}` yazıp Türkçede unutmak
     kullanıcıya sayı göstermeyen bir cümle bırakır).
-  - **Grup rengi okunabilirliği** — karışım oranları CSS'ten okunup aynı hesap
+  - **Yüzey okunabilirliği** — karışım oranları CSS'ten okunup aynı hesap
     testte yapılıyor; 4 tema × 11 grup rengi (saf siyah/beyaz dahil) için grup
-    adı ≥ 4.5, soluk metin ≥ 3.0 karşıtlık. Oran yükseltilirse test düşüyor.
-    Ölçülen ilk hâli 2.12'ye kadar iniyordu — arka plan renklendikçe sabit
-    renkli soluk metin kayboluyordu.
+    adı ≥ 4.5, soluk metin ≥ 3.0; öneri listesinin seçili satırı için de aynısı.
+    Oran yükseltilirse test düşüyor. Ölçülen ilk hâlleri 2.12 ve 2.54'e kadar
+    iniyordu.
+  - **Bağlantı bulma** — gerçek araç çıktısı biçimleriyle: cümle içinde adres,
+    parantez içinde adres, dengeli/dengesiz parantez, sorgu dizesi, tırnak
+    içinde adres, geniş karakterlerin (CJK) hücre indekslerini kaydırması.
+    Yanlış kırpma iki yönlü zarar veriyor: fazla kırpınca adres bozuk açılıyor,
+    az kırpınca sondaki nokta adrese girip 404 üretiyor.
+  - **Komut önerisi** — sıralama (en yeni önce, yinelenensiz, büyük/küçük harf
+    duyarsız) ve **kabul dizisi**. İkincisi kritik: fazla silme kullanıcının
+    yazdığını bozar, o yüzden silme sayısının yazılan karakter sayısıyla birebir
+    olduğu ayrıca sınanıyor.
+  - **Arayüz bileşenleri (jsdom)** — onay penceresi (kararın çağırana ulaşması,
+    Esc/Enter, örtüye tıklama, ikinci istek gelince ilk bekleyenin asılı
+    kalmaması), öneri listesi ve **sürükle-bırak**: gerçek
+    `dragstart`/`dragover`/`drop` olaylarıyla sekme ve grup sıralaması, bırakma
+    göstergesi, favori süzgeci açıkken doğru indeks, sekme sürüklemesinin grup
+    sırasını bozmaması.
+  - **Sözlük hijyeni** — kullanılmayan anahtar bırakılmıyor (bu test yazıldığında
+    sekiz ölü anahtar buldu) ve çoğul kökleri gerçekten `tp()` ile çağrılıyor.
+  - **Tauri yapılandırması** — `dragDropEnabled` kapalı, CSP `script-src 'self'`.
 - **Rust birim (51 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
   yeniden okuma, bozuk satıra dayanıklılık, sıkıştırma), yol taşınabilirliği
   (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,
@@ -530,10 +609,8 @@ yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
   Windows PowerShell 5.1'in getirdiği 2.0 desteklemiyor; `Install-Module
   PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck` ile güncellenir.
   cmd ve bash'te karşılığı yok — orada `Ctrl+R` geçmiş araması kullanılıyor.
-- Renksiz çıktıdaki bağlantılar tıklanabilir ama kalıcı olarak renklendirilmiyor:
-  xterm bunu ancak satır başına dekorasyonla yapıyor ve yoğun çıktıda maliyeti
-  yüksek. Renk üreten araçların (Vite, Angular CLI) bağlantıları kendi renginde
-  görünüyor.
+- Bağlantı renklendirmesi yalnızca **görünür satırlara** uygulanıyor; çok hızlı
+  akan çıktıda renk bir kare gecikmeli oturuyor (erteleme penceresi 90 ms).
 - `cmd.exe` için çıkış kodu bildirilemiyor (yukarıda anlatıldı).
 - Bölünmüş bölme (split pane) yok; ayrım gruplar ve sekmeler üzerinden.
 - Yalnızca Windows: ConPTY ve kabuk tespiti Windows'a özgü.
