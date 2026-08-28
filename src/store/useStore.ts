@@ -12,6 +12,7 @@ import {
 } from "../lib/tabs";
 import { setLanguage as applyLanguage, t, tp } from "../lib/i18n";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
+import { canSuggest, cycleIndex, rankSuggestions } from "../lib/suggest";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
@@ -33,11 +34,58 @@ import type {
  * oluşturulmamaları ve karşılaştırılmamaları gerekiyor. Sekme kimliğinden
  * canlı oturuma giden bu harita modül düzeyinde duruyor.
  */
+/**
+ * Öneri kaynağında tutulacak en fazla komut.
+ *
+ * Geçmiş on binlerce kayıt olabiliyor; öneri için son birkaç yüz komut
+ * yeterli ve her tuş vuruşunda taranacağı için listeyi kısa tutmak
+ * gerekiyor.
+ */
+const SUGGEST_SOURCE_LIMIT = 400;
+
 export const sessions = new Map<string, TerminalSession>();
+
+/**
+ * Onay penceresi çözücüleri.
+ *
+ * React durumunda tutulamaz: `Promise` çözücüsü serileştirilebilir bir değer
+ * değil ve durumun içinde taşınması gereksiz yeniden çizim üretir. Kimliğe
+ * göre modül düzeyinde duruyor; pencere kapanınca siliniyor.
+ */
+const confirmResolvers = new Map<number, (ok: boolean) => void>();
+let confirmSeq = 0;
+
+/** Onay penceresinin verdiği kararı bekleyen çağırana ulaştırır. */
+export function resolveConfirm(id: number, ok: boolean) {
+  const resolve = confirmResolvers.get(id);
+  confirmResolvers.delete(id);
+  const state = useStore.getState();
+  if (state.ui.confirm?.id === id) {
+    useStore.setState({ ui: { ...state.ui, confirm: null } });
+  }
+  resolve?.(ok);
+}
 
 export type HistoryScope = "tab" | "group" | "all";
 /** Sag panel hangi listeyi gosteriyor. */
 export type SidePanelMode = "history" | "favorites";
+
+/**
+ * Onay penceresi isteği.
+ *
+ * `window.confirm` yerine kendi penceremiz: webview iletişim pencereleri
+ * temayı/dili taşımıyor ve gömülü webview'de görünmeme riski var — onay
+ * penceresinin görünmemesi korumanın tümden kaybı demek.
+ */
+export interface ConfirmRequest {
+  id: number;
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
 
 export interface UiState {
   historyOpen: boolean;
@@ -51,6 +99,17 @@ export interface UiState {
   renamingTabId: string | null;
   editingGroupId: string | null;
   toast: { text: string; tone: "ok" | "err" | "info" } | null;
+  /** Açık onay penceresi; yoksa null. */
+  confirm: ConfirmRequest | null;
+  /**
+   * Açık komut önerisi listesi.
+   *
+   * `items` en yeniden eskiye sıralı; `index` seçili öneri. Liste açıkken
+   * yukarı/aşağı oklar kabuğa GİTMİYOR, listede geziniyor — bu yüzden liste
+   * yalnızca kullanıcı bir şey yazdığında ve eşleşme varken açılıyor. Boş
+   * satırda liste kapalı, ok tuşları kabuğun kendi geçmişine gidiyor.
+   */
+  suggest: { items: string[]; index: number; input: string } | null;
 }
 
 interface Store {
@@ -71,6 +130,14 @@ interface Store {
   exited: Record<string, boolean>;
   /** Favori komutlar; kullanıcının belirlediği sırada. */
   favorites: Favorite[];
+  /**
+   * Öneri kaynağı: en yeniden eskiye komut metinleri.
+   *
+   * Bellekte tutuluyor çünkü her tuş vuruşunda diske/IPC'ye gitmek
+   * öneriyi yazma hızının gerisine düşürür. Açılışta bir kez yükleniyor,
+   * sonra her yeni komut başa ekleniyor.
+   */
+  suggestHistory: string[];
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
   /**
@@ -100,6 +167,8 @@ interface Store {
   deleteGroup: (id: string) => Promise<void>;
   setActiveGroup: (id: string) => void;
   moveGroup: (id: string, direction: -1 | 1) => void;
+  /** Grubu belirli bir konuma taşır; sürükle-bırak bunu kullanıyor. */
+  moveGroupTo: (id: string, targetIndex: number) => void;
   toggleGroupFavorite: (id: string) => void;
   toggleAllCollapsed: () => void;
 
@@ -132,6 +201,15 @@ interface Store {
   isFavorite: (command: string) => boolean;
 
   setUi: (patch: Partial<UiState>) => void;
+  /** Onay penceresini açar; kullanıcı karar verene kadar bekler. */
+  askConfirm: (request: Omit<ConfirmRequest, "id">) => Promise<boolean>;
+  loadSuggestHistory: () => Promise<void>;
+  noteCommand: (command: string) => void;
+  updateSuggestions: (state: { prefix: string; full: string }) => void;
+  moveSuggestion: (direction: 1 | -1) => void;
+  acceptSuggestion: () => void;
+  acceptSuggestionAt: (index: number) => void;
+  closeSuggestions: () => void;
   toast: (text: string, tone?: "ok" | "err" | "info") => void;
 }
 
@@ -204,6 +282,7 @@ export const useStore = create<Store>((set, get) => ({
       scrollback: 10000,
       sidebarWidth: 240,
       panelWidth: 390,
+      highlightLinks: true,
       viewMode: "tabs",
     },
     behavior: {
@@ -218,6 +297,7 @@ export const useStore = create<Store>((set, get) => ({
       historyLimit: 50000,
       historyDedupe: false,
       showOnlyFavoriteGroups: false,
+      appSuggestions: true,
       shellPrediction: "list",
     },
     profiles: [],
@@ -233,6 +313,7 @@ export const useStore = create<Store>((set, get) => ({
   sessionEpoch: {},
   statusTick: 0,
   favorites: [],
+  suggestHistory: [],
   ui: {
     historyOpen: false,
     historyScope: "tab",
@@ -245,6 +326,8 @@ export const useStore = create<Store>((set, get) => ({
     renamingTabId: null,
     editingGroupId: null,
     toast: null,
+    confirm: null,
+    suggest: null,
   },
 
   // ------------------------------------------------------------- başlangıç
@@ -266,6 +349,7 @@ export const useStore = create<Store>((set, get) => ({
         restoredSession: boot.restored,
       });
       void get().loadFavorites();
+      void get().loadSuggestHistory();
     } catch (err) {
       set({ ready: true, bootError: String(err) });
     }
@@ -439,12 +523,23 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   moveGroup(id, direction) {
-    const groups = [...get().groups];
+    const groups = get().groups;
     const index = groups.findIndex((g) => g.id === id);
+    if (index === -1) return;
     const target = index + direction;
-    if (index === -1 || target < 0 || target >= groups.length) return;
-    [groups[index], groups[target]] = [groups[target], groups[index]];
-    set({ groups });
+    if (target < 0 || target >= groups.length) return;
+    // dropIndex ile ayni matematik: menuden ve surukle-biraktan gelen tasima
+    // tek bir yoldan gecsin, iki ayri siralama mantigi tutmayalim.
+    get().moveGroupTo(id, direction === 1 ? target + 1 : target);
+  },
+
+  moveGroupTo(id, targetIndex) {
+    const groups = get().groups;
+    const from = groups.findIndex((g) => g.id === id);
+    if (from === -1) return;
+    const next = reorder(groups, from, targetIndex);
+    if (next === groups) return;
+    set({ groups: next });
     get().schedulePersist();
   },
 
@@ -523,12 +618,20 @@ export const useStore = create<Store>((set, get) => ({
       const ask = mode === "always" || (mode === "running" && running);
       if (ask) {
         const name = tabLabel(target);
-        const ok = window.confirm(
-          running
-            ? t("store.closeRunningConfirm", { name })
-            : t("store.closeTabConfirm", { name }),
-        );
+        const ok = await get().askConfirm({
+          title: t("confirm.closeTabTitle"),
+          message: t("confirm.closeTabMessage", { name }),
+          detail: running ? t("confirm.closeTabRunning") : t("confirm.closeTabDetail"),
+          confirmLabel: t("confirm.close"),
+          danger: true,
+        });
         if (!ok) return;
+        // Onay beklerken sekme kapanmis olabilir (baska bir yol,
+        // kabugun olmesi). Durumu yeniden okuyup dogruluyoruz.
+        const still = get()
+          .groups.flatMap((g) => g.tabs)
+          .some((tabItem) => tabItem.id === tabId);
+        if (!still) return;
       }
     }
 
@@ -559,6 +662,8 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setActiveTab(tabId) {
+    // Sekme değişti: önceki sekmenin önerisi ekranda kalmasın.
+    get().closeSuggestions();
     const groups = get().groups;
     const group = groups.find((g) => g.tabs.some((t) => t.id === tabId));
     if (!group) return;
@@ -647,7 +752,12 @@ export const useStore = create<Store>((set, get) => ({
     // Tek onay, sekme basina degil: aksi halde "digerlerini kapat"
     // kullanicidan ust uste onay istiyordu.
     if (get().settings.behavior.confirmCloseTab !== "never") {
-      const ok = window.confirm(tp("store.closeOthersConfirm", targets.length));
+      const ok = await get().askConfirm({
+        title: t("confirm.closeOthersTitle"),
+        message: tp("confirm.closeOthers", targets.length),
+        confirmLabel: t("confirm.close"),
+        danger: true,
+      });
       if (!ok) return;
     }
     for (const tab of targets) {
@@ -767,6 +877,10 @@ export const useStore = create<Store>((set, get) => ({
       onCommandStart: (command) => {
         set({ running: { ...get().running, [tab.id]: true } });
         get().updateTab(tab.id, { lastCommand: command });
+        // Öneri kaynağı anında güncellensin: yeni çalıştırdığınız komut
+        // hemen önerilebilir olmalı.
+        get().noteCommand(command);
+        get().closeSuggestions();
       },
       onCommandEnd: () => {
         set({ running: { ...get().running, [tab.id]: false } });
@@ -783,6 +897,12 @@ export const useStore = create<Store>((set, get) => ({
       // Durum cubugu oturum nesnesini okuyor ama ona abone degil;
       // bildirim gelince bir kez yeniden cizdirmek icin sayaci artiriyoruz.
       onPrediction: () => set({ statusTick: get().statusTick + 1 }),
+      onInput: (state) => {
+        // Öneri yalnızca ETKİN sekme için: bölme kipinde arkadaki bir
+        // sekmenin yazdığı metin listeyi değiştirmesin.
+        if (get().activeTab()?.tab.id !== tab.id) return;
+        get().updateSuggestions(state);
+      },
     });
 
     sessions.set(tab.id, session);
@@ -924,6 +1044,99 @@ export const useStore = create<Store>((set, get) => ({
 
   setUi(patch) {
     set({ ui: { ...get().ui, ...patch } });
+  },
+
+  async loadSuggestHistory() {
+    // Tekrarlar zaten `rankSuggestions` içinde ayıklanıyor; burada dedupe
+    // istemiyoruz ki sıra (en yeni önce) bozulmasın.
+    const page = await api
+      .historyQuery({ limit: SUGGEST_SOURCE_LIMIT, dedupe: false })
+      .catch(() => null);
+    if (!page) return;
+    set({ suggestHistory: page.entries.map((e) => e.command) });
+  },
+
+  noteCommand(command) {
+    const text = command.trim();
+    if (!text) return;
+    const next = [text, ...get().suggestHistory.filter((c) => c !== text)];
+    // Liste sınırsız büyümesin: öneri için son birkaç yüz komut yeterli.
+    set({ suggestHistory: next.slice(0, SUGGEST_SOURCE_LIMIT) });
+  },
+
+  updateSuggestions(state) {
+    const { settings, ui } = get();
+    if (!settings.behavior.appSuggestions) {
+      if (ui.suggest) set({ ui: { ...ui, suggest: null } });
+      return;
+    }
+    if (!canSuggest(state.prefix, state.full)) {
+      if (ui.suggest) set({ ui: { ...ui, suggest: null } });
+      return;
+    }
+
+    const items = rankSuggestions(get().suggestHistory, state.prefix);
+    if (items.length === 0) {
+      if (ui.suggest) set({ ui: { ...ui, suggest: null } });
+      return;
+    }
+    // Ön ek değişmediyse seçimi koruyoruz: kullanıcı listede gezinirken
+    // yeniden hesap seçimi başa atmasın.
+    const keepIndex =
+      ui.suggest && ui.suggest.input === state.prefix
+        ? Math.min(ui.suggest.index, items.length - 1)
+        : 0;
+    set({ ui: { ...ui, suggest: { items, index: keepIndex, input: state.prefix } } });
+  },
+
+  moveSuggestion(direction) {
+    const ui = get().ui;
+    if (!ui.suggest) return;
+    set({
+      ui: {
+        ...ui,
+        suggest: {
+          ...ui.suggest,
+          index: cycleIndex(ui.suggest.index, ui.suggest.items.length, direction),
+        },
+      },
+    });
+  },
+
+  acceptSuggestion() {
+    get().acceptSuggestionAt(get().ui.suggest?.index ?? -1);
+  },
+
+  acceptSuggestionAt(index) {
+    const ui = get().ui;
+    const suggestion = ui.suggest?.items[index];
+    if (!suggestion) return;
+    const session = get().activeSession();
+    session?.acceptSuggestion(suggestion);
+    set({ ui: { ...get().ui, suggest: null } });
+    // Listeye tıklanarak kabul edilmiş olabilir: odak terminale dönmeli,
+    // yoksa kullanıcı yazmaya devam edemiyor.
+    session?.focus();
+  },
+
+  closeSuggestions() {
+    const ui = get().ui;
+    if (!ui.suggest) return;
+    set({ ui: { ...ui, suggest: null } });
+  },
+
+  askConfirm(request) {
+    // Aynı anda iki onay isteği olursa öncekini iptal ediyoruz: iki
+    // pencereyi üst üste göstermek yerine son istek geçerli olsun.
+    const previous = get().ui.confirm;
+    if (previous) resolveConfirm(previous.id, false);
+
+    confirmSeq += 1;
+    const id = confirmSeq;
+    return new Promise<boolean>((resolve) => {
+      confirmResolvers.set(id, resolve);
+      set({ ui: { ...get().ui, confirm: { ...request, id } } });
+    });
   },
 
   toast(text, tone = "info") {

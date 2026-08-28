@@ -42,6 +42,8 @@ export interface Appearance {
   sidebarWidth: number;
   /** Sağ panelin (geçmiş / favoriler) genişliği. */
   panelWidth: number;
+  /** Çıktıdaki bağlantıları renkli göster. */
+  highlightLinks: boolean;
   /** Terminal alanı: tek sekme mi, grubun tüm sekmeleri döşenmiş mi. */
   viewMode: ViewMode;
 }
@@ -62,6 +64,8 @@ export interface Behavior {
   historyDedupe: boolean;
   /** Kenar çubuğunda yalnızca favori grupları göster. */
   showOnlyFavoriteGroups: boolean;
+  /** Uygulama tarafı komut önerisi (uygulamanın kendi geçmişinden). */
+  appSuggestions: boolean;
   /** Kabukta komut önerisi: kapalı / satır içi hayalet metin / liste. */
   shellPrediction: ShellPrediction;
 }

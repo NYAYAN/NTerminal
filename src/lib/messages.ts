@@ -34,22 +34,6 @@ export const MESSAGES = {
     "Sekme kilitli — kapatmak için kilidi kaldırın",
     "The tab is locked — unlock it to close",
   ],
-  "store.closeTabConfirm": [
-    "\"{name}\" sekmesini kapatmak istiyor musunuz?",
-    "Close the \"{name}\" tab?",
-  ],
-  "store.closeRunningConfirm": [
-    "Bu sekmede bir komut çalışıyor. \"{name}\" sekmesini kapatmak istediğinize emin misiniz?",
-    "A command is running in this tab. Are you sure you want to close \"{name}\"?",
-  ],
-  "store.closeOthersConfirm.one": [
-    "{n} sekme kapatılacak. Devam edilsin mi?",
-    "{n} tab will be closed. Continue?",
-  ],
-  "store.closeOthersConfirm.other": [
-    "{n} sekme kapatılacak. Devam edilsin mi?",
-    "{n} tabs will be closed. Continue?",
-  ],
   "store.tabLockedOn": ["Sekme kilitlendi", "Tab locked"],
   "store.tabLockedOff": ["Sekme kilidi kaldırıldı", "Tab unlocked"],
   "store.skippedLocked.one": [
@@ -67,6 +51,75 @@ export const MESSAGES = {
 
   "common.close": ["Kapat", "Close"],
   "common.cancel": ["Vazgeç", "Cancel"],
+  "confirm.ok": ["Tamam", "OK"],
+  "confirm.closeTabTitle": ["Sekmeyi kapat", "Close tab"],
+  "confirm.closeTabMessage": [
+    "\"{name}\" sekmesi kapatılacak.",
+    "The \"{name}\" tab will be closed.",
+  ],
+  "confirm.closeTabRunning": [
+    "Bu sekmede bir komut çalışıyor; kapatmak onu sonlandırır.",
+    "A command is running in this tab; closing it will terminate the command.",
+  ],
+  "confirm.closeTabDetail": [
+    "Kalıcı olarak durması gereken sekmeleri kilitleyebilirsiniz: sağ tık › Kilitle. Bu soruyu Ayarlar › Davranış › Sekme kapatma onayı ile kapatabilirsiniz.",
+    "You can lock tabs that must stay open: right-click › Lock. You can turn this question off in Settings › Behavior › Confirm tab close.",
+  ],
+  "confirm.close": ["Kapat", "Close"],
+  "confirm.closeOthersTitle": ["Diğer sekmeleri kapat", "Close other tabs"],
+  "confirm.closeOthers.one": [
+    "{n} sekme kapatılacak.",
+    "{n} tab will be closed.",
+  ],
+  "confirm.closeOthers.other": [
+    "{n} sekme kapatılacak.",
+    "{n} tabs will be closed.",
+  ],
+  "confirm.deleteGroupTitle": ["Grubu sil", "Delete group"],
+  "confirm.deleteGroupMessage": [
+    "\"{name}\" grubu ve {n} sekmesi kapatılacak.",
+    "The \"{name}\" group and its {n} tabs will be closed.",
+  ],
+  "confirm.delete": ["Sil", "Delete"],
+  "confirm.runManyTitle": ["Komutları çalıştır", "Run commands"],
+  "confirm.runMany.one": [
+    "{n} komut sırayla çalıştırılacak.",
+    "{n} command will run in order.",
+  ],
+  "confirm.runMany.other": [
+    "{n} komut sırayla çalıştırılacak.",
+    "{n} commands will run in order.",
+  ],
+  "confirm.run": ["Çalıştır", "Run"],
+  "confirm.clearHistoryTitle": ["Geçmişi temizle", "Clear history"],
+  "confirm.clearHistoryMessage": [
+    "\"{scope}\" kapsamındaki tüm komut geçmişi silinecek.",
+    "All command history in the \"{scope}\" scope will be deleted.",
+  ],
+  "confirm.clearHistoryDetail": [
+    "Favori komutlar ayrı bir dosyada tutuluyor, etkilenmez.",
+    "Favorite commands are kept in a separate file and are not affected.",
+  ],
+  "confirm.clear": ["Temizle", "Clear"],
+  "confirm.resetSettingsTitle": ["Ayarları sıfırla", "Reset settings"],
+  "confirm.resetSettingsMessage": [
+    "Tüm ayarlar ve kabuk profilleri varsayılanlara dönecek.",
+    "All settings and shell profiles will return to their defaults.",
+  ],
+  "confirm.resetSettingsDetail": [
+    "Gruplar, sekmeler, komut geçmişi ve favoriler etkilenmez.",
+    "Groups, tabs, command history and favorites are not affected.",
+  ],
+  "confirm.reset": ["Sıfırla", "Reset"],
+  "confirm.replaceWorkspaceTitle": [
+    "Gruplar ve sekmeler değiştirilecek",
+    "Groups and tabs will be replaced",
+  ],
+  "confirm.replaceWorkspaceMessage": [
+    "Mevcut gruplar ve sekmeler gelen dosyayla değiştirilecek, açık kabuklar kapanacak.",
+    "The current groups and tabs will be replaced by the file's, and open shells will close.",
+  ],
+  "confirm.apply": ["Uygula", "Apply"],
   "common.delete": ["Sil", "Delete"],
   "common.run": ["Çalıştır", "Run"],
   "common.edit": ["Düzenle…", "Edit…"],
@@ -229,18 +282,10 @@ export const MESSAGES = {
     "Grubu sil ({n} kilitli sekme)",
     "Delete group ({n} locked tabs)",
   ],
-  "group.deleteConfirm": [
-    "\"{name}\" grubunu ve {n} sekmesini kapatmak istiyor musunuz?",
-    "Close the \"{name}\" group and its {n} tabs?",
-  ],
   "group.colorClose": ["Kapat", "Close"],
   "group.customColor": ["Özel renk seç", "Pick a custom color"],
   "group.clearColor": ["Rengi kaldır", "Clear color"],
   "group.delete": ["Grubu sil", "Delete group"],
-  "group.deleteLocked": [
-    "Grubu sil (kilitli sekme var)",
-    "Delete group (contains locked tabs)",
-  ],
 
   // ------------------------------------------------------------------- panel
   "panel.close": ["Paneli kapat", "Close panel"],
@@ -284,14 +329,6 @@ export const MESSAGES = {
   "history.selectedPrefix": ["{n} seçili / ", "{n} selected / "],
   "history.records.one": ["{value} kayıt", "{value} record"],
   "history.records.other": ["{value} kayıt", "{value} records"],
-  "history.runManyConfirm": [
-    "{n} komut sırayla çalıştırılacak. Devam edilsin mi?",
-    "{n} commands will run in order. Continue?",
-  ],
-  "history.clearScopeConfirm": [
-    "\"{scope}\" kapsamındaki tüm komut geçmişi silinecek. Emin misiniz?",
-    "All command history in the \"{scope}\" scope will be deleted. Are you sure?",
-  ],
   "history.btnInsert": ["Yaz", "Insert"],
   "history.btnRun": ["Çalıştır", "Run"],
   "history.btnCopy": ["Kopyala", "Copy"],
@@ -494,6 +531,14 @@ export const MESSAGES = {
   "settings.colorTheme": ["Renk teması", "Color theme"],
   "settings.font": ["Yazı tipi", "Font"],
   "settings.fontFamily": ["Yazı tipi ailesi", "Font family"],
+  "settings.highlightLinks": [
+    "Çıktıdaki bağlantıları renkli göster",
+    "Highlight links in the output",
+  ],
+  "settings.highlightLinksHint": [
+    "Bağlantılar vurgu renginde görünür ve tıklanınca varsayılan tarayıcıda açılır. Çok yoğun çıktı üreten işlerde kapatmak çizimi hafifletir.",
+    "Links appear in the accent color and open in the default browser when clicked. Turning it off lightens rendering for very noisy output.",
+  ],
   "settings.cursorScroll": ["İmleç ve kaydırma", "Cursor and scrolling"],
   "settings.cursorStyle": ["İmleç biçimi", "Cursor style"],
   "settings.cursorBar": ["Çizgi", "Bar"],
@@ -527,6 +572,18 @@ export const MESSAGES = {
   "settings.ctrlCHint": [
     "Seçim yoksa Ctrl+C her zaman kabuğa gider (çalışan komutu durdurur). Kopyalamadan sonra seçim temizlenir, böylece ikinci Ctrl+C komutu durdurur.",
     "With no selection Ctrl+C always goes to the shell (interrupting the running command). The selection is cleared after copying, so a second Ctrl+C interrupts.",
+  ],
+  "suggest.hint": [
+    "\u2191\u2193 seç · \u2192 kabul et · Esc kapat",
+    "\u2191\u2193 select · \u2192 accept · Esc dismiss",
+  ],
+  "settings.appSuggestions": [
+    "Uygulamanın kendi geçmişinden öneri (her kabukta)",
+    "Suggest from the app's own history (in every shell)",
+  ],
+  "settings.appSuggestionsHint": [
+    "Yazdıkça istemin altında bir liste açılır: yukarı/aşağı okla seçilir, sağ okla kabul edilir, Esc ile kapanır. Liste açıkken ok tuşları listede gezinir; boş satırda liste kapalı olduğu için oklar kabuğun kendi geçmişine gider. Kabuğun yerleşik önerisinden bağımsız çalışır ve cmd ile bash'te de vardır.",
+    "As you type, a list opens below the prompt: select with up/down, accept with the right arrow, dismiss with Esc. While the list is open the arrow keys move within it; on an empty line the list is closed so the arrows reach the shell's own history. It works independently of the shell's built-in prediction and is available in cmd and bash too.",
   ],
   "settings.prediction": ["Komut önerisi", "Command suggestions"],
   "settings.predictionList": [
@@ -613,10 +670,6 @@ export const MESSAGES = {
   "settings.workspaceFile": ["Çalışma alanı", "Workspace"],
   "settings.integrationDir": ["Kabuk entegrasyonu", "Shell integration"],
   "settings.reset": ["Sıfırlama", "Reset"],
-  "settings.resetConfirm": [
-    "Tüm ayarlar ve profiller varsayılanlara dönecek. Gruplar ve sekmeler etkilenmez. Devam edilsin mi?",
-    "All settings and profiles will return to their defaults. Groups and tabs are not affected. Continue?",
-  ],
 
   // ----------------------------------------------------------- aktarım penceresi
   "transfer.title": ["Yapılandırma aktarımı", "Configuration transfer"],
@@ -704,10 +757,6 @@ export const MESSAGES = {
   "transfer.restoreScrollback": [
     "Sekmelerin ekran çıktısını da geri yükle",
     "Restore tab screen output as well",
-  ],
-  "transfer.replaceWorkspaceConfirm": [
-    "Mevcut gruplar ve sekmeler gelen dosyayla değiştirilecek, açık kabuklar kapanacak. Devam edilsin mi?",
-    "The current groups and tabs will be replaced by the file's, and open shells will close. Continue?",
   ],
   "transfer.applied": ["Uygulandı", "Applied"],
   "transfer.appliedSettings": ["Ayarlar: {state}", "Settings: {state}"],

@@ -138,3 +138,46 @@ describe("grup rengi okunabilirliği", () => {
     }
   }
 });
+
+/**
+ * Öneri listesinin seçili satırı.
+ *
+ * Bu blok ölçülmüş bir hatadan geliyor: seçili satırın "eklenecek kısmı" vurgu
+ * renginde çiziliyordu, arka planı da vurgu renginin açık bir karışımıydı —
+ * yani renk rengin üzerine geliyordu. Solarized Açık'ta karşıtlık 2.54'e
+ * iniyordu; listenin EN ÖNEMLİ metni en okunmaz olanıydı. Vurgu rengi artık
+ * yalnızca arka plan tonunda ve sol kenar çizgisinde.
+ */
+describe("öneri listesi okunabilirliği", () => {
+  const SELECTED = mixPercent(".suggest-row.on", "accent");
+
+  it("seçili satırın vurgu oranı okunabildi", () => {
+    expect(SELECTED).toBeGreaterThan(0);
+  });
+
+  it("seçili satırın metni vurgu rengi DEĞİL", () => {
+    // Vurgu rengini vurgu tonlu arka plana koymak hatanın kendisiydi.
+    const body = CSS.slice(CSS.indexOf(".suggest-rest {"));
+    const rule = body.slice(0, body.indexOf("}"));
+    expect(rule).toMatch(/color:\s*var\(--text\)/);
+    expect(
+      CSS,
+      "seçili satır için accent renkli metin kuralı geri gelmiş",
+    ).not.toMatch(/\.suggest-row\.on\s+\.suggest-rest\s*\{[^}]*var\(--accent\)/);
+  });
+
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+
+    it(`${meta.id}: seçili öneri metni okunabilir`, () => {
+      const bg = mix(theme.ui.accent, theme.ui.surfaceAlt, SELECTED);
+      const ratio = contrastRatio(theme.ui.text, bg);
+      expect(ratio, `arka plan ${bg}, karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${meta.id}: seçili olmayan öneri okunabilir`, () => {
+      const ratio = contrastRatio(theme.ui.textDim, theme.ui.surfaceAlt);
+      expect(ratio, `karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(3.0);
+    });
+  }
+});

@@ -117,13 +117,17 @@ export function HistoryPanel() {
     }
   };
 
-  const runSelected = () => {
+  const runSelected = async () => {
     if (selectedEntries.length === 0) return;
     if (selectedEntries.length === 1) {
       insert(selectedEntries[0].command, true);
       return;
     }
-    const ok = window.confirm(t("history.runManyConfirm", { n: selectedEntries.length }));
+    const ok = await store().askConfirm({
+      title: t("confirm.runManyTitle"),
+      message: tp("confirm.runMany", selectedEntries.length),
+      confirmLabel: t("confirm.run"),
+    });
     if (!ok) return;
     // Liste en yeniden eskiye sıralı; çalıştırma sırası kronolojik olmalı.
     for (const entry of [...selectedEntries].reverse()) {
@@ -141,7 +145,14 @@ export function HistoryPanel() {
 
   const clearScope = async () => {
     const label = t(SCOPE_KEYS[scope]).toLocaleLowerCase(localeTag());
-    if (!window.confirm(t("history.clearScopeConfirm", { scope: label }))) return;
+    const ok = await store().askConfirm({
+      title: t("confirm.clearHistoryTitle"),
+      message: t("confirm.clearHistoryMessage", { scope: label }),
+      detail: t("confirm.clearHistoryDetail"),
+      confirmLabel: t("confirm.clear"),
+      danger: true,
+    });
+    if (!ok) return;
     const removed = await api
       .historyClear({
         tabId: filter.tabId,
@@ -321,7 +332,7 @@ export function HistoryPanel() {
           className="primary"
           disabled={selected.size === 0}
           title={t("history.runTitle")}
-          onClick={runSelected}
+          onClick={() => void runSelected()}
         >
           {t("history.btnRun")}
         </button>

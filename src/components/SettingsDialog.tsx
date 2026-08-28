@@ -286,6 +286,22 @@ export function SettingsDialog() {
               </div>
 
               <div className="section">
+                <h3>{t("settings.terminal")}</h3>
+                <div className="check-row">
+                  <input
+                    id="highlightLinks"
+                    type="checkbox"
+                    checked={settings.appearance.highlightLinks}
+                    onChange={(e) =>
+                      void store().patchAppearance({ highlightLinks: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="highlightLinks">{t("settings.highlightLinks")}</label>
+                </div>
+                <div className="hintline">{t("settings.highlightLinksHint")}</div>
+              </div>
+
+              <div className="section">
                 <h3>{t("settings.cursorScroll")}</h3>
                 <div className="field">
                   <label>{t("settings.cursorStyle")}</label>
@@ -423,6 +439,19 @@ export function SettingsDialog() {
                   <label htmlFor="ctrlCCopiesSelection">{t("settings.ctrlCCopies")}</label>
                 </div>
                 <div className="hintline">{t("settings.ctrlCHint")}</div>
+                <div className="check-row">
+                  <input
+                    id="appSuggestions"
+                    type="checkbox"
+                    checked={settings.behavior.appSuggestions}
+                    onChange={(e) =>
+                      void store().patchBehavior({ appSuggestions: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="appSuggestions">{t("settings.appSuggestions")}</label>
+                </div>
+                <div className="hintline">{t("settings.appSuggestionsHint")}</div>
+
                 <div className="field">
                   <label>{t("settings.prediction")}</label>
                   <select
@@ -837,11 +866,17 @@ export function SettingsDialog() {
                 <button
                   className="danger"
                   onClick={() => {
-                    if (
-                      window.confirm(t("settings.resetConfirm"))
-                    ) {
-                      void store().resetSettings();
-                    }
+                    void store()
+                      .askConfirm({
+                        title: t("confirm.resetSettingsTitle"),
+                        message: t("confirm.resetSettingsMessage"),
+                        detail: t("confirm.resetSettingsDetail"),
+                        confirmLabel: t("confirm.reset"),
+                        danger: true,
+                      })
+                      .then((ok) => {
+                        if (ok) void store().resetSettings();
+                      });
                   }}
                 >
                   {t("settings.resetButton")}

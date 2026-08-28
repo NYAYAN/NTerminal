@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { CommandPalette } from "./components/CommandPalette";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { SidePanel } from "./components/SidePanel";
 import { StatusBar } from "./components/StatusBar";
+import { SuggestionBar } from "./components/SuggestionBar";
 import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
@@ -87,11 +89,20 @@ export function App() {
       const keys = settings.keybindings;
       const store = useStore.getState();
       const session = store.activeSession();
+      // Onay penceresi de bir ortu: acikken kisayollar islememeli, yoksa
+      // Ctrl+W onay beklerken ikinci bir kapatma istegi baslatir.
       const anyOverlayOpen =
-        store.ui.settingsOpen || store.ui.transferOpen || store.ui.paletteOpen || store.ui.searchOpen;
+        store.ui.settingsOpen ||
+        store.ui.transferOpen ||
+        store.ui.paletteOpen ||
+        store.ui.searchOpen ||
+        store.ui.confirm !== null;
 
       // Örtüler açıkken Esc kapatsın, gerisi örtünün kendi işi.
       if (event.key === "Escape") {
+        // Onay penceresi Esc'yi kendisi ele aliyor (capture fazinda).
+        if (store.ui.confirm) return;
+        if (store.ui.suggest) return store.closeSuggestions();
         if (store.ui.findOpen) return store.setUi({ findOpen: false });
         if (store.ui.paletteOpen) return store.setUi({ paletteOpen: false });
         if (store.ui.searchOpen) return store.setUi({ searchOpen: false });
@@ -134,6 +145,26 @@ export function App() {
             if (result === "failed") store.toast(t("common.clipboardFailed"), "err");
           });
         });
+      }
+
+      // Komut önerisi listesi açıkken ok tuşları LISTEDE geziniyor.
+      //
+      // Bunu yapmak güvenli çünkü liste yalnızca kullanıcı bir şey yazmışken
+      // ve eşleşme varken açılıyor: boş satırda liste kapalı olduğu için
+      // yukarı ok kabuğun kendi geçmişine gidiyor. Aksi bir tasarım (okları
+      // her zaman yakalamak) kabuğun geçmiş gezinmesini bozardı.
+      //
+      // Enter ve Tab bilinçli olarak yakalanmıyor: Enter komutu çalıştırmalı,
+      // Tab kabuğun tamamlamasına gitmeli.
+      const suggest = store.ui.suggest;
+      if (inTerminal && suggest && suggest.items.length > 0 && !event.ctrlKey && !event.altKey) {
+        if (event.key === "ArrowUp") return run(() => store.moveSuggestion(1));
+        if (event.key === "ArrowDown") return run(() => store.moveSuggestion(-1));
+        if (event.key === "ArrowRight") return run(() => store.acceptSuggestion());
+        if (event.key === "Enter" || event.key === "Tab") {
+          store.closeSuggestions();
+          // preventDefault YOK: tuş kabuğa gitmeye devam etsin.
+        }
       }
 
       if (matchCombo(event, keys.newTab)) return run(() => store.addTab());
@@ -277,6 +308,7 @@ export function App() {
       <div className="main">
         <TabBar />
         <TerminalArea />
+        <SuggestionBar />
         {ui.historyOpen && <SidePanel />}
         <StatusBar />
       </div>
@@ -285,6 +317,8 @@ export function App() {
       {ui.searchOpen && <HistoryRecall />}
       {ui.settingsOpen && <SettingsDialog />}
       {ui.transferOpen && <TransferDialog />}
+
+      <ConfirmDialog />
 
       {ui.toast && <div className={`toast ${ui.toast.tone}`}>{ui.toast.text}</div>}
 
