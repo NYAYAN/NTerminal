@@ -174,7 +174,7 @@ export const MESSAGES = {
   "common.moveLeft": ["Sola taşı", "Move left"],
   "common.moveRight": ["Sağa taşı", "Move right"],
   "common.copyCommand": ["Komutu kopyala", "Copy command"],
-  "common.revealFolder": ["Klasörü Gezgin'de aç", "Open folder in Explorer"],
+  "common.revealFolder": ["Klasörü {fm}'de aç", "Open folder in {fm}"],
   "common.restartShell": ["Kabuğu yeniden başlat", "Restart shell"],
   "common.openFolder": ["Klasörü aç", "Open folder"],
   "common.clipboardFailed": ["Panoya kopyalanamadı", "Could not copy to clipboard"],
@@ -443,10 +443,7 @@ export const MESSAGES = {
   "find.close": ["Kapat (Esc)", "Close (Esc)"],
 
   // --------------------------------------------------------------- durum çubuğu
-  "status.revealHint": [
-    "(Dosya Gezgini'nde açmak için tıklayın)",
-    "(click to open in File Explorer)",
-  ],
+  "status.revealHint": ["({fm}'de açmak için tıklayın)", "(click to open in {fm})"],
   "status.running": ["komut çalışıyor", "command running"],
   "status.integrationOn": ["entegrasyon", "integration"],
   "status.integrationOnTitle": [
@@ -472,6 +469,10 @@ export const MESSAGES = {
   "status.predictionUnsupportedTitle": [
     "Bu kabuk komut önerisini desteklemiyor: PSReadLine 2.2+ gerekiyor, kurulu sürüm daha eski.\n\nDüzeltmek için PowerShell'de bir kez şunu çalıştırın:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).",
     "This shell does not support command suggestions: PSReadLine 2.2+ is required and the installed version is older.\n\nTo fix it, run this once in PowerShell:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nThen restart the tab (right-click › Restart shell).",
+  ],
+  "status.predictionUnsupportedTitleMac": [
+    "Bu kabuk komut önerisini desteklemiyor. zsh'de öneriyi zsh-autosuggestions çiziyor.\n\nKurmak için bir kez şunu çalıştırın:\nbrew install zsh-autosuggestions\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).\n\nUygulamanın kendi önerisi bundan bağımsız çalışıyor: Ayarlar › Davranış › Uygulama önerisi.",
+    "This shell does not support command suggestions. In zsh the suggestion is drawn by zsh-autosuggestions.\n\nTo install it, run this once:\nbrew install zsh-autosuggestions\n\nThen restart the tab (right-click › Restart shell).\n\nThe app's own suggestions work independently: Settings › Behavior › App suggestions.",
   ],
   "status.pidTitle": ["Kabuk süreç kimliği", "Shell process id"],
   "status.commandsTitle": ["Kayıtlı komut sayısı", "Recorded commands"],
@@ -517,8 +518,8 @@ export const MESSAGES = {
   ],
   "palette.transfer": ["Ayarları içe / dışa aktar", "Import / export settings"],
   "palette.reveal": [
-    "Etkin sekmenin klasörünü Dosya Gezgini'nde aç",
-    "Open the active tab's folder in File Explorer",
+    "Etkin sekmenin klasörünü {fm}'de aç",
+    "Open the active tab's folder in {fm}",
   ],
   "palette.toggleView": ["Sekme / bölme görünümü", "Toggle tab / pane view"],
   "palette.newTabProfile": ["Yeni sekme: {name}", "New tab: {name}"],
@@ -545,8 +546,8 @@ export const MESSAGES = {
     "Click a box and press the key combination to change it. Shortcuts are exported together with the settings.",
   ],
   "settings.aboutBlurb": [
-    "Gruplanabilir sekmeli Windows terminali. Tauri + Rust (ConPTY) ve xterm.js üzerine kurulu.",
-    "A Windows terminal with groupable tabs. Built on Tauri + Rust (ConPTY) and xterm.js.",
+    "Gruplanabilir sekmeli terminal — Windows ve macOS. Tauri + Rust ve xterm.js üzerine kurulu.",
+    "A terminal with groupable tabs for Windows and macOS. Built on Tauri + Rust and xterm.js.",
   ],
   "settings.openFolderShort": ["Aç", "Open"],
   "settings.resetButton": [
@@ -675,6 +676,15 @@ export const MESSAGES = {
     "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: PowerShell 7.2+ (PSReadLine 2.2+) gerekiyor. Windows PowerShell 5.1, cmd ve bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
     "Suggests commands you have run before as you type. The shell draws the suggestion, so PowerShell 7.2+ (PSReadLine 2.2+) is required. Windows PowerShell 5.1, cmd and bash do not support it — use the Ctrl+R history search there.",
   ],
+  "settings.predictionHintMac": [
+    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: zsh'de zsh-autosuggestions (brew install zsh-autosuggestions), pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
+    "Suggests commands you have run before as you type. The shell draws the suggestion: zsh needs zsh-autosuggestions (brew install zsh-autosuggestions), pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
+  ],
+  "settings.macOptionIsMeta": ["Option tuşu Meta olsun", "Use Option as Meta"],
+  "settings.macOptionIsMetaHint": [
+    "Açıkken Option+B / Option+F kelime kelime gezinir, Option+Backspace kelimeyi siler — Windows'ta Alt'ın yaptığı iş. Kapalıyken Option normal karakter üretir; Türkçe Mac klavyesinde @ = Option+Q olduğu için varsayılan kapalı.",
+    "When on, Option+B / Option+F move by word and Option+Backspace deletes a word — what Alt does on Windows. When off, Option produces its normal character; the default is off because @ is Option+Q on the Turkish Mac layout.",
+  ],
   "settings.confirmCloseTab": ["Sekme kapatma onayı", "Confirm tab close"],
   "settings.confirmAlways": ["Her zaman sor", "Always ask"],
   "settings.confirmRunning": [
@@ -698,6 +708,20 @@ export const MESSAGES = {
   "settings.pickProfile": ["Soldan bir profil seçin.", "Pick a profile on the left."],
   "settings.pickGroup": ["Soldan bir grup seçin.", "Pick a group on the left."],
   "settings.shellKind": ["Kabuk türü", "Shell type"],
+  "settings.openTransfer": ["İçe / dışa aktar…", "Import / export…"],
+  "settings.groupEnvHint": [
+    "Profilin değişkenlerinin üstüne yazılır. Örnek: bir proje grubunda {example}.",
+    "Overrides the profile's variables. For example, {example} in a project group.",
+  ],
+  "settings.groupEnvApplyHint": [
+    "Değişiklikler yeni açılan sekmelerde geçerli olur.",
+    "Changes take effect in newly opened tabs.",
+  ],
+  "settings.shellKindHint": [
+    "Tür, kabuk entegrasyon betiğinin nasıl yükleneceğini belirler.",
+    "The type determines how the shell integration script is loaded.",
+  ],
+  "settings.keyboard": ["Klavye", "Keyboard"],
   "settings.browse": ["Gözat", "Browse"],
   "settings.executable": ["Çalıştırılabilir", "Executable"],
   "settings.executablePlaceholder": [
@@ -734,6 +758,8 @@ export const MESSAGES = {
   "settings.profilesAdded.other": ["{n} profil eklendi", "{n} profiles added"],
   "settings.pickFolder": ["Klasör seç", "Pick a folder"],
   "settings.pickShell": ["Kabuk çalıştırılabiliri seç", "Pick a shell executable"],
+  "settings.newProfileName": ["Yeni profil", "New profile"],
+  "settings.programFilter": ["Program", "Program"],
   "settings.fileLocations": ["Dosya konumları", "File locations"],
   "settings.dataFolder": ["Veri klasörü", "Data folder"],
   "settings.portableOn": [

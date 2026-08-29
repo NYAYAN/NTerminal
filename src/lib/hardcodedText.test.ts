@@ -1,42 +1,83 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
  * Sabit kodlanmış arayüz metni taraması.
  *
  * Bu test bir kez ödenmiş bedelden geliyor: metinleri sözlüğe taşırken elle
- * `grep` ile taradım ve **dört metni kaçırdım** — hepsi aynı sebeple, arada
- * `{}` ya da satır sonu olduğu için satır bazlı aramaya takılmadılar:
+ * `grep` ile taradım ve dört metni kaçırdım — hepsi aynı sebeple, arada `{}`
+ * ya da satır sonu olduğu için satır bazlı aramaya takılmadılar. Kaçan metin
+ * arayüzde İngilizce seçildiğinde Türkçe kalıyor ve bu ancak gözle görülüyor.
  *
- *   <label>Boyut ({fontSize} px)</label>
- *   <div className="hintline">\n  Terminalde geriye doğru kaç satır…\n</div>
- *   `${total.toLocaleString("tr-TR")} kayıt`
- *   [oturum sona erdi, çıkış kodu {code}]
+ * ## Neden AST
  *
- * Kaçan metin arayüzde İngilizce seçildiğinde Türkçe kalıyor ve bu ancak
- * gözle görülüyor. Tarama şimdi yapısal: yorumlar ve `{...}` ifadeleri
- * çıkarıldıktan sonra kalan JSX metni ile insan diline benzeyen öznitelik
- * değerleri işaretleniyor.
+ * İlk sürüm metinsel bir sezgiyle çalışıyordu: yorumları ve `{...}`
+ * ifadelerini boşaltıp kalan JSX metnine bakıyordu. O yaklaşım SESSİZCE
+ * BOZUKTU ve bunu ölçerek bulduk — `{` sayarak JSX ifade parantezini sıradan
+ * bir kod bloğundan ayırt etmek mümkün değil, dolayısıyla `function X() {`
+ * satırından itibaren dosyanın TAMAMI "ifade içi" sayılıp boşaltılıyordu.
+ * Bütün JSX bir fonksiyon gövdesinde olduğu için tarama hiçbir şey görmüyordu.
+ *
+ * Daha kötüsü: kendi öz-denetim testi, fonksiyon sarmalayıcısı OLMAYAN bir
+ * örnek üzerinde çalıştığı için geçiyordu. Yani test "çalışıyorum" diyordu.
+ * Buradaki ders artık kodda: öz-denetim gerçek `scan()` işlevini, gerçekçi bir
+ * kaynak üzerinde çağırıyor (aşağıya bakın).
+ *
+ * Şimdi TypeScript'in kendi ayrıştırıcısı kullanılıyor: `JsxText` düğümleri ve
+ * dize değerli JSX öznitelikleri tam olarak biliniyor, sezgiye yer yok.
  */
 
 const SRC = join(process.cwd(), "src");
 
-/** Taranmayacak dosyalar: sözlüğün kendisi, testler ve dil motoru. */
+/** Taranmayacak dosyalar: sözlüğün kendisi ve dil motoru. */
 const SKIP = new Set(["messages.ts", "i18n.ts"]);
+
+/** Kullanıcıya görünen JSX öznitelikleri. */
+const ATTRS = new Set(["placeholder", "title", "aria-label", "label", "alt"]);
+
+/**
+ * Kullanıcıya görünen nesne alanları.
+ *
+ * Menü girdileri (`{ kind: "item", label: "..." }`) ve onay penceresi istekleri
+ * JSX değil, düz nesne; metinleri de çeviriden geçmeli.
+ */
+const PROPS = new Set([
+  "label",
+  "title",
+  "hint",
+  "placeholder",
+  "message",
+  "detail",
+  "confirmLabel",
+  "cancelLabel",
+]);
+
+/**
+ * Tek sözcük bile olsa çeviri gerektiren etiketler.
+ *
+ * Bir düğmenin ya da etiketin içindeki tek sözcük ("Kapat", "Sil") neredeyse
+ * her zaman arayüz metni. Diğer etiketlerde tek sözcük genelde ürün adı, kod
+ * örneği ya da teknik kısaltma oluyor ("NTerminal", "NODE_ENV=development",
+ * "pid") — onları işaretlemek gürültü olurdu.
+ */
+const WORDY_TAGS = new Set(["button", "label"]);
 
 /**
  * Çeviri gerektirmeyen, bilinçli olarak sabit metinler.
  *
- * Ürün adları, kod örnekleri ve tek karakterlik simgeler. Listeye ekleme
- * yapmak bir karar: "bu metin gerçekten dile bağlı değil mi?"
+ * Ürün adları ve kod örnekleri. Listeye ekleme yapmak bir karar: "bu metin
+ * gerçekten dile bağlı değil mi?"
  */
 const ALLOWED = new Set([
   "Bash (Git Bash / MSYS)",
   "PowerShell 7+ (pwsh)",
   "Windows PowerShell 5.1",
 ]);
+
+const LETTER = /[A-Za-zÇĞİÖŞÜçğıöşü]/;
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -53,104 +94,100 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-/** Satır ve blok yorumlarını boşlukla değiştirir (konumlar kaymasın). */
-function stripComments(source: string): string {
-  let out = "";
-  let i = 0;
-  while (i < source.length) {
-    if (source.startsWith("//", i)) {
-      while (i < source.length && source[i] !== "\n") {
-        out += " ";
-        i += 1;
-      }
-      continue;
-    }
-    if (source.startsWith("/*", i)) {
-      const end = source.indexOf("*/", i + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      for (; i < stop; i++) out += source[i] === "\n" ? "\n" : " ";
-      continue;
-    }
-    out += source[i];
-    i += 1;
-  }
-  return out;
+function letterCount(text: string): number {
+  return [...text].filter((c) => LETTER.test(c)).length;
 }
 
-/**
- * `{...}` ifadelerini boşaltır.
- *
- * JSX metni bunların ARASINDA kalan kısım. İfadelerin içi kod; orada geçen
- * metin ya `t(...)` çağrısıdır ya da başka bir yerde denetleniyor.
- */
-function blankBraces(source: string): string {
-  const chars = [...source];
-  let depth = 0;
-  for (let i = 0; i < chars.length; i++) {
-    if (chars[i] === "{") {
-      depth += 1;
-      chars[i] = " ";
-      continue;
-    }
-    if (chars[i] === "}") {
-      if (depth > 0) depth -= 1;
-      chars[i] = " ";
-      continue;
-    }
-    if (depth > 0 && chars[i] !== "\n") chars[i] = " ";
-  }
-  return chars.join("");
+function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter((w) => LETTER.test(w)).length;
 }
-
-const LETTERS = /[A-Za-zÇĞİÖŞÜçğıöşü]/g;
 
 /**
  * İnsan diline benzeyen metin: en az iki sözcük ve en az altı harf.
  *
  * Tek sözcükler (`NODE_ENV=development`, `PS7`, dosya yolları) ve simgeler
- * dışarıda kalıyor; bunlar çeviri gerektirmiyor.
+ * dışarıda kalıyor; `WORDY_TAGS` içindekiler ayrıca ele alınıyor.
  */
 function looksLikeSentence(text: string): boolean {
   const clean = text.trim();
-  if (!clean) return false;
-  if (ALLOWED.has(clean)) return false;
-  const letters = clean.match(LETTERS)?.length ?? 0;
-  if (letters < 6) return false;
-  const words = clean.split(/\s+/).filter((w) => LETTERS.test(w));
-  LETTERS.lastIndex = 0;
-  return words.length >= 2;
+  if (!clean || ALLOWED.has(clean)) return false;
+  return letterCount(clean) >= 6 && wordCount(clean) >= 2;
 }
 
-interface Finding {
+/** Düğme/etiket içindeki tek sözcük de sayılıyor. */
+function looksLikeLabel(text: string): boolean {
+  const clean = text.trim();
+  if (!clean || ALLOWED.has(clean)) return false;
+  return letterCount(clean) >= 3 && wordCount(clean) >= 1;
+}
+
+export interface Finding {
   file: string;
+  line: number;
+  kind: string;
   text: string;
 }
 
-function scan(path: string): Finding[] {
-  const raw = readFileSync(path, "utf8");
-  const source = blankBraces(stripComments(raw));
-  const file = relative(process.cwd(), path).replace(/\\/g, "/");
+/** Tek bir kaynak metnini tarar. Dosya adı yalnızca raporda kullanılıyor. */
+function scanSource(text: string, file: string): Finding[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const out: Finding[] = [];
+  const lineOf = (node: ts.Node) =>
+    sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
 
-  // 1) JSX metin dugumleri.
-  //
-  // Kapanis etiketi (`</`) SART: `>` ile `<` arasini kosulsuz almak
-  // TypeScript jeneriklerini metin saniyordu - iki ayri jenerik arasinda
-  // kalan kod parcasi (`): Promise` gibi) iki sozcuk gibi gorunuyor.
-  // JSX metni neredeyse her zaman kapanis etiketiyle bitiyor.
-  if (path.endsWith(".tsx")) {
-    for (const match of source.matchAll(/>([^<>]+)<\//g)) {
-      if (looksLikeSentence(match[1])) out.push({ file, text: match[1].trim() });
+  const visit = (node: ts.Node) => {
+    // 1) JSX metin düğümleri.
+    if (ts.isJsxText(node)) {
+      const clean = node.text.trim();
+      if (clean) {
+        const parent = node.parent;
+        const tag =
+          parent && ts.isJsxElement(parent)
+            ? parent.openingElement.tagName.getText(sf)
+            : "";
+        const wordy = WORDY_TAGS.has(tag);
+        if (looksLikeSentence(clean) || (wordy && looksLikeLabel(clean))) {
+          out.push({ file, line: lineOf(node), kind: `jsx<${tag || "?"}>`, text: clean });
+        }
+      }
     }
-  }
 
-  // 2) Kullaniciya gorunen oznitelikler ve menu etiketleri.
-  const attrs = /(?:placeholder|title|aria-label|label)\s*[=:]\s*"([^"]+)"/g;
-  for (const match of source.matchAll(attrs)) {
-    if (looksLikeSentence(match[1])) out.push({ file, text: match[1] });
-  }
+    // 2) Kullanıcıya görünen JSX öznitelikleri.
+    if (ts.isJsxAttribute(node) && node.initializer && ts.isStringLiteral(node.initializer)) {
+      const name = node.name.getText(sf);
+      if (ATTRS.has(name) && looksLikeSentence(node.initializer.text)) {
+        out.push({
+          file,
+          line: lineOf(node),
+          kind: `attr:${name}`,
+          text: node.initializer.text,
+        });
+      }
+    }
 
+    // 3) Menü girdisi / onay isteği gibi nesne alanları.
+    if (ts.isPropertyAssignment(node) && ts.isStringLiteral(node.initializer)) {
+      const name = node.name.getText(sf).replace(/["']/g, "");
+      if (PROPS.has(name) && looksLikeSentence(node.initializer.text)) {
+        out.push({
+          file,
+          line: lineOf(node),
+          kind: `prop:${name}`,
+          text: node.initializer.text,
+        });
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sf);
   return out;
+}
+
+function scan(path: string): Finding[] {
+  const file = relative(process.cwd(), path).replace(/\\/g, "/");
+  return scanSource(readFileSync(path, "utf8"), file);
 }
 
 describe("sabit kodlanmış arayüz metni", () => {
@@ -163,23 +200,109 @@ describe("sabit kodlanmış arayüz metni", () => {
 
   it("çeviriden geçmemiş metin yok", () => {
     const findings = files.flatMap(scan);
-    const report = findings.map((f) => `  ${f.file}: ${JSON.stringify(f.text)}`).join("\n");
+    const report = findings
+      .map((f) => `  ${f.file}:${f.line} [${f.kind}] ${JSON.stringify(f.text)}`)
+      .join("\n");
     expect(findings, `sözlüğe taşınmamış metin:\n${report}`).toEqual([]);
   });
 
-  it("tarama gerçekten metin yakalıyor", () => {
-    // Testin kendisi çalışmıyorsa (yanlış ayrıştırma) sessizce geçer. Bilinen
-    // bir örnekle doğruluyoruz.
-    const sample = `
-      const x = <div>{t("a.b")}</div>;
-      const y = <label>Boyut ({size} px) burada</label>;
-    `;
-    const cooked = blankBraces(stripComments(sample));
-    // Gerçek taramanın deseniyle aynı: aksi hâlde bu öz-denetim başka bir kod
-    // yolunu doğrular ve tarama bozulduğunda sessiz kalır.
-    const hits = [...cooked.matchAll(/>([^<>]+)<\//g)]
-      .map((m) => m[1])
-      .filter(looksLikeSentence);
-    expect(hits.length, "bilinen sabit metin yakalanamadı").toBeGreaterThan(0);
+  /**
+   * Öz-denetim.
+   *
+   * Örnekler GERÇEKÇİ olmak zorunda ve gerçek `scanSource` ile taranmak
+   * zorunda. Önceki sürümün tam hatası buydu: öz-denetim sarmalayıcısız bir
+   * örnek üzerinde ayrı bir kod yolunu doğruluyor, gerçek tarama ise ölü
+   * duruyordu.
+   */
+  describe("tarama gerçekten çalışıyor", () => {
+    it("fonksiyon gövdesindeki JSX metnini yakalıyor", () => {
+      const sample = `
+        export function A() {
+          return <div className="hintline">Bu metin sözlüğe taşınmamış.</div>;
+        }
+      `;
+      const hits = scanSource(sample, "ornek.tsx");
+      expect(hits.map((h) => h.text), "fonksiyon içindeki metin kaçtı").toContain(
+        "Bu metin sözlüğe taşınmamış.",
+      );
+    });
+
+    it("map ifadesinin içindeki JSX metnini yakalıyor", () => {
+      // Liste öğeleri arayüzün büyük kısmı; `{...map()}` içinde kaldıkları için
+      // önceki tarama bunları hiç görmüyordu.
+      const sample = `
+        export function B({ items }) {
+          return (
+            <ul>
+              {items.map((x) => (
+                <li key={x.id}>Bu satır sözlüğe taşınmamış.</li>
+              ))}
+            </ul>
+          );
+        }
+      `;
+      const hits = scanSource(sample, "ornek.tsx");
+      expect(hits.map((h) => h.text), "map içindeki metin kaçtı").toContain(
+        "Bu satır sözlüğe taşınmamış.",
+      );
+    });
+
+    it("düğme içindeki tek sözcüğü yakalıyor", () => {
+      const sample = `
+        export function C() {
+          return <button onClick={close}>Kapat</button>;
+        }
+      `;
+      expect(scanSource(sample, "ornek.tsx").map((h) => h.text)).toContain("Kapat");
+    });
+
+    it("çeviriden geçen metni işaretlemiyor", () => {
+      const sample = `
+        export function D() {
+          return (
+            <div>
+              <span>{t("common.close")}</span>
+              <button>{t("confirm.delete")}</button>
+              <p>{tp("status.tabs", n)}</p>
+            </div>
+          );
+        }
+      `;
+      expect(scanSource(sample, "ornek.tsx")).toEqual([]);
+    });
+
+    it("TypeScript jeneriklerini metin sanmıyor", () => {
+      // Eski metinsel tarama `>` ile `<` arasını metin sayıyordu ve iki jenerik
+      // arasında kalan kod parçası cümle gibi görünüyordu.
+      const sample = `
+        export async function load(): Promise<Map<string, number>> {
+          const cache = new Map<string, Array<number>>();
+          return cache;
+        }
+      `;
+      expect(scanSource(sample, "ornek.ts")).toEqual([]);
+    });
+
+    it("ürün adını ve kod örneğini işaretlemiyor", () => {
+      const sample = `
+        export function E() {
+          return (
+            <div>
+              <h3>NTerminal</h3>
+              <span className="mono">NODE_ENV=development</span>
+              <span>pid</span>
+            </div>
+          );
+        }
+      `;
+      expect(scanSource(sample, "ornek.tsx")).toEqual([]);
+    });
+
+    it("menü girdisinin etiketini yakalıyor", () => {
+      const sample = `
+        const entries = [{ kind: "item", label: "Klasörü gezginde aç", run: f }];
+      `;
+      expect(scanSource(sample, "ornek.ts").map((h) => h.kind)).toContain("prop:label");
+    });
   });
 });

@@ -1,0 +1,17 @@
+# gercek zsh (5.9) ile uretildi - elle duzenlemeyin
+# bicim: etiket <TAB> base64(girdi) <TAB> escaped
+duz	Z2l0IHN0YXR1cw==	git status
+noktali_virgul	ZWNobyBhOyBlY2hvIGI=	echo a\x3B echo b
+ters_egik	Y2QgQzpcVXNlcnNcdGVzdA==	cd C:\\Users\\test
+ters_egik_cift	ZWNobyBcXA==	echo \\\\
+satir_sonu	aWxrCmlraW5jaQ==	ilk\x0Aikinci
+cr	YQ1i	a\x0Db
+esc	cmVuaxtbMzFta2lybWl6aQ==	renk\x1B[31mkirmizi
+bel	emlsBw==	zil\x07
+karisik	YTtiXGMKZBtl	a\x3Bb\\c\x0Ad\x1Be
+turkce	ZWNobyAixZ/En8O8w7bDp8SwIg==	echo "şğüöçİ"
+yalniz_bs	XA==	\\
+yalniz_noktali	Ow==	\x3B
+onceden_kacisli	ZWNobyBceDNC	echo \\x3B
+uzun_yol	L1VzZXJzL2FsaS9EZXNrdG9wL8SwxZ8gS2xhc8O2csO8L3Byb2plO3llZGVr	/Users/ali/Desktop/İş Klasörü/proje\x3Byedek
+her_kacis	XDsKDRsH	\\\x3B\x0A\x0D\x1B\x07

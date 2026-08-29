@@ -1,10 +1,11 @@
 # NTerminal
 
-Windows için gruplanabilir sekmeli terminal. Gruplar, gruba bağlı sekmeler,
-sekme ya da bölme görünümü, oturum devamlılığı, komut geçmişi, Türkçe/İngilizce
-arayüz ve ayarların makineler arası taşınması.
+Windows ve macOS için gruplanabilir sekmeli terminal. Gruplar, gruba bağlı
+sekmeler, sekme ya da bölme görünümü, oturum devamlılığı, komut geçmişi,
+Türkçe/İngilizce arayüz ve ayarların makineler arası taşınması.
 
-Tauri 2 (Rust / ConPTY) + xterm.js 6 üzerine kurulu.
+Tauri 2 (Rust) + xterm.js 6 üzerine kurulu. PTY katmanı `portable-pty`
+üzerinden: Windows'ta ConPTY, macOS'ta yerel Unix PTY.
 
 ---
 
@@ -185,10 +186,14 @@ yeniden aranır. Ne değiştiğini uygulamadan önce görebilirsiniz.
 | | |
 |---|---|
 | Windows | 10 1809+ / 11 (ConPTY gerektirir) |
-| WebView2 | Windows 11'de yerleşik; Windows 10'da [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| macOS | 11 Big Sur+ (Intel ve Apple Silicon) |
+| WebView2 | Yalnızca Windows. 11'de yerleşik; 10'da [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | Node.js | 20+ (yalnızca geliştirme) |
 | Rust | 1.82+ (yalnızca geliştirme) |
-| Visual Studio | C++ masaüstü geliştirme bileşeni (yalnızca geliştirme) |
+| Visual Studio | C++ masaüstü geliştirme bileşeni (yalnızca Windows'ta geliştirme) |
+| Xcode Command Line Tools | `xcode-select --install` (yalnızca macOS'ta geliştirme) |
+
+macOS'ta WebView2 gerekmiyor: sistemin WKWebView'ü kullanılıyor.
 
 ## Kurulum ve çalıştırma
 
@@ -214,13 +219,22 @@ Testleri koş:
 npm test
 ```
 
-Çıktılar `src-tauri/target/release/` ve `.../release/bundle/` altında.
+Üç komut da **iki platformda aynı**. Çıktılar `src-tauri/target/release/`
+altında: Windows'ta `bundle/nsis/*.exe` ve `bundle/msi/*.msi`, macOS'ta
+`bundle/macos/*.app` ve `bundle/dmg/*.dmg`.
+
+macOS paketi bir Mac'te üretilmek zorunda: Apple SDK'sı olmadan çapraz derleme
+mümkün değil. Windows kurucusu da aynı şekilde Windows'ta üretiliyor.
 
 ### Neden `npx tauri dev` yerine `npm start`?
 
-`scripts/win-env.ps1`, derlemeden önce **kullanılabilir** bir MSVC toolset'i
-bulup ortamı kuruyor. Bu makinede iki Visual Studio kurulumu var ve rustc her
-zaman en yeni toolset'i seçiyor; yeni olan (VS 18 / MSVC 14.50) linker'ı
+`scripts/run.mjs` platforma göre dağıtıyor. macOS ve Linux'ta doğrudan `tauri`
+çağırıyor — orada özel bir hazırlık gerekmiyor. Windows'ta ise
+`scripts/win-env.ps1` üzerinden geçiyor; o betik derlemeden önce
+**kullanılabilir** bir MSVC toolset'i buluyor.
+
+Sebebi somut bir sorun: bu makinede iki Visual Studio kurulumu var ve rustc her
+zaman en yeni toolset'i seçiyor. Yeni olan (VS 18 / MSVC 14.50) linker'ı
 içerdiği hâlde x64 CRT kütüphanelerini (`msvcrt.lib`) içermiyor, dolayısıyla
 doğrudan `cargo build` şununla düşüyor:
 
@@ -230,8 +244,11 @@ LINK : fatal error LNK1104: cannot open file 'msvcrt.lib'
 
 Betik toolset'leri `lib\x64\msvcrt.lib` var mı diye tarıyor, sağlam olanın
 `vcvars64` ortamını içeriye alıyor ve linker'ı `cargo`'ya açıkça bildiriyor.
-Bu yüzden hangi VS kurulu olduğundan bağımsız çalışır — başka bir makineye
-taşıdığınızda da uğraşmanız gerekmez.
+Bu yüzden hangi VS kurulu olduğundan bağımsız çalışır.
+
+> Paketlemede `LNK1104` yerine **`Access is denied`** görürseniz NTerminal
+> açıktır: çalışan `nterminal.exe` değiştirilemiyor. Uygulamayı kapatıp
+> yeniden deneyin.
 
 ---
 
@@ -261,14 +278,17 @@ dağıtılıyor ve her açılışta veri klasörüne yazılıyor.
 
 ### Destek durumu
 
-| Kabuk | Komut metni | Çıkış kodu | Süre | Klasör |
-|---|---|---|---|---|
-| PowerShell 7 (pwsh) | ✅ | ✅ | ✅ | ✅ |
-| Windows PowerShell 5.1 | ✅ | ✅ | ✅ | ✅ |
-| Git Bash / MSYS | ✅ | ✅ | ✅ | ✅ |
-| WSL | ✅ | ✅ | ✅ | ✅ |
-| cmd.exe | ⚠️ tampondan | ❌ | ✅ | ✅ |
-| Özel profil | ⚠️ tampondan | ❌ | ⚠️ | ❌ |
+| Kabuk | Platform | Komut metni | Çıkış kodu | Süre | Klasör |
+|---|---|---|---|---|---|
+| PowerShell 7 (pwsh) | ikisi | ✅ | ✅ | ✅ | ✅ |
+| Windows PowerShell 5.1 | Windows | ✅ | ✅ | ✅ | ✅ |
+| Git Bash / MSYS | Windows | ✅ | ✅ | ✅ | ✅ |
+| WSL | Windows | ✅ | ✅ | ✅ | ✅ |
+| cmd.exe | Windows | ⚠️ tampondan | ❌ | ✅ | ✅ |
+| zsh | macOS | ✅ | ✅ | ✅ | ✅ |
+| bash | macOS | ✅ | ✅ | ✅ | ✅ |
+| fish | macOS | ⚠️ tampondan | ❌ | ⚠️ | ❌ |
+| Özel profil | ikisi | ⚠️ tampondan | ❌ | ⚠️ | ❌ |
 
 **PowerShell**, kullanıcının kendi `prompt` fonksiyonunu ve profilini bozmuyor;
 sarmalıyor. Komut metni PSReadLine'ın `PSConsoleHostReadLine` kancasından
@@ -286,6 +306,29 @@ sonraki ilk tetikleme kullanıcının komutu sayılıyor. Alternatifler yetmiyor
 `history` numarasını karşılaştırmak `HISTCONTROL=ignoredups` ile tekrarlanan
 komutları kaçırıyor, basit bir "bir kez bildir" bayrağı ise kullanıcının kendi
 `PROMPT_COMMAND` parçalarını komut sanıyordu.
+
+**Bash macOS'ta** ayrıca login zincirini kendisi yüklüyor. `--init-file`
+bash'te yalnızca login *olmayan* etkileşimli kabukta okunuyor, dolayısıyla
+`--login` çıkarılmak zorunda; ama mac'te kullanıcı ayarları `.bash_profile`'da
+duruyor (Terminal.app login kabuğu açtığı için) ve PATH'i `/etc/profile`
+içindeki `path_helper` kuruyor. Betik ikisini de yükleyip `.bashrc`'yi bir kez
+daha yüklemiyor — çift yükleme PATH girdilerini ikiye katlardı.
+
+**Zsh** `--init-file` benzeri bir bayrak sunmuyor. Tek yol `ZDOTDIR`'i kendi
+klasörümüze çevirmek, ama o zaman kullanıcının `.zshenv`, `.zprofile`, `.zshrc`
+ve `.zlogin` dosyalarının **hiçbiri** okunmuyor. `shell-integration/zdotdir/`
+altındaki dört köprü dosyası her birini kendi sırasında yükleyip zinciri
+kurtarıyor; `.zshrc` sonunda `ZDOTDIR` kullanıcıya geri veriliyor — aksi hâlde
+`.zshrc`'ye satır ekleyen bir kurulum betiği (nvm, rustup) bizim klasöre yazar
+ve o klasör her açılışta üzerine yazıldığı için ayarı sessizce kaybolurdu.
+
+Zsh tarafı bash'ten daha temiz: komut satırını `preexec` doğrudan argüman
+olarak veriyor, `DEBUG` tuzağı ve sentinel gerekmiyor. Buna karşılık `precmd`
+kancası dizinin **başına** ekleniyor — `$?` bir sonraki kancaya kadar yaşıyor
+ve başka bir kanca önce koşarsa okunan çıkış kodu onunki olurdu. `133;B`
+işareti ise her istemde yeniden kontrol ediliyor: powerlevel10k ve starship
+PS1'i her istemde yeniden kuruyor, tek seferlik ekleme ilk istemden sonra
+kaybolurdu.
 
 **cmd.exe** çıkış kodu bildiremiyor: `PROMPT` değişkeni her istemde yeniden
 değerlendiriliyor ama `%ERRORLEVEL%` atama anında bir kez çözülüyor. İstem ve
@@ -717,12 +760,23 @@ yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
 ## Bilinen sınırlar
 
 - Kabuk süreçleri uygulamayla kapanır; arka planda canlı oturum tutulmuyor.
-- Komut önerisi (hayalet metin / liste) kabuğa bağlı: PSReadLine 2.2+ gerekiyor.
-  Windows PowerShell 5.1'in getirdiği 2.0 desteklemiyor; `Install-Module
-  PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck` ile güncellenir.
-  cmd ve bash'te karşılığı yok — orada `Ctrl+R` geçmiş araması kullanılıyor.
+- Komut önerisi (hayalet metin / liste) kabuğa bağlı. PowerShell'de PSReadLine
+  2.2+ gerekiyor; Windows PowerShell 5.1'in getirdiği 2.0 desteklemiyor,
+  `Install-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck`
+  ile güncellenir. zsh'de `zsh-autosuggestions` gerekiyor
+  (`brew install zsh-autosuggestions`) — kurmuyoruz, varsa kullanıyoruz.
+  cmd, bash ve fish'te karşılığı yok. Uygulamanın **kendi** önerisi bundan
+  bağımsız ve her kabukta çalışıyor.
 - Bağlantı renklendirmesi yalnızca **görünür satırlara** uygulanıyor; çok hızlı
   akan çıktıda renk bir kare gecikmeli oturuyor (erteleme penceresi 90 ms).
 - `cmd.exe` için çıkış kodu bildirilemiyor (yukarıda anlatıldı).
 - Bölünmüş bölme (split pane) yok; ayrım gruplar ve sekmeler üzerinden.
-- Yalnızca Windows: ConPTY ve kabuk tespiti Windows'a özgü.
+- **fish** için kabuk entegrasyonu yok: bash/zsh söz dizimini paylaşmadığı için
+  kendi betiği gerekiyor. Profil olarak açılıyor ve terminal çalışıyor, ama
+  komut geçmişi, çıkış kodu ve klasör takibi gelmiyor. Bilinçli olarak
+  "desteklenmiyor" işaretli — yarım çalışan bir entegrasyon sessiz olurdu.
+- **macOS'ta Option tuşu** varsayılan olarak Meta değil: Türkçe Mac klavyesinde
+  `@` = Option+Q ve Meta yapılırsa `@` yazılamıyor. Kelime kelime gezinme
+  (Option+B/F) isteyenler Ayarlar › Terminal › Klavye'den açabilir.
+- macOS derlemesi bir Mac'te yapılmak zorunda: Apple SDK'sı olmadan çapraz
+  derleme mümkün değil.

@@ -125,9 +125,27 @@ impl PtyManager {
 
         let exe = profile_executable(&profile);
         let mut args: Vec<String> = profile.args.clone();
+        // Entegrasyonun yazdigi ortam degiskenleri. Profil/grup env'inden SONRA
+        // uygulaniyor: kullanici ZDOTDIR yazdiysa bile kopru calismali, yoksa
+        // entegrasyon sessizce olur.
+        let mut int_env: Vec<(String, String)> = Vec::new();
+        // Kullanicinin GERCEK ZDOTDIR'i. En ozel kaynak once: grup env'i,
+        // sonra profil env'i, sonra uygulamanin kendi ortami.
+        let user_zdotdir = spec
+            .env
+            .get("ZDOTDIR")
+            .or_else(|| profile.env.get("ZDOTDIR"))
+            .cloned()
+            .or_else(|| std::env::var("ZDOTDIR").ok());
         let integration = profile.shell_integration
             && profile.kind.supports_integration()
-            && apply_integration(profile.kind, &mut args, integration_dir);
+            && apply_integration(
+                profile.kind,
+                &mut args,
+                &mut int_env,
+                integration_dir,
+                user_zdotdir.as_deref(),
+            );
 
         let cwd = spec
             .cwd
@@ -156,6 +174,13 @@ impl PtyManager {
             cmd.env(k, v);
         }
         for (k, v) in &spec.env {
+            cmd.env(k, v);
+        }
+        // Entegrasyon env'i kullanici env'inin USTUNE: ZDOTDIR'in bizim
+        // kopruyu gostermesi zorunlu, aksi halde kancalar hic yuklenmez.
+        // Kullanicinin kendi degeri kaybolmuyor - NTERMINAL_ZDOTDIR olarak
+        // kopruye geciyor ve kopru onun dosyalarini oradan yukluyor.
+        for (k, v) in &int_env {
             cmd.env(k, v);
         }
         for (k, v) in TERMINAL_ENV {
@@ -340,7 +365,19 @@ impl PtyManager {
 
 /// Kabuk entegrasyon betigini baslatma argumanlarina ekler.
 /// Basarili olursa true doner.
-fn apply_integration(kind: ShellKind, args: &mut Vec<String>, dir: &std::path::Path) -> bool {
+///
+/// `env` de yaziliyor cunku zsh argumanla yuklenemiyor: `--init-file`
+/// karsiligi yok, tek yol ZDOTDIR ortam degiskeni (bkz. Zsh dali).
+///
+/// `user_zdotdir`: kullanicinin GERCEK ZDOTDIR'i. Kopru dosyalari bununla onun
+/// kendi baslangic dosyalarini buluyor; None ise $HOME'a dusuyorlar.
+fn apply_integration(
+    kind: ShellKind,
+    args: &mut Vec<String>,
+    env: &mut Vec<(String, String)>,
+    dir: &std::path::Path,
+    user_zdotdir: Option<&str>,
+) -> bool {
     match kind {
         ShellKind::PowerShell | ShellKind::Pwsh => {
             let script = dir.join("nterminal.ps1");
@@ -369,17 +406,61 @@ fn apply_integration(kind: ShellKind, args: &mut Vec<String>, dir: &std::path::P
             if !script.is_file() {
                 return false;
             }
-            // --init-file kullanici rc dosyalarini atlar; betik onlari kendisi
-            // yukluyor. --login ile birlikte kullanmak anlamsiz oldugu icin
-            // varsa cikariyoruz.
+            // --login CIKARILMAK ZORUNDA: bash `--init-file`i yalnizca login
+            // OLMAYAN etkilesimli kabukta okuyor (man bash, --rcfile). Login
+            // kabugunda birakirsak betik hic yuklenmez ve entegrasyon sessizce
+            // olur.
+            //
+            // Bedeli: login kabugunun okudugu dosyalar (mac'te /etc/profile ve
+            // ~/.bash_profile) atlanir. Betik onlari KENDISI yukluyor - bkz.
+            // nterminal.sh, bolum 1.
             args.retain(|a| a != "--login" && a != "-l");
             args.push("--init-file".into());
+            // Git Bash yolu MSYS bicimine cevirmek zorunda (`/c/...`); mac ve
+            // Linux'ta yol zaten POSIX bicimde.
+            #[cfg(windows)]
             args.push(unix_style_path(&script));
+            #[cfg(not(windows))]
+            args.push(script.to_string_lossy().to_string());
             if !args.iter().any(|a| a == "-i") {
                 args.push("-i".into());
             }
             true
         }
+        ShellKind::Zsh => {
+            let zdotdir = dir.join("zdotdir");
+            // Kopru dosyalarindan .zshrc olmazsa kancalar hic yuklenmez.
+            if !zdotdir.join(".zshrc").is_file() {
+                return false;
+            }
+            // zsh'in `--init-file` karsiligi YOK. Baslangic dosyalarini
+            // degistirmenin tek yolu ZDOTDIR: kendi klasorumuzu gosteriyoruz,
+            // oradaki dort kopru dosyasi da kullanicinin gercek dosyalarini
+            // yukluyor (bkz. shell-integration/zdotdir/.zshenv).
+            env.push(("ZDOTDIR".into(), zdotdir.to_string_lossy().to_string()));
+            // Kullanicinin kendi ZDOTDIR'i varsa kopruye bildiriyoruz; yoksa
+            // kopru $HOME'a dusuyor. Kendi klasorumuzu geri vermemek SART:
+            // uygulama bir NTerminal sekmesinden baslatildiginda ZDOTDIR bizde
+            // olur, kopru kendi kendini yuklemeye calisir ve kullanicinin hicbir
+            // dosyasi okunmaz.
+            if let Some(user) = user_zdotdir.filter(|u| !u.trim().is_empty()) {
+                if std::path::Path::new(user) != zdotdir {
+                    env.push(("NTERMINAL_ZDOTDIR".into(), user.to_string()));
+                }
+            }
+            true
+        }
+        // Fish bash/zsh soz dizimini paylasmiyor; kendi betigi yazilmadan
+        // entegrasyon "acik ama hicbir sey bildirmiyor" olurdu.
+        // `supports_integration()` bunu zaten disarida tutuyor, burada da
+        // acikca yaziyoruz ki dal eklendiginde gozden kacmasin.
+        ShellKind::Fish => false,
+        // WSL yalnizca Windows'ta var. Ice alinan (import) bir yapilandirmadan
+        // mac'e gelmis bir WSL profili entegrasyon almiyor - profilin kendisi
+        // de zaten calismaz, `unavailable` isaretiyle gosteriliyor.
+        #[cfg(not(windows))]
+        ShellKind::Wsl => false,
+        #[cfg(windows)]
         ShellKind::Wsl => {
             let script = dir.join("nterminal.sh");
             if !script.is_file() {
@@ -403,6 +484,10 @@ fn apply_integration(kind: ShellKind, args: &mut Vec<String>, dir: &std::path::P
 }
 
 /// `C:\Users\x\y.sh` -> `/c/Users/x/y.sh` (MSYS / Git Bash bicimi).
+///
+/// Yalnizca Windows: mac ve Linux'ta yol zaten POSIX bicimde, cevrim yapmak
+/// bozardi.
+#[cfg(windows)]
 fn unix_style_path(path: &std::path::Path) -> String {
     let text = path.to_string_lossy().replace('\\', "/");
     match text.as_bytes() {
@@ -414,6 +499,9 @@ fn unix_style_path(path: &std::path::Path) -> String {
 }
 
 /// `C:\Users\x\y.sh` -> `/mnt/c/Users/x/y.sh` (WSL bicimi).
+///
+/// Yalnizca Windows: WSL baska platformda yok.
+#[cfg(windows)]
 fn wsl_mount_path(path: &std::path::Path) -> Option<String> {
     let text = path.to_string_lossy().replace('\\', "/");
     let bytes = text.as_bytes();

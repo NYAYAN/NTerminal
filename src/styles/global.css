@@ -30,6 +30,20 @@
   color-scheme: light;
 }
 
+/* macOS'ta tek aralıklı yazı tipi.
+ *
+ * Cascadia Mono ve Consolas mac'te YOK, yığın doğrudan jenerik `monospace`'e
+ * düşüyordu — Chromium'un o varsayılanı terminal ve kod listeleri için kötü.
+ * Menlo her mac'te var; SF Mono Xcode ile geliyor ve varsa daha iyi.
+ *
+ * `--ui-font` değişmiyor: içindeki `system-ui` mac'te zaten San Francisco'ya
+ * çözülüyor, Segoe adları sessizce atlanıyor.
+ *
+ * İşareti `setPlatform()` koyuyor (lib/platform.ts). */
+html[data-platform="macos"] {
+  --mono-font: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -11,6 +11,11 @@ import {
   reorder,
 } from "../lib/tabs";
 import { setLanguage as applyLanguage, t, tp } from "../lib/i18n";
+import {
+  defaultFontStack,
+  setFileManager as applyFileManager,
+  setPlatform as applyPlatform,
+} from "../lib/platform";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { canSuggest, cycleIndex, rankSuggestions } from "../lib/suggest";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
@@ -272,7 +277,10 @@ export const useStore = create<Store>((set, get) => ({
   settings: {
     version: 1,
     appearance: {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
+      // Rust tarafı (model.rs default_font_family) doğru kaynak; bu yalnızca
+      // açılış verisi gelmeden önceki ilk çizim için. Platforma göre olması
+      // şart: Cascadia mac'te yok, jenerik monospace terminal için kötü.
+      fontFamily: defaultFontStack(),
       fontSize: 14,
       lineHeight: 1.2,
       letterSpacing: 0,
@@ -299,6 +307,7 @@ export const useStore = create<Store>((set, get) => ({
       showOnlyFavoriteGroups: false,
       appSuggestions: true,
       shellPrediction: "list",
+      macOptionIsMeta: false,
     },
     profiles: [],
     defaultProfileId: "",
@@ -335,6 +344,10 @@ export const useStore = create<Store>((set, get) => ({
   async bootstrap() {
     try {
       const boot = await api.bootstrap();
+      // Platform en basta: dil ve tema metinleri dosya yoneticisi adini
+      // ("Gezgin" / "Finder") ve Cmd/Ctrl yazimini buna gore uretiyor.
+      applyPlatform(boot.platform);
+      applyFileManager(boot.fileManager, boot.fileManagerEn);
       // Dil temadan once: hata iletileri de dogru dilde cikabilsin.
       applyLanguage(boot.settings.language);
       applyThemeToDocument(getTheme(boot.settings.appearance.theme));

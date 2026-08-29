@@ -3,9 +3,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
-import { LANGS, localeTag, tp, useT, type Translate } from "../lib/i18n";
+import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
+import { isMac } from "../lib/platform";
 import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { THEMES } from "../lib/themes";
 import { useStore } from "../store/useStore";
@@ -30,7 +31,9 @@ const VIEW_MODES: { value: ViewMode; key: MsgKey }[] = [
  * Kabuk adlari cevrilmiyor: "PowerShell 7+ (pwsh)" bir urun adi. Yalnizca
  * aciklama tasiyan iki girdi (cmd, ozel) ceviriden geliyor.
  */
-const SHELL_KINDS: { value: ShellKind; label?: string; key?: MsgKey }[] = [
+type ShellKindOption = { value: ShellKind; label?: string; key?: MsgKey };
+
+const SHELL_KINDS_WINDOWS: ShellKindOption[] = [
   { value: "pwsh", label: "PowerShell 7+ (pwsh)" },
   { value: "power-shell", label: "Windows PowerShell 5.1" },
   { value: "cmd", key: "settings.shellCmd" },
@@ -38,6 +41,32 @@ const SHELL_KINDS: { value: ShellKind; label?: string; key?: MsgKey }[] = [
   { value: "wsl", label: "WSL" },
   { value: "custom", key: "settings.shellCustom" },
 ];
+
+/**
+ * macOS listesi ayri: Windows PowerShell 5.1, cmd ve WSL mac'te YOK, listede
+ * durmalari yalnizca karisiklik yaratir. Zsh basta cunku Catalina'dan beri
+ * mac'in varsayilan kabugu.
+ */
+const SHELL_KINDS_MAC: ShellKindOption[] = [
+  { value: "zsh", label: "Zsh" },
+  { value: "bash", label: "Bash" },
+  { value: "fish", label: "Fish" },
+  { value: "pwsh", label: "PowerShell 7+ (pwsh)" },
+  { value: "custom", key: "settings.shellCustom" },
+];
+
+/**
+ * Ice alinan (import) bir yapilandirmadan bu platformda olmayan bir kabuk turu
+ * gelebiliyor. Listede yoksa `select` bos gorunur ve kullanici kaydedince deger
+ * sessizce degisir - bu yuzden mevcut deger her zaman listeye ekleniyor.
+ */
+function shellKindOptions(current: ShellKind): ShellKindOption[] {
+  const base = isMac() ? SHELL_KINDS_MAC : SHELL_KINDS_WINDOWS;
+  if (base.some((o) => o.value === current)) return base;
+  const all = [...SHELL_KINDS_WINDOWS, ...SHELL_KINDS_MAC];
+  const found = all.find((o) => o.value === current);
+  return found ? [...base, found] : base;
+}
 
 function pickFolder(t: Translate, current: string | null): Promise<string | null> {
   return open({
@@ -53,7 +82,17 @@ function pickExe(t: Translate, current: string | null): Promise<string | null> {
     multiple: false,
     defaultPath: current ?? undefined,
     title: t("settings.pickShell"),
-    filters: [{ name: "Program", extensions: ["exe", "cmd", "bat", "com"] }],
+    // Uzanti suzgeci YALNIZCA Windows'ta anlamli. macOS'ta kabuk
+    // calistirilabilirlerinin uzantisi yok (/bin/zsh, /opt/homebrew/bin/fish);
+    // ayni suzgeci orada uygulamak dosya seciciyi bomboş gosterirdi ve
+    // kullanici hicbir kabuk secemezdi.
+    ...(isMac()
+      ? {}
+      : {
+          filters: [
+            { name: t("settings.programFilter"), extensions: ["exe", "cmd", "bat", "com"] },
+          ],
+        }),
   }).then((res) => (typeof res === "string" ? res : null));
 }
 
@@ -78,6 +117,12 @@ export function SettingsDialog() {
   const store = useStore.getState;
   const close = () => setUi({ settingsOpen: false, editingGroupId: null });
 
+  // Cumlenin ortasinda `<span className="mono">` var; ceviriyi ikiye bolmek
+  // yerine metni tek anahtarda tutup yer tutucudan boluyoruz - cumle yapisi
+  // dile gore degistigi icin "once su metin sonra kod" diye sabitlemek yanlis
+  // olur.
+  const [envHintBefore, envHintAfter] = tSplit("settings.groupEnvHint", "example");
+
   const profile = settings.profiles.find((p) => p.id === selectedProfileId);
   const group = groups.find((g) => g.id === selectedGroupId);
 
@@ -92,7 +137,7 @@ export function SettingsDialog() {
     const id = `prof-${crypto.randomUUID().replace(/-/g, "")}`;
     const fresh: Profile = {
       id,
-      name: "Yeni profil",
+      name: t("settings.newProfileName"),
       kind: "pwsh",
       shell: "",
       args: [],
@@ -461,18 +506,25 @@ export function SettingsDialog() {
                     <option value="paste">{t("settings.rightClickPaste")}</option>
                   </select>
                 </div>
-                <div className="check-row" data-setting="settings.ctrlCCopies">
-                  <input
-                    id="ctrlCCopiesSelection"
-                    type="checkbox"
-                    checked={settings.behavior.ctrlCCopiesSelection}
-                    onChange={(e) =>
-                      void store().patchBehavior({ ctrlCCopiesSelection: e.target.checked })
-                    }
-                  />
-                  <label htmlFor="ctrlCCopiesSelection">{t("settings.ctrlCCopies")}</label>
-                </div>
-                <div className="hintline">{t("settings.ctrlCHint")}</div>
+                {/* macOS'ta bu ayarin islevi yok: kopyalama orada Cmd+C,
+                    Ctrl+C ile bir cakisma olmuyor. Gostermek "acsam ne olur"
+                    diye dusundurur, cevabi "hicbir sey". */}
+                {!isMac() && (
+                  <>
+                    <div className="check-row" data-setting="settings.ctrlCCopies">
+                      <input
+                        id="ctrlCCopiesSelection"
+                        type="checkbox"
+                        checked={settings.behavior.ctrlCCopiesSelection}
+                        onChange={(e) =>
+                          void store().patchBehavior({ ctrlCCopiesSelection: e.target.checked })
+                        }
+                      />
+                      <label htmlFor="ctrlCCopiesSelection">{t("settings.ctrlCCopies")}</label>
+                    </div>
+                    <div className="hintline">{t("settings.ctrlCHint")}</div>
+                  </>
+                )}
               </div>
 
               <div className="section">
@@ -519,9 +571,30 @@ export function SettingsDialog() {
                     <option value="inline">{t("settings.predictionInline")}</option>
                     <option value="off">{t("settings.predictionOff")}</option>
                   </select>
-                  <div className="hintline">{t("settings.predictionHint")}</div>
+                  <div className="hintline">
+                    {t(isMac() ? "settings.predictionHintMac" : "settings.predictionHint")}
+                  </div>
                 </div>
               </div>
+              {/* Option/Meta yalnizca macOS'ta anlamli: Windows'ta Alt zaten
+                  Meta gibi davraniyor, ayar orada bir sey yapmazdi. */}
+              {isMac() && (
+                <div className="section">
+                  <h3>{t("settings.keyboard")}</h3>
+                  <div className="check-row" data-setting="settings.macOptionIsMeta">
+                    <input
+                      id="macOptionIsMeta"
+                      type="checkbox"
+                      checked={settings.behavior.macOptionIsMeta}
+                      onChange={(e) =>
+                        void store().patchBehavior({ macOptionIsMeta: e.target.checked })
+                      }
+                    />
+                    <label htmlFor="macOptionIsMeta">{t("settings.macOptionIsMeta")}</label>
+                  </div>
+                  <div className="hintline">{t("settings.macOptionIsMetaHint")}</div>
+                </div>
+              )}
             </>
           )}
 
@@ -690,15 +763,13 @@ export function SettingsDialog() {
                         value={profile.kind}
                         onChange={(e) => updateProfile({ kind: e.target.value as ShellKind })}
                       >
-                        {SHELL_KINDS.map((k) => (
+                        {shellKindOptions(profile.kind).map((k) => (
                           <option key={k.value} value={k.value}>
                             {k.label ?? t(k.key!)}
                           </option>
                         ))}
                       </select>
-                      <div className="hintline">
-                        Tür, kabuk entegrasyon betiğinin nasıl yükleneceğini belirler.
-                      </div>
+                      <div className="hintline">{t("settings.shellKindHint")}</div>
                     </div>
                     <div className="field">
                       <label>{t("settings.executable")}</label>
@@ -880,15 +951,16 @@ export function SettingsDialog() {
                     <div className="section" style={{ marginTop: 14 }}>
                       <h3>{t("settings.groupEnvVars")}</h3>
                       <p className="dim" style={{ marginTop: 0, fontSize: 11 }}>
-                        Profilin değişkenlerinin üstüne yazılır. Örnek: bir proje grubunda{" "}
-                        <span className="mono">NODE_ENV=development</span>.
+                        {envHintBefore}
+                        <span className="mono">NODE_ENV=development</span>
+                        {envHintAfter}
                       </p>
                       <EnvEditor
                         value={group.env}
                         onChange={(env) => store().updateGroup(group.id, { env })}
                       />
                       <p className="dim" style={{ fontSize: 11 }}>
-                        Değişiklikler yeni açılan sekmelerde geçerli olur.
+                        {t("settings.groupEnvApplyHint")}
                       </p>
                     </div>
                   </>
@@ -1005,10 +1077,10 @@ export function SettingsDialog() {
           <span className="dim">{t("settings.savedInstantly")}</span>
           <span className="spacer" />
           <button className="outline" onClick={() => setUi({ settingsOpen: false, transferOpen: true })}>
-            İçe / dışa aktar…
+            {t("settings.openTransfer")}
           </button>
           <button className="primary" onClick={close}>
-            Kapat
+            {t("common.close")}
           </button>
         </div>
       </div>

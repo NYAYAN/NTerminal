@@ -267,6 +267,11 @@ pub fn resolve_profile<'a>(settings: &'a Settings, profile_id: &str) -> Option<&
 }
 
 /// Profilde exe yazmamissa turden varsayilani uretir.
+///
+/// Platforma gore ayri: `.exe` uzantisi ve `cmd`/`wsl` yalnizca Windows'ta
+/// anlamli, mac'te mutlak yol vermek gerekiyor cunku bir profil PATH'i
+/// degistirmis bir ortamda da acilabiliyor.
+#[cfg(windows)]
 pub fn profile_executable(profile: &Profile) -> String {
     if !profile.shell.trim().is_empty() {
         return profile.shell.clone();
@@ -277,7 +282,28 @@ pub fn profile_executable(profile: &Profile) -> String {
         ShellKind::Cmd => "cmd.exe".into(),
         ShellKind::Bash => "bash.exe".into(),
         ShellKind::Wsl => "wsl.exe".into(),
+        ShellKind::Zsh => "zsh.exe".into(),
+        ShellKind::Fish => "fish.exe".into(),
         ShellKind::Custom => "cmd.exe".into(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn profile_executable(profile: &Profile) -> String {
+    if !profile.shell.trim().is_empty() {
+        return profile.shell.clone();
+    }
+    match profile.kind {
+        ShellKind::Zsh => "/bin/zsh".into(),
+        ShellKind::Bash => "/bin/bash".into(),
+        ShellKind::Fish => "fish".into(),
+        ShellKind::Pwsh => "pwsh".into(),
+        // Windows'a ozgu turler mac'te yok. Ice alinan (import) bir
+        // yapilandirmadan gelebiliyorlar; kullanilabilir tek kabuga dusuyoruz
+        // ki profil "acilmiyor" yerine "beklenenden farkli kabuk" olsun.
+        ShellKind::PowerShell | ShellKind::Cmd | ShellKind::Wsl | ShellKind::Custom => {
+            "/bin/zsh".into()
+        }
     }
 }
 

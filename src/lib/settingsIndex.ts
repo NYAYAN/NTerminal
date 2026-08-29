@@ -1,5 +1,6 @@
 import type { Translate } from "./i18n";
 import type { MsgKey } from "./messages";
+import { isMac, platform, type Platform } from "./platform";
 
 /**
  * Ayar bölümleri.
@@ -36,6 +37,23 @@ export interface SettingEntry {
   key: MsgKey;
   /** Açıklama satırı — aramaya dahil, çünkü kullanıcı ne yaptığını arıyor. */
   hint?: MsgKey;
+  /**
+   * macOS'ta gösterilen açıklama, farklıysa.
+   *
+   * Arama GÖRÜNEN metne göre çalışmalı: mac'te "PSReadLine" yazan bir ipucu
+   * ekranda yok, onu aramada eşleştirmek yanlış sonuç verir; "zsh-autosuggestions"
+   * ise ekranda var ve eşleşmeli.
+   */
+  hintMac?: MsgKey;
+  /**
+   * Ayarın var olduğu platformlar. Yazılmazsa her platformda var.
+   *
+   * Bazı ayarlar arayüzde koşullu çiziliyor (Option/Meta yalnızca mac'te,
+   * Ctrl+C kopyalama yalnızca Windows'ta). O ayarların diğer platformlarda
+   * arama sonucunda GÖRÜNMEMESİ gerekiyor: tıklayan kullanıcı hiçbir yere
+   * gitmiyor, sonuç var ama satır yok.
+   */
+  only?: Platform[];
 }
 
 /**
@@ -64,10 +82,22 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   // --------------------------------------------------------------- terminal
   { section: "terminal", key: "settings.copyOnSelect" },
   { section: "terminal", key: "settings.rightClick", hint: "settings.rightClickMenu" },
-  { section: "terminal", key: "settings.ctrlCCopies", hint: "settings.ctrlCHint" },
+  // macOS'ta kopyalama Cmd+C; Ctrl+C ile çakışma olmadığı için ayarın işlevi yok.
+  {
+    section: "terminal",
+    key: "settings.ctrlCCopies",
+    hint: "settings.ctrlCHint",
+    only: ["windows", "linux"],
+  },
   { section: "terminal", key: "settings.highlightLinks", hint: "settings.highlightLinksHint" },
   { section: "terminal", key: "settings.appSuggestions", hint: "settings.appSuggestionsHint" },
-  { section: "terminal", key: "settings.predictionShell", hint: "settings.predictionHint" },
+  { section: "terminal", key: "settings.predictionShell", hint: "settings.predictionHint", hintMac: "settings.predictionHintMac" },
+  {
+    section: "terminal",
+    key: "settings.macOptionIsMeta",
+    hint: "settings.macOptionIsMetaHint",
+    only: ["macos"],
+  },
 
   // ----------------------------------------------------------------- oturum
   { section: "session", key: "settings.restoreSessionLabel" },
@@ -152,7 +182,13 @@ export function searchSettings(query: string, t: Translate): SettingHit[] {
   const byLabel: SettingHit[] = [];
   const byHint: SettingHit[] = [];
 
+  const mac = isMac();
+  const here = platform();
+
   for (const entry of SETTINGS_INDEX) {
+    // Bu platformda çizilmeyen ayar aramada da çıkmamalı.
+    if (entry.only && !entry.only.includes(here)) continue;
+
     const label = t(entry.key);
     const hit: SettingHit = {
       ...entry,
@@ -164,7 +200,9 @@ export function searchSettings(query: string, t: Translate): SettingHit[] {
       byLabel.push(hit);
       continue;
     }
-    if (entry.hint && fold(t(entry.hint)).includes(needle)) byHint.push(hit);
+    // Ekranda hangi ipucu duruyorsa onda arıyoruz.
+    const hint = mac && entry.hintMac ? entry.hintMac : entry.hint;
+    if (hint && fold(t(hint)).includes(needle)) byHint.push(hit);
   }
 
   return [...byLabel, ...byHint];

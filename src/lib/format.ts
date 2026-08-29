@@ -67,7 +67,12 @@ export function shortenPath(path: string | null, maxSegments = 3): string {
   if (!path) return "";
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length <= maxSegments) return path;
-  return `…\\${parts.slice(-maxSegments).join("\\")}`;
+  // Ayırıcı YOLUN KENDİSİNDEN alınıyor, platformdan değil: `/Users/ali/proje`
+  // mac'te `…\Users\ali\proje` diye gösterilirse yol tanınmaz hâle geliyor.
+  // Yolun kendi biçimine bakmak ayrıca içe alınan (import) bir yapılandırmadan
+  // gelen Windows yolunu mac'te de doğru gösteriyor.
+  const sep = path.includes("\\") && !path.includes("/") ? "\\" : "/";
+  return `…${sep}${parts.slice(-maxSegments).join(sep)}`;
 }
 
 /**
