@@ -48,7 +48,7 @@ export function ChevronIcon({ open, ...props }: IconProps & { open: boolean }) {
 }
 
 /**
- * "Grupları Daralt": iki ok birbirine doğru bakıyor (Material `unfold_less`
+ * "Grupları daralt": iki ok birbirine doğru bakıyor (Material `unfold_less`
  * karşılığı) — içerik kapanıyor.
  */
 export function CollapseAllIcon(props: IconProps) {
@@ -61,7 +61,7 @@ export function CollapseAllIcon(props: IconProps) {
 }
 
 /**
- * "Grupları Aç": iki ok birbirinden uzaklaşıyor (`unfold_more`) — içerik
+ * "Grupları aç": iki ok birbirinden uzaklaşıyor (`unfold_more`) — içerik
  * açılıyor.
  */
 export function ExpandAllIcon(props: IconProps) {

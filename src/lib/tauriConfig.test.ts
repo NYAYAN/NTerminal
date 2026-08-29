@@ -121,3 +121,54 @@ describe("yapı betikleri", () => {
     }
   });
 });
+
+/**
+ * Çalışan uygulama denetimi.
+ *
+ * Cargo, bağlama adımında eski ikiliyi siliyor; uygulama açıksa Windows onu
+ * kilitliyor ve derleme `Access is denied (os error 5)` ile düşüyor. İletinin
+ * sebebi söylemediği yetmezmiş gibi, hata ÖN YÜZ DERLENDİKTEN sonra — iki
+ * dakika sonra — geliyor.
+ *
+ * Üç kez yaşandı; artık dağıtıcı en başta bakıyor. `openSync(exe, "r+")`
+ * çalışan bir exe'de EBUSY veriyor (ölçüldü).
+ */
+describe("çalışan uygulama denetimi", () => {
+  const runner = readFileSync(join(process.cwd(), "scripts/run.mjs"), "utf8");
+
+  it("ikiliyi yazma için açmayı deniyor", () => {
+    expect(runner, "kilit denetimi yok").toMatch(/openSync\([^)]*"r\+"\)/);
+  });
+
+  it("kilit hata kodlarını tanıyor", () => {
+    // Windows EBUSY veriyor; EPERM/EACCES başka kilit senaryolarında çıkıyor.
+    for (const code of ["EBUSY", "EPERM", "EACCES"]) {
+      expect(runner, `${code} tanınmıyor`).toContain(code);
+    }
+  });
+
+  it("denetim platform dağıtımından ÖNCE", () => {
+    // Sonra kalırsa ileti yine iki dakika sonra gelir — düzeltmenin bütün
+    // anlamı erken çıkmasıydı.
+    const denetim = runner.indexOf("kilitliIkili()");
+    const dagitim = runner.indexOf("if (WINDOWS) {");
+    expect(denetim, "denetim çağrılmıyor").toBeGreaterThan(-1);
+    expect(dagitim, "platform dağıtımı yok").toBeGreaterThan(-1);
+    expect(denetim, "denetim dağıtımdan sonra kalmış").toBeLessThan(dagitim);
+  });
+
+  it("deps/ altındaki ikiliye de bakıyor", () => {
+    // Asıl kilit ORADA: cargo ikiliyi önce `deps/` altında üretip profil
+    // klasörüne kopyalıyor, çalışan süreç `deps/` altındakini tutuyor.
+    // Yalnızca profil klasörüne bakan bir denetim yanılıyor — ölçüldü:
+    // `release/nterminal.exe` silinmişken bile derleme, deps altındaki
+    // ikiliyi açamadığı için LNK1104 ile düşüyor.
+    expect(runner, "deps/ denetlenmiyor").toContain('"deps"');
+  });
+
+  it("CARGO_TARGET_DIR ayarını dikkate alıyor", () => {
+    // Ayrı hedef dizin, uygulamayı kapatmadan derlemenin yolu; denetim oraya
+    // bakmalı, yoksa yanlış dosyayı yoklar.
+    expect(runner).toContain("CARGO_TARGET_DIR");
+  });
+});

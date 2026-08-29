@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import { prettyCombo } from "../lib/keys";
 import { isMac } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 
@@ -14,6 +15,9 @@ export function StatusBar() {
   const running = useStore((s) => s.running);
   const paths = useStore((s) => s.paths);
   const restored = useStore((s) => s.restoredSession);
+  const ui = useStore((s) => s.ui);
+  const setUi = useStore((s) => s.setUi);
+  const keybindings = useStore((s) => s.settings.keybindings);
   // Oturum nesnesi React durumunda degil; bu sayac degisince yeniden ciziyoruz.
   useStore((s) => s.statusTick);
 
@@ -23,6 +27,22 @@ export function StatusBar() {
   const profile = profiles.find((p) => p.id === tab?.profileId);
 
   const [historyCount, setHistoryCount] = useState<number | null>(null);
+
+  /** Eylemin kisayolu, ipucunda gostermek icin. */
+  const key = (action: string) => prettyCombo(keybindings[action] ?? "");
+
+  /**
+   * Panel dugmeleri acik/kapali gecisi yapiyor.
+   *
+   * Ayni kip zaten aciksa kapatiyor; farkli bir kip aciksa ona geciyor.
+   * Yalnizca acmak, ikinci tiklamayi ise yaramaz kilardi.
+   */
+  const togglePanel = (mode: "history" | "favorites") =>
+    setUi(
+      ui.historyOpen && ui.panelMode === mode
+        ? { historyOpen: false }
+        : { historyOpen: true, panelMode: mode },
+    );
 
   // Geçmiş sayısı sık değişiyor ama saniyede birkaç kez okumaya değmez.
   useEffect(() => {
@@ -141,6 +161,27 @@ export function StatusBar() {
           {t("status.restored")}
         </span>
       )}
+
+      {/* Gecmis ve Favoriler baslik cubugundan buraya indi: ikisi de bir PANEL
+          aciyor, bir pencere eylemi degil. Durum cubugu zaten "su an ne var"
+          seridi; panel anahtarlarinin yeri burasi. */}
+      <button
+        className={ui.historyOpen && ui.panelMode === "history" ? "status-btn on" : "status-btn"}
+        title={t("app.historyTitle", { keys: key("historyPanel") })}
+        aria-pressed={ui.historyOpen && ui.panelMode === "history"}
+        onClick={() => togglePanel("history")}
+      >
+        {t("app.history")}
+      </button>
+      <button
+        className={ui.historyOpen && ui.panelMode === "favorites" ? "status-btn on" : "status-btn"}
+        title={t("app.favoritesTitle", { keys: key("favorites") })}
+        aria-pressed={ui.historyOpen && ui.panelMode === "favorites"}
+        onClick={() => togglePanel("favorites")}
+      >
+        {"★ "}
+        {t("app.favorites")}
+      </button>
     </div>
   );
 }
