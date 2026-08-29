@@ -37,11 +37,14 @@ export function unescapeOsc(value: string): string {
 }
 
 /**
- * OSC 7 yükünü Windows yoluna çevirir.
+ * OSC 7 yükünü dosya yoluna çevirir.
  *
- * Gelen biçimler: `file:///C:/Users/x`, `file://makine/C:/Users/x`,
- * `file:///home/ali` (WSL). Sürücü harfi varsa ters eğik çizgiye çeviriyoruz;
- * yoksa (WSL / Linux) yolu olduğu gibi bırakıyoruz.
+ * Gelen biçimler: `file:///C:/Users/x`, `file://makine/C:/Users/x` (Windows),
+ * `file:///home/ali` (WSL, Linux), `file://mac/Users/ali` (macOS).
+ *
+ * Sürücü harfi varsa ters eğik çizgiye çeviriyoruz — Windows yolu böyle
+ * görünmeli. Yoksa yol OLDUĞU GİBİ kalıyor: POSIX yolunda ayırıcıyı
+ * değiştirmek onu bozar.
  */
 export function cwdFromFileUri(payload: string): string | null {
   const trimmed = payload.trim();

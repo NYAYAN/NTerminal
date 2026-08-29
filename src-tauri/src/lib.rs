@@ -5,6 +5,7 @@ mod history;
 mod model;
 mod osinfo;
 mod paths;
+mod platform;
 pub mod pty;
 mod shellint;
 mod shells;
@@ -68,6 +69,14 @@ pub struct Bootstrap {
     /// Windows yapi numarasi. xterm.js ConPTY satir akisi davranisini buna
     /// gore seciyor; bkz. osinfo.rs.
     pub windows_build: u32,
+    /// Uygulamanin uzerinde kostugu platform. Arayuz buna bakarak Cmd/Ctrl
+    /// seciyor, `windowsPty` verip vermeyecegine karar veriyor ve yazi tipi
+    /// ontanimini belirliyor.
+    pub platform: platform::Platform,
+    /// Dosya yoneticisinin adi ("Gezgin" / "Finder"). Arayuz metinlerine
+    /// `{fm}` olarak giriyor; iki dil icin ayri.
+    pub file_manager: String,
+    pub file_manager_en: String,
 }
 
 fn paths_info(state: &AppState) -> PathsInfo {
@@ -97,6 +106,9 @@ fn app_bootstrap(state: State<AppState>) -> Bootstrap {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         restored,
         windows_build: osinfo::build_number(),
+        platform: platform::Platform::current(),
+        file_manager: platform::file_manager_name().to_string(),
+        file_manager_en: platform::file_manager_name_en().to_string(),
     }
 }
 
@@ -493,14 +505,15 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 /// `window.open` cagiriyor, Tauri webview'unde ise bu hicbir sey yapmiyor -
 /// linke tiklamak sessizce isleve yaramiyordu.
 ///
-/// `cmd /c start` DEGIL: url kabuktan gecerse icindeki `&`, `|`, `^` gibi
-/// karakterler komut ayirici olur (`?a=1&b=2` gibi siradan bir sorgu dizesi
-/// bile yeter). `rundll32 url.dll,FileProtocolHandler` url'i tek bir arguman
-/// olarak aliyor, araya kabuk girmiyor.
+/// Isletim sistemine nasil verildigi platforma gore degisiyor; ikisi de kabugu
+/// ARAYA SOKMUYOR (bkz. platform.rs). Url terminal ciktisindan geliyor, yani
+/// guvenilmez bir kaynak: kabuktan gecerse icindeki `&`, `|`, `;` karakterleri
+/// komut ayiricisina donusur - `?a=1&b=2` gibi siradan bir sorgu dizesi bile
+/// yeter.
 ///
 /// Sema beyaz listeli: yalnizca http/https. `file:`, `ms-msdt:` gibi semalar
 /// terminal ciktisindaki rastgele bir metnin yerel bir seyi calistirmasina yol
-/// acabilir - cikti guvenilir bir kaynak degil.
+/// acabilir.
 #[tauri::command]
 fn open_external(url: String) -> CmdResult<()> {
     let lower = url.to_ascii_lowercase();
@@ -511,25 +524,24 @@ fn open_external(url: String) -> CmdResult<()> {
     if url.chars().any(|c| c.is_control()) {
         return Err("baglantida denetim karakteri var".into());
     }
-    std::process::Command::new("rundll32.exe")
-        .arg("url.dll,FileProtocolHandler")
-        .arg(&url)
-        .spawn()
-        .map_err(fail)?;
+    platform::open_url(&url).map_err(fail)?;
     Ok(())
 }
 
-/// Verilen klasoru Dosya Gezgini'nde acar.
+/// Verilen klasoru sistemin dosya yoneticisinde acar (Gezgin / Finder).
 #[tauri::command]
 fn reveal_in_explorer(path: String) -> CmdResult<()> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
         return Err(format!("yol bulunamadi: {path}"));
     }
-    std::process::Command::new("explorer.exe")
-        .arg(p)
-        .spawn()
-        .map_err(fail)?;
+    // Dizin olmasi sart: `open` / `explorer` bir DOSYAYA verildiginde onu
+    // varsayilan uygulamayla CALISTIRIR. Cagiran yerlerin hepsi dizin veriyor
+    // ama denetim burada, cagiranin disiplinine guvenmiyoruz.
+    if !p.is_dir() {
+        return Err(format!("klasor degil: {path}"));
+    }
+    platform::reveal_path(p).map_err(fail)?;
     Ok(())
 }
 

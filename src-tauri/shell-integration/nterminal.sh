@@ -10,9 +10,44 @@ fi
 NTERMINAL_INTEGRATION_LOADED=1
 
 # --- 1) kullanicinin kendi baslangic dosyalari ------------------------------
-# Etkilesimli, login olmayan bir kabugun normalde okudugu sirayi taklit ediyoruz.
-if [ -f /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi
-if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi
+#
+# --init-file ile geldigimiz icin bash bunlarin hicbirini kendiliginden
+# okumuyor; sirayi biz taklit ediyoruz. Yoksa alias'lar, PATH ve tema gider.
+#
+# Zincir platforma gore DEGISIYOR cunku kullanicilarin ayarlarini yazdigi yer
+# degisiyor. pty.rs `--login`i cikarmak zorunda (bash `--init-file`i yalnizca
+# login OLMAYAN etkilesimli kabukta okuyor), dolayisiyla login zincirini de
+# gerektiginde biz yukluyoruz.
+case "${OSTYPE:-}" in
+  darwin*)
+    # macOS: Terminal.app login kabugu actigi icin kullanicilar ayarini
+    # .bash_profile'a yaziyor, PATH'i de /etc/profile icindeki path_helper
+    # kuruyor. Login zincirini birebir taklit ediyoruz.
+    #
+    # .bashrc'yi AYRICA yuklemiyoruz: mac'te profil dosyasi gerekiyorsa onu
+    # kendisi yukluyor ve iki kez yuklemek PATH girdilerini cift yazardi.
+    if [ -f /etc/profile ]; then . /etc/profile; fi
+    __nterm_profile=""
+    for __nterm_f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [ -f "$__nterm_f" ]; then
+        __nterm_profile="$__nterm_f"
+        . "$__nterm_f"
+        break
+      fi
+    done
+    # Hic profil dosyasi yoksa .bashrc'ye dusuyoruz: ayarini Linux
+    # aliskanligiyla oraya yazmis bir kullanici bos kabukla karsilasmasin.
+    if [ -z "$__nterm_profile" ] && [ -f "$HOME/.bashrc" ]; then
+      . "$HOME/.bashrc"
+    fi
+    unset __nterm_f __nterm_profile
+    ;;
+  *)
+    # Git Bash ve WSL: etkilesimli, login olmayan kabugun okudugu sira.
+    if [ -f /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi
+    if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi
+    ;;
+esac
 
 # --- 2) yardimcilar ---------------------------------------------------------
 

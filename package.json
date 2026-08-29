@@ -8,9 +8,9 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
-    "start": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/dev.ps1",
-    "bundle": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/build.ps1",
-    "test": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/test.ps1",
+    "start": "node scripts/run.mjs dev",
+    "bundle": "node scripts/run.mjs build",
+    "test": "node scripts/run.mjs test",
     "tauri": "tauri"
   },
   "dependencies": {

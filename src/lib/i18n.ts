@@ -2,6 +2,7 @@ import { useMemo, useSyncExternalStore } from "react";
 
 import type { Lang } from "../types";
 import { MESSAGES, type MsgKey, type PluralBase } from "./messages";
+import { fileManager } from "./platform";
 
 /**
  * Arayüz dili.
@@ -56,12 +57,19 @@ export type Params = Record<string, string | number>;
 export function t(key: MsgKey, params?: Params): string {
   const entry = MESSAGES[key];
   const text = current === "en" ? entry[1] : entry[0];
-  if (!params) return text;
-  // Eşleşmeyen yer tutucu olduğu gibi kalıyor: eksik parametre sessizce
-  // "undefined" yazmaktan iyi, hatayı gösteriyor.
-  return text.replace(/\{(\w+)\}/g, (whole, name: string) =>
-    name in params ? String(params[name]) : whole,
-  );
+  // Yer tutucu yoksa hızlı yol: metinlerin büyük çoğunluğu böyle.
+  if (!text.includes("{")) return text;
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => {
+    if (params && name in params) return String(params[name]);
+    // `{fm}` yerleşik parametre: dosya yöneticisinin adı platforma göre
+    // değişiyor ("Gezgin" / "Finder") ve birkaç metinde geçiyor. Her çağrı
+    // yerinde elle geçirmek unutulmaya açık — biri unutulsa mac kullanıcısına
+    // "Gezgin" yazardı ve bu ancak mac'te görülürdü.
+    if (name === "fm") return fileManager(current);
+    // Eşleşmeyen yer tutucu olduğu gibi kalıyor: eksik parametre sessizce
+    // "undefined" yazmaktan iyi, hatayı gösteriyor.
+    return whole;
+  });
 }
 
 /**

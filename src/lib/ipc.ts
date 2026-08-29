@@ -77,6 +77,13 @@ export const api = {
   configImportApply: (path: string, options: ImportOptions) =>
     invoke<ImportResult>("config_import_apply", { path, options }),
 
+  /**
+   * Klasörü sistemin dosya yöneticisinde açar.
+   *
+   * Ad Windows'tan kalma ama işlev platforma göre: Windows'ta Gezgin, macOS'ta
+   * Finder (bkz. `src-tauri/src/platform.rs`). Arayüzdeki metin `{fm}` yer
+   * tutucusuyla doğru adı yazıyor.
+   */
   revealInExplorer: (path: string) => invoke<void>("reveal_in_explorer", { path }),
   /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
   openExternal: (url: string) => invoke<void>("open_external", { url }),

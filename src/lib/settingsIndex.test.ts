@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_LANG, setLanguage, t } from "./i18n";
+import { setPlatform } from "./platform";
 import { MESSAGES } from "./messages";
 import {
   SECTIONS,
@@ -166,5 +167,78 @@ describe("ayar arama", () => {
     expect(searchSettings("theme", t).map((h) => h.key)).toContain("settings.colorTheme");
     // Türkçe etiket artık eşleşmemeli: arama görünen metne göre çalışıyor.
     expect(searchSettings("renk teması", t)).toEqual([]);
+  });
+});
+
+describe("platforma bağlı ayarlar", () => {
+  afterEach(() => setPlatform("windows"));
+
+  it("mac'e özgü ayar Windows'ta aramada çıkmıyor", () => {
+    // Arayüzde `isMac()` koşuluyla çiziliyor. Windows'ta arama sonucunda
+    // görünürse tıklayan kullanıcı hiçbir yere gitmiyor — sonuç var, satır yok.
+    setPlatform("windows");
+    const hits = searchSettings("option", t);
+    expect(hits.map((h) => h.key)).not.toContain("settings.macOptionIsMeta");
+  });
+
+  it("mac'te o ayar aramada çıkıyor", () => {
+    setPlatform("macos");
+    const hits = searchSettings("option", t);
+    expect(hits.map((h) => h.key)).toContain("settings.macOptionIsMeta");
+  });
+
+  it("mac'te açıklama araması mac metnine göre", () => {
+    // Ekranda hangi ipucu duruyorsa onda aranmalı.
+    //
+    // "PSReadLine" ayırt edici DEĞİL: pwsh mac'te de kurulabiliyor ve orada da
+    // PSReadLine kullanıyor, iki metinde de geçiyor. Ayırt edici olan, yalnızca
+    // o platformda anlamı olan ifadeler.
+    setPlatform("macos");
+    expect(
+      searchSettings("zsh-autosuggestions", t).map((h) => h.key),
+      "mac ipucundaki ifade bulunamadı",
+    ).toContain("settings.predictionShell");
+    expect(
+      searchSettings("Windows PowerShell", t).map((h) => h.key),
+      "mac'te ekranda olmayan ifade eşleşti",
+    ).not.toContain("settings.predictionShell");
+  });
+
+  it("Windows'ta açıklama araması Windows metnine göre", () => {
+    setPlatform("windows");
+    expect(searchSettings("Windows PowerShell", t).map((h) => h.key)).toContain(
+      "settings.predictionShell",
+    );
+    expect(
+      searchSettings("zsh-autosuggestions", t).map((h) => h.key),
+      "Windows'ta ekranda olmayan ifade eşleşti",
+    ).not.toContain("settings.predictionShell");
+  });
+
+  it("Windows'a özgü ayar mac'te aramada çıkmıyor", () => {
+    // Ctrl+C kopyalama mac'te işlevsiz: kopyalama orada Cmd+C.
+    setPlatform("macos");
+    expect(searchSettings("Ctrl+C", t).map((h) => h.key)).not.toContain("settings.ctrlCCopies");
+    setPlatform("windows");
+    expect(searchSettings("Ctrl+C", t).map((h) => h.key)).toContain("settings.ctrlCCopies");
+  });
+
+  it("platforma bağlı ayarların hepsi arayüzde koşullu çiziliyor", () => {
+    // İndekste platform kısıtı yazıp arayüzde koşulsuz çizmek tersi hataya yol
+    // açar: kullanıcı işe yaramayan bir onay kutusu görür.
+    const source = readFileSync(
+      join(process.cwd(), "src/components/SettingsDialog.tsx"),
+      "utf8",
+    );
+    const gated = SETTINGS_INDEX.filter((e) => e.only);
+    // Tarama boş dönerse bu test hiçbir şey doğrulamaz.
+    expect(gated.length, "platforma bağlı ayar bulunamadı").toBeGreaterThan(0);
+    for (const entry of gated) {
+      const at = source.indexOf(`data-setting="${entry.key}"`);
+      expect(at, `${entry.key} arayüzde yok`).toBeGreaterThan(-1);
+      // Satırdan geriye doğru bakıp isMac() koşulu arıyoruz.
+      const before = source.slice(Math.max(0, at - 900), at);
+      expect(before, `${entry.key} isMac() koşulu olmadan çiziliyor`).toContain("isMac()");
+    }
   });
 });

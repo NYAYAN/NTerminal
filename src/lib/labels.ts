@@ -40,6 +40,8 @@ const SHELL_BADGES: Record<ShellKind, string> = {
   cmd: "CMD",
   bash: "SH",
   wsl: "WSL",
+  zsh: "ZSH",
+  fish: "FISH",
   custom: "EXE",
 };
 

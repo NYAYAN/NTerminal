@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import { isMac } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 
 export function StatusBar() {
@@ -89,7 +90,15 @@ export function StatusBar() {
           className={session.prediction === "unsupported" ? "pill warn" : "pill"}
           title={
             session.prediction === "unsupported"
-              ? t("status.predictionUnsupportedTitle")
+              ? // Cozum yolu platforma gore farkli: Windows'ta PSReadLine
+                // guncellemesi, mac'te zsh-autosuggestions kurulumu. Yanlis
+                // platformun tavsiyesini gostermek kullaniciyi bos yere
+                // ugrastirir.
+                t(
+                  isMac()
+                    ? "status.predictionUnsupportedTitleMac"
+                    : "status.predictionUnsupportedTitle",
+                )
               : session.prediction === "off"
                 ? t("status.predictionOffTitle")
                 : t("status.predictionOnTitle", { view: session.prediction })

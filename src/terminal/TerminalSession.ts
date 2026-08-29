@@ -12,6 +12,7 @@ import { t } from "../lib/i18n";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys } from "../lib/suggest";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
+import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
 import type { Settings } from "../types";
 
@@ -158,16 +159,32 @@ export class TerminalSession {
       scrollback: init.settings.appearance.scrollback,
       theme: theme.xterm,
       convertEol: false,
-      macOptionIsMeta: false,
+      // macOS'ta Option'ı Meta yapmak kullanıcının seçimi. Varsayılan kapalı:
+      // Türkçe Mac klavyesinde `@` = Option+Q ve açık olsa `@` yazılamazdı —
+      // terminalde `@angular/cli` ya da bir e-posta adresi yazmak imkânsız
+      // olurdu. Açıkken Option+B/F kelime kelime gezinmeyi veriyor (Windows'ta
+      // Alt'ın yaptığı iş). Diğer platformlarda ayarın etkisi yok.
+      macOptionIsMeta: isMac() && init.settings.behavior.macOptionIsMeta,
       rightClickSelectsWord: false,
-      // buildNumber şart: xterm satır akışını (reflow)
+      // windowsPty YALNIZCA Windows'ta verilmeli.
+      //
+      // Windows'ta buildNumber şart: xterm satır akışını (reflow)
       // `backend === "conpty" && buildNumber >= 21376` koşuluyla açıyor.
       // Vermezsek Windows 11'de bile eski kipte kalır ve pencere yeniden
       // boyutlandırıldığında uzun satırlar yanlış birleşir.
-      windowsPty: {
-        backend: "conpty",
-        ...(init.windowsBuild > 0 ? { buildNumber: init.windowsBuild } : {}),
-      },
+      //
+      // macOS'ta ise vermek AKTIF ZARARLI: xterm o bayrağı görünce ConPTY'ye
+      // özgü düzeltmeleri uyguluyor — satırın son karakteri boşluk değilse
+      // "bu satır kaydırılmış" varsayıyor. Gerçek bir Unix PTY'de bu varsayım
+      // yanlış ve alakasız satırlar birleşmiş görünüyor.
+      ...(platform() === "windows"
+        ? {
+            windowsPty: {
+              backend: "conpty" as const,
+              ...(init.windowsBuild > 0 ? { buildNumber: init.windowsBuild } : {}),
+            },
+          }
+        : {}),
     });
 
     this.term.loadAddon(this.fit);
@@ -921,11 +938,30 @@ ${dim}[${
    * kullaniciyi uyarma sansi veriyoruz.
    */
   async copyForCtrlC(): Promise<"copied" | "failed" | "passthrough"> {
-    if (!this.settings.behavior.ctrlCCopiesSelection) return "passthrough";
-    if (!this.term.hasSelection()) return "passthrough";
+    if (!this.wantsCtrlCCopy()) return "passthrough";
     const ok = await this.copySelection();
     this.term.clearSelection();
     return ok ? "copied" : "failed";
+  }
+
+  /**
+   * Ctrl+C bu an KOPYALAMALI mı?
+   *
+   * Senkron olması şart: karar `preventDefault` verilmeden önce alınmak
+   * zorunda. Yanlış tarafa düşerse iki sessiz hatadan biri oluyor — ya seçim
+   * kopyalanmıyor, ya da (daha kötüsü) tuş yutulup SIGINT kabuğa hiç
+   * ulaşmıyor ve çalışan komut durdurulamıyor.
+   *
+   * Kural TEK YERDE: `App.tsx` de bunu çağırıyor. İki yerde ayrı yazılsaydı
+   * biri güncellenip diğeri unutulduğunda tam olarak o SIGINT kaybı olurdu.
+   *
+   * macOS'ta her zaman `false`: kopyalama orada Cmd+C, dolayısıyla Ctrl+C ile
+   * bir çakışma yok ve Ctrl+C tamamen kabuğun tuşu.
+   */
+  wantsCtrlCCopy(): boolean {
+    if (isMac()) return false;
+    if (!this.settings.behavior.ctrlCCopiesSelection) return false;
+    return this.term.hasSelection();
   }
 
   /** Geçmişten seçilen komutu istem satırına yazar; çalıştırmak kullanıcıya kalır. */

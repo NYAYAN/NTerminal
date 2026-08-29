@@ -21,19 +21,34 @@ pub enum ShellKind {
     Cmd,
     Bash,
     Wsl,
+    /// macOS'un varsayilan kabugu (Catalina'dan beri).
+    Zsh,
+    Fish,
     Custom,
 }
 
 impl Default for ShellKind {
     fn default() -> Self {
-        ShellKind::PowerShell
+        // Platforma gore: Windows'ta her kurulumda bulunan kabuk PowerShell,
+        // macOS'ta zsh. Bu deger yalnizca eksik/bozuk bir profil okundugunda
+        // devreye giriyor ama yanlis platform varsayilani orada da is gormez
+        // bir profil uretir.
+        #[cfg(windows)]
+        return ShellKind::PowerShell;
+        #[cfg(not(windows))]
+        return ShellKind::Zsh;
     }
 }
 
 impl ShellKind {
     /// Kabuk entegrasyonu (OSC 133/633) bu tur icin desteklenir mi?
+    ///
+    /// `Custom` disinda hepsi destekli. `Fish` bilincli olarak DISARIDA: fish
+    /// bash/zsh soz dizimini paylasmiyor, kendi entegrasyon betigi yazilmadan
+    /// destekli saymak "acildi ama hicbir sey bildirmiyor" durumuna yol acar -
+    /// gecmis, oneri ve cikis kodu sessizce calismaz.
     pub fn supports_integration(self) -> bool {
-        !matches!(self, ShellKind::Custom)
+        !matches!(self, ShellKind::Custom | ShellKind::Fish)
     }
 }
 
@@ -69,6 +84,19 @@ fn default_true() -> bool {
 }
 
 // ------------------------------------------------------------------ ayarlar
+
+/// Varsayilan tek aralikli yazi tipi yigini.
+///
+/// Platform basina ayri olmasi SART: Cascadia Mono ve Consolas mac'te YOK,
+/// oradaki liste dogrudan jenerik `monospace`'e duserdi - Chromium'un varsayilani
+/// ise terminal icin kotu (dar, ligatursuz, satir yuksekligi tutarsiz).
+/// Menlo her mac'te var; SF Mono Xcode ile geliyor ve varsa daha iyi.
+pub fn default_font_family() -> String {
+    #[cfg(target_os = "macos")]
+    return "SF Mono, Menlo, Monaco, Courier New, monospace".into();
+    #[cfg(not(target_os = "macos"))]
+    return "Cascadia Mono, Consolas, Courier New, monospace".into();
+}
 
 /// Kapsayici duzeyinde `serde(default)`: eksik alanlar `Default` uygulamasindan
 /// dolduruluyor. Bu sart - yeni bir gorunum alani eklendiginde (ornek:
@@ -107,7 +135,7 @@ pub struct Appearance {
 impl Default for Appearance {
     fn default() -> Self {
         Self {
-            font_family: "Cascadia Mono, Consolas, Courier New, monospace".into(),
+            font_family: default_font_family(),
             font_size: 14,
             line_height: 1.2,
             letter_spacing: 0.0,
@@ -170,6 +198,17 @@ pub struct Behavior {
     /// PSReadLine tahminini aciyor. "off" = dokunma (kullanicinin kendi
     /// profil ayari gecerli kalsin).
     pub shell_prediction: String,
+    /// YALNIZCA macOS: Option tusu Meta gibi davransin.
+    ///
+    /// Acikken Option+B / Option+F / Option+Backspace kabuga ESC dizisi olarak
+    /// gidiyor, yani kelime kelime gezinme calisiyor - Windows'ta Alt'in yaptigi
+    /// is. Kapalıyken Option normal karakter uretiyor.
+    ///
+    /// Varsayilan KAPALI ve bu bilincli: Turkce Mac klavyesinde `@` = Option+Q.
+    /// Acik olsa `@` yazilamazdi - terminalde `@angular/cli`, e-posta adresi,
+    /// git remote yazmak imkansiz olurdu. Kelime gezinmesi bundan daha az
+    /// onemli, ustelik ayardan acilabiliyor.
+    pub mac_option_is_meta: bool,
 }
 
 impl Default for Behavior {
@@ -186,6 +225,7 @@ impl Default for Behavior {
             history_limit: 50_000,
             history_dedupe: false,
             show_only_favorite_groups: false,
+            mac_option_is_meta: false,
             app_suggestions: true,
             shell_prediction: "list".into(),
         }
@@ -235,7 +275,18 @@ impl Default for Settings {
     }
 }
 
+/// Varsayilan kisayollar.
+///
+/// macOS'ta Cmd, Windows'ta Ctrl. Bu kozmetik bir tercih degil: Cmd+T / Cmd+W /
+/// Cmd+C mac'te isletim sistemi genelinde beklenen tuslar, Ctrl ise terminalin
+/// KENDI tusu (Ctrl+C = SIGINT, Ctrl+D = EOF, Ctrl+R = ters arama). Mac'te
+/// Ctrl'u arayuz kisayoluna baglamak kabugun kendi tuslarini yer.
+///
+/// Bu yuzden mac tarafinda kopyala/yapistir da Shift'siz: Cmd+C ile SIGINT
+/// carpismasi yok, Windows'ta oldugu gibi secim-varsa-kopyala numarasina
+/// gerek kalmiyor.
 pub fn default_keybindings() -> BTreeMap<String, String> {
+    #[cfg(not(target_os = "macos"))]
     let pairs = [
         ("newTab", "Ctrl+T"),
         ("closeTab", "Ctrl+W"),
@@ -257,6 +308,34 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("zoomIn", "Ctrl+="),
         ("zoomOut", "Ctrl+-"),
         ("zoomReset", "Ctrl+0"),
+    ];
+    #[cfg(target_os = "macos")]
+    let pairs = [
+        ("newTab", "Cmd+T"),
+        ("closeTab", "Cmd+W"),
+        // Cmd+Tab isletim sistemine ait (uygulama gecisi), webview'e hic
+        // ulasmiyor. Mac terminalleri sekme gezinmesini Cmd+Shift+[ ] ve
+        // Ctrl+Tab ile veriyor; ikincisi burada cakismiyor cunku kabuga giden
+        // bir Ctrl+Tab dizisi yok.
+        ("nextTab", "Ctrl+Tab"),
+        ("prevTab", "Ctrl+Shift+Tab"),
+        ("newGroup", "Cmd+Shift+N"),
+        ("commandPalette", "Cmd+Shift+P"),
+        ("historyPanel", "Cmd+Shift+H"),
+        // Cmd+R: mac'te Ctrl+R kabugun ters aramasi, ona dokunmuyoruz.
+        ("historySearch", "Cmd+R"),
+        ("favorites", "Cmd+Shift+B"),
+        ("settings", "Cmd+,"),
+        ("renameTab", "Cmd+Shift+R"),
+        ("toggleLock", "Cmd+Shift+L"),
+        ("toggleViewMode", "Cmd+Shift+E"),
+        ("clearTerminal", "Cmd+K"),
+        ("findInTerminal", "Cmd+F"),
+        ("copy", "Cmd+C"),
+        ("paste", "Cmd+V"),
+        ("zoomIn", "Cmd+="),
+        ("zoomOut", "Cmd+-"),
+        ("zoomReset", "Cmd+0"),
     ];
     pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }

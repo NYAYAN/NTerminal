@@ -1,0 +1,36 @@
+# Gercek zsh 5.9'un gonderdigi OSC dizi sirasi - elle duzenlemeyin.
+#
+# Kosturulan komutlar (sirayla): echo tamam / false / echo "a;b" / exit
+# Ana makine adi MAKINE olarak sabitlendi; uretim betigi
+# scratchpad/zsh-osc-fixture.sh (Docker: alpine:3.21 + zsh).
+633;P;Prediction=off
+633;P;Cwd=/home/t/proje
+7;file://MAKINE/home/t/proje
+133;D
+633;P;Cwd=/home/t/proje
+7;file://MAKINE/home/t/proje
+133;A
+133;B
+633;E;echo tamam
+133;C
+133;D;0
+633;P;Cwd=/home/t/proje
+7;file://MAKINE/home/t/proje
+133;A
+133;B
+633;E;false
+133;C
+133;D;1
+633;P;Cwd=/home/t/proje
+7;file://MAKINE/home/t/proje
+133;A
+133;B
+633;E;echo "a\x3Bb"
+133;C
+133;D;0
+633;P;Cwd=/home/t/proje
+7;file://MAKINE/home/t/proje
+133;A
+133;B
+633;E;exit
+133;C

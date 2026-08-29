@@ -1,7 +1,19 @@
 // Rust tarafındaki model.rs / transfer.rs ile birebir eşleşen tipler.
 // serde `rename_all = "camelCase"` kullanıyor, o yüzden alanlar camelCase.
 
-export type ShellKind = "power-shell" | "pwsh" | "cmd" | "bash" | "wsl" | "custom";
+import type { Platform } from "./lib/platform";
+
+export type { Platform };
+
+export type ShellKind =
+  | "power-shell"
+  | "pwsh"
+  | "cmd"
+  | "bash"
+  | "wsl"
+  | "zsh"
+  | "fish"
+  | "custom";
 
 export type RightClickAction = "menu" | "paste" | "copyPaste";
 
@@ -68,6 +80,14 @@ export interface Behavior {
   appSuggestions: boolean;
   /** Kabukta komut önerisi: kapalı / satır içi hayalet metin / liste. */
   shellPrediction: ShellPrediction;
+  /**
+   * YALNIZCA macOS: Option tuşu Meta gibi davransın.
+   *
+   * Açıkken Option+B / Option+F / Option+Backspace kabuğa ESC dizisi olarak
+   * gidiyor — Windows'ta Alt'ın yaptığı iş. Varsayılan kapalı: Türkçe Mac
+   * klavyesinde `@` = Option+Q, açık olsa `@` yazılamazdı.
+   */
+  macOptionIsMeta: boolean;
 }
 
 export interface Settings {
@@ -135,6 +155,11 @@ export interface Bootstrap {
   restored: boolean;
   /** Windows yapı numarası; xterm'in ConPTY uyumluluk kipini seçmek için. */
   windowsBuild: number;
+  /** Uygulamanın koştuğu platform. Cmd/Ctrl seçimi ve `windowsPty` buna bağlı. */
+  platform: Platform;
+  /** Dosya yöneticisinin adı; arayüz metinlerinde `{fm}` yerine geçiyor. */
+  fileManager: string;
+  fileManagerEn: string;
 }
 
 export interface SpawnSpec {

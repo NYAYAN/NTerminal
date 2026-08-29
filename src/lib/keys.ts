@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import type { MsgKey } from "./messages";
+import { isMac } from "./platform";
 
 /**
  * Kısayol eşleştirme. Kısayollar ayarlarda "Ctrl+Shift+H" biçiminde metin
@@ -11,6 +12,10 @@ export interface ParsedCombo {
   ctrl: boolean;
   shift: boolean;
   alt: boolean;
+  /** macOS'ta Cmd (⌘), Windows'ta Win tuşu. Ayrı tutulması şart: mac'te Ctrl
+   *  kabuğun tuşu, Cmd arayüzün — ikisi karışırsa Ctrl+C hem SIGINT hem
+   *  kopyalama olur. */
+  meta: boolean;
   key: string;
 }
 
@@ -34,12 +39,25 @@ export function parseCombo(combo: string): ParsedCombo | null {
     .filter(Boolean);
   if (parts.length === 0) return null;
 
-  const result: ParsedCombo = { ctrl: false, shift: false, alt: false, key: "" };
+  const result: ParsedCombo = {
+    ctrl: false,
+    shift: false,
+    alt: false,
+    meta: false,
+    key: "",
+  };
   for (const part of parts) {
     const lower = part.toLowerCase();
     if (lower === "ctrl" || lower === "control") result.ctrl = true;
     else if (lower === "shift") result.shift = true;
-    else if (lower === "alt") result.alt = true;
+    // "option" mac'te Alt tuşunun adı; ayarlardan elle yazan kullanıcı ikisini
+    // de kullanabilmeli.
+    else if (lower === "alt" || lower === "option" || lower === "opt") result.alt = true;
+    // "cmd" / "command" / "meta" / "super" aynı tuş. Dört yazımın hepsi
+    // kabul ediliyor: kısayollar settings.json'da metin olarak duruyor ve
+    // başka bir makineden / sürümden gelebiliyor.
+    else if (lower === "cmd" || lower === "command" || lower === "meta" || lower === "super")
+      result.meta = true;
     else result.key = ALIASES[lower] ?? lower;
   }
   return result.key ? result : null;
@@ -51,6 +69,9 @@ export function matchCombo(event: KeyboardEvent, combo: string): boolean {
   if (event.ctrlKey !== parsed.ctrl) return false;
   if (event.altKey !== parsed.alt) return false;
   if (event.shiftKey !== parsed.shift) return false;
+  // Meta de TAM eşleşmeli. Yoksa mac'te Cmd+T ile eşleşen bir "Ctrl+T"
+  // tanımı, Cmd basılıyken de tetiklenirdi.
+  if (event.metaKey !== parsed.meta) return false;
 
   const key = event.key.toLowerCase();
   if (key === parsed.key) return true;
@@ -70,10 +91,14 @@ export function matchCombo(event: KeyboardEvent, combo: string): boolean {
 export function prettyCombo(combo: string): string {
   const parsed = parseCombo(combo);
   if (!parsed) return combo;
+  // macOS'ta kısayollar simgeyle ve ARALIKSIZ yazılır (⌘⇧K), sistem
+  // genelindeki yazım bu. Sıra da sabit: ⌃⌥⇧⌘ (Apple HIG).
+  if (isMac()) return prettyMac(parsed);
   const parts: string[] = [];
   if (parsed.ctrl) parts.push("Ctrl");
   if (parsed.shift) parts.push("Shift");
   if (parsed.alt) parts.push("Alt");
+  if (parsed.meta) parts.push("Win");
   const key = parsed.key;
   const named: Record<string, string> = {
     tab: "Tab",
@@ -89,14 +114,51 @@ export function prettyCombo(combo: string): string {
   return parts.join("+");
 }
 
+/**
+ * macOS yazımı: simgeler, ayırıcı yok, sabit sıra.
+ *
+ * Sıra Apple'ın kuralı (HIG): Control, Option, Shift, Command. Ayarlarda
+ * "Ctrl+Shift+K" yazan bir kısayolu mac kullanıcısına "⌃⇧K" olarak göstermek
+ * onun sistemin geri kalanında gördüğü biçim; "Ctrl+Shift+K" yazmak hangi
+ * tuşa basacağını düşündürüyor.
+ */
+function prettyMac(parsed: ParsedCombo): string {
+  let out = "";
+  if (parsed.ctrl) out += "⌃";
+  if (parsed.alt) out += "⌥";
+  if (parsed.shift) out += "⇧";
+  if (parsed.meta) out += "⌘";
+  const named: Record<string, string> = {
+    tab: "⇥",
+    enter: "↩",
+    escape: "⎋",
+    backspace: "⌫",
+    delete: "⌦",
+    " ": "Space",
+    arrowup: "↑",
+    arrowdown: "↓",
+    arrowleft: "←",
+    arrowright: "→",
+    pageup: "⇞",
+    pagedown: "⇟",
+  };
+  const key = parsed.key;
+  return out + (named[key] ?? (key.length === 1 ? key.toUpperCase() : key));
+}
+
 /** Klavye olayından kısayol metni üretir; ayarlarda "tuşa bas" alanı için. */
 export function comboFromEvent(event: KeyboardEvent): string | null {
   const key = event.key;
   if (["Control", "Shift", "Alt", "Meta"].includes(key)) return null;
   const parts: string[] = [];
+  // Sıra parseCombo'nun kabul ettiği her biçimde çalışıyor ama sabit tutmak
+  // ayarlar dosyasını okunur kılıyor.
   if (event.ctrlKey) parts.push("Ctrl");
   if (event.shiftKey) parts.push("Shift");
   if (event.altKey) parts.push("Alt");
+  // Depolanan biçim her platformda "Cmd": settings.json taşınabilir olmalı ve
+  // "Meta" kullanıcıya bir şey anlatmıyor.
+  if (event.metaKey) parts.push("Cmd");
   parts.push(key.length === 1 ? key.toUpperCase() : key);
   return parts.join("+");
 }

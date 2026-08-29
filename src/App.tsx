@@ -14,6 +14,7 @@ import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
 import { useT } from "./lib/i18n";
 import { matchCombo, prettyCombo } from "./lib/keys";
+import { isMac } from "./lib/platform";
 import { flushAllState, useStore } from "./store/useStore";
 
 export function App() {
@@ -137,8 +138,10 @@ export function App() {
         !event.altKey &&
         event.key.toLowerCase() === "c" &&
         session &&
-        store.settings.behavior.ctrlCCopiesSelection &&
-        session.hasSelection()
+        // Ayar, seçim ve platform kararı oturumda: mac'te bu her zaman false
+        // (kopyalama orada Cmd+C). Burada tekrar yazmak, iki tarafın
+        // ayrışması hâlinde tuşun yutulup SIGINT'in kaybolmasına yol açardı.
+        session.wantsCtrlCCopy()
       ) {
         return run(() => {
           void session.copyForCtrlC().then((result) => {
@@ -157,7 +160,16 @@ export function App() {
       // Enter ve Tab bilinçli olarak yakalanmıyor: Enter komutu çalıştırmalı,
       // Tab kabuğun tamamlamasına gitmeli.
       const suggest = store.ui.suggest;
-      if (inTerminal && suggest && suggest.items.length > 0 && !event.ctrlKey && !event.altKey) {
+      if (
+        inTerminal &&
+        suggest &&
+        suggest.items.length > 0 &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        // Cmd de dışarıda: mac'te Cmd+↑/↓ metin gezinme tuşları, onları
+        // öneri listesine yönlendirmek beklenmedik olur.
+        !event.metaKey
+      ) {
         if (event.key === "ArrowUp") return run(() => store.moveSuggestion(1));
         if (event.key === "ArrowDown") return run(() => store.moveSuggestion(-1));
         if (event.key === "ArrowRight") return run(() => store.acceptSuggestion());
@@ -214,8 +226,13 @@ export function App() {
       if (matchCombo(event, keys.zoomReset))
         return run(() => void store.patchAppearance({ fontSize: 14 }));
 
-      // Ctrl+1..9: gruptaki n. sekmeye geç.
-      if (event.ctrlKey && !event.shiftKey && !event.altKey && /^[1-9]$/.test(event.key)) {
+      // Ctrl+1..9 (mac'te Cmd+1..9): gruptaki n. sekmeye geç.
+      //
+      // Bu kısayol ayarlanabilir listede değil, o yüzden değiştiriciyi burada
+      // seçiyoruz. mac'te Ctrl+<rakam> kabuğa ait değil ama Cmd sistem geneli
+      // kural ve diğer kısayollarla tutarlı olması gerekiyor.
+      const tabMod = isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (tabMod && !event.shiftKey && !event.altKey && /^[1-9]$/.test(event.key)) {
         return run(() => store.selectTabByIndex(Number(event.key) - 1));
       }
     };

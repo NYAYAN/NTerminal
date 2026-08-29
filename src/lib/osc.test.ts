@@ -158,6 +158,8 @@ describe("biçimlendirme", () => {
   it("yol son parçasını verir", () => {
     expect(baseName("C:\\Users\\ali\\proje")).toBe("proje");
     expect(baseName("C:\\Users\\ali\\proje\\")).toBe("proje");
+    expect(baseName("/Users/ali/proje")).toBe("proje");
+    expect(baseName("/Users/ali/proje/")).toBe("proje");
     expect(baseName(null)).toBe("");
   });
 
@@ -165,6 +167,15 @@ describe("biçimlendirme", () => {
     expect(shortenPath("C:\\a\\b\\c\\d\\e", 2)).toBe("…\\d\\e");
     // Kısa yol olduğu gibi kalmalı.
     expect(shortenPath("C:\\a", 3)).toBe("C:\\a");
+  });
+
+  it("kısaltırken yolun kendi ayırıcısını koruyor", () => {
+    // POSIX yolunu `…\Users\ali` diye göstermek yolu tanınmaz hâle getiriyor;
+    // mac'te durum çubuğunda ve sekme altyazısında tam olarak bu görünürdü.
+    expect(shortenPath("/Users/ali/Desktop/proje/src", 2)).toBe("…/proje/src");
+    // İçe alınan bir yapılandırmadan gelen Windows yolu mac'te de kendi
+    // biçiminde kalmalı — çevirmek yolu yanlış göstermek olur.
+    expect(shortenPath("C:\\a\\b\\c\\d", 2)).toBe("…\\c\\d");
   });
 
   it("bulanık arama alt diziyi öne alır", () => {
@@ -183,8 +194,20 @@ describe("biçimlendirme", () => {
 });
 
 describe("kısayollar", () => {
+  // Gerçek bir KeyboardEvent'te dört değiştirici alanı da HER ZAMAN boolean.
+  // Birini eksik bırakmak `undefined` üretir ve `matchCombo`'nun tam
+  // karşılaştırması onu hiçbir şeyle eşleştiremez — test kodun değil,
+  // yardımcının hatasıyla düşer.
   const event = (init: Partial<KeyboardEvent>): KeyboardEvent =>
-    ({ ctrlKey: false, shiftKey: false, altKey: false, key: "", code: "", ...init }) as KeyboardEvent;
+    ({
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
+      key: "",
+      code: "",
+      ...init,
+    }) as KeyboardEvent;
 
   it("basit bileşimi eşler", () => {
     expect(matchCombo(event({ ctrlKey: true, key: "t", code: "KeyT" }), "Ctrl+T")).toBe(true);
