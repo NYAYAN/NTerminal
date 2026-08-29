@@ -272,7 +272,7 @@ export function GroupSidebar() {
     return [
       {
         kind: "item",
-        label: t(hasCustomTitle(tab) ? "menu.rename" : "menu.giveName"),
+        label: t("menu.rename"),
         hint: t("common.doubleClick"),
         run: () => startEditTab(tab),
       },

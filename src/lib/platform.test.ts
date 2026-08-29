@@ -123,27 +123,30 @@ describe("dosya yöneticisi adı", () => {
   });
 });
 
+// Menü etiketi ("Klasörü aç") artık dosya yöneticisinin adını yazmıyor —
+// menü zaten bir klasörün üzerinde. Yer tutucu, adı bilmenin işe yaradığı
+// açıklama metinlerinde kaldı: durum çubuğu ipucu ve komut paleti.
 describe("{fm} yerleşik parametresi", () => {
   it("metne platforma göre yerleşiyor", () => {
     setPlatform("windows");
     setFileManager("Gezgin", "Explorer");
-    expect(t("common.revealFolder")).toBe("Klasörü Gezgin'de aç");
+    expect(t("status.revealHint")).toBe("(Gezgin'de açmak için tıklayın)");
 
     setPlatform("macos");
     setFileManager("Finder", "Finder");
-    expect(t("common.revealFolder")).toBe("Klasörü Finder'de aç");
+    expect(t("status.revealHint")).toBe("(Finder'de açmak için tıklayın)");
   });
 
   it("İngilizcede de yerleşiyor", () => {
     setLanguage("en");
     setFileManager("Finder", "Finder");
-    expect(t("common.revealFolder")).toBe("Open folder in Finder");
+    expect(t("status.revealHint")).toBe("(click to open in Finder)");
   });
 
   it("yer tutucu metinde kalmıyor", () => {
     // Doldurulmamış bir `{fm}` ekranda olduğu gibi görünürdü.
     setFileManager("Finder", "Finder");
-    for (const key of ["common.revealFolder", "status.revealHint", "palette.reveal"] as const) {
+    for (const key of ["status.revealHint", "palette.reveal"] as const) {
       expect(t(key), `${key} içinde {fm} kalmış`).not.toContain("{fm}");
     }
   });
@@ -151,7 +154,7 @@ describe("{fm} yerleşik parametresi", () => {
   it("elle geçirilen parametre yerleşiği eziyor", () => {
     // Çağrı yeri özel bir ad vermek isterse öncelik onda olmalı.
     setFileManager("Finder", "Finder");
-    expect(t("common.revealFolder", { fm: "Dosyalar" })).toBe("Klasörü Dosyalar'de aç");
+    expect(t("status.revealHint", { fm: "Dosyalar" })).toBe("(Dosyalar'de açmak için tıklayın)");
   });
 
   it("bilinmeyen yer tutucu olduğu gibi kalıyor", () => {

@@ -4,6 +4,7 @@ import { formatWhen, fuzzyScore, shortenPath } from "../lib/format";
 import { tp, tSplit, useT } from "../lib/i18n";
 import { useStore } from "../store/useStore";
 import type { Favorite } from "../types";
+import { api } from "../lib/ipc";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 
 interface DraftForm {
@@ -116,6 +117,17 @@ export function FavoritesPanel() {
       label: t("common.copyCommand"),
       run: () => void navigator.clipboard?.writeText(favorite.command).catch(() => {}),
     },
+    // Favorinin klasoru satirda YAZIYOR ama acmanin bir yolu yoktu; ayni yol
+    // gecmis panelinde ve sekme menusunde acilabiliyordu.
+    ...(favorite.cwd
+      ? [
+          {
+            kind: "item" as const,
+            label: t("common.revealFolder"),
+            run: () => void api.revealInExplorer(favorite.cwd!).catch(() => {}),
+          },
+        ]
+      : []),
     { kind: "separator" },
     {
       kind: "item",

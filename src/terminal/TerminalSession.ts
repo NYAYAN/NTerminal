@@ -268,7 +268,18 @@ export class TerminalSession {
       this.pid = result.pid;
       this.shell = result.shell;
       this.integration = result.integration;
-      if (result.cwd) this.cwd = result.cwd;
+      // `updateCwd` — duz atama DEGIL.
+      //
+      // Duz atama oturumun kendi alanini dolduruyordu ama `onCwd` cagrilmadigi
+      // icin SEKMEYE hic ulasmiyordu. Sonuc: kabuk entegrasyonu olmayan bir
+      // profilde (Ozel profil, entegrasyonu kapatilmis profil) `tab.cwd`
+      // kalici olarak bos kaliyor ve "Klasoru ... ac" menu ogesi hic
+      // gorunmuyordu - klasor belliyken.
+      //
+      // `result.cwd` kabugun GERCEKTEN basladigi dizin (Rust tarafi profil,
+      // grup ve ev dizini sirasiyla cozuyor), yani entegrasyon bildirene kadar
+      // dogru cevap bu.
+      if (result.cwd) this.updateCwd(result.cwd);
     } catch (err) {
       this.term.write(
         `\r\n\x1b[31m${t("term.spawnFailed")}\x1b[0m ${String(err)}\r\n`,

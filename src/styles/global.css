@@ -281,6 +281,15 @@ input[type="color"] {
   height: 100%;
 }
 
+/* Uygulamanin baslik cubugu - artik TEK baslik cubugu.
+ *
+ * Yerel cerceve kapali (`decorations: false`). Onceden ustte iki serit
+ * duruyordu: isletim sisteminin kendi cubugu (Windows 11'de 32px, yalnizca
+ * uygulama adi ve uc dugme) ve hemen altinda bu. Yerel olani kaldirmak 32px
+ * kazandiriyor ve "iki baslik cubugu" gorunumunu bitiriyor.
+ *
+ * Surukleme ve cift tikla buyutme `data-tauri-drag-region` ile geliyor
+ * (bkz. App.tsx); pencere dugmeleri `WindowControls`. */
 .titlebar {
   grid-area: titlebar;
   display: flex;
@@ -289,6 +298,13 @@ input[type="color"] {
   padding: 0 8px;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
+}
+
+/* macOS'ta yerel trafik isiklari sol ustte duruyor (titleBarStyle: Overlay:
+ * susleme acik kaliyor, yalnizca cubuk saydamlasiyor). Icerik onlarin altindan
+ * gecmemeli - 78px uc dugmenin kapladigi alan arti nefes payi. */
+html[data-platform="macos"] .titlebar {
+  padding-left: 78px;
 }
 
 .titlebar .drag {
@@ -904,6 +920,57 @@ input[type="color"] {
   min-width: 0;
 }
 
+/* Pencere dugmeleri: kucult / buyut / kapat.
+ *
+ * Olculer Windows 11'in kendi cubugundan: dugme basina 46x32. Kullanici bu
+ * hedefleri kas hafizasiyla buluyor, farkli bir olcu vermek isabeti dusurur.
+ *
+ * `margin-top` cubugun ust dolgusunu geri aliyor ki dugmeler kosenin en ust
+ * pikseline kadar uzansin. */
+.win-controls {
+  display: flex;
+  flex: none;
+  align-self: stretch;
+  /* Baslik cubugunun yatay dolgusunu gecersiz kiliyor: dugmeler sag KENARA
+     dayanmali. */
+  margin-right: -8px;
+  margin-left: 4px;
+}
+
+.win-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-width: 46px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.win-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Kapat dugmesi hover'da kirmizi: Windows'un kendi davranisi ve tek yikici
+ * dugme oldugu icin otekilerden ayrismasi dogru. Beyaz metin sabit - kirmizi
+ * zeminde tema rengi okunmayabilir. */
+.win-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+/* Odak halkasi ic tarafta: dugme kose pikseline dayandigi icin disari tasan
+ * bir halka kirpilirdi. */
+.win-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 /* Etkin grubun rengi sekme cubugunun altinda ince bir cizgi olarak: kenar
    cubugu kapaliyken de hangi grupta oldugunuz gorunuyor. Border yerine
    ::after, cunku border kutuyu buyutup terminal satir hesabini kaydirir. */
@@ -1419,6 +1486,37 @@ input[type="color"] {
   border-radius: 999px;
   padding: 0 7px;
   line-height: 15px;
+}
+
+/* Durum cubugundaki panel anahtarlari (Gecmis, Favoriler).
+ *
+ * Cubugun geri kalani BILGI; bunlar ise tiklanabilir. Ayrimin gorunmesi icin
+ * kendi zeminleri ve imlecleri var, ama cubugun 11px olcusunden ayrilmiyorlar:
+ * daha buyuk bir dugme seridi ikiye boler. */
+.statusbar .status-btn {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.statusbar .status-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Acik panel: yalnizca renk degil ZEMIN de degisiyor - soluk bir cubukta tek
+   basina renk farki secilmiyor. */
+.statusbar .status-btn.on {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
 }
 
 .statusbar .pill.ok {

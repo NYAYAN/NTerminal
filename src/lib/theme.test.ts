@@ -182,7 +182,7 @@ describe("sekme etiketleri", () => {
   });
 
   it("hiçbir bilgi yoksa yedek etiket", () => {
-    expect(tabLabel(tab())).toBe("sekme");
+    expect(tabLabel(tab())).toBe("Sekme");
     expect(hasCustomTitle(tab({ customTitle: "   " }))).toBe(false);
   });
 

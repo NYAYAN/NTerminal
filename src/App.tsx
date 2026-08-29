@@ -12,6 +12,7 @@ import { SuggestionBar } from "./components/SuggestionBar";
 import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
+import { WindowControls } from "./components/WindowControls";
 import { useT } from "./lib/i18n";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
@@ -262,55 +263,17 @@ export function App() {
           NTerminal
           <span className="version">{appVersion}</span>
         </div>
-        <button
-          className="icon-btn"
-          title={t("app.newTabTitle", { keys: key("newTab") })}
-          onClick={() => useStore.getState().addTab()}
-        >
-          {t("app.newTab")}
-        </button>
-        <button
-          className="icon-btn"
-          title={t("app.newGroupTitle", { keys: key("newGroup") })}
-          onClick={() => useStore.getState().addGroup()}
-        >
-          {t("app.newGroup")}
-        </button>
-        <div className="drag" data-tauri-drag-region />
-        <button
-          className={ui.historyOpen && ui.panelMode === "history" ? "icon-btn on" : "icon-btn"}
-          title={t("app.historyTitle", { keys: key("historyPanel") })}
-          onClick={() =>
-            setUi(
-              ui.historyOpen && ui.panelMode === "history"
-                ? { historyOpen: false }
-                : { historyOpen: true, panelMode: "history" },
-            )
-          }
-        >
-          {t("app.history")}
-        </button>
-        <button
-          className={ui.historyOpen && ui.panelMode === "favorites" ? "icon-btn on" : "icon-btn"}
-          title={t("app.favoritesTitle", { keys: key("favorites") })}
-          onClick={() =>
-            setUi(
-              ui.historyOpen && ui.panelMode === "favorites"
-                ? { historyOpen: false }
-                : { historyOpen: true, panelMode: "favorites" },
-            )
-          }
-        >
-          {"★ "}
-          {t("app.favorites")}
-        </button>
-        <button
-          className="icon-btn"
-          title={t("app.transferTitle")}
-          onClick={() => setUi({ transferOpen: true })}
-        >
-          {t("app.transfer")}
-        </button>
+        {/* Baslik cubugunda TEK eylem: Ayarlar.
+         *
+         * Buradan cikanlar ve nereye gittikleri:
+         *   Yeni sekme  -> sekme cubugundaki "+" (ayrica Ctrl+T, komut paleti)
+         *   Yeni grup   -> kenar cubugundaki "+" (ayrica Ctrl+Shift+N, palet)
+         *   Aktar       -> Ayarlar penceresinin altindaki "Ice / disa aktar…"
+         *   Gecmis      -> durum cubugu
+         *   Favoriler   -> durum cubugu
+         *
+         * Hicbiri erisilemez olmadi; ikisi de zaten baska yerde vardi ve
+         * baslik cubugu bir eylem cubugu degil. */}
         <button
           className="icon-btn"
           title={t("app.settingsTitle", { keys: key("settings") })}
@@ -318,6 +281,14 @@ export function App() {
         >
           {t("app.settings")}
         </button>
+
+        <div className="drag" data-tauri-drag-region />
+
+        {/* Pencere dugmeleri en sagda ve kosenin ta kendisine dayali; yerel
+            baslik cubugu kapali (`decorations: false`) oldugu icin onun isini
+            bu cubuk devraldi. macOS'ta hic cizilmiyor - orada trafik isiklari
+            yerel kaliyor. */}
+        <WindowControls />
       </div>
 
       <GroupSidebar />
