@@ -1938,7 +1938,9 @@ input[type="color"] {
 }
 
 .modal-body {
-  padding: 14px;
+  /* Dikey dolgu yataydan az: kit olan dikey alan. Ayarlar penceresinde
+     ust+alt 28px, govdenin gorunur yuksekliginin (430px) %6,5'i idi. */
+  padding: 12px 14px;
   overflow-y: auto;
   flex: 1;
 }
@@ -2131,34 +2133,90 @@ input[type="color"] {
  * kapliyor (kendi ic izgaralari var), bolum duzeyindeki ipuclari ve onay
  * kutulari ise DENETIM sutununa yerlesiyor. Sonuc iki kenar: etiketler ve
  * denetimler. */
+/* Etiket sutunu.
+ *
+ * 170px olculerek secildi: 29 etiketten yalnizca biri ("Sekme basina
+ * kaydedilecek satir", 184px) tasip iki satira sariyor, ikinci en genis olan
+ * 145px. Kalan 20px denetim sutununa - dolayisiyla ipuclarina - gidiyor ve
+ * uzun ipuclari bir satir kisaliyor. 150px'e indirmek olcumde EK KAZANC
+ * vermedi (ipuclari zaten en az satir sayisina inmisti), yalnizca daha cok
+ * etiket sarardi. */
 :root {
-  --label-col: 190px;
+  --label-col: 170px;
+  /* Etiket ile denetim arasindaki bosluk.
+   *
+   * Degisken olmasi SART, sayi olarak yazmak degil: `.field`, `.section` ve
+   * `.settings-form` AYNI izgarayi kuruyor ve denetim sutununun hepsinde ayni
+   * yerde baslamasi gerekiyor. Birinde 8px otekinde 10px olunca sutun 2px
+   * kayiyor - olculdu (192'ye karsi 194) ve gozle fark edilmiyor ama duzen
+   * "biraz bozuk" gorunuyor. */
+  --label-gap: 10px;
 }
 
 .field {
   display: grid;
-  grid-template-columns: var(--label-col) 1fr;
-  gap: 10px;
+  /* `minmax(0, 1fr)` ZORUNLU, yalin `1fr` degil.
+   *
+   * `1fr` izin otomatik asgarisi min-content: iz, icindeki en genis
+   * sikismayan ogenin altina INMIYOR. Denetim sutununda "Gozat" dugmesi gibi
+   * (`white-space: nowrap`) sikismayan ogeler var ve bu yuzden Profiller
+   * bolumu yatayda kayiyordu - olculen: icerik 697px, gorunur alan 696px,
+   * yani 1px tasma ve tam ekranda bile yatay kaydirma cubugu.
+   *
+   * Ayni ders `.main` ve bolme izgarasinda bir kez odendi (bkz. layout.test). */
+  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  /* Sutun boslugu ortak degiskenden; satir boslugu ondan BAGIMSIZ ve daha dar:
+     alanin altindaki ipucu denetime yapisik durmali, kit olan dikey alan. */
+  column-gap: var(--label-gap);
+  row-gap: 4px;
   align-items: center;
-  padding: 6px 0;
+  padding: 4px 0;
+}
+
+/* Alan icindeki denetimler sikisabilmeli.
+ *
+ * Esnek ogenin varsayilan `min-width: auto`si icerik asgarisinde duruyor;
+ * yol kutusu + "Gozat" ikilisi bu yuzden dar pencerede tasiyordu. Olculen
+ * (modal 700px): 161px tasma -> 0. */
+.field > * {
+  min-width: 0;
+}
+
+.field input,
+.field select {
+  min-width: 0;
 }
 
 .field > label {
   color: var(--text-dim);
 }
 
-.field .hintline {
-  grid-column: 2;
+/* Ipucu metni - TEK bicim.
+ *
+ * Onceden yalnizca `.field .hintline` bicimlenmisti; bolum duzeyindeki
+ * ipuclari (`.section > .hintline`) kural bulamayip 13px ve TAM parlaklikta
+ * kaliyordu. Sonuc iki tur ipucu: kimi 11px soluk, kimi govde metniyle ayni.
+ * Ikincisi ayarin kendisiyle gorsel olarak yarisiyordu, ustelik satir basina
+ * daha cok yer kapliyordu.
+ *
+ * Olculen kazanc (Terminal bolumu): 552px -> 489px, yalnizca bu kuraldan. */
+.hintline {
   color: var(--text-dim);
   font-size: 11px;
-  margin-top: -2px;
+  line-height: 1.45;
+}
+
+.field .hintline {
+  grid-column: 2;
 }
 
 .section {
   display: grid;
-  grid-template-columns: var(--label-col) 1fr;
-  column-gap: 10px;
-  margin-bottom: 18px;
+  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  column-gap: var(--label-gap);
+  /* Bolumler arasi ayrimi baslik cizgisi zaten veriyor; 18px'in yarisi
+     gorsel olarak yeterli ve ucuncu bolumu ekrana sokuyor. */
+  margin-bottom: 12px;
 }
 
 /* Varsayilan: bolum cocugu iki sutunu kapliyor (basliklar, alanlar, listeler). */
@@ -2181,8 +2239,8 @@ input[type="color"] {
    denetim sutununa degil formun sol kenarina hizaliyordu. */
 .settings-form {
   display: grid;
-  grid-template-columns: var(--label-col) 1fr;
-  column-gap: 10px;
+  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  column-gap: var(--label-gap);
   align-content: start;
   min-width: 0;
 }
@@ -2198,20 +2256,20 @@ input[type="color"] {
 }
 
 .section > h3 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.7px;
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 5px;
+  padding-bottom: 4px;
 }
 
 .check-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 0;
+  padding: 3px 0;
 }
 
 /* Tarayicinin onay kutusuna ve kaydiriciya verdigi varsayilan bosluk denetim

@@ -224,3 +224,106 @@ describe("düğme hizalaması", () => {
     expect(CSS.slice(at, at + 120)).toContain(".modal-foot button");
   });
 });
+
+/**
+ * Ayar penceresinin izgara hizası.
+ *
+ * Üç ayrı kural AYNI izgarayı kuruyor — `.field` (tek ayar satırı), `.section`
+ * (bölüm gövdesi) ve `.settings-form` (iki panelli bölümlerin sağ tarafı) —
+ * ve denetim sütununun üçünde de aynı yerde başlaması gerekiyor. Sütun
+ * genişliği ya da boşluğu birinde değişirse öteki ikisi kayıyor.
+ *
+ * Bu soyut bir kaygı değil: yoğunluk çalışmasında `.field`in boşluğu 8px'e
+ * çekildi, `.section` 10px'te kaldı ve denetim sütunu 2px kaydı (ölçülen:
+ * 192'ye karşı 194). Gözle fark edilmiyor, düzen yalnızca "biraz bozuk"
+ * görünüyor. Ölçüm yakaladı; bu testler bir daha kaymasın diye.
+ */
+describe("ayarlar izgara hizası", () => {
+  const GRIDS = [".field", ".section", ".settings-form"];
+
+  it("üç kural da aynı sütun genişliği değişkenini kullanıyor", () => {
+    for (const selector of GRIDS) {
+      const body = ruleBody(selector);
+      expect(body, `${selector}: grid-template-columns yok`).toMatch(/grid-template-columns/);
+      expect(body, `${selector}: etiket sütunu değişkenden gelmiyor`).toContain(
+        "var(--label-col)",
+      );
+    }
+  });
+
+  it("denetim sütunu içerik asgarisinin altına inebiliyor", () => {
+    // Yalın `1fr` izinin otomatik asgarisi min-content: iz, içindeki en geniş
+    // SIKIŞMAYAN öğenin altına inmiyor. Denetim sütununda "Gözat" düğmesi gibi
+    // `white-space: nowrap` öğeler var ve bu yüzden Profiller bölümü yatayda
+    // kayıyordu — ölçülen: içerik 697px, görünür alan 696px. Tek piksel ama
+    // tarayıcının yatay kaydırma çubuğunu göstermesine yetiyor ve tam ekranda
+    // bile görünüyordu.
+    for (const selector of GRIDS) {
+      const body = ruleBody(selector);
+      expect(body, `${selector}: minmax(0, 1fr) yok — iz sıkışamıyor`).toMatch(
+        /grid-template-columns:\s*var\(--label-col\)\s+minmax\(\s*0\s*,\s*1fr\s*\)/,
+      );
+    }
+  });
+
+  it("alan içindeki denetimler sıkışabiliyor", () => {
+    // İzi düzeltmek yetmiyor: esnek öğenin varsayılan `min-width: auto`su da
+    // içerik asgarisinde duruyor. Yol kutusu + "Gözat" ikilisi bu yüzden dar
+    // pencerede taşıyordu (ölçülen, modal 700px: 161px taşma).
+    expect(ruleBody(".field > *"), ".field çocukları sıkışamıyor").toMatch(/min-width:\s*0/);
+    // Seçici iki satıra yayılıyor; `ruleBody` tam metni arıyor.
+    const inputs = ruleBody(".field input,\n.field select");
+    expect(inputs, "girdi ve seçim sıkışamıyor").toMatch(/min-width:\s*0/);
+  });
+
+  it("üç kural da aynı sütun boşluğu değişkenini kullanıyor", () => {
+    for (const selector of GRIDS) {
+      const body = ruleBody(selector);
+      expect(body, `${selector}: sütun boşluğu değişkenden gelmiyor`).toMatch(
+        /column-gap:\s*var\(--label-gap\)/,
+      );
+    }
+  });
+
+  it("sütun boşluğu sabit sayıyla yazılmamış", () => {
+    // `gap: 10px` kısayolu hem satır hem sütun boşluğunu kuruyor; sütun
+    // tarafını değişkenin dışına çıkardığı için kayma buradan geliyordu.
+    for (const selector of GRIDS) {
+      const body = ruleBody(selector);
+      expect(body, `${selector}: 'gap' kısayolu sütunu değişkenden koparıyor`).not.toMatch(
+        /(?:^|\s|;)gap\s*:/,
+      );
+    }
+  });
+
+  it("değişkenler tanımlı", () => {
+    // `:root` dosyada birden çok kez açılıyor (tema değişkenleri ayrı blokta),
+    // o yüzden tek bir bloğa değil dosyanın tamamına bakıyoruz.
+    expect(CSS, "--label-col tanımsız").toMatch(/--label-col:\s*\d+px/);
+    expect(CSS, "--label-gap tanımsız").toMatch(/--label-gap:\s*\d+px/);
+  });
+});
+
+/**
+ * İpucu metninin tek biçimi.
+ *
+ * Önceden yalnızca `.field .hintline` biçimlenmişti; bölüm düzeyindeki
+ * ipuçları (`.section > .hintline`) hiçbir kural bulamayıp 13px ve tam
+ * parlaklıkta kalıyordu — yani ayarın kendisiyle aynı ağırlıkta görünüyorlar,
+ * üstelik satır başına daha çok yer kaplıyorlardı. Ölçülen: iki ayrı biçim
+ * (`11px / rgb(139,148,158)` ve `13px / rgb(230,237,243)`).
+ */
+describe("ipucu metni", () => {
+  it("taban kuralda boyut ve renk tanımlı", () => {
+    const body = ruleBody(".hintline");
+    expect(body, "ipucu boyutu tanımsız").toMatch(/font-size:\s*11px/);
+    expect(body, "ipucu rengi tanımsız").toContain("var(--text-dim)");
+  });
+
+  it("alan içindeki ipucu biçimi yeniden tanımlamıyor", () => {
+    // Yeniden tanımlamak iki biçimin yeniden ayrışmasının yolu.
+    const body = ruleBody(".field .hintline");
+    expect(body, "font-size tekrar tanımlanmış").not.toMatch(/font-size/);
+    expect(body, "renk tekrar tanımlanmış").not.toMatch(/color/);
+  });
+});
