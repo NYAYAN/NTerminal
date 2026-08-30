@@ -17,7 +17,7 @@ import {
   setPlatform as applyPlatform,
 } from "../lib/platform";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
-import { canSuggest, cycleIndex, rankSuggestions } from "../lib/suggest";
+import { canSuggest, cycleIndex, rankSuggestions, type SuggestEntry } from "../lib/suggest";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
@@ -142,7 +142,7 @@ interface Store {
    * öneriyi yazma hızının gerisine düşürür. Açılışta bir kez yükleniyor,
    * sonra her yeni komut başa ekleniyor.
    */
-  suggestHistory: string[];
+  suggestHistory: SuggestEntry[];
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
   /**
@@ -209,7 +209,7 @@ interface Store {
   /** Onay penceresini açar; kullanıcı karar verene kadar bekler. */
   askConfirm: (request: Omit<ConfirmRequest, "id">) => Promise<boolean>;
   loadSuggestHistory: () => Promise<void>;
-  noteCommand: (command: string) => void;
+  noteCommand: (command: string, cwd: string | null) => void;
   /**
    * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
    * İsteğe bağlı — yokluğu "hayalet metin yok" demek.
@@ -916,7 +916,7 @@ export const useStore = create<Store>((set, get) => ({
         get().updateTab(tab.id, { lastCommand: command });
         // Öneri kaynağı anında güncellensin: yeni çalıştırdığınız komut
         // hemen önerilebilir olmalı.
-        get().noteCommand(command);
+        get().noteCommand(command, sessions.get(tab.id)?.cwd ?? null);
         get().closeSuggestions();
       },
       onCommandEnd: () => {
@@ -1113,13 +1113,16 @@ export const useStore = create<Store>((set, get) => ({
       .historyQuery({ limit: SUGGEST_SOURCE_LIMIT, dedupe: false })
       .catch(() => null);
     if (!page) return;
-    set({ suggestHistory: page.entries.map((e) => e.command) });
+    set({ suggestHistory: page.entries.map((e) => ({ command: e.command, cwd: e.cwd ?? null })) });
   },
 
-  noteCommand(command) {
+  noteCommand(command, cwd) {
     const text = command.trim();
     if (!text) return;
-    const next = [text, ...get().suggestHistory.filter((c) => c !== text)];
+    const next = [
+      { command: text, cwd },
+      ...get().suggestHistory.filter((e) => e.command !== text),
+    ];
     // Liste sınırsız büyümesin: öneri için son birkaç yüz komut yeterli.
     set({ suggestHistory: next.slice(0, SUGGEST_SOURCE_LIMIT) });
   },
@@ -1135,7 +1138,12 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
-    const items = rankSuggestions(get().suggestHistory, state.prefix);
+    // Dizin etkin oturumdan: aynı yerde çalıştırılmış komutlar önce gelsin.
+    const items = rankSuggestions(
+      get().suggestHistory,
+      state.prefix,
+      get().activeSession()?.cwd ?? null,
+    );
     if (items.length === 0) {
       if (ui.suggest) set({ ui: { ...ui, suggest: null } });
       return;

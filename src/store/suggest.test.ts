@@ -13,7 +13,10 @@ import { useStore } from "./useStore";
  * görünmüyor ya da ekranda takılı kalıyor — ikisi de sessiz.
  */
 
-const HISTORY = ["npm run bundle", "npm test", "git status", "npm run dev"];
+/** Dizini bilinmeyen kayıtlar: sıralama testleri dizine bakmıyor. */
+const gecmis = (...komutlar: string[]) => komutlar.map((command) => ({ command, cwd: null }));
+
+const HISTORY = gecmis("npm run bundle", "npm test", "git status", "npm run dev");
 
 function setBehavior(patch: Record<string, unknown>) {
   const settings = useStore.getState().settings;
@@ -98,7 +101,7 @@ describe("öneri durumu", () => {
     useStore.getState().moveSuggestion(1);
     expect(suggest()?.index).toBe(2);
 
-    useStore.setState({ suggestHistory: ["npm run bundle", "npm run dev"] });
+    useStore.setState({ suggestHistory: gecmis("npm run bundle", "npm run dev") });
     useStore.getState().updateSuggestions({ prefix: "npm run", full: "npm run" });
     expect(suggest()?.items).toHaveLength(2);
     expect(suggest()!.index).toBeLessThan(suggest()!.items.length);
@@ -116,29 +119,29 @@ describe("öneri durumu", () => {
 
 describe("öneri kaynağı", () => {
   it("yeni komut başa ekleniyor", () => {
-    useStore.getState().noteCommand("kubectl get pods");
-    expect(useStore.getState().suggestHistory[0]).toBe("kubectl get pods");
+    useStore.getState().noteCommand("kubectl get pods", null);
+    expect(useStore.getState().suggestHistory[0].command).toBe("kubectl get pods");
   });
 
   it("var olan komut başa taşınıyor, yinelenmiyor", () => {
-    useStore.getState().noteCommand("git status");
+    useStore.getState().noteCommand("git status", null);
     const list = useStore.getState().suggestHistory;
-    expect(list[0]).toBe("git status");
-    expect(list.filter((c) => c === "git status")).toHaveLength(1);
+    expect(list[0].command).toBe("git status");
+    expect(list.filter((e) => e.command === "git status")).toHaveLength(1);
   });
 
   it("boş komut eklenmiyor", () => {
     const before = useStore.getState().suggestHistory.length;
-    useStore.getState().noteCommand("");
-    useStore.getState().noteCommand("   ");
+    useStore.getState().noteCommand("", null);
+    useStore.getState().noteCommand("   ", null);
     expect(useStore.getState().suggestHistory).toHaveLength(before);
   });
 
   it("kaynak sınırsız büyümüyor", () => {
-    for (let i = 0; i < 600; i++) useStore.getState().noteCommand(`komut-${i}`);
+    for (let i = 0; i < 600; i++) useStore.getState().noteCommand(`komut-${i}`, null);
     // Her tuş vuruşunda taranıyor; liste sınırlı kalmalı.
     expect(useStore.getState().suggestHistory.length).toBeLessThanOrEqual(400);
-    expect(useStore.getState().suggestHistory[0]).toBe("komut-599");
+    expect(useStore.getState().suggestHistory[0].command).toBe("komut-599");
   });
 
   it("komut çalıştırıldığında kaynak güncelleniyor ve liste kapanıyor", () => {
@@ -146,10 +149,10 @@ describe("öneri kaynağı", () => {
     expect(suggest()).not.toBe(null);
 
     // onCommandStart'ın yaptığı iki iş.
-    useStore.getState().noteCommand("npm run e2e");
+    useStore.getState().noteCommand("npm run e2e", null);
     useStore.getState().closeSuggestions();
 
-    expect(useStore.getState().suggestHistory[0]).toBe("npm run e2e");
+    expect(useStore.getState().suggestHistory[0].command).toBe("npm run e2e");
     expect(suggest()).toBe(null);
   });
 });
