@@ -12,7 +12,10 @@ import { MAX_SUGGESTIONS, MIN_PREFIX, acceptKeys, canSuggest, cycleIndex, rankSu
  *    orada.
  */
 
-const HISTORY = [
+/** Dizini bilinmeyen kayıtlar. */
+const gecmis = (...komutlar: string[]) => komutlar.map((command) => ({ command, cwd: null }));
+
+const HISTORY = gecmis(
   "npm run bundle",
   "npm test",
   "git status",
@@ -20,7 +23,7 @@ const HISTORY = [
   "git commit -m x",
   "npm test",
   "dotnet run",
-];
+);
 
 describe("öneri sıralaması", () => {
   it("ön eke uyanları en yeniden eskiye veriyor", () => {
@@ -41,7 +44,7 @@ describe("öneri sıralaması", () => {
 
   it("büyük/küçük harf ayrımı yapmıyor", () => {
     expect(rankSuggestions(HISTORY, "NPM TE")).toEqual(["npm test"]);
-    expect(rankSuggestions(["Git Status"], "git")).toEqual(["Git Status"]);
+    expect(rankSuggestions(gecmis("Git Status"), "git")).toEqual(["Git Status"]);
   });
 
   it("yazılanın aynısını önermiyor", () => {
@@ -65,21 +68,65 @@ describe("öneri sıralaması", () => {
 
   it("ortada geçen metin ön ek sayılmıyor", () => {
     // Bulanık/altdizi eşleşmesi bilinçli olarak yok: öneri yazılanın devamı.
-    expect(rankSuggestions(["git commit"], "commit")).toEqual([]);
+    expect(rankSuggestions(gecmis("git commit"), "commit")).toEqual([]);
   });
 
   it("boş ve boşluklu kayıtlar atlanıyor", () => {
-    expect(rankSuggestions(["", "   ", "npm test"], "npm")).toEqual(["npm test"]);
+    expect(rankSuggestions(gecmis("", "   ", "npm test"), "npm")).toEqual(["npm test"]);
   });
 
   it("kayıtların baş/son boşlukları kırpılıyor", () => {
-    expect(rankSuggestions(["  npm test  "], "npm")).toEqual(["npm test"]);
+    expect(rankSuggestions(gecmis("  npm test  "), "npm")).toEqual(["npm test"]);
   });
 
   it("sınır uygulanıyor", () => {
-    const many = Array.from({ length: 50 }, (_, i) => `npm run task-${i}`);
+    const many = gecmis(...Array.from({ length: 50 }, (_, i) => `npm run task-${i}`));
     expect(rankSuggestions(many, "npm")).toHaveLength(MAX_SUGGESTIONS);
-    expect(rankSuggestions(many, "npm", 3)).toHaveLength(3);
+    expect(rankSuggestions(many, "npm", null, 3)).toHaveLength(3);
+  });
+});
+
+describe("dizine göre öncelik", () => {
+  /**
+   * Bildirilen belirti: `.../src-tauri/target` içinde `cd t` yazınca liste
+   * `cd NTerminal` öneriyordu — o klasör orada YOK, yani öneri kabul edilse
+   * komut hata verirdi. Yol içeren komutlar bulundukları dizine bağlı ama
+   * geçmiş tek bir havuz.
+   */
+  const KARISIK = [
+    { command: "cd NTerminal", cwd: "/repo" },
+    { command: "cd ..", cwd: "/repo/src-tauri/target" },
+    { command: "cd src-tauri", cwd: "/repo" },
+    { command: "cd target", cwd: "/repo/src-tauri/target" },
+  ];
+
+  it("aynı dizinde çalıştırılanlar önce geliyor", () => {
+    const out = rankSuggestions(KARISIK, "cd", "/repo/src-tauri/target");
+    expect(out.slice(0, 2), "bu dizinin komutları üstte değil").toEqual(["cd ..", "cd target"]);
+  });
+
+  it("başka dizindekiler atılmıyor, altta kalıyor", () => {
+    // Süzmek kullanıcıdan bir şey götürürdü: `npm test` her yerde geçerli.
+    const out = rankSuggestions(KARISIK, "cd", "/repo/src-tauri/target");
+    expect(out).toHaveLength(4);
+    expect(out.slice(2)).toEqual(["cd NTerminal", "cd src-tauri"]);
+  });
+
+  it("dizin bilinmiyorsa eski sıra korunuyor", () => {
+    // Geçmişten gelen eski kayıtların dizini boş olabilir.
+    expect(rankSuggestions(KARISIK, "cd", null)).toEqual([
+      "cd NTerminal",
+      "cd ..",
+      "cd src-tauri",
+      "cd target",
+    ]);
+  });
+
+  it("aynı dizin kotayı doldurursa diğerleri hiç girmiyor", () => {
+    const cok = Array.from({ length: 8 }, (_, i) => ({ command: `cd k${i}`, cwd: "/burada" }));
+    const out = rankSuggestions([...cok, { command: "cd baska", cwd: "/orada" }], "cd", "/burada");
+    expect(out).toHaveLength(MAX_SUGGESTIONS);
+    expect(out.includes("cd baska"), "başka dizinin komutu üste çıkmış").toBe(false);
   });
 });
 

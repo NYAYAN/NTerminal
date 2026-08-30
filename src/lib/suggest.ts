@@ -20,36 +20,58 @@ export const MIN_PREFIX = 2;
  */
 export const MAX_SUGGESTIONS = 5;
 
+/** Geçmişten gelen bir komut ve çalıştırıldığı dizin. */
+export interface SuggestEntry {
+  command: string;
+  /** Komutun çalıştırıldığı dizin; bilinmiyorsa null. */
+  cwd: string | null;
+}
+
 /**
  * Ön eke uyan komutları sıralar.
  *
  * `history` EN YENİDEN eskiye sıralı olmalı: en son çalıştırılan komut ilk
  * öneri olur. Yinelenenler ilk (yani en yeni) görüldüğü yerde tutulur.
+ *
+ * ## Neden dizin önemli
+ *
+ * Aynı dizinde çalıştırılmış komutlar ÖNCE geliyor. Bildirilen belirti bunu
+ * iyi anlatıyor: `.../src-tauri/target` içinde `cd t` yazınca liste
+ * `cd NTerminal` öneriyordu — o klasör orada yok, yani öneri tıklansa komut
+ * hata verirdi. Yol içeren komutlar (`cd`, `code`, `./betik`) bulundukları
+ * dizine bağlı ve geçmiş tek bir havuz.
+ *
+ * Süzme DEĞİL sıralama: başka dizinde çalıştırılmış komutlar listeden
+ * atılmıyor, altta kalıyor. `npm test` her yerde geçerli ve onu saklamak
+ * kullanıcıdan bir şey götürürdü.
  */
 export function rankSuggestions(
-  history: readonly string[],
+  history: readonly SuggestEntry[],
   prefix: string,
+  cwd: string | null = null,
   limit = MAX_SUGGESTIONS,
 ): string[] {
   const needle = prefix.toLowerCase();
   if (needle.length < MIN_PREFIX) return [];
 
   const seen = new Set<string>();
-  const out: string[] = [];
+  const ayni: string[] = [];
+  const diger: string[] = [];
 
-  for (const raw of history) {
-    const command = raw.trim();
+  for (const entry of history) {
+    const command = entry.command.trim();
     if (!command) continue;
     // Yazılanın aynısını önermek anlamsız: kabul etmek hiçbir şey değiştirmez.
     if (command === prefix) continue;
     if (!command.toLowerCase().startsWith(needle)) continue;
     if (seen.has(command)) continue;
     seen.add(command);
-    out.push(command);
-    if (out.length >= limit) break;
+    (cwd && entry.cwd === cwd ? ayni : diger).push(command);
+    // İki kova da dolduysa daha fazla taramaya gerek yok.
+    if (ayni.length >= limit) break;
   }
 
-  return out;
+  return [...ayni, ...diger].slice(0, limit);
 }
 
 /**
