@@ -583,6 +583,9 @@ export const MESSAGES = {
     "Gruplanabilir sekmeli terminal — Windows ve macOS. Tauri + Rust ve xterm.js üzerine kurulu.",
     "A terminal with groupable tabs for Windows and macOS. Built on Tauri + Rust and xterm.js.",
   ],
+  // Ad iki dilde de aynı; sözlükten geçiyor çünkü sabit kodlanmış arayüz
+  // metni taraması JSX metinlerini yakalıyor.
+  "settings.developer": ["Geliştirici · Nurullah YAYAN", "Developer · Nurullah YAYAN"],
   "settings.openFolderShort": ["Aç", "Open"],
   "settings.resetButton": [
     "Ayarları varsayılanlara döndür",

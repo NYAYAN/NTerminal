@@ -2,7 +2,7 @@
 name = "nterminal"
 version = "0.1.0"
 description = "Gruplanabilir sekmeli Windows terminali"
-authors = ["NYAYAN"]
+authors = ["Nurullah YAYAN"]
 edition = "2021"
 rust-version = "1.82"
 
