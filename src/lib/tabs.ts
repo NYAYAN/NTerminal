@@ -84,14 +84,22 @@ export function nextCollapsedAll(groups: { collapsed: boolean }[]): boolean {
 /**
  * Kenar cubugunda gosterilecek gruplar.
  *
- * Suzgec acikken yalnizca favoriler listelenir; etkin grup favori olmasa da
- * listede kalir - aksi halde kullanici calistigi yeri gozden kaybediyor.
+ * Suzgec acikken YALNIZCA favoriler listeleniyor. Istisna yok.
+ *
+ * Eskiden etkin grup favori olmasa da listede kaliyordu; gerekcesi "kullanici
+ * calistigi yeri gozden kaybetmesin"di. Kullanici bunun tersini istedi ve
+ * hakli: suzgec "favoriler" diyorsa listede favori olmayan bir satir gormek
+ * suzgecin ne yaptigini belirsiz kiliyor - hangi grubun neden orada oldugu
+ * anlasilmiyor.
+ *
+ * Kaybedilen sey sinirli: etkin grubun sekmeleri USTTEKI sekme cubugunda
+ * duruyor, yani calisilan yere erisim kapanmiyor. Yalnizca kenar cubugundaki
+ * satiri gitmis oluyor.
  */
-export function visibleGroups<T extends { id: string; favorite?: boolean }>(
+export function visibleGroups<T extends { favorite?: boolean }>(
   groups: T[],
   onlyFavorites: boolean,
-  activeGroupId: string | null,
 ): T[] {
   if (!onlyFavorites) return groups;
-  return groups.filter((g) => g.favorite === true || g.id === activeGroupId);
+  return groups.filter((g) => g.favorite === true);
 }
