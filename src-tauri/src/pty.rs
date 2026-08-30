@@ -145,6 +145,9 @@ impl PtyManager {
                 &mut int_env,
                 integration_dir,
                 user_zdotdir.as_deref(),
+                // Arayuzden geliyor (Behavior.shell_prediction). `int_env`den
+                // OKUNAMAZ: o vektor bu cagriyla doluyor, cagri aninda bos.
+                spec.env.get("NTERMINAL_PREDICTION").map(String::as_str),
             );
 
         let cwd = spec
@@ -377,6 +380,9 @@ fn apply_integration(
     env: &mut Vec<(String, String)>,
     dir: &std::path::Path,
     user_zdotdir: Option<&str>,
+    // Yalnizca Windows dalinda okunuyor (PSReadLine yolu); POSIX'te
+    // kullanilmiyor ve uyari uretmesin diye isaretli.
+    #[cfg_attr(not(windows), allow(unused_variables))] prediction: Option<&str>,
 ) -> bool {
     match kind {
         ShellKind::PowerShell | ShellKind::Pwsh => {
@@ -389,6 +395,42 @@ fn apply_integration(
             args.push("-NoExit".into());
             args.push("-File".into());
             args.push(script.to_string_lossy().to_string());
+
+            // Yalnizca Windows PowerShell 5.1: uygulamayla gelen PSReadLine'i
+            // gorunur kil.
+            //
+            // 5.1 PSReadLine 2.0 ile geliyor ve hicbir zaman guncellenmiyor;
+            // satir ici oneri icin 2.2+ gerekiyor. `PSModulePath`in BASINA
+            // kendi klasorumuzu koyuyoruz, kabuk arama sirasinda once bizimkini
+            // buluyor. Bu, oturum icinde modul degistirmekten daha guvenli:
+            // eski surum hic yuklenmiyor, dolayisiyla ayni assembly'nin iki
+            // surumunun carpismasi da soz konusu degil.
+            //
+            // pwsh'e DOKUNMUYORUZ: PowerShell 7.2+ zaten 2.2+ ile geliyor ve
+            // bizimkini one almak ileride onun daha yeni surumunu golgeleyip
+            // sessizce eskiye dusururdu.
+            //
+            // Kullanici oneriyi kapattiysa (`NTERMINAL_PREDICTION=off`) yolu
+            // hic degistirmiyoruz - kendi kurulumu ve ayari gecerli kalsin.
+            #[cfg(windows)]
+            if kind == ShellKind::PowerShell {
+                // Ayar YOKSA da yukluyoruz: arayuz varsayilani "list", yani
+                // oneri aciktir. Yalnizca acikca "off" denmisse dokunmuyoruz.
+                let wants_prediction = prediction != Some("off");
+                let modules = dir.join("modules");
+                if wants_prediction && modules.join("PSReadLine").join("PSReadLine.psd1").is_file() {
+                    // Kullanicinin kendi yolu KAYBOLMAMALI: bastan ekliyoruz,
+                    // ustune yazmiyoruz. Yoksa profilindeki modullerin hicbiri
+                    // bulunamaz.
+                    let existing = std::env::var("PSModulePath").unwrap_or_default();
+                    let value = if existing.is_empty() {
+                        modules.to_string_lossy().to_string()
+                    } else {
+                        format!("{};{}", modules.to_string_lossy(), existing)
+                    };
+                    env.push(("PSModulePath".into(), value));
+                }
+            }
             true
         }
         ShellKind::Cmd => {

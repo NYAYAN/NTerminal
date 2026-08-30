@@ -9,6 +9,11 @@
 *.cmd  text eol=crlf
 *.bat  text eol=crlf
 
+# Disaridan gelen (vendor) dosyalar oldugu gibi kalmali: satir sonu donusumu
+# imzali DLL'leri ve modul bildirimlerini degistirir.
+src-tauri/shell-integration/modules/** -text
+
 *.png  binary
+*.woff2 binary
 *.ico  binary
 *.icns binary

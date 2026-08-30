@@ -102,7 +102,10 @@ describe("öneri çubuğu", () => {
       fireEvent.click(rows(container)[2]);
     });
 
-    expect(accept).toHaveBeenCalledWith("a3");
+    // İkinci argüman öneriyi ÜRETEN önek: kabul ederken satır ekrandan
+    // yeniden okunmuyor (okunduğunda hayalet metin yüzünden yanlış çıkıyor ve
+    // komut kabuğa iki kez gidebiliyordu).
+    expect(accept).toHaveBeenCalledWith("a3", "a");
     expect(focus, "kabul sonrası odak terminale dönmeli").toHaveBeenCalled();
     expect(useStore.getState().ui.suggest, "kabul sonrası liste kapanmalı").toBe(null);
     spy.mockRestore();
@@ -118,7 +121,7 @@ describe("öneri çubuğu", () => {
     render(<SuggestionBar />);
     await act(async () => useStore.getState().acceptSuggestion());
 
-    expect(accept).toHaveBeenCalledWith("a2");
+    expect(accept).toHaveBeenCalledWith("a2", "a");
     spy.mockRestore();
   });
 

@@ -209,6 +209,19 @@ pub struct Behavior {
     /// git remote yazmak imkansiz olurdu. Kelime gezinmesi bundan daha az
     /// onemli, ustelik ayardan acilabiliyor.
     pub mac_option_is_meta: bool,
+    /// Pencere kapatilinca ne olsun: "quit" | "background".
+    ///
+    /// "background": pencere gizleniyor, uygulama menu cubugu (macOS) ya da
+    /// bildirim alani (Windows) simgesinde yasamaya devam ediyor. Kabuk
+    /// surecleri de yasiyor - zaten amaci bu: uzun suren bir islemi kapatmadan
+    /// pencereyi kaldirabilmek.
+    ///
+    /// Varsayilan "background". Uygulamanin menu cubugunda / bildirim alaninda
+    /// her zaman bir simgesi var; kapatma dugmesine basinca tumden olmesi bu
+    /// varlikla celisiyordu - simge de kayboluyordu. Teams, Slack ve benzeri
+    /// uygulamalarin davranisi da bu. Tamamen cikmak icin simgedeki "Cikis"
+    /// ya da bu ayar var.
+    pub close_action: String,
 }
 
 impl Default for Behavior {
@@ -228,6 +241,7 @@ impl Default for Behavior {
             mac_option_is_meta: false,
             app_suggestions: true,
             shell_prediction: "list".into(),
+            close_action: "background".into(),
         }
     }
 }

@@ -165,7 +165,10 @@ describe("öneriyi kabul etme", () => {
     useStore.getState().moveSuggestion(1);
     useStore.getState().acceptSuggestion();
 
-    expect(accept).toHaveBeenCalledWith("npm test");
+    // İkinci argüman öneriyi ÜRETEN önek. Kabul ederken satır ekrandan
+    // yeniden okunmuyor: okuma boş dönebiliyor ve o durumda önerinin tamamı
+    // yazılıp komut kabuğa iki kez giriyordu.
+    expect(accept).toHaveBeenCalledWith("npm test", "npm");
     expect(suggest()).toBe(null);
     spy.mockRestore();
   });

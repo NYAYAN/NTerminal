@@ -43,7 +43,7 @@ export interface SessionCallbacks {
   /** Kabuk komut önerisini açabildi mi. */
   onPrediction?: (state: PredictionState) => void;
   /** İstem satırında yazılmakta olan metin değişti. */
-  onInput?: (state: { prefix: string; full: string }) => void;
+  onInput?: (state: { prefix: string; full: string; hintTail: boolean }) => void;
 }
 
 export interface SessionInit {
@@ -406,6 +406,51 @@ export class TerminalSession {
     this.safeFit();
   }
 
+  /**
+   * İmlecin bulunduğu satırın ekrandaki yeri (görünüm koordinatları).
+   *
+   * Öneri listesi buna göre konumlanıyor. Neden gerekli: liste eskiden ızgarada
+   * ayrı bir satırdı ve yüksekliği öneri sayısıyla değişiyordu; her değişim
+   * terminal alanını küçültüp büyütüyor, `ResizeObserver` `fit()` çağırıyor ve
+   * kabuk istemi yeniden çiziyordu. Kullanıcının gördüğü titreme buydu —
+   * terminal hücresi ~17px, öneri satırı ~24px olduğu için tek bir önerinin
+   * eklenmesi bile ekranı bir iki satır kaydırıyordu.
+   *
+   * Liste artık yüzüyor ve terminale hiç dokunmuyor; nereye konduğunu
+   * `lib/anchor.ts` belirliyor.
+   *
+   * Hücre yüksekliği `.xterm-screen`den ölçülüyor, xterm'in iç
+   * `_renderService`inden değil: o özel bir alan ve sürümle birlikte sessizce
+   * değişiyor. Ekran yüksekliğini satır sayısına bölmek aynı sonucu veriyor ve
+   * herkese açık.
+   */
+  cursorAnchor(): {
+    top: number;
+    left: number;
+    width: number;
+    bottom: number;
+    cellHeight: number;
+  } | null {
+    if (!this.container) return null;
+    const screen = this.container.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen || this.term.rows < 1) return null;
+
+    const rect = screen.getBoundingClientRect();
+    if (rect.height < 1) return null;
+    const cellHeight = rect.height / this.term.rows;
+
+    // `cursorY` görünüme göre (0..rows-1), kaydırmadan bağımsız.
+    const row = Math.min(Math.max(this.term.buffer.active.cursorY, 0), this.term.rows - 1);
+    return {
+      top: rect.top + row * cellHeight,
+      left: rect.left,
+      width: rect.width,
+      // Listenin sabit durdugu yer: terminalin dibi.
+      bottom: rect.bottom,
+      cellHeight,
+    };
+  }
+
   private safeFit() {
     if (!this.container) return;
     // Sekme henüz düzenlenmemişse (0 boyut) fit hesabı NaN üretir.
@@ -608,13 +653,13 @@ export class TerminalSession {
     void api.ptyWrite(this.tabId, data).catch(() => {});
 
     // Enter'da öneri anlamsız: satır kabuğa gitti.
-    if (data.includes("\r")) this.notifyInput({ prefix: "", full: "" });
+    if (data.includes("\r")) this.notifyInput({ prefix: "", full: "", hintTail: false });
     else this.scheduleInputNotify();
   }
 
   // ------------------------------------------------------ komut önerisi
 
-  private notifyInput(state: { prefix: string; full: string }) {
+  private notifyInput(state: { prefix: string; full: string; hintTail: boolean }) {
     if (this.inputTimer !== null) {
       window.clearTimeout(this.inputTimer);
       this.inputTimer = null;
@@ -637,14 +682,16 @@ export class TerminalSession {
    * öneri ön eke göre üretiliyor ama kabul etmek satırın tamamını
    * değiştiriyor: imleç ortadaysa öneri gösterilmemeli (bkz. canSuggest).
    */
-  readInputState(): { prefix: string; full: string } {
+  readInputState(): { prefix: string; full: string; hintTail: boolean } {
     const mark = this.promptEndMark;
     // Komut çalışırken istem yok: okunacak bir girdi de yok.
-    if (!mark || this.running || this.exited) return { prefix: "", full: "" };
+    if (!mark || this.running || this.exited) {
+      return { prefix: "", full: "", hintTail: false };
+    }
 
     const buf = this.term.buffer.active;
     const endY = buf.baseY + buf.cursorY;
-    if (endY < mark.y) return { prefix: "", full: "" };
+    if (endY < mark.y) return { prefix: "", full: "", hintTail: false };
 
     let prefix = "";
     let full = "";
@@ -662,17 +709,65 @@ export class TerminalSession {
         full += whole;
       }
     }
-    return { prefix, full };
+    return { prefix, full, hintTail: this.tailLooksLikeHint(endY, buf.cursorX) };
   }
 
-  /** Seçilen öneriyi istem satırına yazar. */
-  acceptSuggestion(suggestion: string) {
+  /**
+   * İmlecin sağındaki metin kabuğun KENDİ satır içi önerisi mi?
+   *
+   * Neden gerekiyor: zsh-autosuggestions (ve PSReadLine'ın InlineView'ı) o
+   * öneriyi gerçek metin gibi ekrana yazıyor. Ekrandan okuduğumuzda
+   * kullanıcının yazdığından ayırt edilemiyor ve "imleç satırın ortasında"
+   * sanılıyor — sonuç olarak kabuk hayalet metin gösterdiği her an bizim
+   * listemiz kapanıyordu.
+   *
+   * Ayırt eden şey RENK: hayalet metin soluk / varsayılan olmayan bir ön
+   * renkle çiziliyor (zsh-autosuggestions varsayılanı `fg=8`), kullanıcının
+   * yazdığı metin ise varsayılan renkte. Bu bir sezgi, kesin bir işaret değil:
+   * satırını `zsh-syntax-highlighting` ile renklendiren birinde imleç gerçekten
+   * ortadayken de doğru dönebilir. Bedeli sınırlı — o durumda liste açılıyor,
+   * veri kaybı yok.
+   */
+  private tailLooksLikeHint(row: number, cursorX: number): boolean {
+    const line = this.term.buffer.active.getLine(row);
+    if (!line) return false;
+
+    const cell = line.getCell(0);
+    if (!cell) return false;
+
+    let sawText = false;
+    for (let x = cursorX; x < line.length; x++) {
+      if (!line.getCell(x, cell)) break;
+      const chars = cell.getChars();
+      if (chars === "" || chars === " ") continue;
+      // Varsayılan renkte bir karakter: bu kullanıcının metni, hayalet değil.
+      if (cell.isFgDefault() && !cell.isDim()) return false;
+      sawText = true;
+    }
+    return sawText;
+  }
+
+  /**
+   * Seçilen öneriyi istem satırına yazar.
+   *
+   * `current` DIŞARIDAN geliyor: öneri listesini üreten önek. Eskiden burada
+   * satır ekrandan yeniden okunuyordu ve iki türlü yanlış çıkabiliyordu:
+   *
+   *  - İstem işareti yoksa okuma boş dönüyor, `acceptKeys` de önerinin
+   *    tamamını yazıyordu — komut kabuğa iki kez giriyordu.
+   *  - zsh-autosuggestions'ın soluk hayalet metni de EKRANDA duruyor, yani
+   *    okunan satır kabuğun gerçek satırından uzun çıkabiliyor; silinecek
+   *    karakter sayısı da o kadar yanlış oluyor.
+   *
+   * Önek her tuş vuruşunda güncelleniyor ve imlece kadar okunuyor (hayalet
+   * metin imlecin sağında kalıyor), dolayısıyla doğru kaynak o.
+   */
+  acceptSuggestion(suggestion: string, current: string) {
     if (this.exited) return;
-    const { full } = this.readInputState();
-    const keys = acceptKeys(full, suggestion);
+    const keys = acceptKeys(current, suggestion);
     if (!keys) return;
     void api.ptyWrite(this.tabId, keys).catch(() => {});
-    this.notifyInput({ prefix: suggestion, full: suggestion });
+    this.notifyInput({ prefix: suggestion, full: suggestion, hintTail: false });
   }
 
   private handleSelectionChange() {

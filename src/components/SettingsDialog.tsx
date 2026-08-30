@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
 import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
+import { BUNDLED_FONTS } from "../lib/fonts";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { isMac } from "../lib/platform";
@@ -11,6 +12,7 @@ import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { THEMES } from "../lib/themes";
 import { useStore } from "../store/useStore";
 import type {
+  CloseAction,
   ConfirmCloseTab,
   Lang,
   Profile,
@@ -381,11 +383,23 @@ export function SettingsDialog() {
                 <h3>{t("settings.font")}</h3>
                 <div className="field" data-setting="settings.fontFamily">
                   <label>{t("settings.fontFamily")}</label>
+                  {/* Serbest metin kalıyor — kullanıcı sistemindeki herhangi
+                      bir yazı tipini yazabilmeli. Liste yalnızca uygulamayla
+                      GELEN aileleri duyuruyor; olmasaydı o dosyalar paketin
+                      içinde durur ama kimse varlığını bilmezdi. */}
                   <input
+                    list="bundled-fonts"
                     value={settings.appearance.fontFamily}
                     onChange={(e) => void store().patchAppearance({ fontFamily: e.target.value })}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
+                  <datalist id="bundled-fonts">
+                    {BUNDLED_FONTS.map((font) => (
+                      <option key={font.family} value={font.stack}>
+                        {font.family}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div className="field" data-setting="settings.fontSize">
                   <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
@@ -667,6 +681,20 @@ export function SettingsDialog() {
                     <option value="never">{t("settings.confirmNever")}</option>
                   </select>
                   <div className="hintline">{t("settings.confirmCloseTabHint")}</div>
+                </div>
+
+                <div className="field" data-setting="settings.closeAction">
+                  <label>{t("settings.closeAction")}</label>
+                  <select
+                    value={settings.behavior.closeAction}
+                    onChange={(e) =>
+                      void store().patchBehavior({ closeAction: e.target.value as CloseAction })
+                    }
+                  >
+                    <option value="quit">{t("settings.closeActionQuit")}</option>
+                    <option value="background">{t("settings.closeActionBackground")}</option>
+                  </select>
+                  <div className="hintline">{t("settings.closeActionHint")}</div>
                 </div>
               </div>
             </>

@@ -67,6 +67,36 @@ fn posix_betikleri_lf_satir_sonu_kullaniyor() {
     let _ = std::fs::remove_dir_all(&paths.root);
 }
 
+/// PSReadLine uygulamayla birlikte tasiniyor.
+///
+/// Yazilmazsa hata SESSIZ: `PSModulePath` bos bir klasoru gosterir, kabuk kendi
+/// eski 2.0'ini yukler, satir ici oneri hic gorunmez ve kullanici bunun bir
+/// eksiklik oldugunu anlamaz.
+#[test]
+#[cfg(windows)]
+fn windowsta_psreadline_moduLu_yaziliyor() {
+    let paths = temp_paths("psreadline");
+    let installed = install(&paths).unwrap();
+
+    let module = installed.dir.join("modules").join("PSReadLine");
+    assert!(module.join("PSReadLine.psd1").is_file(), "modul bildirimi yazilmadi");
+    assert!(
+        module.join("Microsoft.PowerShell.PSReadLine2.dll").is_file(),
+        "modul ikilisi yazilmadi"
+    );
+    // Alt klasorler de sart: polyfiller calisma zamanina gore seciliyor.
+    assert!(module.join("net462").is_dir(), "net462 klasoru yok");
+    assert!(module.join("net6plus").is_dir(), "net6plus klasoru yok");
+    // BSD-2-Clause lisansi dagitimla birlikte gitmeli.
+    assert!(module.join("License.txt").is_file(), "lisans metni yazilmadi");
+
+    // Surum 2.2'nin altinda olsaydi tahmin yine calismazdi.
+    let psd1 = std::fs::read_to_string(module.join("PSReadLine.psd1")).unwrap();
+    assert!(psd1.contains("ModuleVersion"), "psd1 bozuk");
+
+    let _ = std::fs::remove_dir_all(&paths.root);
+}
+
 #[test]
 #[cfg(windows)]
 fn windowsta_cmd_yaziliyor_zdotdir_yazilmiyor() {
@@ -100,6 +130,37 @@ fn unixte_zsh_koprusu_tam_yaziliyor() {
     }
     // cmd POSIX'te anlamsiz.
     assert!(!installed.dir.join("nterminal.cmd").exists());
+
+    let _ = std::fs::remove_dir_all(&paths.root);
+}
+
+/// zsh-autosuggestions uygulamayla birlikte tasiniyor.
+///
+/// Yazilmazsa hata SESSIZ: `nterminal.zsh` dosyayi bulamayip durumu
+/// "unsupported" bildiriyor, kullanici da satir ici oneriyi hic gormuyor ve
+/// bunun bir eksiklik oldugunu anlamiyor.
+#[test]
+#[cfg(unix)]
+fn unixte_autosuggestions_eklentisi_yaziliyor() {
+    let paths = temp_paths("autosuggest");
+    let installed = install(&paths).unwrap();
+
+    let plugin = installed.dir.join("zsh-autosuggestions.zsh");
+    assert!(plugin.is_file(), "eklenti yazilmadi");
+
+    // Icerik denetimi: `nterminal.zsh` bu islevin varligina bakarak eklentinin
+    // yuklenip yuklenmedigini anliyor.
+    let text = std::fs::read_to_string(&plugin).unwrap();
+    assert!(
+        text.contains("_zsh_autosuggest_start"),
+        "eklenti dosyasi beklenen islevi icermiyor"
+    );
+
+    // MIT lisansi dagitimla birlikte gitmeli.
+    assert!(
+        installed.dir.join("zsh-autosuggestions-LICENSE.txt").is_file(),
+        "lisans metni yazilmadi"
+    );
 
     let _ = std::fs::remove_dir_all(&paths.root);
 }

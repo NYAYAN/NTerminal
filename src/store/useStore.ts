@@ -210,7 +210,11 @@ interface Store {
   askConfirm: (request: Omit<ConfirmRequest, "id">) => Promise<boolean>;
   loadSuggestHistory: () => Promise<void>;
   noteCommand: (command: string) => void;
-  updateSuggestions: (state: { prefix: string; full: string }) => void;
+  /**
+   * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
+   * İsteğe bağlı — yokluğu "hayalet metin yok" demek.
+   */
+  updateSuggestions: (state: { prefix: string; full: string; hintTail?: boolean }) => void;
   moveSuggestion: (direction: 1 | -1) => void;
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
@@ -307,6 +311,10 @@ export const useStore = create<Store>((set, get) => ({
       showOnlyFavoriteGroups: false,
       appSuggestions: true,
       shellPrediction: "list",
+      // Varsayılan "background": uygulamanın menü çubuğunda / bildirim
+      // alanında her zaman bir simgesi var, kapatma düğmesine basınca tümden
+      // ölmesi bu varlıkla çelişiyordu — simge de kayboluyordu.
+      closeAction: "background",
       macOptionIsMeta: false,
     },
     profiles: [],
@@ -1122,7 +1130,7 @@ export const useStore = create<Store>((set, get) => ({
       if (ui.suggest) set({ ui: { ...ui, suggest: null } });
       return;
     }
-    if (!canSuggest(state.prefix, state.full)) {
+    if (!canSuggest(state.prefix, state.full, state.hintTail)) {
       if (ui.suggest) set({ ui: { ...ui, suggest: null } });
       return;
     }
@@ -1162,9 +1170,11 @@ export const useStore = create<Store>((set, get) => ({
   acceptSuggestionAt(index) {
     const ui = get().ui;
     const suggestion = ui.suggest?.items[index];
-    if (!suggestion) return;
+    if (!suggestion || !ui.suggest) return;
     const session = get().activeSession();
-    session?.acceptSuggestion(suggestion);
+    // Satırdaki metin olarak öneriyi ÜRETEN öneki veriyoruz; ekranı yeniden
+    // okumak hayalet metin yüzünden yanlış sonuç veriyordu.
+    session?.acceptSuggestion(suggestion, ui.suggest.input);
     set({ ui: { ...get().ui, suggest: null } });
     // Listeye tıklanarak kabul edilmiş olabilir: odak terminale dönmeli,
     // yoksa kullanıcı yazmaya devam edemiyor.

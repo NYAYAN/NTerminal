@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../lib/i18n";
+import { getTheme } from "../lib/themes";
 import { useStore } from "../store/useStore";
 
 /**
@@ -27,14 +28,32 @@ export function TerminalFind() {
 
   // Eslesme sayaci yalnizca dekorasyonlar acikken bildiriliyor (addon
   // sozlesmesi), zaten eslesmelerin isaretlenmesini de istiyoruz.
+  /*
+   * Eşleşme vurguları.
+   *
+   * İki şey düzeltildi.
+   *
+   * 1. ETKİN EŞLEŞME AYIRT EDİLEMİYORDU. 150 sonuç arasında "Sonraki"ye
+   *    basınca hangisinde olduğunuz seçilmiyordu: iki renk de maviydi, yalnızca
+   *    tonu farklıydı. Artık etkin eşleşmenin ayrıca ÇERÇEVESİ var — renk
+   *    yakınlığından bağımsız olarak göze çarpıyor.
+   *
+   * 2. RENKLER SABİT KODLANMIŞTI. Koyu tema için seçilmiş maviler açık temada
+   *    (Solarized Light) zeminle karışıyordu. Artık temadan geliyorlar:
+   *    sıradan eşleşme seçim rengiyle — "vurgulu ama odakta değil" anlamı zaten
+   *    bu —, etkin eşleşme vurgu rengiyle, çerçevesi de ön plan rengiyle.
+   */
+  const theme = getTheme(useStore((s) => s.settings.appearance.theme));
   const options = {
     caseSensitive,
     wholeWord,
     decorations: {
-      matchBackground: "#3b5070",
-      matchOverviewRuler: "#58a6ff",
-      activeMatchBackground: "#58a6ff",
-      activeMatchColorOverviewRuler: "#79c0ff",
+      matchBackground: theme.xterm.selectionBackground ?? "#3b5070",
+      matchBorder: theme.xterm.selectionBackground ?? "#3b5070",
+      matchOverviewRuler: theme.ui.accent,
+      activeMatchBackground: theme.ui.accent,
+      activeMatchBorder: theme.xterm.foreground ?? "#ffffff",
+      activeMatchColorOverviewRuler: theme.xterm.foreground ?? "#ffffff",
     },
   };
 

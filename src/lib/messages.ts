@@ -446,34 +446,46 @@ export const MESSAGES = {
   // --------------------------------------------------------------- durum çubuğu
   "status.revealHint": ["({fm}'de açmak için tıklayın)", "(click to open in {fm})"],
   "status.running": ["Komut çalışıyor", "Command running"],
-  "status.integrationOn": ["Entegrasyon", "Integration"],
+  // Rozet metni DURUMU söylemeli, özelliğin adını değil. "Entegrasyon" tek
+  // başına hiçbir şey anlatmıyordu: neyin entegre olduğu da, bunun iyi mi kötü
+  // mü olduğu da yazmıyor. İki durum artık karşıt bir çift olarak okunuyor —
+  // "tam" / "sınırlı" — ve rozetin rengi bu okumayı destekliyor.
+  "status.integrationOn": ["Komut takibi tam", "Full command tracking"],
   "status.integrationOnTitle": [
     "Kabuk entegrasyonu etkin: komut metni ve çıkış kodu kabuktan geliyor",
     "Shell integration active: command text and exit code come from the shell",
   ],
-  "status.integrationOff": ["Entegrasyon yok", "No integration"],
+  "status.integrationOff": ["Komut takibi sınırlı", "Limited command tracking"],
   "status.integrationOffTitle": [
     "Kabuk entegrasyonu yok: komutlar ekran tamponundan okunuyor, çıkış kodu bilinmiyor",
     "No shell integration: commands are read from the screen buffer, exit code unknown",
   ],
-  "status.predictionOff": ["Öneri kapalı", "Suggestions off"],
+  // Rozetler KABUĞUN kendi önerisini anlatıyor, uygulamanınkini değil. Ayrım
+  // önemliydi: "Komut önerisi desteklenmiyor" yazınca kullanıcı hiç öneri
+  // almadığını sanıyordu, oysa uygulamanın kendi listesi her kabukta çalışıyor
+  // ve o sırada ekranda duruyordu. Rozet artık yalnızca kabuk hakkında konuşuyor.
+  "status.predictionOff": ["Kabuk önerisi kapalı", "Shell suggestions off"],
   "status.predictionOffTitle": [
-    "Komut önerisi kapalı. Ayarlar › Davranış › Komut önerisi ile açabilirsiniz.",
-    "Command suggestions are off. Turn them on in Settings › Behavior › Command suggestions.",
+    "Kabuğun kendi önerisi kapalı. Ayarlar › Davranış › Kabuğun kendi önerisi ile açabilirsiniz.\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışmaya devam ediyor.",
+    "The shell's own suggestion is off. Turn it on in Settings › Behavior › The shell's own suggestion.\n\nThe app's own suggestion list keeps working independently.",
   ],
-  "status.predictionOn": ["Öneri", "Suggestions"],
+  "status.predictionOn": ["Kabuk önerisi açık", "Shell suggestions on"],
   "status.predictionOnTitle": [
-    "Komut önerisi etkin ({view}): daha önce çalıştırdığınız komutlar yazarken öneriliyor.",
-    "Command suggestions active ({view}): commands you have run before are suggested as you type.",
+    "Kabuğun kendi önerisi etkin ({view}): daha önce çalıştırdığınız komutlar yazarken öneriliyor.",
+    "The shell's own suggestion is active ({view}): commands you have run before are suggested as you type.",
   ],
-  "status.predictionUnsupported": ["Öneri yok", "No suggestions"],
+  "status.predictionUnsupported": ["Kabuk önerisi yok", "No shell suggestions"],
   "status.predictionUnsupportedTitle": [
-    "Bu kabuk komut önerisini desteklemiyor: PSReadLine 2.2+ gerekiyor, kurulu sürüm daha eski.\n\nDüzeltmek için PowerShell'de bir kez şunu çalıştırın:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).",
-    "This shell does not support command suggestions: PSReadLine 2.2+ is required and the installed version is older.\n\nTo fix it, run this once in PowerShell:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nThen restart the tab (right-click › Restart shell).",
+    "Bu kabuk kendi önerisini çizemiyor: PSReadLine 2.2+ gerekiyor, kurulu sürüm daha eski.\n\nUygulamanın kendi öneri listesi çalışmaya devam ediyor; eksik olan yalnızca kabuğun satır içi soluk metni.\n\nOnu da istiyorsanız PowerShell'de bir kez şunu çalıştırın:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).",
+    "This shell cannot draw its own suggestion: PSReadLine 2.2+ is required and the installed version is older.\n\nThe app's own suggestion list keeps working; only the shell's inline ghost text is missing.\n\nIf you want that too, run this once in PowerShell:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nThen restart the tab (right-click › Restart shell).",
   ],
+  // Mac'te bu durum artık BEKLENMİYOR: zsh-autosuggestions uygulamayla birlikte
+  // geliyor ve kurulum gerektirmiyor. Buraya düşülüyorsa eklenti dosyası
+  // okunamamış demektir — kullanıcının kuracağı bir şey yok, o yüzden metin de
+  // kurulum tarifi vermiyor.
   "status.predictionUnsupportedTitleMac": [
-    "Bu kabuk komut önerisini desteklemiyor. zsh'de öneriyi zsh-autosuggestions çiziyor.\n\nKurmak için bir kez şunu çalıştırın:\nbrew install zsh-autosuggestions\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).\n\nUygulamanın kendi önerisi bundan bağımsız çalışıyor: Ayarlar › Davranış › Uygulama önerisi.",
-    "This shell does not support command suggestions. In zsh the suggestion is drawn by zsh-autosuggestions.\n\nTo install it, run this once:\nbrew install zsh-autosuggestions\n\nThen restart the tab (right-click › Restart shell).\n\nThe app's own suggestions work independently: Settings › Behavior › App suggestions.",
+    "Kabuğun satır içi önerisi yüklenemedi. Bu beklenen bir durum değil: eklenti uygulamayla birlikte geliyor, ayrıca kurmanız gereken bir şey yok.\n\nSekmeyi yeniden başlatmayı deneyin (sağ tık › Kabuğu yeniden başlat).\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışıyor.",
+    "The shell's inline suggestion could not be loaded. This is unexpected: the plugin ships with the app, so there is nothing for you to install.\n\nTry restarting the tab (right-click › Restart shell).\n\nThe app's own suggestion list works independently.",
   ],
   "status.pidTitle": ["Kabuk süreç kimliği", "Shell process id"],
   "status.commandsTitle": ["Kayıtlı komut sayısı", "Recorded commands"],
@@ -488,6 +500,27 @@ export const MESSAGES = {
     "Settings live in a folder next to the exe: {path}",
   ],
   "status.restored": ["Oturum geri yüklendi", "Session restored"],
+  // "⋯" menüsü: çubuğa sığmayanlar buraya taşınıyor. Etiketler çubuktakinden
+  // FARKLI: çubukta yer dar olduğu için değer tek başına yazıyor ("Zsh"),
+  // menüde yer var, o yüzden neyin ne olduğu da yazıyor ("Profil: Zsh").
+  "status.moreTitle": ["Sığmayan durum bilgileri", "Status details that do not fit"],
+  "status.moreHeader": ["Durum", "Status"],
+  "status.fieldGroup": ["Grup", "Group"],
+  "status.fieldProfile": ["Profil", "Profile"],
+  "status.fieldCwd": ["Çalışma dizini", "Working directory"],
+  "status.fieldIntegration": ["Komut takibi", "Command tracking"],
+  "status.fieldPrediction": ["Kabuk önerisi", "Shell suggestions"],
+  "status.fieldPid": ["Kabuk pid", "Shell pid"],
+  "status.fieldCommands": ["Kayıtlı komut", "Recorded commands"],
+  "status.fieldTabs": ["Sekme", "Tabs"],
+  // Menüde etiket ve değer İKİ AYRI SÜTUN ("Komut takibi | Tam"), o yüzden
+  // burada yalnızca değer var — rozetteki uzun biçim menüde tekrar olurdu.
+  // Cümle içine girmedikleri için büyük harfle başlıyorlar.
+  "status.valueIntegrationOn": ["Tam", "Full"],
+  "status.valueIntegrationOff": ["Sınırlı", "Limited"],
+  "status.valuePredictionOn": ["Açık", "On"],
+  "status.valuePredictionOff": ["Kapalı", "Off"],
+  "status.valuePredictionUnsupported": ["Desteklenmiyor", "Unsupported"],
   "status.restoredTitle": [
     "Önceki oturumun grup ve sekme düzeni geri yüklendi",
     "The group and tab layout from the previous session was restored",
@@ -674,12 +707,29 @@ export const MESSAGES = {
   ],
   "settings.predictionOff": ["Kapalı (kabuğun kendi ayarı)", "Off (leave it to the shell)"],
   "settings.predictionHint": [
-    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: PowerShell 7.2+ (PSReadLine 2.2+) gerekiyor. Windows PowerShell 5.1, cmd ve bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
-    "Suggests commands you have run before as you type. The shell draws the suggestion, so PowerShell 7.2+ (PSReadLine 2.2+) is required. Windows PowerShell 5.1, cmd and bash do not support it — use the Ctrl+R history search there.",
+    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: PowerShell 7.2+ (PSReadLine 2.2+) gerekiyor. Windows PowerShell 5.1, cmd ve bash bunu desteklemiyor — orada uygulamanın kendi öneri listesi devrede kalır, ayrıca Ctrl+R geçmiş aramasını kullanabilirsiniz.",
+    "Suggests commands you have run before as you type. The shell draws the suggestion, so PowerShell 7.2+ (PSReadLine 2.2+) is required. Windows PowerShell 5.1, cmd and bash do not support it — the app's own suggestion list stays available there, and you can also use the Ctrl+R history search.",
   ],
   "settings.predictionHintMac": [
-    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: zsh'de zsh-autosuggestions (brew install zsh-autosuggestions), pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
-    "Suggests commands you have run before as you type. The shell draws the suggestion: zsh needs zsh-autosuggestions (brew install zsh-autosuggestions), pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
+    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor. zsh için gereken eklenti (zsh-autosuggestions) uygulamayla birlikte geliyor, kurmanız gereken bir şey yok; kendi kurulumunuz varsa o kullanılır. pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
+    "Suggests commands you have run before as you type. The shell draws the suggestion. The plugin zsh needs (zsh-autosuggestions) ships with the app, so there is nothing to install; if you have your own copy, that one is used. pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
+  ],
+  // Menü çubuğu / bildirim alanı simgesi.
+  //
+  // `tray.*` metinlerini işletim sistemi çiziyor ve arayüz yüklenmeden önce
+  // kuruluyorlar, o yüzden Rust tarafında da yazılılar (`src-tauri/src/tray.rs`).
+  // İkisinin ayrılmaması `trayLabels.test.ts` ile bağlı.
+  "tray.show": ["NTerminal'i göster", "Show NTerminal"],
+  "tray.quit": ["Çıkış", "Quit"],
+  "settings.closeAction": ["Kapatma düğmesi", "Close button"],
+  "settings.closeActionQuit": ["Uygulamadan tamamen çık", "Quit the app"],
+  "settings.closeActionBackground": [
+    "Arka planda çalışmaya devam et",
+    "Keep running in the background",
+  ],
+  "settings.closeActionHint": [
+    "\"Arka planda\" seçilirse pencere kapanır ama çalışan komutlar kesilmez; uygulamaya menü çubuğundaki (macOS) ya da saatin yanındaki (Windows) simgeden geri dönersiniz. Simge her iki durumda da duruyor, yani uygulamaya ulaşamama gibi bir durum olmuyor.",
+    "With \"in the background\", the window closes but running commands keep going; you return to the app from the menu bar icon (macOS) or the one next to the clock (Windows). The icon is there either way, so the app never becomes unreachable.",
   ],
   "settings.macOptionIsMeta": ["Option tuşu Meta olsun", "Use Option as Meta"],
   "settings.macOptionIsMetaHint": [
