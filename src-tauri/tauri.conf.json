@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "NTerminal",
+  "productName": "N-Terminal",
   "version": "0.1.0",
   "identifier": "com.nyayan.nterminal",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "NTerminal",
+        "title": "N-Terminal",
         "width": 1320,
         "height": 840,
         "minWidth": 760,
@@ -41,7 +41,7 @@
     "copyright": "© 2026 Nurullah YAYAN",
     "category": "DeveloperTool",
     "shortDescription": "Gruplanabilir sekmeli terminal",
-    "longDescription": "Gruplar ve gruplara bagli terminal sekmeleri, oturum devamliligi, komut gecmisi ve ayar aktarimi.",
+    "longDescription": "N-Terminal: gruplar ve gruplara bagli terminal sekmeleri, oturum devamliligi, komut gecmisi ve ayar aktarimi.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

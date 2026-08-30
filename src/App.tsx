@@ -314,7 +314,7 @@ export function App() {
       <div className="titlebar" data-tauri-drag-region>
         <div className="brand">
           <span className="mark">&gt;_</span>
-          NTerminal
+          N-Terminal
           <span className="version">{appVersion}</span>
         </div>
         {/* Baslik cubugunda TEK eylem: Ayarlar.

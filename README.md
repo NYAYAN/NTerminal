@@ -1,4 +1,4 @@
-# NTerminal
+# N-Terminal
 
 Windows ve macOS için gruplanabilir sekmeli terminal. Gruplar, gruba bağlı
 sekmeler, sekme ya da bölme görünümü, oturum devamlılığı, komut geçmişi,
@@ -246,7 +246,7 @@ Betik toolset'leri `lib\x64\msvcrt.lib` var mı diye tarıyor, sağlam olanın
 `vcvars64` ortamını içeriye alıyor ve linker'ı `cargo`'ya açıkça bildiriyor.
 Bu yüzden hangi VS kurulu olduğundan bağımsız çalışır.
 
-> Paketlemede `LNK1104` yerine **`Access is denied`** görürseniz NTerminal
+> Paketlemede `LNK1104` yerine **`Access is denied`** görürseniz N-Terminal
 > açıktır: çalışan `nterminal.exe` değiştirilemiyor. Uygulamayı kapatıp
 > yeniden deneyin.
 

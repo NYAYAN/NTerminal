@@ -1,7 +1,7 @@
 [package]
 name = "nterminal"
 version = "0.1.0"
-description = "Gruplanabilir sekmeli Windows terminali"
+description = "N-Terminal - gruplanabilir sekmeli terminal"
 authors = ["Nurullah YAYAN"]
 edition = "2021"
 rust-version = "1.82"

@@ -10,7 +10,7 @@
  */
 export const MESSAGES = {
   // ------------------------------------------------------------ genel/ortak
-  "theme.nterminalDark": ["NTerminal Koyu", "NTerminal Dark"],
+  "theme.nterminalDark": ["N-Terminal Koyu", "N-Terminal Dark"],
   "theme.windowsTerminal": ["Windows Terminal", "Windows Terminal"],
   "theme.oneHalfDark": ["One Half Koyu", "One Half Dark"],
   "theme.solarizedLight": ["Solarized Açık", "Solarized Light"],
@@ -188,8 +188,8 @@ export const MESSAGES = {
   "app.favoritesTitle": ["Favori komutlar ({keys})", "Favorite commands ({keys})"],
   "app.settings": ["Ayarlar", "Settings"],
   "app.settingsTitle": ["Ayarlar ({keys})", "Settings ({keys})"],
-  "app.loading": ["NTerminal yükleniyor…", "Loading NTerminal…"],
-  "app.bootFailed": ["NTerminal başlatılamadı", "NTerminal could not start"],
+  "app.loading": ["N-Terminal yükleniyor…", "Loading N-Terminal…"],
+  "app.bootFailed": ["N-Terminal başlatılamadı", "N-Terminal could not start"],
   "app.savingState": ["Durum kaydediliyor…", "Saving state…"],
 
   // ---------------------------------------------------------- terminal alanı
@@ -722,7 +722,7 @@ export const MESSAGES = {
   // `tray.*` metinlerini işletim sistemi çiziyor ve arayüz yüklenmeden önce
   // kuruluyorlar, o yüzden Rust tarafında da yazılılar (`src-tauri/src/tray.rs`).
   // İkisinin ayrılmaması `trayLabels.test.ts` ile bağlı.
-  "tray.show": ["NTerminal'i göster", "Show NTerminal"],
+  "tray.show": ["N-Terminal'i göster", "Show N-Terminal"],
   "tray.quit": ["Çıkış", "Quit"],
   "settings.closeAction": ["Kapatma düğmesi", "Close button"],
   "settings.closeActionQuit": ["Uygulamadan tamamen çık", "Quit the app"],
@@ -872,16 +872,16 @@ export const MESSAGES = {
   "transfer.countScrollback": ["Ekran çıktısı", "Screen output"],
   "transfer.fileSize": ["Dosya boyutu", "File size"],
   "transfer.saveTitle": ["Yapılandırmayı kaydet", "Save configuration"],
-  "transfer.pickTitle": ["NTerminal yapılandırması seç", "Pick an NTerminal configuration"],
-  "transfer.filterName": ["NTerminal yapılandırması", "NTerminal configuration"],
+  "transfer.pickTitle": ["N-Terminal yapılandırması seç", "Pick an N-Terminal configuration"],
+  "transfer.filterName": ["N-Terminal yapılandırması", "N-Terminal configuration"],
   "transfer.exported": ["Yapılandırma dışa aktarıldı", "Configuration exported"],
   "transfer.imported": ["Yapılandırma içe alındı", "Configuration imported"],
   "transfer.pickFile": ["Dosya seç…", "Pick a file…"],
   "transfer.notPicked": ["Henüz seçilmedi", "Nothing picked yet"],
   "transfer.fileContents": ["Dosya içeriği", "File contents"],
   "transfer.madeOn": [
-    "{machine}{date} tarihinde NTerminal {version} ile oluşturuldu. Yollar {paths}.",
-    "Created on {date} with NTerminal {version}{machine}. Paths are {paths}.",
+    "{machine}{date} tarihinde N-Terminal {version} ile oluşturuldu. Yollar {paths}.",
+    "Created on {date} with N-Terminal {version}{machine}. Paths are {paths}.",
   ],
   "transfer.onMachine": ["{machine} makinesinde ", " on {machine}"],
   "transfer.pathsPortable": ["Taşınabilir", "Portable"],

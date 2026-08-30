@@ -35,9 +35,9 @@ const TRAY_ICON: &[u8] = include_bytes!("../icons/32x32.png");
 
 fn label_show(lang: &str) -> &'static str {
     if lang == "en" {
-        "Show NTerminal"
+        "Show N-Terminal"
     } else {
-        "NTerminal'i göster"
+        "N-Terminal'i göster"
     }
 }
 
@@ -84,7 +84,7 @@ pub fn setup(app: &AppHandle, lang: &str) -> tauri::Result<()> {
 
     let builder = TrayIconBuilder::with_id("nterminal")
         .icon(Image::from_bytes(TRAY_ICON)?)
-        .tooltip("NTerminal")
+        .tooltip("N-Terminal")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-show" => show_main(app),
