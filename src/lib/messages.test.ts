@@ -137,7 +137,7 @@ describe("büyük harf düzeni", () => {
 
   /** Özel adlar ve tuş adları: büyük harf yazılmaları doğru. */
   const PROPER = new Set([
-    "NTerminal", "Windows", "Terminal", "One", "Half", "Solarized", "Koyu", "Açık",
+    "N-Terminal", "Windows", "Terminal", "One", "Half", "Solarized", "Koyu", "Açık",
     "Dark", "Light", "PowerShell", "Git", "Bash", "WSL", "Zsh", "Fish", "Cmd",
     "PSReadLine", "Tauri", "Rust", "Gezgin", "Finder", "Explorer",
     "Ctrl", "Alt", "Shift", "Esc", "Tab", "Enter", "Option", "Meta",

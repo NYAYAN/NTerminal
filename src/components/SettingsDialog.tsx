@@ -1037,7 +1037,7 @@ export function SettingsDialog() {
           {section === "about" && (
             <>
               <div className="section">
-                <h3>NTerminal {appVersion}</h3>
+                <h3>N-Terminal {appVersion}</h3>
                 <p className="dim">{t("settings.aboutBlurb")}</p>
                 <p className="dim">{t("settings.developer")}</p>
               </div>
