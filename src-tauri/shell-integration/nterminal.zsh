@@ -120,10 +120,20 @@ fi
 
 # --- 4) komut onerisi -------------------------------------------------------
 #
-# zsh'te PSReadLine karsiligi `zsh-autosuggestions`. Kurmuyoruz - kullanicinin
-# kabuguna eklenti yuklemek bizim isimiz degil; varsa kullaniyoruz, yoksa
-# durumu bildiriyoruz. Arayuz 'unsupported' gorunce ne yapilacagini soyluyor,
-# sessiz kalmak "uygulama bozuk" izlenimi veriyordu.
+# zsh'te PSReadLine karsiligi `zsh-autosuggestions`. Eklenti uygulamayla
+# birlikte GELIYOR, yani kullanicinin hicbir sey kurmasi gerekmiyor.
+#
+# Onceki davranis eksigi bildirmekle yetiniyordu ve cozumu kullaniciya
+# birakiyordu: ipucu `brew install zsh-autosuggestions` diyordu, yani once
+# Homebrew kurmak gerekiyordu. Bir ozelligin calismasi icin paket yoneticisi
+# kurmasini istemek makul degil.
+#
+# Sira onemli ve kullanicinin kurulumu ONCE geliyor: kendi surumunu
+# yapilandirmis (renk, strateji, tus baglama) biri bizimkine dusmemeli. Bizim
+# kopyamiz yalnizca hicbiri yoksa devreye giriyor.
+#
+# Bu KURULUM DEGIL: dosya yalnizca bu oturumda source ediliyor, kullanicinin
+# .zshrc'sine ya da baska terminallerine dokunmuyor.
 #
 # NTERMINAL_PREDICTION yok ya da 'off' ise HIC dokunmuyoruz: kullanicinin kendi
 # .zshrc'sindeki ayar gecerli kalir.
@@ -139,7 +149,8 @@ else
       "/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
       "/usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
       "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" \
-      "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
+      "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+      "${NTERMINAL_OWN_ZDOTDIR:h}/zsh-autosuggestions.zsh"
     do
       if [[ -r $__nterm_cand ]]; then
         source "$__nterm_cand"

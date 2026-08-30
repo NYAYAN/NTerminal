@@ -55,7 +55,7 @@ fn integrate(
     dir: &std::path::Path,
 ) -> (bool, Vec<(String, String)>) {
     let mut env = Vec::new();
-    let ok = apply_integration(kind, args, &mut env, dir, None);
+    let ok = apply_integration(kind, args, &mut env, dir, None, None);
     (ok, env)
 }
 
@@ -267,6 +267,7 @@ fn zsh_kullanici_zdotdiri_kopruye_gecirilir() {
         &mut env,
         &dir,
         Some("/Users/ali/.config/zsh"),
+        None,
     );
     assert!(ok);
     // Kopru dosyalari kullanicinin gercek dosyalarini bu degerle buluyor.
@@ -289,7 +290,7 @@ fn zsh_kendi_klasorunu_kullanici_zdotdiri_sanmiyor() {
     let own = dir.join("zdotdir").to_string_lossy().to_string();
     let mut args = Vec::new();
     let mut env = Vec::new();
-    let ok = apply_integration(ShellKind::Zsh, &mut args, &mut env, &dir, Some(&own));
+    let ok = apply_integration(ShellKind::Zsh, &mut args, &mut env, &dir, Some(&own), None);
     assert!(ok);
     assert_eq!(
         env_get(&env, "NTERMINAL_ZDOTDIR"),
@@ -307,7 +308,7 @@ fn zsh_bos_kullanici_zdotdiri_yazilmiyor() {
     let dir = fixture_dir("zsh-empty");
     let mut args = Vec::new();
     let mut env = Vec::new();
-    assert!(apply_integration(ShellKind::Zsh, &mut args, &mut env, &dir, Some("   ")));
+    assert!(apply_integration(ShellKind::Zsh, &mut args, &mut env, &dir, Some("   "), None));
     assert_eq!(env_get(&env, "NTERMINAL_ZDOTDIR"), None);
     let _ = std::fs::remove_dir_all(dir);
 }

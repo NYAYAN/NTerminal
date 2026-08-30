@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { cwdFromFileUri, parseOsc133, parseOsc633, unescapeOsc } from "./osc";
 import { base64ToBytes } from "./ipc";
 import { formatDuration, fuzzyScore, baseName, shortenPath } from "./format";
 import { matchCombo, parseCombo, prettyCombo } from "./keys";
+import { setPlatform } from "./platform";
 
 /**
  * Buradaki kurallar `src-tauri/shell-integration/` altındaki betiklerle
@@ -194,6 +195,18 @@ describe("biçimlendirme", () => {
 });
 
 describe("kısayollar", () => {
+  /**
+   * Platform ELLE kuruluyor; buradaki iddialar Windows yazımını bağlıyor
+   * (mac yazımı `keysMac.test.ts` içinde).
+   *
+   * Kurulmadığında test makineye göre değişiyordu: `platform.ts` ilk tahmini
+   * `navigator`dan alıyor ve Node 24 `navigator.platform` alanını sunuyor —
+   * Windows'ta "Win32", mac'te "MacIntel". Yani aynı test Windows'ta geçip
+   * mac'te düşüyordu, üstelik `prettyCombo` doğru çalışırken: beklenen
+   * "Ctrl+Shift+H", gelen "⌃⇧H".
+   */
+  beforeEach(() => setPlatform("windows"));
+
   // Gerçek bir KeyboardEvent'te dört değiştirici alanı da HER ZAMAN boolean.
   // Birini eksik bırakmak `undefined` üretir ve `matchCombo`'nun tam
   // karşılaştırması onu hiçbir şeyle eşleştiremez — test kodun değil,

@@ -1,0 +1,75 @@
+/* Uygulamayla birlikte gelen yazı tipleri.
+ *
+ * Neden gömülü: yazı tipi ayarı serbest metin ve sistemde ne varsa onu
+ * kullanıyor. Sistemden gelen listeye güvenmek iki platformda iki farklı
+ * görüntü demek — Cascadia Mono mac'te, SF Mono Windows'ta yok. Buradaki iki
+ * aile her kurulumda AYNI, kullanıcının hiçbir şey kurması gerekmiyor.
+ *
+ * Neden yalnızca dört kesim (regular / bold / italic / bold-italic): terminalin
+ * kullandığı tek küme bu. xterm kalın ve eğik metni ANSI kaçışlarından çiziyor,
+ * ara ağırlıklara (light, medium, semibold) hiç uğramıyor; hepsini paketlemek
+ * uygulamayı megabaytlarca büyütür, karşılığında hiçbir şey vermezdi.
+ *
+ * `font-display` yok ve bu kasıtlı: dosyalar diskten geliyor, ağ gecikmesi
+ * yok. Varsayılan `auto` ilk boyamada kısa bir görünmezlik penceresi bırakıyor
+ * ama terminal zaten o anda boş.
+ *
+ * Lisanslar yanlarında: JetBrainsMono-OFL.txt ve IBMPlexMono-LICENSE.txt.
+ * İkisi de SIL Open Font License 1.1 — uygulamayla dağıtılabiliyorlar.
+ */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../assets/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 400;
+  src: url("../assets/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 700;
+  src: url("../assets/fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../assets/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../assets/fonts/IBMPlexMono-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: italic;
+  font-weight: 400;
+  src: url("../assets/fonts/IBMPlexMono-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: italic;
+  font-weight: 700;
+  src: url("../assets/fonts/IBMPlexMono-BoldItalic.woff2") format("woff2");
+}

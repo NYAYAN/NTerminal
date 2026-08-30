@@ -87,7 +87,28 @@ describe("öneriyi kabul etme dizisi", () => {
   it("devam ediyorsa yalnızca kalanı yazıyor", () => {
     // Hiçbir şey silinmiyor: kabuğun satır düzenleyicisiyle en az temas.
     expect(acceptKeys("npm t", "npm test")).toBe("est");
-    expect(acceptKeys("", "npm test")).toBe("npm test");
+  });
+
+  it("satır okunamadığında hiçbir şey yazmıyor", () => {
+    // ÖLÇÜLEN HATA — ve bu testin ilk hâli tam tersini bağlıyordu
+    // (`acceptKeys("", "npm test")` → `"npm test"`), yani hatayı korumuş.
+    //
+    // Boş `current` "satır boş" demek DEĞİL, "satırı okuyamadım" demek: istem
+    // işareti yoksa ya da komut çalışıyorsa okuma boş dönüyor. O durumda
+    // önerinin tamamını yazmak, satırda zaten yazılı olanın üstüne ikinci bir
+    // kopya gönderiyor. Kullanıcının geçmişine böyle bir kayıt düştü:
+    // `yarn start:devyarn start:dev`.
+    expect(acceptKeys("", "npm test")).toBe("");
+  });
+
+  it("aynı komutu ikinci kez yazmıyor", () => {
+    const yazilan = "yarn start:dev";
+    for (const current of ["", "y", "yarn", "yarn start:de", yazilan]) {
+      const keys = acceptKeys(current, yazilan);
+      expect(current + keys, `current=${JSON.stringify(current)}`).not.toContain(
+        yazilan + yazilan,
+      );
+    }
   });
 
   it("büyük/küçük harf farkında yazılanı geri siliyor", () => {
@@ -155,5 +176,22 @@ describe("öneri gösterme koşulu", () => {
     expect(canSuggest("n", "n")).toBe(false);
     expect(canSuggest("", "")).toBe(false);
     expect(canSuggest("  ", "  ")).toBe(false);
+  });
+
+  it("kabuğun hayalet önerisi satırın parçası sayılmıyor", () => {
+    // ÖLÇÜLEN BELİRTİ: geçmişte hem `yarn start:dev` hem `yarn start:prod`
+    // varken `yarn` yazınca liste hiç açılmıyordu. Sebep zsh-autosuggestions'ın
+    // imlecin sağına çizdiği soluk `start:dev`: ekrandan okununca satırın
+    // parçası görünüyor ve "imleç ortada" sanılıyordu. Yani kabuk öneri
+    // verebildiği HER AN bizim listemiz susuyordu — oysa listenin bütün değeri
+    // birden çok seçeneği yan yana göstermesi.
+    expect(canSuggest("yarn", "yarn start:dev"), "hayalet metin listeyi kapatıyor").toBe(false);
+    expect(canSuggest("yarn", "yarn start:dev", true), "hayalet metin ayırt edilmiyor").toBe(true);
+  });
+
+  it("hayalet bayrağı imleci satır ortasına taşımıyor", () => {
+    // Bayrak yalnızca SAĞDAKİ metni yok sayıyor. Önek satırın başında değilse
+    // durum yine "imleç ortada" ve öneri gösterilmemeli.
+    expect(canSuggest("start", "yarn start:dev", true)).toBe(false);
   });
 });

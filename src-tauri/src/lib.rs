@@ -11,6 +11,7 @@ mod shellint;
 mod shells;
 mod store;
 mod transfer;
+mod tray;
 
 use base64::Engine;
 use favorites::{Favorite, FavoritePatch, FavoriteStore, NewFavorite};
@@ -125,6 +126,16 @@ fn settings_save(state: State<AppState>, settings: Settings) -> CmdResult<()> {
     store::save_settings(&state.paths, &settings).map_err(fail)?;
     *state.settings.lock() = settings;
     Ok(())
+}
+
+/// Menu cubugu / bildirim alani simgesinin menu metinleri.
+///
+/// Arayuz dilinden geliyor: simge acilista Rust tarafindaki metinlerle
+/// kuruluyor (o an sozluk yuklenmemis oluyor), dil degisince arayuz burayi
+/// cagirip guncelliyor. Aksi halde menu eski dilde kalirdi.
+#[tauri::command]
+fn tray_labels(app: tauri::AppHandle, show: String, quit: String) -> CmdResult<()> {
+    tray::set_labels(&app, &show, &quit).map_err(fail)
 }
 
 #[tauri::command]
@@ -590,9 +601,17 @@ pub fn run() {
         integration_dir: integration,
     };
 
+    // Simge ve kapatma davranisi ayarlardan geliyor; `state` tasinmadan once
+    // okuyoruz.
+    let lang = state.settings.lock().language.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
+        .setup(move |app| {
+            tray::setup(app.handle(), &lang)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_bootstrap,
             paths_get,
@@ -631,10 +650,18 @@ pub fn run() {
             config_import_apply,
             reveal_in_explorer,
             open_external,
+            tray_labels,
         ])
         .on_window_event(|window, event| {
-            // Pencere yok olurken kabuk sureclerini birakmiyoruz: aksi halde
-            // arkada sahipsiz conhost/powershell surecleri kalir.
+            // Kapatma KARARI burada DEGIL: arayuz `onCloseRequested`i yakalayip
+            // durumu diske yaziyor ve ardindan `destroy()` cagiriyor. `destroy`
+            // kapatma istegini tumden atladigi icin buraya konulacak bir
+            // `prevent_close()` hicbir zaman is gormuyor - denendi, "arka planda
+            // kal" ayari calismadi. Karar tek yerde: `App.tsx`.
+            //
+            // Burada yalnizca yikim sonrasi temizlik var: pencere yok olurken
+            // kabuk sureclerini birakmiyoruz, aksi halde arkada sahipsiz
+            // conhost/powershell surecleri kalir.
             if let tauri::WindowEvent::Destroyed = event {
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
                     state.pty.kill_all();

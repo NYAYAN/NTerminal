@@ -148,3 +148,30 @@ describe("alt menü", () => {
     expect(container.querySelector(".ctx-item.has-sub.open")).not.toBe(null);
   });
 });
+
+/**
+ * Bilgi satırı, durum çubuğunun "⋯" menüsü için eklendi: oradaki girdilerin
+ * çoğunun bir eylemi yok, okunacak bir değerleri var.
+ */
+describe("bilgi satırı", () => {
+  it("etiketi ve değeri çiziyor", () => {
+    const { container } = menu([{ kind: "info", label: "Kabuk pid", value: "11421" }]);
+    expect(container.querySelector(".ctx-info")!.textContent).toContain("Kabuk pid");
+    expect(container.querySelector(".ctx-info .ctx-hint")!.textContent).toBe("11421");
+  });
+
+  it("değersiz de çizilebiliyor", () => {
+    // "Oturum geri yüklendi" gibi tek başına anlamlı durumlar için.
+    const { container } = menu([{ kind: "info", label: "Oturum geri yüklendi" }]);
+    expect(container.querySelector(".ctx-info")!.textContent).toBe("Oturum geri yüklendi");
+    expect(container.querySelector(".ctx-info .ctx-hint")).toBe(null);
+  });
+
+  it("düğme değil — tıklanacak bir şey olduğunu söylemiyor", () => {
+    // `item` + boş `run` tıklanabilir görünüp menüyü kapatırdı; `disabled` ise
+    // "şu an kullanılamıyor" derdi. İkisi de yanlış söz veriyor.
+    const { container } = menu([{ kind: "info", label: "Sekme", value: "3" }]);
+    expect(container.querySelector(".ctx-info")!.tagName).toBe("DIV");
+    expect(container.querySelectorAll("button.ctx-item")).toHaveLength(0);
+  });
+});

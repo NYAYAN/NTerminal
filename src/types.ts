@@ -23,6 +23,14 @@ export type ConfirmCloseTab = "always" | "running" | "never";
 /** Kabuğun komut önerisi (PSReadLine tahmini) görünümü. */
 export type ShellPrediction = "off" | "inline" | "list";
 
+/**
+ * Pencere kapatılınca ne olsun.
+ *
+ * "background": pencere gizlenir, uygulama menü çubuğu (macOS) / bildirim
+ * alanı (Windows) simgesinde yaşamaya devam eder — çalışan komutlar kesilmez.
+ */
+export type CloseAction = "quit" | "background";
+
 export type ViewMode = "tabs" | "panes";
 
 /** Arayüz dili. */
@@ -88,6 +96,8 @@ export interface Behavior {
    * klavyesinde `@` = Option+Q, açık olsa `@` yazılamazdı.
    */
   macOptionIsMeta: boolean;
+  /** Kapatma düğmesi: tamamen çık ya da arka planda kal. */
+  closeAction: CloseAction;
 }
 
 export interface Settings {

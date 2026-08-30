@@ -128,7 +128,17 @@ pub fn load_workspace(paths: &DataPaths, settings: &Settings) -> Workspace {
     let file = paths.workspace_file();
     let mut ws = match fs::read_to_string(&file) {
         Ok(text) => serde_json::from_str::<Workspace>(&text).unwrap_or_else(|err| {
-            eprintln!("[nterminal] workspace.json okunamadi ({err}); sifirdan baslaniyor");
+            // Bozuk dosyayi YEDEKLIYORUZ, ayarlarda oldugu gibi. Eskiden
+            // yalnizca stderr'e yazip bos duzenle basliyorduk - ve bos duzen
+            // ilk kayitta gercek dosyanin uzerine yaziliyordu. Yani tek bir
+            // okuma sorunu butun grup/sekme duzenini kalici olarak siliyordu;
+            // kullanicinin elinde hicbir kurtarma yolu kalmiyordu.
+            let backup = file.with_extension("json.bozuk");
+            let _ = fs::copy(&file, &backup);
+            eprintln!(
+                "[nterminal] workspace.json okunamadi ({err}); yedek: {}",
+                backup.display()
+            );
             Workspace::default()
         }),
         Err(_) => Workspace::default(),
@@ -171,7 +181,50 @@ pub fn load_workspace(paths: &DataPaths, settings: &Settings) -> Workspace {
     ws
 }
 
+/// Toplam sekme sayisi.
+fn tab_count(ws: &Workspace) -> usize {
+    ws.groups.iter().map(|g| g.tabs.len()).sum()
+}
+
+/// Duzen SICRAMALI kuculuyorsa uzerine yazmadan once bir kopya birak.
+///
+/// Yasanmis bir kayiptan geliyor: bes gruplu, dokuz sekmeli bir duzenin
+/// uzerine tek gruplu bos bir duzen yazildi ve geri donus yolu kalmadi.
+/// Duzeni geri getirmek komut gecmisinden elle yeniden kurmayi gerektirdi -
+/// grup adlari da oradan gelmedigi icin tam kurtarilamadi.
+///
+/// Yazma zaten atomik (`write_atomic`), yani dosya yarim kalmiyor; korunan sey
+/// dosyanin BUTUNLUGU degil ICERIGI. Bos bir duzen de gecerli bir duzen, o
+/// yuzden hicbir dogrulama onu durdurmaz - tek savunma bir onceki hali
+/// saklamak.
+///
+/// Her kayitta degil yalnizca sicramali kucullmede: sekme kapatmak siradan bir
+/// is ve her seferinde yedeklemek yedegi de kisa surede ayni kayba ugratirdi.
+/// Esik "sekmelerin yarisindan cogu gitti" - normal duzenlemede olmayan,
+/// kaybin imzasi olan bicim.
+fn snapshot_if_shrinking(paths: &DataPaths, incoming: &Workspace) {
+    let file = paths.workspace_file();
+    let Ok(text) = fs::read_to_string(&file) else {
+        return;
+    };
+    let Ok(current) = serde_json::from_str::<Workspace>(&text) else {
+        return;
+    };
+
+    let before = tab_count(&current);
+    let after = tab_count(incoming);
+    if before >= 2 && after * 2 < before {
+        let backup = file.with_extension("json.onceki");
+        let _ = fs::copy(&file, &backup);
+        eprintln!(
+            "[nterminal] duzen {before} sekmeden {after} sekmeye dustu; onceki hal: {}",
+            backup.display()
+        );
+    }
+}
+
 pub fn save_workspace(paths: &DataPaths, workspace: &Workspace) -> Result<()> {
+    snapshot_if_shrinking(paths, workspace);
     let mut ws = workspace.clone();
     ws.saved_at = now_ms();
     let text = serde_json::to_string_pretty(&ws)?;

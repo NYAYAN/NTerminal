@@ -87,6 +87,13 @@ export const api = {
   revealInExplorer: (path: string) => invoke<void>("reveal_in_explorer", { path }),
   /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
   openExternal: (url: string) => invoke<void>("open_external", { url }),
+  /**
+   * Menü çubuğu / bildirim alanı simgesinin menü metinleri.
+   *
+   * Menüyü işletim sistemi çiziyor, yani sözlüğe erişimi yok; dil değişince
+   * metinleri buradan geçiriyoruz.
+   */
+  trayLabels: (show: string, quit: string) => invoke<void>("tray_labels", { show, quit }),
 };
 
 // PTY çıktısı base64 geliyor: terminal akışı geçerli UTF-8 olmak zorunda değil

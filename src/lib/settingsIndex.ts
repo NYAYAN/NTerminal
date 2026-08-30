@@ -105,6 +105,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "session", key: "settings.scrollbackPerTab", hint: "settings.scrollbackPerTabHint" },
   { section: "session", key: "settings.inheritCwd" },
   { section: "session", key: "settings.confirmCloseTab", hint: "settings.confirmCloseTabHint" },
+  { section: "session", key: "settings.closeAction", hint: "settings.closeActionHint" },
 
   // ----------------------------------------------------------------- geçmiş
   { section: "history", key: "settings.historyLimit", hint: "settings.historyLimitHint" },

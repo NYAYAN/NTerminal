@@ -181,9 +181,15 @@ $Global:__NTermPredict = $env:NTERMINAL_PREDICTION
 if ([string]::IsNullOrEmpty($Global:__NTermPredict) -or $Global:__NTermPredict -eq 'off') {
     __NTermOsc '633;P;Prediction=off'
 } else {
-    # Durum arayuze bildiriliyor. Sebebi: destek yoksa oneri hic
-    # gorunmuyor ve kullanici bunu uygulamanin hatasi saniyor. Arayuz
-    # 'unsupported' gorunce ne yapilmasi gerektigini soyluyor.
+    # Windows PowerShell 5.1 PSReadLine 2.0 ile geliyor ve tahmini
+    # desteklemiyor. Uygulama bu durum icin PSReadLine 2.3.6'yi kendisiyle
+    # birlikte tasiyor ve `PSModulePath`in basina ekliyor (bkz. pty.rs), yani
+    # buraya gelindiginde YENI surum yuklenmis oluyor ve asagidaki denetim
+    # geciyor. Kullanicinin bir sey kurmasi gerekmiyor.
+    #
+    # Yine de 'unsupported' bir cikis yolu olarak duruyor: modul yuklenemezse
+    # ya da kabuk pwsh 7.0/7.1 ise buraya dusuyoruz. Durum arayuze bildiriliyor
+    # cunku sessiz kalmak "uygulama bozuk" izlenimi veriyor.
     $state = 'unsupported'
     try {
         $psrl = Get-Command Set-PSReadLineOption -ErrorAction Stop

@@ -29,6 +29,98 @@ function read(...parts: string[]): string {
 const ZSH = read(DIR, "nterminal.zsh");
 const SH = read(DIR, "nterminal.sh");
 
+/**
+ * PowerShell tarafının karşılığı: PSReadLine uygulamayla birlikte geliyor.
+ *
+ * Bu testler her platformda koşuyor — Rust tarafındaki kurulum testi
+ * `#[cfg(windows)]` olduğu için mac'te hiç çalışmıyor ve paketlenen dosyalar
+ * denetimsiz kalıyordu. Buradaki denetim dosyaların KENDİSİNE bakıyor, yani
+ * yanlış sürüm ya da eksik dosya mac'te de yakalanıyor.
+ */
+describe("PSReadLine modülü", () => {
+  const MODULE = join(DIR, "modules", "PSReadLine");
+  const psd1 = () => read(MODULE, "PSReadLine.psd1");
+
+  it("modül dosyaları yerinde", () => {
+    for (const f of [
+      "PSReadLine.psd1",
+      "PSReadLine.psm1",
+      "PSReadLine.format.ps1xml",
+      "Microsoft.PowerShell.PSReadLine2.dll",
+      "License.txt",
+    ]) {
+      expect(existsSync(join(MODULE, f)), `${f} eksik`).toBe(true);
+    }
+    // Polyfiller çalışma zamanına göre seçiliyor; ikisi de gerekli.
+    expect(existsSync(join(MODULE, "net462", "Microsoft.PowerShell.PSReadLine.Polyfiller.dll"))).toBe(true);
+    expect(existsSync(join(MODULE, "net6plus", "Microsoft.PowerShell.PSReadLine.Polyfiller.dll"))).toBe(true);
+  });
+
+  it("sürüm 2.2 ya da üstü", () => {
+    // Satır içi öneri (`PredictionSource`) 2.2 ile geldi. Daha eski bir sürüm
+    // paketlemek bütün işi anlamsız kılar ve hata sessiz olur: modül yüklenir,
+    // öneri yine çıkmaz.
+    const m = /ModuleVersion\s*=\s*'([\d.]+)'/.exec(psd1());
+    expect(m, "ModuleVersion okunamadı").not.toBe(null);
+    const [major, minor] = m![1].split(".").map(Number);
+    expect(major * 100 + minor, `paketlenen sürüm ${m![1]}`).toBeGreaterThanOrEqual(202);
+  });
+
+  it("Windows PowerShell 5.1'i destekliyor", () => {
+    // Hedef zaten 5.1: pwsh 7.2+ kendi güncel PSReadLine'ıyla geliyor ve ona
+    // dokunmuyoruz. Modül 5.1'i desteklemiyorsa paketlemenin anlamı yok.
+    const m = /PowerShellVersion\s*=\s*'([\d.]+)'/.exec(psd1());
+    expect(m, "PowerShellVersion okunamadı").not.toBe(null);
+    expect(Number.parseFloat(m![1]), `modül PowerShell ${m![1]}+ istiyor`).toBeLessThanOrEqual(5.1);
+  });
+});
+
+/**
+ * Satır içi öneri eklentisi (zsh-autosuggestions) uygulamayla birlikte geliyor.
+ *
+ * Önceden yoksa durum "unsupported" bildiriliyor, arayüz de kullanıcıya
+ * `brew install zsh-autosuggestions` diyordu — yani özelliğin çalışması için
+ * önce Homebrew kurulması gerekiyordu.
+ */
+describe("satır içi öneri eklentisi", () => {
+  /** Eklenti aday listesi: aranan yollar, yazıldıkları sırayla. */
+  const adaylar = () => {
+    const start = ZSH.indexOf("for __nterm_cand in");
+    expect(start, "aday döngüsü bulunamadı").toBeGreaterThan(-1);
+    const body = ZSH.slice(start, ZSH.indexOf("do", start));
+    return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  };
+
+  it("uygulamayla gelen kopya aday listesinde", () => {
+    expect(adaylar().some((p) => p.includes("zsh-autosuggestions.zsh"))).toBe(true);
+    expect(existsSync(join(DIR, "zsh-autosuggestions.zsh")), "eklenti dosyası yok").toBe(true);
+  });
+
+  it("kullanıcının kendi kurulumu ÖNCE geliyor", () => {
+    // Sıra bir tercih değil, doğruluk meselesi: kendi sürümünü yapılandırmış
+    // (renk, strateji, tuş bağlama) biri bizim yapılandırılmamış kopyamıza
+    // düşmemeli. Bizimki yalnızca hiçbiri yoksa devreye girer, o yüzden EN SON.
+    const list = adaylar();
+    const bizimki = list.findIndex((p) => p.includes("NTERMINAL_OWN_ZDOTDIR"));
+    expect(bizimki, "uygulamanın kopyası aday listesinde yok").toBeGreaterThan(-1);
+    expect(bizimki, "uygulamanın kopyası kullanıcınınkinden önce deneniyor").toBe(list.length - 1);
+  });
+
+  it("kullanıcı zaten yüklediyse ikinci kez yüklenmiyor", () => {
+    // İki kez source etmek tuş bağlamalarını üst üste kuruyor.
+    expect(ZSH).toContain("$+functions[_zsh_autosuggest_start]");
+  });
+
+  it("öneri kapalıyken eklentiye hiç dokunulmuyor", () => {
+    // Kullanıcı kabuk önerisini kapattıysa onun .zshrc'sindeki ayar geçerli
+    // kalmalı; eklentiyi yine de yüklemek o kararı eziyor.
+    const off = ZSH.indexOf('NTERMINAL_PREDICTION == "off"');
+    const loop = ZSH.indexOf("for __nterm_cand in");
+    expect(off, "kapalı denetimi yok").toBeGreaterThan(-1);
+    expect(off, "kapalı denetimi yükleme döngüsünden sonra geliyor").toBeLessThan(loop);
+  });
+});
+
 describe("zsh betiği", () => {
   it("dosya var", () => {
     expect(existsSync(join(DIR, "nterminal.zsh"))).toBe(true);

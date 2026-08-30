@@ -71,9 +71,7 @@ describe("terminal boşluk dolgusu", () => {
     // Sabit yükseklikler sekme/durum çubuğunun gerçek ölçüsüyle bir piksel
     // oynadığında içerik satır sınırını aşıyordu.
     //
-    // Satırlar: sekme çubuğu, terminal (1fr), öneri çubuğu, durum çubuğu.
-    // Öneri çubuğu görünmediğinde `auto` satır sıfır yükseklikte kalıyor;
-    // terminalin ÜSTÜNE bindirmek istem satırını kapatırdı.
+    // Satırlar: sekme çubuğu, terminal (1fr), durum çubuğu.
     const body = ruleBody(".main");
     const match = /grid-template-rows:\s*([^;]+);/.exec(body);
     expect(match, "grid-template-rows tanımlı olmalı").not.toBe(null);
@@ -96,7 +94,24 @@ describe("terminal boşluk dolgusu", () => {
     const areas = /grid-template-areas:\s*([^;]+);/.exec(body)![1];
     const areaRows = [...areas.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(areaRows).toHaveLength(rows.length);
-    expect(areaRows.some((r) => r.includes("suggest")), "öneri çubuğunun alanı yok").toBe(true);
+  });
+
+  it("öneri listesi ızgarada yer kaplamıyor", () => {
+    // ÖLÇÜLEN HATA. Liste bir zamanlar `grid-area: suggest` ile kendi
+    // satırındaydı; yüksekliği öneri sayısıyla değiştiği için her tuş
+    // vuruşunda terminal alanı küçülüp büyüyor, `ResizeObserver` → `fit()` →
+    // PTY yeniden ölçülendirme zinciri işliyor ve kabuk istemi yeniden
+    // çiziyordu. Terminal hücresi ~17px, öneri satırı ~24px: tek bir önerinin
+    // eklenmesi bile ekranı bir iki satır kaydırıyordu.
+    //
+    // Geri dönüşün yolu ızgaraya bir satır eklemekten geçiyor; ikisi de burada
+    // bağlı.
+    const areas = /grid-template-areas:\s*([^;]+);/.exec(ruleBody(".main"))![1];
+    expect(areas, "öneri listesi yeniden ızgara satırı olmuş").not.toContain("suggest");
+
+    const body = ruleBody(".suggest-bar");
+    expect(body, "liste ızgara alanına geri konmuş").not.toMatch(/grid-area/);
+    expect(body, "liste yüzmüyor — düzende yer kaplıyor").toMatch(/position:\s*fixed/);
   });
 
   it("terminal alanı ızgarada büyümüyor", () => {
@@ -186,6 +201,201 @@ describe("öneri listesi", () => {
 });
 
 /**
+ * Pencere iskeleti: durum çubuğu HER ZAMAN görünür kalmalı.
+ *
+ * ÖLÇÜLEN HATA. Kullanıcının dört grubu ve dokuz sekmesi varken pencere
+ * kısaldığında durum çubuğu ekranın dışına itiliyordu — 400px yükseklikte
+ * çerçevenin 251px altında. Aynı anda soldaki grup listesi de kaydırılamıyordu.
+ *
+ * İkisi tek sebep: `overflow-y: auto` kaydırma için TEK BAŞINA yetmiyor.
+ * Esnek öğenin ve ızgara izinin otomatik alt sınırı içerik boyutu, yani kutu
+ * hiç küçülmüyor — kaydırılacak bir taşma oluşmuyor, onun yerine kutu büyüyüp
+ * altındaki her şeyi dışarı itiyor.
+ *
+ * Aynı hata `.main` için bir kez çözülmüştü (`min-height: 0`); bir üst katmanda
+ * atlanmıştı. Üç kural birlikte gerekiyor ve üçü de burada bağlı.
+ */
+describe("iskelet yüksekliği", () => {
+  it("ana ızgara satırı içeriğe göre büyüyemiyor", () => {
+    // Yalın `1fr` iznin otomatik alt sınırı min-content: kenar çubuğu uzayınca
+    // satır pencereden yüksek oluyor ve durum çubuğu dışarı taşıyor.
+    const rows = /grid-template-rows:\s*([^;]+);/.exec(ruleBody(".app"))![1];
+    expect(rows, `.app satırları içeriğe göre büyüyebiliyor: ${rows}`).toMatch(
+      /minmax\(\s*0\s*,\s*1fr\s*\)/,
+    );
+  });
+
+  it("kenar çubuğu ızgara izini şişiremiyor", () => {
+    expect(ruleBody(".sidebar"), ".sidebar sıkışamıyor").toMatch(/min-height:\s*0/);
+  });
+
+  it("grup listesi gerçekten kaydırılabiliyor", () => {
+    // `overflow-y: auto` tek başına yetmiyor; kutunun küçülebilmesi de gerekiyor.
+    const body = ruleBody(".sidebar-scroll");
+    expect(body, "kaydırma tanımlı değil").toMatch(/overflow-y:\s*auto/);
+    expect(body, "min-height: 0 yok — kutu küçülemez, kaydırma da oluşmaz").toMatch(
+      /min-height:\s*0/,
+    );
+  });
+});
+
+/**
+ * Durum çubuğunun daralma davranışı.
+ *
+ * Ölçülmüş iki hata bu bölümün arkasında duruyor.
+ *
+ * 1. Pencere daraldığında "Komut önerisi desteklenmiyor" gibi çok sözcüklü bir
+ *    rozet ikinci satıra sarıyordu: yüksekliği 15px'ten 30px'e çıkıp 24px'lik
+ *    çubuğu taşırıyor ve sol komşusunun ÜZERİNE biniyordu.
+ *
+ * 2. Sarma kesildikten sonra rozet bu kez, yer sıkıntısı OLMADIĞI hâlde
+ *    kısalmaya başladı. Sebebi incelikli: açığı önce yol kapatsın diye yola çok
+ *    büyük bir sıkışma katsayısı verilmişti, rozete kalan pay 0.02px gibi bir
+ *    değerdi — ama `text-overflow: ellipsis` payın büyüklüğüne bakmıyor, bir
+ *    pikselin altındaki eksik bile son harfi üç noktaya çeviriyor.
+ *
+ * Bugünkü kural bu yüzden kesin: çubuktaki hiçbir şey SIKIŞMAZ. Tek istisna
+ * yol; o da bir asgarinin altına inmiyor. Sığmayan her şey "⋯" menüsüne
+ * gidiyor, yani gizlemek bilgi kaybı değil.
+ *
+ * Sığdırma kararı CSS'te değil `statusFit.ts` içinde (gerekçesi orada, testi de
+ * `statusFit.test.ts`); burada yalnızca o kararın uygulanabilmesi için gereken
+ * stil değişmezleri bağlı.
+ */
+describe("durum çubuğu daralması", () => {
+  const SOURCE = readFileSync(join(process.cwd(), "src/components/StatusBar.tsx"), "utf8");
+
+  it("rozet sarmıyor", () => {
+    expect(
+      ruleBody(".statusbar .pill"),
+      "rozet sarabiliyor — ikinci satır komşusunun üstüne biner",
+    ).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it("rozet kısalmıyor da", () => {
+    // İkinci hata. `flex: none` olmadan rozet, açığın binde biri kendisine
+    // düştüğünde bile son harfini üç noktaya çeviriyor.
+    const body = ruleBody(".statusbar .pill");
+    expect(body, "rozet sıkışabiliyor").toMatch(/flex:\s*none/);
+    expect(body, "rozette text-overflow var — kısalmaya kapı açıyor").not.toMatch(
+      /text-overflow/,
+    );
+  });
+
+  it("bilgi öğeleri sıkışmıyor", () => {
+    // Yarım kalmış bir sayı ya da kırpılmış bir grup adı, olmayan bilgiden
+    // kötü: bunlar küçülmez, sırası gelince tümden gider.
+    expect(ruleBody(".statusbar .item"), ".item sıkışabiliyor").toMatch(/flex:\s*none/);
+  });
+
+  it("hiçbir öğe sıkışmıyor", () => {
+    // Sığdırma hesabı ölçülen genişliği GEREKEN genişlik sayıyor. Sıkışabilen
+    // tek bir öğe bile bu varsayımı sessizce bozar: hesap "sığıyor" derken
+    // gerçekte yarısı kırpılmış bir öğe kalır.
+    for (const selector of [".statusbar .item", ".statusbar .pill", ".statusbar .cwd"]) {
+      expect(ruleBody(selector), `${selector} sıkışabiliyor`).toMatch(/flex:\s*none/);
+    }
+  });
+
+  it("yol segment sınırından kısalıyor", () => {
+    // Esneklikle sıkıştırıp soldan kırpmak sözcüğün ortasından geçiyordu
+    // ("ks/Other_Projects"); ayrıca `direction: rtl` bidi yüzünden yolun
+    // başındaki eğik çizgiyi görsel olarak sona taşıyordu.
+    expect(SOURCE, "yol kısaltılmadan basılıyor").toMatch(/shortenPath\(tab\.cwd/);
+    expect(ruleBody(".statusbar .cwd"), "rtl kırpma numarası geri gelmiş").not.toMatch(
+      /direction:\s*rtl/,
+    );
+  });
+
+  it("gizleme kuralı var ve geç geliyor", () => {
+    // `.statusbar [data-out]` ile `.statusbar .item` aynı özgüllükte (0,2,0);
+    // ikisi de `display` yazıyor, dolayısıyla kazananı SIRA belirliyor. Kural
+    // yukarı taşınırsa gizleme sessizce çalışmaz olur.
+    expect(ruleBody(".statusbar [data-out]"), "gizleme kuralı display vermiyor").toMatch(
+      /display:\s*none/,
+    );
+    expect(
+      CSS.indexOf(".statusbar [data-out] {"),
+      "gizleme kuralı .item kuralından önce geliyor — display: flex onu eziyor",
+    ).toBeGreaterThan(CSS.indexOf(".statusbar .item {"));
+  });
+
+  it("⋯ düğmesi yalnızca gerektiğinde görünüyor", () => {
+    expect(ruleBody(".statusbar .status-more"), "⋯ varsayılan gizli olmalı").toMatch(
+      /display:\s*none/,
+    );
+    expect(
+      ruleBody(".statusbar .status-more[data-in]"),
+      "⋯ açılma kuralı yok — hiç görünmez",
+    ).toMatch(/display:\s*flex/);
+  });
+
+  it("öncelik numaraları tanımlı aralıkta", () => {
+    // Numarayı büyütüp `MAX_DROP_LEVEL`i unutmak sessiz bir hata: o öncelik
+    // hiç gizlenmez ve düzen yine taşar.
+    const max = Number(/MAX_DROP_LEVEL\s*=\s*(\d+)/.exec(SOURCE)![1]);
+    const used = [
+      ...new Set(
+        [...SOURCE.matchAll(/data-drop=(?:"(\d)"|\{[^}]*?"(\d)"[^}]*?\})/g)].flatMap((m) =>
+          [m[1], m[2]].filter(Boolean).map(Number),
+        ),
+      ),
+    ];
+    expect(used.length, "StatusBar.tsx hiç data-drop kullanmıyor").toBeGreaterThan(0);
+    expect(Math.max(...used), `MAX_DROP_LEVEL (${max}) kullanılan en büyük numaradan küçük`)
+      .toBeLessThanOrEqual(max);
+  });
+
+  it("sağlıklı rozet uyarı rozetinden önce gidiyor", () => {
+    // Rozetin değeri durumuna bağlı. "Komut takibi tam" kullanıcıdan bir şey
+    // istemiyor; "sınırlı" ve "desteklenmiyor" bir eksiği haber veriyor ve
+    // ipucunda çözümü yazıyor.
+    const ok = Number(/<span className="pill ok" data-drop="(\d)"/.exec(SOURCE)![1]);
+    const warn = Number(/<span\s+className="pill warn"\s+data-drop="(\d)"/.exec(SOURCE)![1]);
+    expect(ok, "sağlıklı rozet uyarıdan sonra gidiyor").toBeLessThan(warn);
+
+    // Öneri rozeti tek öğe, önceliği duruma göre hesaplanıyor.
+    const pred = /data-drop=\{session\.prediction === "unsupported" \? "(\d)" : "(\d)"\}/.exec(
+      SOURCE,
+    );
+    expect(pred, "öneri rozetinin önceliği duruma bağlı değil").not.toBe(null);
+    expect(Number(pred![2]), "sağlıklı öneri uyarıdan sonra gidiyor").toBeLessThan(
+      Number(pred![1]),
+    );
+  });
+
+  it("düğmeler hiçbir düzeyde kaybolmuyor", () => {
+    // Eski davranışta kırpılan İLK şey bunlardı, çünkü en sağdaydılar.
+    // Çapa `<button` — özniteliğin ADINDAN değil ÖĞENİN başından kesiyoruz.
+    // İlk sürüm `className=...` satırını çapa almıştı ve ondan ÖNCE eklenen
+    // bir `data-drop`u görmüyordu: mutasyon denemesinde test geçiyordu.
+    const at = SOURCE.indexOf("<button");
+    expect(at, "düğme bulunamadı").toBeGreaterThan(-1);
+    expect(
+      SOURCE.slice(at).replace(/className="status-btn status-more"/, ""),
+      "düğmelere data-drop verilmiş — çubuğun tek eylemi kaybolabilir",
+    ).not.toMatch(/data-drop/);
+    expect(CSS, ".status-btn gizleyen bir kural var").not.toMatch(
+      /\.status-btn[^{[]*\{[^}]*display:\s*none/,
+    );
+  });
+
+  it("menü çubuğun dışında duruyor", () => {
+    // Sığdırma hesabı çubuğun DOĞRUDAN ÇOCUKLARINI ölçüyor. Menü içeride
+    // olsaydı bir "durum öğesi" sayılır ve çubuk kendini gereğinden dar
+    // sanardı — üstelik yalnızca menü açıkken.
+    const bar = SOURCE.indexOf('<div className="statusbar"');
+    const menu = SOURCE.indexOf("<ContextMenu");
+    expect(bar, "çubuk bulunamadı").toBeGreaterThan(-1);
+    expect(menu, "menü çizilmiyor").toBeGreaterThan(bar);
+    expect(
+      SOURCE.slice(bar, menu),
+      "menü çubuğun içinde — ölçüme fazladan bir öğe olarak girer",
+    ).toContain("</div>");
+  });
+});
+
+/**
  * Düğme hizalaması.
  *
  * Ölçülmüş bir gerileme: temel `button` kuralına `justify-content: center`
@@ -207,11 +417,28 @@ describe("düğme hizalaması", () => {
   });
 
   it("sola dayalı düğmeler text-align: left taşıyor", () => {
-    for (const selector of [".ctx-item", ".suggest-row", ".add-tab", ".settings-nav button"]) {
+    // `.add-tab` bu listede DEĞİL: içeriği kadar yer kaplayıp sağa dayanıyor,
+    // dolayısıyla metin hizası anlamsız (gerekçe `.add-tab` kuralında).
+    for (const selector of [".ctx-item", ".suggest-row", ".settings-nav button"]) {
       expect(ruleBody(selector), `${selector} sola dayalı olmalı`).toMatch(
         /text-align:\s*left/,
       );
     }
+  });
+
+  it("sekme ekle düğmesi sağa yapışık", () => {
+    // Bildirilen hata: düğme tam genişlikteyken tıklama hedefi son sekme
+    // satırının hemen altında, aynı sütunda uzanıyordu; sekmeye nişan alıp
+    // birkaç piksel aşağı kayan tıklama istemeden yeni sekme açıyordu.
+    const body = ruleBody(".add-tab");
+    expect(body, "düğme yine tam genişlikte").not.toMatch(/width:\s*100%/);
+    expect(body, "sağa dayama yok").toMatch(/margin-left:\s*auto/);
+
+    // Boş grupta tam genişlik geri geliyor ve bu kasıtlı: üstünde yanlışlıkla
+    // nişan alınacak bir sekme satırı yok, düğme de tek yönlendirme.
+    const prominent = ruleBody(".add-tab.prominent");
+    expect(prominent, "boş grupta tam genişlik kaybolmuş").toMatch(/width:\s*100%/);
+    expect(prominent, "boş grupta sağa dayama kaldırılmamış").toMatch(/margin-left:\s*0/);
   });
 
   it("içerikten geniş olabilen düğmeler ortalanıyor", () => {

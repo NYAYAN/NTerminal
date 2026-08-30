@@ -1,4 +1,5 @@
 @import "@xterm/xterm/css/xterm.css";
+@import "./fonts.css";
 
 :root {
   /* themes.ts bu değişkenleri çalışma anında yazar; buradakiler ilk boyama içindir. */
@@ -273,7 +274,16 @@ input[type="color"] {
 
 .app {
   display: grid;
-  grid-template-rows: 34px 1fr;
+  /* `minmax(0, 1fr)` — yalin `1fr` DEGIL.
+   *
+   * OLCULEN HATA: yalin `1fr` izin otomatik alt siniri icerik boyutu. Kenar
+   * cubugundaki grup listesi uzayinca satir pencereden daha yuksek oluyor,
+   * icerik asagi tasiyor ve satirin dibindeki durum cubugu ekranin disinda
+   * kaliyordu. Olculen: 400px yukseklikte cubuk cercevenin 251px altinda.
+   *
+   * Ayni hata `.main` icin bir kez cozulmustu (`min-height: 0`); bu bir ust
+   * katman ve orada atlanmisti. */
+  grid-template-rows: 34px minmax(0, 1fr);
   grid-template-columns: auto 1fr;
   grid-template-areas:
     "titlebar titlebar"
@@ -343,6 +353,9 @@ html[data-platform="macos"] .titlebar {
   flex-direction: column;
   min-width: 170px;
   max-width: 480px;
+  /* Izgara ogesinin otomatik alt siniri da icerik boyutu; bu olmadan uzun
+     grup listesi cubugu pencereden tasiriyor. */
+  min-height: 0;
   position: relative;
 }
 
@@ -360,6 +373,11 @@ html[data-platform="macos"] .titlebar {
 
 .sidebar-scroll {
   flex: 1;
+  /* `overflow-y: auto` TEK BASINA yetmiyor: esnek ogenin otomatik alt siniri
+     icerik yuksekligi, yani kutu hic kucullmuyor ve kaydirilacak bir tasma da
+     olusmuyor. Kullanicinin gordugu iki belirti de buydu - liste kaydirilamiyor
+     ve durum cubugu ekranin disina itiliyor. */
+  min-height: 0;
   overflow-y: auto;
   padding: 2px 7px 10px;
 }
@@ -646,11 +664,23 @@ html[data-platform="macos"] .titlebar {
    Ayni kalibi (rozet kutusu + tam yukseklik) kullandiginda sekme sanilip
    yanlislikla tiklaniyordu; bu yuzden yariya yakin yukseklikte, rozetsiz,
    soluk ve cizgili bir baglanti gibi duruyor. */
+/* "Sekme ekle" — SEKME SATIRLARININ ALTINDA ve saga yapisik.
+ *
+ * Eskiden tam genislikteydi ve tiklama hedefi son sekme satirinin hemen
+ * altinda, ayni sutunda, bastan sona uzaniyordu. Sekmeye nisan alip birkac
+ * piksel asagi kayan her tiklama bu dugmeye gidiyor, kullanici istemeden yeni
+ * sekme aciyordu - bildirilen sikayet buydu.
+ *
+ * Cozum hedefi kucultmek degil, KAYDIRMAK: dugme artik yalnizca kendi metni
+ * kadar yer kapliyor ve saga dayali, yani sekme adlarinin bulundugu sol sutunla
+ * hic ustuste binmiyor. Yanlislikla tiklama icin imlecin ayrica saga gitmesi
+ * gerekiyor. */
 .add-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  width: fit-content;
+  margin-left: auto;
   min-height: 19px;
   padding: 0 4px 0 8px;
   margin-top: 2px;
@@ -659,7 +689,6 @@ html[data-platform="macos"] .titlebar {
   background: transparent;
   color: color-mix(in srgb, var(--text-dim) 72%, transparent);
   font-size: 10.5px;
-  text-align: left;
   cursor: pointer;
 }
 
@@ -676,8 +705,13 @@ html[data-platform="macos"] .titlebar {
   line-height: 1;
 }
 
-/* Grup bosken tek yonlendirme bu satir; biraz daha gorunur olsun. */
+/* Grup bosken tek yonlendirme bu satir; biraz daha gorunur olsun.
+ *
+ * Tam genislik burada geri geliyor ve sorun degil: grup bos oldugu icin
+ * ustunde yanlislikla nisan alinacak bir sekme satiri yok. */
 .add-tab.prominent {
+  width: 100%;
+  margin-left: 0;
   min-height: 26px;
   font-size: 11.5px;
   color: var(--text-dim);
@@ -770,10 +804,26 @@ html[data-platform="macos"] .titlebar {
 
 /* ----------------------------------------------------------- komut onerisi */
 
+/* Oneri listesi TERMINALIN USTUNDE YUZUYOR, izgarada yer kaplamiyor.
+ *
+ * OLCULEN HATA: eskiden `grid-area: suggest` ile ayri bir izgara satiriydi ve
+ * yuksekligi oneri sayisiyla degisiyordu. Her degisim terminal alanini
+ * kucultup buyutuyor, `ResizeObserver` -> `fit()` -> yeni satir sayisi ->
+ * PTY'ye yeni olcu zinciri isliyor ve kabuk istemi yeniden ciziyordu. Terminal
+ * hucresi ~17px, oneri satiri ~24px; yani tek bir oneri eklenmesi bile ekrani
+ * bir iki satir kaydiriyordu. Kullanicinin gordugu titreme buydu.
+ *
+ * `fixed` konumlandirma bilincli: kutuyu imlece gore JS yerlestiriyor ve
+ * gorunum koordinatlari en basit ortak zemin. z-index 20, terminalin ustunde
+ * ama menulerin (300+) altinda. */
 .suggest-bar {
-  grid-area: suggest;
-  border-top: 1px solid var(--border);
+  position: fixed;
+  z-index: 20;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--surface-alt);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
   min-width: 0;
 }
 
@@ -890,15 +940,14 @@ html[data-platform="macos"] .titlebar {
   /* Satirlar icerige gore: sabit yukseklikler sekme cubugunun ve durum
      cubugunun gercek olculeriyle bir piksel oynadiginda icerik satir
      sinirini asiyordu. `auto` bunu tumden ortadan kaldiriyor. */
-  /* Oneri cubugu ayri bir `auto` satir: gorunmedigi zaman yuksekligi
-     sifir, gorundugunde terminali yukari itiyor. Terminalin ustune
-     bindirmek istem satirini kapatirdi. */
-  grid-template-rows: auto 1fr auto auto;
+  /* Oneri listesi burada YOK: kendi izgara satirindayken yuksekligi her tus
+     vurusunda degisiyor ve terminali yeniden olculendiriyordu. Artik yuzuyor
+     (bkz. `.suggest-bar`). */
+  grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "tabbar tabbar"
     "terminal panel"
-    "suggest suggest"
     "status status";
   min-width: 0;
   min-height: 0;
@@ -1466,19 +1515,32 @@ html[data-platform="macos"] .titlebar {
   align-items: center;
   gap: 5px;
   white-space: nowrap;
+  /* Sikismiyorlar. Yer daralinca bu ogeler KUCULMEZ, sirasi gelince tumden
+     kaybolur (asagidaki `data-out`). Yarim kalmis bir sayi ya da kirpilmis
+     bir grup adi, olmayan bilgiden daha kotu. */
+  flex: none;
 }
 
 .statusbar .cwd {
   font-family: var(--mono-font);
+  /* Kisaltma CSS'te DEGIL, `shortenPath` ile yapiliyor: kesme segment
+     sinirindan gecsin diye.
+     Onceki cozum yolu esneklikle sikistirip `direction: rtl` ile soldan
+     kirpiyordu. Iki kusuru vardi ve ikisi de ekranda goruluyordu: kesme
+     sozcugun ortasindan geciyordu ("ks/Other_Projects"), ve bidi algoritmasi
+     yolun BASINDAKI egik cizgiyi notr karakter sayip gorsel olarak sona
+     tasiyordu ("ers/nyayan/Desktop/Works/" - sondaki cizgi yolda yok).
+     Tam yol ipucunda ve "⋯" menusunde duruyor. */
+  max-width: 46ch;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
-  max-width: 46ch;
+  flex: none;
 }
+
 
 .statusbar .spacer {
   flex: 1;
+  min-width: 0;
 }
 
 .statusbar .pill {
@@ -1486,6 +1548,56 @@ html[data-platform="macos"] .titlebar {
   border-radius: 999px;
   padding: 0 7px;
   line-height: 15px;
+  /* Rozet ne SARAR ne KISALIR: ya tam okunur, ya "⋯" menusune gider.
+   *
+   * Iki olculen hata bu iki bildirimin arkasinda duruyor.
+   *
+   * 1. `nowrap` yokken cok sozcuklu bir rozet ("Komut onerisi desteklenmiyor")
+   *    dar cubukta ikinci satira sariyor, yuksekligi 15px yerine 30px oluyor,
+   *    24px'lik cubuktan tasip sol komsusunun UZERINE biniyordu.
+   *
+   * 2. `flex: none` yerine kisalmaya izin verildiginde rozet, yer sikintisi
+   *    OLMADIGI halde kisaliyordu. Sebep incelikli: acigi once yol kapatsin
+   *    diye yola cok buyuk bir sikisma katsayisi verilmisti, rozete kalan pay
+   *    0.02px gibi bir degerdi - ama `text-overflow: ellipsis` payin
+   *    buyuklugune bakmiyor, bir pikselin altindaki eksik bile son harfi
+   *    ucnoktaya cevirmeye yetiyor. Ekranda "desteklenmiy..." goruluyordu.
+   */
+  white-space: nowrap;
+  flex: none;
+}
+
+/* "⋯" — sigmayanlarin kapisi.
+ *
+ * Yalnizca bir sey gizlendiginde beliriyor; esigi ilk `data-drop` esigiyle
+ * AYNI, yani dugme ile ilk kaybolan oge tam olarak birlikte hareket ediyor.
+ * Genis pencerede cubukta fazladan bir dugme durmuyor. */
+.statusbar .status-more {
+  /* Varsayilan gizli: yalnizca bir sey gizlendiginde JS `data-in` ekliyor.
+     Genis pencerede cubukta fazladan bir dugme durmuyor. */
+  display: none;
+  font-size: 13px;
+  line-height: 13px;
+  padding: 1px 7px 3px;
+}
+
+.statusbar .status-more[data-in] {
+  display: flex;
+}
+
+/* Gizleme.
+ *
+ * Karari CSS degil `StatusBar.tsx` veriyor: cubugun icerigi duruma gore
+ * 200px'den fazla degisiyor (Ingilizce uyari metinleri Turkce saglikli
+ * metinlerden ~200px genis) ve sabit bir esik iki ucu birden dogru yapamiyor.
+ * Once `@container` esikleriyle denendi, olcum yetmedigini gosterdi.
+ *
+ * Burada yalnizca SONUC var: `data-out` tasiyan gizlenir. Ozniteligi JS
+ * yaziyor; React onu render etmedigi icin kendi guncellemelerinde silmiyor.
+ *
+ * Sira ve gerekcesi StatusBar.tsx icinde. */
+.statusbar [data-out] {
+  display: none;
 }
 
 /* Durum cubugundaki panel anahtarlari (Gecmis, Favoriler).
@@ -1916,7 +2028,7 @@ html[data-platform="macos"] .titlebar {
   z-index: 302;
 }
 
-.ctx-item:hover:not(:disabled) {
+.ctx-item:hover:not(:disabled):not(.ctx-info) {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
@@ -1937,6 +2049,12 @@ html[data-platform="macos"] .titlebar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Bilgi satiri: `.ctx-item` ile ayni izgara, ama dugme degil.
+   Vurgu ve imlec yok - tiklanacak bir sey oldugunu soylememeli. */
+.ctx-info {
+  cursor: default;
 }
 
 .ctx-hint {

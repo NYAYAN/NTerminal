@@ -8,6 +8,16 @@ export type MenuEntry =
   | { kind: "separator" }
   | { kind: "header"; label: string }
   /**
+   * Tıklanamayan bilgi satırı: solda ne olduğu, sağda değeri.
+   *
+   * Durum çubuğu dar kaldığında öğeleri "⋯" menüsüne taşıyor ve oradaki
+   * çoğunun bir eylemi yok — "Kabuk pid: 11421" okunacak bir şey, yapılacak
+   * değil. `item` + boş `run` yanlış söz veriyor (tıklanabilir görünüyor,
+   * tıklayınca menü kapanıyor), `disabled` ise "şu an kullanılamıyor" diyor.
+   * İkisi de doğru değil, o yüzden ayrı bir tür.
+   */
+  | { kind: "info"; label: string; value?: string }
+  /**
    * Alt menü.
    *
    * Uzun listeler (örnek: "Gruba taşı" altındaki gruplar) menüyü ana
@@ -141,6 +151,16 @@ function MenuPanel({
       >
         {entries.map((entry, index) => {
           if (entry.kind === "separator") return <div className="ctx-sep" key={index} />;
+
+          if (entry.kind === "info") {
+            return (
+              <div className="ctx-item ctx-info" key={index}>
+                <span className="ctx-mark" />
+                <span className="ctx-label">{entry.label}</span>
+                {entry.value && <span className="ctx-hint">{entry.value}</span>}
+              </div>
+            );
+          }
 
           if (entry.kind === "header") {
             return (

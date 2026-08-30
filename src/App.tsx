@@ -13,7 +13,8 @@ import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
-import { useT } from "./lib/i18n";
+import { useT, useLang } from "./lib/i18n";
+import { api } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { flushAllState, useStore } from "./store/useStore";
@@ -33,6 +34,9 @@ export function App() {
   const key = (action: string) => prettyCombo(settings.keybindings[action] ?? "");
 
   const [closing, setClosing] = useState(false);
+  // Kapanış durumu ayrıca ref'te: kapatma dinleyicisi bir kez kuruluyor ve
+  // durumu ÇAĞRI ANINDA okuması gerekiyor, closure'dan değil.
+  const closingRef = useRef(false);
   const bootstrapped = useRef(false);
 
   useEffect(() => {
@@ -40,6 +44,16 @@ export function App() {
     bootstrapped.current = true;
     void bootstrap();
   }, [bootstrap]);
+
+  // Menü çubuğu / bildirim alanı simgesinin menüsü de arayüz dilini izlesin.
+  //
+  // Simge açılışta Rust tarafındaki metinlerle kuruluyor (o an sözlük henüz
+  // yüklenmemiş oluyor); dil değişince burası güncelliyor. Olmasaydı menü,
+  // uygulama yeniden başlatılana kadar eski dilde kalırdı.
+  const lang = useLang();
+  useEffect(() => {
+    void api.trayLabels(t("tray.show"), t("tray.quit")).catch(() => {});
+  }, [lang, t]);
 
   // Açılışta aktif grubun hiç sekmesi yoksa bir tane aç: boş pencere ile
   // karşılaşmak kimsenin istediği şey değil.
@@ -50,15 +64,50 @@ export function App() {
     if (group && group.tabs.length === 0) store.addTab({ groupId: group.id });
   }, [ready, activeGroupId, groups.length]);
 
-  // Pencere kapatılırken tüm durumu diske yaz, sonra gerçekten kapat.
-  // Kaydetme bitmeden kapatırsak "kaldığı yerden devam" bilgisi kaybolur.
+  /*
+   * Pencere kapatılırken tüm durumu diske yaz, sonra kapatma kararını uygula.
+   *
+   * Karar BURADA ve tek yerde. Rust tarafında da bir `CloseRequested` kancası
+   * denendi ve hiç çalışmadı: buradaki `destroy()` kapatma isteğini tümden
+   * atlıyor, yani Rust'ın `prevent_close()` çağrısının bir hükmü kalmıyordu.
+   * "Arka planda kal" ayarı seçiliyken bile uygulama kapanıyordu — kullanıcının
+   * bildirdiği hata buydu. İki kancadan biri kalmalıydı; durumu diske yazan
+   * taraf burası olduğu için karar da burada.
+   */
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     const window_ = getCurrentWindow();
     void window_
       .onCloseRequested(async (event) => {
-        if (closing) return;
+        if (closingRef.current) return;
         event.preventDefault();
+
+        // Ayar ÇAĞRI ANINDA okunuyor, closure'dan değil: dinleyici yalnızca
+        // bir kez kuruluyor (aşağıdaki boş bağımlılık listesi), dolayısıyla
+        // ayarı yakalamak onu dondurmak olurdu.
+        //
+        // Dinleyicinin bir kez kurulması da bilinçli: `onCloseRequested` bir
+        // söz döndürüyor ve bağımlılık her değiştiğinde etki yeniden koşuyordu.
+        // Söz çözülmeden temizlik çalışırsa `unlisten` henüz tanımsız oluyor,
+        // yani ESKİ dinleyici kaldırılmadan yenisi ekleniyordu.
+        if (useStore.getState().settings.behavior.closeAction === "background") {
+          // Arka planda kal: pencere YOK EDİLMİYOR, gizleniyor. Kabuk
+          // süreçleri ve ekran çıktısı olduğu gibi kalıyor; menü çubuğu /
+          // bildirim alanı simgesinden geri çağrıldığında çalışan komut
+          // kaldığı yerden görünür.
+          //
+          // `finally`: kaydetme bir sebeple düşerse bile pencere gizlenmeli.
+          // Aksi halde kapatma düğmesi hiçbir şey yapmıyor gibi görünüyor.
+          try {
+            await flushAllState();
+          } finally {
+            await window_.hide();
+          }
+          return;
+        }
+
+        closingRef.current = true;
         setClosing(true);
         try {
           await flushAllState();
@@ -67,10 +116,15 @@ export function App() {
         }
       })
       .then((fn) => {
-        unlisten = fn;
+        // Etki sökülmüşse dinleyiciyi hemen bırak: yoksa sızıyor.
+        if (disposed) fn();
+        else unlisten = fn;
       });
-    return () => unlisten?.();
-  }, [closing]);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Periyodik güvenlik kaydı: uygulama beklenmedik şekilde kapanırsa (güç
   // kesintisi, çökme) en fazla iki dakikalık kayıp olsun.
