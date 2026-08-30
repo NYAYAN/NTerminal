@@ -1039,6 +1039,7 @@ export function SettingsDialog() {
               <div className="section">
                 <h3>NTerminal {appVersion}</h3>
                 <p className="dim">{t("settings.aboutBlurb")}</p>
+                <p className="dim">{t("settings.developer")}</p>
               </div>
               <div className="section">
                 <h3>{t("settings.fileLocations")}</h3>

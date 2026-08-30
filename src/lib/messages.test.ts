@@ -143,6 +143,9 @@ describe("büyük harf düzeni", () => {
     "Ctrl", "Alt", "Shift", "Esc", "Tab", "Enter", "Option", "Meta",
     "Ayarlar", "Profiller", "Davranış", "Settings", "Profiles", "Behavior",
     "Komut", "İstemi", "Prompt", "Command",
+    // Geliştiricinin adı (Hakkında bölümü). Soyadın büyük yazılması Türkçe
+    // yazışma geleneği, başlık stili değil.
+    "Nurullah", "YAYAN",
   ]);
 
   const CAP = /^[A-ZÇĞİÖŞÜ]/;
