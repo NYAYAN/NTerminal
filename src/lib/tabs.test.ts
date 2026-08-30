@@ -158,17 +158,25 @@ describe("grup gorunumu", () => {
 
   it("suzgec kapaliyken tum gruplar gorunur", () => {
     const list = [g("a"), g("b", { favorite: true })];
-    expect(visibleGroups(list, false, "a").map((x) => x.id)).toEqual(["a", "b"]);
+    expect(visibleGroups(list, false).map((x) => x.id)).toEqual(["a", "b"]);
   });
 
   it("suzgec acikken yalnizca favoriler gorunur", () => {
     const list = [g("a"), g("b", { favorite: true }), g("c", { favorite: true })];
-    expect(visibleGroups(list, true, "b").map((x) => x.id)).toEqual(["b", "c"]);
+    expect(visibleGroups(list, true).map((x) => x.id)).toEqual(["b", "c"]);
   });
 
-  it("etkin grup favori olmasa da listede kalir", () => {
-    // Aksi halde kullanici calistigi yeri gozden kaybediyor.
+  it("etkin grup da favori degilse listede yok", () => {
+    // Eskiden istisna vardi ("calistigi yeri gozden kaybetmesin"). Suzgec
+    // "favoriler" diyorsa listede favori olmayan bir satir gormek suzgecin ne
+    // yaptigini belirsiz kiliyordu. Etkin grubun sekmeleri ustteki sekme
+    // cubugunda duruyor, yani erisim kapanmiyor.
     const list = [g("a"), g("b", { favorite: true })];
-    expect(visibleGroups(list, true, "a").map((x) => x.id)).toEqual(["a", "b"]);
+    expect(visibleGroups(list, true).map((x) => x.id)).toEqual(["b"]);
+  });
+
+  it("hic favori yoksa liste bos", () => {
+    // Kenar cubugu bu durumda "favori yok" ipucunu gosteriyor.
+    expect(visibleGroups([g("a"), g("b")], true)).toEqual([]);
   });
 });

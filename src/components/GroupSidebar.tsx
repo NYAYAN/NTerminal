@@ -89,7 +89,7 @@ export function GroupSidebar() {
     };
   }, [sidebarWidth, patchAppearance]);
 
-  const shown = visibleGroups(groups, onlyFavorites, activeGroupId);
+  const shown = visibleGroups(groups, onlyFavorites);
   const favoriteCount = groups.filter((g) => g.favorite).length;
   const allCollapsed = groups.length > 0 && !nextCollapsedAll(groups);
 
