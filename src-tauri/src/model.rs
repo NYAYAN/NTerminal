@@ -353,6 +353,7 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("prevTab", "Ctrl+Shift+Tab"),
         ("newGroup", "Ctrl+Shift+N"),
         ("commandPalette", "Ctrl+Shift+P"),
+        ("filePalette", "Ctrl+P"),
         ("historyPanel", "Ctrl+Shift+H"),
         ("historySearch", "Ctrl+R"),
         ("favorites", "Ctrl+Shift+B"),
@@ -380,6 +381,7 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("prevTab", "Ctrl+Shift+Tab"),
         ("newGroup", "Cmd+Shift+N"),
         ("commandPalette", "Cmd+Shift+P"),
+        ("filePalette", "Cmd+P"),
         ("historyPanel", "Cmd+Shift+H"),
         // Cmd+R: mac'te Ctrl+R kabugun ters aramasi, ona dokunmuyoruz.
         ("historySearch", "Cmd+R"),
