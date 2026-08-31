@@ -755,6 +755,27 @@ Entegrasyon testleri ConPTY'nin açılışta gönderdiği `ESC[6n` imleç konumu
 sorgusunu elle yanıtlıyor — gerçek uygulamada bunu xterm.js kendiliğinden
 yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
 
+### GitHub Actions
+
+`.github/workflows/build.yml`: main'e her itmede, her PR'de ve elle
+tetiklendiğinde koşuyor.
+
+- **Arayüz** (ubuntu) — tip denetimi + vitest. jsdom platformdan bağımsız,
+  bir kez koşması yeterli; her platformda tekrarlamak iki katı runner dakikası
+  demek.
+- **Windows ve macOS** — `cargo test -- --test-threads=1`, ardından
+  `npx tauri build`. Rust testleri paketlemeden ÖNCE: PTY ve kabuk
+  entegrasyonu platforma bağlı ve kırıldığında paketin derlenmesi bunu
+  söylemiyor. Kabuğunu bulamayan testler kendini atlıyor (macOS'ta
+  `powershell.exe`, `cmd.exe` ve Git Bash yok).
+
+Çıktılar koşunun **Artifacts** bölümünde, 14 gün: Windows için NSIS kurucusu
+ve MSI, macOS için DMG. İkisi de **imzasız** — depoda ne Windows sertifikası
+ne Apple kimliği var, macOS'ta indiren kullanıcı Gatekeeper uyarısı görür.
+
+Linux yok: uygulama orada denenmedi (`src-tauri/src/platform.rs`) ve paket
+türlerinin hiçbiri Linux'ta karşılık bulmuyor.
+
 ---
 
 ## Bilinen sınırlar
