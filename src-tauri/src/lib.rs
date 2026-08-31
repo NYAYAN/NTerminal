@@ -1,6 +1,7 @@
 //! NTerminal - Tauri komut yuzeyi ve uygulama durumu.
 
 mod favorites;
+mod files;
 mod git;
 mod history;
 mod model;
@@ -549,6 +550,66 @@ fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
     Ok(git::read(&path))
 }
 
+/// Bir metin dosyasinin icerigi - goruntuleyici icin.
+///
+/// Sinirlar ve ikili sezgisi `files` modulunde belgelenmis.
+#[tauri::command]
+fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
+    Ok(files::read_text(std::path::Path::new(&path)))
+}
+
+/// Bir dizinin girdileri, tur bilgisiyle - dosya agaci icin.
+///
+/// Klasorler ONCE, sonra dosyalar; her grup buyuk/kucuk harf gozetmeden
+/// siralanmis. Karisik siralama agaci taramayi zorlastiriyor: goz once
+/// klasorleri arayip iciyor.
+///
+/// `list_files` ile ayri isler: o TUM agaci duz bir liste olarak veriyor
+/// (arama icin), bu ise TEK bir seviyeyi (agaci tembel acmak icin). Derin bir
+/// agacta hepsini onden okumak gereksiz.
+#[tauri::command]
+fn list_entries(path: String) -> CmdResult<Vec<files::Entry>> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("klasor degil: {path}"));
+    }
+    Ok(files::entries(p))
+}
+
+/// Dizin altindaki dosyalar (goreli yollar) - Ctrl+P dosya arama icin.
+///
+/// Sinirli: atlanan klasorler ve azami sayi/derinlik `files` modulunde
+/// belgelenmis. Eksik liste, donmus bir arayuzden iyi.
+#[tauri::command]
+fn list_files(path: String) -> CmdResult<Vec<String>> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("klasor degil: {path}"));
+    }
+    Ok(files::list(p))
+}
+
+/// Deponun ucuz durum imzasi; degistiyse tam sorgu gerekiyor.
+///
+/// Yoklama icin: her yoklamada `git status` kosturmak buyuk bir depoda saniye
+/// mertebesinde bir surec demek. Imza iki dosya okumasi.
+#[tauri::command]
+fn git_fingerprint(path: String) -> CmdResult<Option<String>> {
+    Ok(git::fingerprint(&path))
+}
+
+/// Tek bir dosyanin farki; okunamazsa `None`.
+#[tauri::command]
+fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<String>> {
+    Ok(git::diff(&path, &file, untracked))
+}
+
+/// Depodaki yerel dallar; depo degilse bos liste.
+#[tauri::command]
+fn git_branches(path: String) -> CmdResult<Vec<String>> {
+    Ok(git::branches(&path))
+}
+
 /// Bir dizinin ALT DIZINLERI - dizin secici icin.
 ///
 /// Yalnizca klasorler donuyor: secici bir dizine gecmek icin var, dosya
@@ -697,7 +758,13 @@ pub fn run() {
             reveal_in_explorer,
             open_external,
             list_dirs,
+            list_files,
+            list_entries,
+            read_text_file,
             git_info,
+            git_branches,
+            git_diff,
+            git_fingerprint,
             tray_labels,
         ])
         .on_window_event(|window, event| {
