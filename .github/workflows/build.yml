@@ -1,0 +1,126 @@
+# N-Terminal — testler ve dağıtım paketleri (Windows + macOS).
+#
+# Neden Linux yok: PTY, kabuk entegrasyonu ve pencere süslemeleri Windows ve
+# macOS için yazıldı (bkz. src-tauri/src/platform.rs — `Platform::Linux` bir
+# destek beyanı değil) ve tauri.conf.json'daki paket türleri (nsis, msi, app,
+# dmg) Linux'ta karşılık bulmuyor.
+#
+# scripts/*.ps1 BURADA kullanılmıyor. O betiklerin tek işi geliştirme
+# makinesindeki iki Visual Studio kurulumundan çalışan MSVC toolset'ini seçmek
+# (win-env.ps1); runner'da tek toolset var, komutlar doğrudan çağrılıyor.
+
+name: Derleme
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Aynı dala yeni bir itme gelirse eski koşu iptal edilir: macOS runner'ı pahalı
+# ve geçilmiş bir commit'in sonucunun değeri yok.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  CARGO_TERM_COLOR: always
+  # Düşen bir testi CI kütüğünden anlamanın tek yolu yığın izi.
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # Arayüz testleri jsdom üzerinde koşuyor, platformdan bağımsız: en ucuz
+  # runner'da bir kez. Rust testleri gerçek PTY açtığı için aşağıda her iki
+  # platformda ayrı koşuyor.
+  arayuz:
+    name: Arayüz (tip denetimi + vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: TypeScript tip denetimi
+        run: npx tsc --noEmit
+
+      - name: Arayüz testleri
+        run: npx vitest run
+
+  paket:
+    name: ${{ matrix.ad }}
+    needs: arayuz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # Bir platform düşse de diğerinin sonucu görülsün.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ad: Windows
+            cikti: |
+              src-tauri/target/release/bundle/nsis/*.exe
+              src-tauri/target/release/bundle/msi/*.msi
+          - os: macos-latest
+            ad: macOS
+            cikti: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Tauri'nin bağımlılık ağacı sıfırdan on dakikanın üzerinde derleniyor;
+      # önbellek olmadan her koşu bunu yeniden ödüyor.
+      - name: Cargo önbelleği
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.os }}
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      # PTY, kabuk entegrasyonu ve git okuması platforma bağlı; testler bu
+      # yüzden paketlemeden ÖNCE ve her iki platformda koşuyor. Entegrasyon
+      # testleri gerçek kabuk süreci başlattığı için sıralı. Kabuğunu
+      # bulamayan testler (macOS'ta powershell.exe, cmd.exe, Git Bash)
+      # kendilerini atlıyor.
+      - name: Rust testleri
+        working-directory: src-tauri
+        run: cargo test -- --test-threads=1
+
+      # `tauri build` önce beforeBuildCommand'ı (npm run build → tsc + vite)
+      # koşuyor, sonra release ikilisini derleyip kurucuları üretiyor.
+      # Platformda desteklenmeyen paket türleri atlanıyor: Windows'ta nsis+msi,
+      # macOS'ta app+dmg çıkıyor.
+      #
+      # İmzalama YOK: ne Windows sertifikası ne Apple kimliği tanımlı, çıktılar
+      # imzasız. macOS'ta indiren kullanıcı Gatekeeper uyarısı görür.
+      - name: Paketle
+        run: npx tauri build
+
+      - name: Paketleri yükle
+        uses: actions/upload-artifact@v7
+        with:
+          name: nterminal-${{ matrix.ad }}
+          path: ${{ matrix.cikti }}
+          if-no-files-found: error
+          retention-days: 14
