@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
 import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
-import { BUNDLED_FONTS } from "../lib/fonts";
+import {
+  BUNDLED_FONTS,
+  CANDIDATE_FONTS,
+  canvasMeasurer,
+  detectInstalled,
+  fontStack,
+} from "../lib/fonts";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { isMac } from "../lib/platform";
@@ -98,6 +104,9 @@ function pickExe(t: Translate, current: string | null): Promise<string | null> {
   }).then((res) => (typeof res === "string" ? res : null));
 }
 
+/** Menüdeki "özel" seçeneğinin değeri; hiçbir yazı tipi yığınına benzemiyor. */
+const CUSTOM_FONT = "__custom__";
+
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
@@ -111,6 +120,42 @@ export function SettingsDialog() {
   const [selectedProfileId, setSelectedProfileId] = useState(settings.profiles[0]?.id ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingGroupId ?? groups[0]?.id ?? "");
   const [capturing, setCapturing] = useState<string | null>(null);
+
+  /**
+   * Makinede kurulu eş aralıklı yazı tipleri.
+   *
+   * BİR KEZ, pencere açılınca hesaplanıyor: her aday için iki canvas ölçümü
+   * gerekiyor ve liste yirmi küçük ölçüm demek. Her çizimde yapmak ayarlar
+   * penceresini gereksiz yere ağırlaştırırdı; kurulu yazı tipleri de pencere
+   * açıkken değişmiyor.
+   */
+  const installedFonts = useMemo(() => {
+    const measure = canvasMeasurer();
+    if (!measure) return [];
+    const bundled = new Set(BUNDLED_FONTS.map((f) => f.family));
+    // Gömülü aileler zaten listede; iki kez göstermek seçimi zorlaştırır.
+    return detectInstalled(CANDIDATE_FONTS, measure).filter((f) => !bundled.has(f));
+  }, []);
+
+  /**
+   * Menüde seçili duran değer.
+   *
+   * Kayıtlı ayar bir seçeneğin yığınıyla birebir eşleşmiyorsa "özel" kipe
+   * düşüyoruz — aksi hâlde menü eşleşmeyen bir değerde boş görünür ve
+   * kullanıcı kendi yazdığı yazı tipinin kaybolduğunu sanır.
+   */
+  const [customFont, setCustomFont] = useState(false);
+  const bilinen = useMemo(
+    () => [
+      ...BUNDLED_FONTS.map((f) => f.stack),
+      ...installedFonts.map((f) => fontStack(f)),
+    ],
+    [installedFonts],
+  );
+  const fontChoice =
+    !customFont && bilinen.includes(settings.appearance.fontFamily)
+      ? settings.appearance.fontFamily
+      : CUSTOM_FONT;
   const [query, setQuery] = useState("");
   /** Aramadan gidilen ayar: bulunduğunda kısa bir vurgu alıyor. */
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -383,23 +428,62 @@ export function SettingsDialog() {
                 <h3>{t("settings.font")}</h3>
                 <div className="field" data-setting="settings.fontFamily">
                   <label>{t("settings.fontFamily")}</label>
-                  {/* Serbest metin kalıyor — kullanıcı sistemindeki herhangi
-                      bir yazı tipini yazabilmeli. Liste yalnızca uygulamayla
-                      GELEN aileleri duyuruyor; olmasaydı o dosyalar paketin
-                      içinde durur ama kimse varlığını bilmezdi. */}
-                  <input
-                    list="bundled-fonts"
-                    value={settings.appearance.fontFamily}
-                    onChange={(e) => void store().patchAppearance({ fontFamily: e.target.value })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                  <datalist id="bundled-fonts">
-                    {BUNDLED_FONTS.map((font) => (
-                      <option key={font.family} value={font.stack}>
-                        {font.family}
-                      </option>
-                    ))}
-                  </datalist>
+                  {/*
+                    Açılır menü, serbest metin DEĞİL.
+                    
+                    Önceki hâli bir `datalist`ti: kutu boş görünüyor, öneriler
+                    ancak yazmaya başlayınca çıkıyordu. Yani seçmek için ne
+                    yazacağını bilmen gerekiyordu — seçici olmanın bütün amacını
+                    kaçırıyordu.
+                    
+                    Her seçenek KENDİ yazı tipiyle çiziliyor: adına bakarak bir
+                    yazı tipini seçmek zor, görünüşüne bakarak kolay.
+                    
+                    "Özel" seçeneği duruyor: listede olmayan bir aile ya da
+                    elle yazılmış bir yığın kullanmak isteyen kaybolmasın.
+                  */}
+                  <select
+                    value={fontChoice}
+                    onChange={(e) => {
+                      if (e.target.value === CUSTOM_FONT) {
+                        setCustomFont(true);
+                        return;
+                      }
+                      setCustomFont(false);
+                      void store().patchAppearance({ fontFamily: e.target.value });
+                    }}
+                  >
+                    <optgroup label={t("settings.fontBundled")}>
+                      {BUNDLED_FONTS.map((font) => (
+                        <option key={font.family} value={font.stack} style={{ fontFamily: font.stack }}>
+                          {font.family}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {installedFonts.length > 0 && (
+                      <optgroup label={t("settings.fontInstalled")}>
+                        {installedFonts.map((family) => (
+                          <option
+                            key={family}
+                            value={fontStack(family)}
+                            style={{ fontFamily: fontStack(family) }}
+                          >
+                            {family}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value={CUSTOM_FONT}>{t("settings.fontCustom")}</option>
+                  </select>
+                  {fontChoice === CUSTOM_FONT && (
+                    <input
+                      className="font-custom"
+                      value={settings.appearance.fontFamily}
+                      placeholder={t("settings.fontCustomHint")}
+                      onChange={(e) => void store().patchAppearance({ fontFamily: e.target.value })}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                  )}
                 </div>
                 <div className="field" data-setting="settings.fontSize">
                   <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
@@ -558,6 +642,59 @@ export function SettingsDialog() {
               </div>
 
               <div className="section">
+                <h3>{t("settings.commandLine")}</h3>
+                <div className="check-row" data-setting="settings.commandBlocks">
+                  <input
+                    id="commandBlocks"
+                    type="checkbox"
+                    checked={settings.behavior.commandBlocks}
+                    onChange={(e) =>
+                      void store().patchBehavior({ commandBlocks: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="commandBlocks">{t("settings.commandBlocks")}</label>
+                </div>
+                <div className="hintline">{t("settings.commandBlocksHint")}</div>
+                {/* Blok basligi bloklara BAGLI: bloklar kapaliyken cizilecek
+                    bir baslik da yok. */}
+                <div className="check-row" data-setting="settings.blockHeaders">
+                  <input
+                    id="blockHeaders"
+                    type="checkbox"
+                    checked={settings.behavior.blockHeaders}
+                    disabled={!settings.behavior.commandBlocks}
+                    onChange={(e) =>
+                      void store().patchBehavior({ blockHeaders: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="blockHeaders">{t("settings.blockHeaders")}</label>
+                </div>
+                <div className="hintline">{t("settings.blockHeadersHint")}</div>
+                <div className="check-row" data-setting="settings.appInput">
+                  <input
+                    id="appInput"
+                    type="checkbox"
+                    checked={settings.behavior.appInput}
+                    onChange={(e) => void store().patchBehavior({ appInput: e.target.checked })}
+                  />
+                  <label htmlFor="appInput">{t("settings.appInput")}</label>
+                </div>
+                <div className="hintline">{t("settings.appInputHint")}</div>
+                <div className="check-row" data-setting="settings.promptAtBottom">
+                  <input
+                    id="promptAtBottom"
+                    type="checkbox"
+                    checked={settings.behavior.promptAtBottom}
+                    onChange={(e) =>
+                      void store().patchBehavior({ promptAtBottom: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="promptAtBottom">{t("settings.promptAtBottom")}</label>
+                </div>
+                <div className="hintline">{t("settings.promptAtBottomHint")}</div>
+              </div>
+
+              <div className="section">
                 <h3>{t("settings.prediction")}</h3>
                 <div className="check-row" data-setting="settings.appSuggestions">
                   <input
@@ -581,10 +718,21 @@ export function SettingsDialog() {
                       })
                     }
                   >
-                    <option value="list">{t("settings.predictionList")}</option>
+                    {/* Dipte duran istemle birlikte teknik olarak calismiyor;
+                        secilemez yapmak, secip sonra "neden olmadi" demekten
+                        iyi (bkz. lib/suggest.ts effectiveShellPrediction). */}
+                    <option value="list" disabled={settings.behavior.promptAtBottom}>
+                      {t("settings.predictionList")}
+                    </option>
                     <option value="inline">{t("settings.predictionInline")}</option>
                     <option value="off">{t("settings.predictionOff")}</option>
                   </select>
+                  {settings.behavior.promptAtBottom &&
+                    settings.behavior.shellPrediction === "list" && (
+                      <div className="hintline warn">
+                        {t("settings.predictionListBlocked")}
+                      </div>
+                    )}
                   <div className="hintline">
                     {t(isMac() ? "settings.predictionHintMac" : "settings.predictionHint")}
                   </div>

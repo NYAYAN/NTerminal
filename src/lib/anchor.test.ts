@@ -19,12 +19,19 @@ const place = (anchorTop: number, height: number, areaBottom = AREA_BOTTOM) =>
   });
 
 describe("öneri listesinin yerleşimi", () => {
-  it("normalde terminalin dibinde duruyor", () => {
-    // Asıl istek buydu: sabit bir yer. İmlecin nerede olduğundan bağımsız
-    // olarak liste hep aynı yerde açılıyor.
-    expect(place(200, 100)).toBe(AREA_BOTTOM - GAP - 100);
-    expect(place(500, 100)).toBe(AREA_BOTTOM - GAP - 100);
-    expect(place(200, 60)).toBe(AREA_BOTTOM - GAP - 60);
+  it("terminalin alt kenarına yapışık duruyor", () => {
+    // Asıl istek buydu: sabit VE boşluksuz bir yer. İmlecin nerede olduğundan
+    // bağımsız olarak liste hep dibe oturuyor.
+    expect(place(200, 100)).toBe(AREA_BOTTOM - 100);
+    expect(place(500, 100)).toBe(AREA_BOTTOM - 100);
+    expect(place(200, 60)).toBe(AREA_BOTTOM - 60);
+  });
+
+  it("altta boşluk bırakmıyor", () => {
+    // "Footer'a yapışık" istendi: panelin alt kenarı terminalin alt kenarı.
+    for (const height of [24, 60, 112, 140]) {
+      expect(place(200, height) + height, `height=${height}`).toBe(AREA_BOTTOM);
+    }
   });
 
   it("imleç nerede olursa olsun yeri değişmiyor", () => {
@@ -56,8 +63,8 @@ describe("öneri listesinin yerleşimi", () => {
   it("sınır durumu: tam sığdığında hâlâ altta", () => {
     // Dipteki yer imlecin altına tam denk geliyor.
     const height = 100;
-    const anchorTop = AREA_BOTTOM - GAP - height - CELL - GAP;
-    expect(place(anchorTop, height)).toBe(AREA_BOTTOM - GAP - height);
+    const anchorTop = AREA_BOTTOM - height - CELL - GAP;
+    expect(place(anchorTop, height)).toBe(AREA_BOTTOM - height);
   });
 
   it("görünümden taşmıyor", () => {
@@ -73,7 +80,7 @@ describe("öneri listesinin yerleşimi", () => {
       gap: GAP,
     });
     expect(top).toBeGreaterThanOrEqual(GAP);
-    expect(top + height).toBeLessThanOrEqual(200 - GAP);
+    expect(top + height).toBeLessThanOrEqual(200);
   });
 
   it("hiçbir durumda negatif değer üretmiyor", () => {

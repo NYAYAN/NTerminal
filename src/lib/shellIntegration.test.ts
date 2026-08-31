@@ -76,6 +76,69 @@ describe("PSReadLine modülü", () => {
 });
 
 /**
+ * PowerShell entegrasyonunun tahmin (prediction) kurulumu.
+ *
+ * Betik Windows dışında koşturulamadığı için içeriğine bakıyoruz.
+ */
+describe("PowerShell tahmin kurulumu", () => {
+  const PS1 = read(DIR, "nterminal.ps1");
+
+  it("liste görünümünde seçili satırın rengi ayarlanıyor", () => {
+    // ÖLÇÜLEN HATA: açık temada seçili satırın metni okunmuyordu. PSReadLine
+    // varsayılanı yalnızca ARKA PLANI koyulaştırıyor (48;5;238), yazı rengine
+    // dokunmuyor; açık temada yazı da koyu olduğu için satır kayboluyordu.
+    //
+    // Ters video (SGR 7) terminalin kendi iki rengini takas ediyor: her temada
+    // okunabilir. Sabit bir renk yazmak temalardan birinde yine kaybolurdu,
+    // bu yüzden kural sabit renk DEĞİL takas olmalı.
+    expect(PS1).toMatch(/ListPredictionSelected\s*=\s*\(\$Global:__NTermESC \+ '\[7m'\)/);
+  });
+
+  it("istemi dibe itme ayara bağlı ve varsayılanı kapalı", () => {
+    // Arayüz bildirmediyse davranış DEĞİŞMEMELİ: eski bir uygulama sürümüyle
+    // çalışırken kullanıcının ekranını sessizce yeniden düzenlemek istemiyoruz.
+    expect(PS1).toMatch(/__NTermPromptBottom\s*=\s*\(\$env:NTERMINAL_PROMPT_BOTTOM -eq '1'\)/);
+    expect(PS1).toMatch(/if \(-not \$Global:__NTermPromptBottom\) \{ return '' \}/);
+  });
+
+  it("boşluklar istem işaretinden ÖNCE yazılıyor", () => {
+    // 133;A "istem burada başlıyor" demek ve arayüz yazdığınız satırı oradan
+    // okuyor. Boşluklar sonra yazılsaydı işaret boş bir satırı gösterir,
+    // satır okuma (dolayısıyla öneri listesi) bozulurdu.
+    const pad = PS1.indexOf("__NTermBottomPad $userPrompt");
+    const mark = PS1.indexOf("']133;A'", pad);
+    expect(pad, "boşluk çağrısı yok").toBeGreaterThan(-1);
+    expect(mark, "133;A işareti boşluktan sonra gelmiyor").toBeGreaterThan(pad);
+  });
+
+  it("çok satırlı istemde son satır dibe oturuyor", () => {
+    // Tek satır varsayılsaydı iki satırlı istemin ALT satırı ekranın dışına
+    // taşardı; hesap istemin kendi satır sayısını düşüyor.
+    expect(PS1).toMatch(/\$bosluk = \$sonSatir - \[Console\]::CursorTop - \$promptLines/);
+  });
+
+  it("blok başlığı kipinde görünür istem boş satıra dönüyor", () => {
+    // Başlık ekranda BİR SATIR yer istiyor ve arayüz ızgaraya satır
+    // ekleyemiyor — yalnızca var olanın üstüne çizebiliyor. İstemi tümden
+    // silmek o satırı da yok ederdi.
+    expect(PS1).toMatch(/if \(\$Global:__NTermBlockHeader\) \{\s*\$userPrompt = "`n"/);
+  });
+
+  it("blok başlığı kipi arayüze bildiriliyor", () => {
+    // Bildirmeyen bir kabukta (bash, cmd) boş satır oluşmuyor; arayüz başlığı
+    // oraya çizerse çıktının üstünü örter. Karar bu yüzden bildirime bağlı.
+    expect(PS1).toMatch(/633;P;BlockHeader=1/);
+    expect(PS1).toMatch(/633;P;BlockHeader=0/);
+  });
+
+  it("liste görünümü hâlâ kuruluyor", () => {
+    // Renk düzeltmesi görünüm ayarının yerine geçmemeli.
+    expect(PS1).toMatch(/PredictionViewStyle ListView/);
+    expect(PS1).toMatch(/PredictionViewStyle InlineView/);
+  });
+});
+
+/**
  * Satır içi öneri eklentisi (zsh-autosuggestions) uygulamayla birlikte geliyor.
  *
  * Önceden yoksa durum "unsupported" bildiriliyor, arayüz de kullanıcıya

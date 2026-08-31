@@ -1,4 +1,4 @@
-import { Terminal, type IDisposable } from "@xterm/xterm";
+import { Terminal, type IDisposable, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -9,8 +9,10 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { api, onPtyData, onPtyExit } from "../lib/ipc";
 import { t } from "../lib/i18n";
+import { hasVisibleContent, type BlockView } from "../lib/blocks";
+import { extractServerUrls } from "../lib/serverLinks";
 import { linkCellRanges, type CellLike } from "../lib/links";
-import { acceptKeys } from "../lib/suggest";
+import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
@@ -20,6 +22,52 @@ interface BufferMark {
   y: number;
   x: number;
 }
+
+/**
+ * Bir komut bloğu: istem satırı, komut ve çıktısı.
+ *
+ * Başlangıç bir xterm İŞARETÇİSİ (marker). Düz satır numarası tutmak
+ * çalışmıyor: kaydırma geçmişi dolduğunda xterm en eski satırları atıyor ve
+ * mutlak numaralar kayıyor. İşaretçiyi xterm kendisi güncelliyor, satır
+ * geçmişten düşünce de kendini kapatıyor (`isDisposed`).
+ *
+ * Bitiş AYRI TUTULMUYOR: bir bloğun sonu, bir sonraki bloğun başlangıcının bir
+ * üstü. İkinci bir işaretçi hem gereksiz hem de senkron tutulması gereken
+ * ikinci bir gerçek olurdu.
+ */
+interface TrackedBlock {
+  id: string;
+  marker: IMarker;
+  command: string | null;
+  /**
+   * İstem çizilirken geçerli olan dizin.
+   *
+   * O ANDA yakalanıyor, sonradan okunmuyor: `cd` çalıştıran bir komuttan sonra
+   * oturumun dizini değişiyor ve blok başlığı komutun ÇALIŞTIĞI yeri
+   * göstermeli, sonrasını değil.
+   */
+  cwd: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
+  running: boolean;
+}
+
+/**
+ * Bellekte tutulan en fazla blok.
+ *
+ * Sınır gerekiyor: uzun bir oturumda binlerce blok birikir ve her biri bir
+ * işaretçi tutar. Yüz blok, kaydırma geçmişinde geriye doğru gözle bakılacak
+ * mesafeden fazlası.
+ */
+const MAX_BLOCKS = 100;
+
+/**
+ * Calisan komut basina tutulan en fazla sunucu adresi.
+ *
+ * Dort yetiyor: bir sunucu genelde bir ya da iki adres yaziyor (http + https,
+ * ya da yerel + ag). Fazlasi rozet seridini komut satirindan genis yapiyor.
+ */
+const RUN_URL_LIMIT = 4;
 
 /**
  * Kabuğun komut önerisi durumu.
@@ -44,6 +92,19 @@ export interface SessionCallbacks {
   onPrediction?: (state: PredictionState) => void;
   /** İstem satırında yazılmakta olan metin değişti. */
   onInput?: (state: { prefix: string; full: string; hintTail: boolean }) => void;
+  /**
+   * Girdi kipini belirleyen sinyaller değişti.
+   *
+   * Karar burada verilmiyor (bkz. `lib/inputMode.ts`): oturum yalnızca ne
+   * gördüğünü bildiriyor, ayarı ve sonucu arayüz birleştiriyor.
+   */
+  /** Çalışan komutun çıktısında bir sunucu adresi görüldü. */
+  onRunLinks?: (urls: string[]) => void;
+  onInputSignals?: (signals: {
+    atPrompt: boolean;
+    altScreen: boolean;
+    integration: boolean;
+  }) => void;
 }
 
 export interface SessionInit {
@@ -133,6 +194,22 @@ export class TerminalSession {
    * "onceki komut hala calisiyor" durumu ile karismiyor.
    */
   private openedForCurrentPrompt = false;
+  /** Kabuk istemde bekliyor mu: OSC 133;B geldi, 133;C gelmedi. */
+  private atPrompt = false;
+  /** İkincil ekran tamponu etkin mi (vim, less, htop). */
+  private altScreen = false;
+  private blocks: TrackedBlock[] = [];
+  private blockSeq = 0;
+  private blockSyncFrame: number | null = null;
+  private blockListener: (() => void) | null = null;
+  /** Kabuk görünür istem yerine boş satır bırakıyor mu (OSC 633;P;BlockHeader). */
+  private blockHeaderMode = false;
+  /** Uygulama komut satırı etkin mi (imleç gizli, stdin kapalı). */
+  private appInputActive = false;
+  /** Çalışan komutun çıktısında görülen sunucu adresleri. */
+  private runUrls: string[] = [];
+  /** Adres taraması için akış çözücü; xterm kendi çözücüsünü kullanıyor. */
+  private readonly decoder = new TextDecoder("utf-8");
   private activeStartedAt = 0;
   /** Komut çalışıyor mu? Sekme kapatma onayı ve göstergeler için. */
   running = false;
@@ -216,8 +293,20 @@ export class TerminalSession {
     this.registerHandlers();
   }
 
+  /** Dikkat: bütün geri çağırmaları DEĞİŞTİRİR, birleştirmez. */
   setCallbacks(callbacks: SessionCallbacks) {
     this.callbacks = callbacks;
+  }
+
+  /**
+   * Blok katmanının yeniden çizim aboneliği.
+   *
+   * `setCallbacks` yerine AYRI bir yol, çünkü o bütün kancaları değiştiriyor:
+   * bileşenden çağrılsaydı deponun kancalarını (başlık, dizin, komut başladı)
+   * sessizce siler ve sekme başlığından geçmiş kaydına kadar her şey dururdu.
+   */
+  setBlockListener(listener: (() => void) | null) {
+    this.blockListener = listener;
   }
 
   // ------------------------------------------------------------- yaşam döngüsü
@@ -229,7 +318,12 @@ export class TerminalSession {
     this.term.open(container);
     this.safeFit();
 
-    this.resizeObserver = new ResizeObserver(() => this.safeFit());
+    this.syncCellHeight();
+
+    this.resizeObserver = new ResizeObserver(() => {
+      this.safeFit();
+      this.syncCellHeight();
+    });
     this.resizeObserver.observe(container);
   }
 
@@ -260,7 +354,20 @@ export class TerminalSession {
           ...this.env,
           // Kabuk betigi bunu okuyup PSReadLine tahminini aciyor. Ayar
           // olarak tasiniyor cunku kullanici kapatabilmeli.
-          NTERMINAL_PREDICTION: this.settings.behavior.shellPrediction,
+          // Liste gorunumu istem dipteyken calisamiyor; kural tek yerde
+          // (bkz. `effectiveShellPrediction`).
+          NTERMINAL_PREDICTION: effectiveShellPrediction(
+            this.settings.behavior.shellPrediction,
+            this.settings.behavior.promptAtBottom,
+          ),
+          // Istemi ekranin dibine iten kod da kabukta: satiri kabuk ciziyor,
+          // bosluk eklemesi de onun akisinda olmali (bkz. nterminal.ps1).
+          NTERMINAL_PROMPT_BOTTOM: this.settings.behavior.promptAtBottom ? "1" : "0",
+          // Gorunur istemi kabuk yazmiyor; basligi arayuz ciziyor.
+          NTERMINAL_BLOCK_HEADER:
+            this.settings.behavior.commandBlocks && this.settings.behavior.blockHeaders
+              ? "1"
+              : "0",
         },
         cols: this.term.cols,
         rows: this.term.rows,
@@ -289,7 +396,10 @@ export class TerminalSession {
     }
 
     this.unlisteners.push(
-      await onPtyData(this.tabId, (bytes) => this.term.write(bytes)),
+      await onPtyData(this.tabId, (bytes) => {
+        this.collectServerUrls(bytes);
+        this.term.write(bytes);
+      }),
     );
     this.unlisteners.push(
       await onPtyExit(this.tabId, (code) => this.handleExit(code)),
@@ -375,7 +485,6 @@ export class TerminalSession {
 
   applySettings(settings: Settings) {
     this.settings = settings;
-    const theme = getTheme(settings.appearance.theme);
     this.term.options.fontFamily = settings.appearance.fontFamily;
     this.term.options.fontSize = settings.appearance.fontSize;
     this.term.options.lineHeight = settings.appearance.lineHeight;
@@ -383,8 +492,12 @@ export class TerminalSession {
     this.term.options.cursorStyle = settings.appearance.cursorStyle;
     this.term.options.cursorBlink = settings.appearance.cursorBlink;
     this.term.options.scrollback = settings.appearance.scrollback;
-    this.term.options.theme = theme.xterm;
+    // Tema ve imleç TEK YERDEN: burada `theme.xterm`i doğrudan yazmak, uygulama
+    // komut satırı açıkken gizlenmiş imleci geri getiriyordu.
+    this.applyCursorVisibility();
     this.safeFit();
+    // Yazi tipi/boyut/satir araligi degistiyse satir yuksekligi de degisti.
+    this.syncCellHeight();
     // Vurgu rengi temayla degisiyor ve renklendirme kapatilabiliyor: ikisi de
     // mevcut dekorasyonlari gecersiz kiliyor.
     this.clearLinkDecorations();
@@ -439,16 +552,330 @@ export class TerminalSession {
     if (rect.height < 1) return null;
     const cellHeight = rect.height / this.term.rows;
 
+    // İki AYRI dikdörtgen, bilinçli:
+    //
+    //  - satır hesabı ekran dikdörtgeninden (`.xterm-screen`): imlecin hangi
+    //    piksele denk geldiğini yalnızca o biliyor.
+    //  - panelin genişliği ve dibi KAPSAYICIDAN: `.xterm` ögesinin 8-10px
+    //    dolgusu var ve ekran dikdörtgeni o kadar içeride. Paneli ona
+    //    dayadığımızda kenarlardan boşluk kalıyor, kutu da "yüzen bir ipucu"
+    //    gibi görünüyordu. İstenen bunun tersi: kenardan kenara bir şerit.
+    const hostRect = this.container.getBoundingClientRect();
+
     // `cursorY` görünüme göre (0..rows-1), kaydırmadan bağımsız.
     const row = Math.min(Math.max(this.term.buffer.active.cursorY, 0), this.term.rows - 1);
     return {
       top: rect.top + row * cellHeight,
-      left: rect.left,
-      width: rect.width,
-      // Listenin sabit durdugu yer: terminalin dibi.
-      bottom: rect.bottom,
+      left: hostRect.left,
+      width: hostRect.width,
+      // Listenin sabit durdugu yer: terminal alaninin dibi.
+      bottom: hostRect.bottom,
       cellHeight,
     };
+  }
+
+  /**
+   * Bir terminal satırının yüksekliğini kapsayıcıya CSS değişkeni olarak yazar.
+   *
+   * Komut satırının ÜSTÜNDEKİ ayırıcı çizgi buna dayanıyor: istem dipteyken
+   * girdi alanı her zaman son satır, yani çizginin yeri "dip eksi bir satır".
+   * CSS bunu tek başına bilemiyor — satır yüksekliği yazı tipine, boyuta ve
+   * satır aralığı ayarına bağlı.
+   *
+   * Neden CSS değişkeni ve her tuş vuruşunda değil: çizginin yeri yalnızca
+   * ölçü değişince (pencere boyutu, yazı tipi) değişiyor. İmleci izleseydik
+   * her karakterde yeniden konumlandırma gerekirdi ve çizgi geriden gelirdi.
+   */
+  // ------------------------------------------------------------ komut blokları
+
+  /**
+   * Yeni istemde blok açar.
+   *
+   * İşaretçi İMLECE GÖRE kaydediliyor (`registerMarker(0)`), yani "istem
+   * satırı burası". Bir önceki bloğun sonu ayrıca işaretlenmiyor: sonu, bu
+   * bloğun bir üst satırı.
+   */
+  private openBlock() {
+    const marker = this.term.registerMarker(0);
+    if (!marker) return;
+
+    this.blockSeq += 1;
+    this.blocks.push({
+      id: `${this.tabId}:${this.blockSeq}`,
+      marker,
+      command: null,
+      cwd: this.cwd,
+      exitCode: null,
+      durationMs: null,
+      running: false,
+    });
+
+    // Sınırı aşanları at ve işaretçilerini bırak: her işaretçi xterm'de
+    // güncellenmeye devam ediyor, birikmesi bedava değil.
+    while (this.blocks.length > MAX_BLOCKS) {
+      const dropped = this.blocks.shift();
+      dropped?.marker.dispose();
+    }
+    this.notifyBlocks();
+  }
+
+  private markBlockRunning(command: string | null) {
+    const block = this.blocks[this.blocks.length - 1];
+    if (!block) return;
+    block.command = command?.trim() || null;
+    block.running = true;
+    this.notifyBlocks();
+  }
+
+  private closeBlock(exitCode: number | null) {
+    const block = this.blocks[this.blocks.length - 1];
+    if (!block || !block.running) return;
+    block.running = false;
+    block.exitCode = exitCode;
+    block.durationMs = this.durationOverride ?? Date.now() - this.activeStartedAt;
+    this.notifyBlocks();
+  }
+
+  /**
+   * Katmanın çizeceği blok listesi.
+   *
+   * Bir bloğun SONU burada hesaplanıyor: bir sonrakinin başlangıcının bir
+   * üstü. Son blok açık (`null`) — orada henüz bir sonraki istem yok.
+   *
+   * Komutu olmayan bloklar ELENİYOR. Boş satırda Enter'a basmak da bir istem
+   * üretiyor; onlara şerit çizmek ekranı bölünmüş gösterir, oysa gösterilecek
+   * bir şey yok.
+   */
+  snapshotBlocks(): BlockView[] {
+    const canli = this.blocks.filter((b) => !b.marker.isDisposed);
+    const out: BlockView[] = [];
+    for (let i = 0; i < canli.length; i++) {
+      const block = canli[i];
+      /*
+       * Komutu olmayan bloklar ELENİYOR — biri hariç: SONUNCUSU.
+       *
+       * Sonuncu, kabuğun şu an beklediği istem. Onun başlık satırı ekranda
+       * duruyor ve boş bırakılırsa kullanıcı sebebini göremediği bir boşluk
+       * görüyor (ölçülen şikâyet buydu). Başlığı çizdiğimizde o satır bir
+       * anlam kazanıyor: "bir sonraki komut bu dizinde çalışacak".
+       *
+       * Aradakiler yine eleniyor: boş satırda Enter'a basmak da istem
+       * üretiyor ve onlara başlık çizmek ekranı rozetlerle doldururdu.
+       */
+      if (!block.command && i !== canli.length - 1) continue;
+      const next = canli[i + 1];
+      const endLine = next ? next.marker.line - 1 : null;
+
+      const view: BlockView = {
+        id: block.id,
+        startLine: block.marker.line,
+        endLine,
+        command: block.command,
+        cwd: block.cwd,
+        exitCode: block.exitCode,
+        durationMs: block.durationMs,
+        running: block.running,
+      };
+
+      // Ekranı silen komutlar (`clear`) kendi bloklarını da siliyor; geriye
+      // gösterilecek bir şey kalmıyor (bkz. `hasVisibleContent`).
+      if (!hasVisibleContent(view, (from, to) => this.readBlockText(from, to))) continue;
+
+      out.push(view);
+    }
+    return out;
+  }
+
+  /**
+   * Katmanın hizalanması için gereken ölçüler — KAPSAYICIYA göre.
+   *
+   * `.xterm` ögesinin dolgusu var, yani ilk satır kapsayıcının tepesinde
+   * başlamıyor. Katman bunu bilmezse bütün bloklar birkaç piksel yukarıda
+   * çizilir; hata küçük ama şerit satırla hizalanmadığı için gözle hemen
+   * yakalanıyor.
+   */
+  /** Başlık çizilebilir mi: kabuk boş satır bıraktığını bildirdi mi. */
+  hasBlockHeaders(): boolean {
+    return this.blockHeaderMode;
+  }
+
+  blockGeometry(): {
+    top: number;
+    left: number;
+    width: number;
+    cellHeight: number;
+    viewportTop: number;
+    rows: number;
+  } | null {
+    const host = this.container;
+    if (!host) return null;
+    const screen = host.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen || this.term.rows < 1) return null;
+
+    const hostRect = host.getBoundingClientRect();
+    const rect = screen.getBoundingClientRect();
+    if (rect.height < 1) return null;
+
+    return {
+      top: rect.top - hostRect.top,
+      left: rect.left - hostRect.left,
+      width: rect.width,
+      cellHeight: rect.height / this.term.rows,
+      viewportTop: this.term.buffer.active.viewportY,
+      rows: this.term.rows,
+    };
+  }
+
+  /** Bloğun kapsadığı satırların düz metni (çıktıyı kopyalamak için). */
+  readBlockText(startLine: number, endLine: number | null): string {
+    const buf = this.term.buffer.active;
+    const son = endLine ?? buf.viewportY + this.term.rows - 1;
+    const satirlar: string[] = [];
+    for (let y = startLine; y <= son; y++) {
+      const line = buf.getLine(y);
+      if (!line) continue;
+      satirlar.push(line.translateToString(true));
+    }
+    // Sondaki boş satırlar kopyalanan metne değer katmıyor.
+    while (satirlar.length && !satirlar[satirlar.length - 1].trim()) satirlar.pop();
+    return satirlar.join("\n");
+  }
+
+  /**
+   * Katmanı yeniden çizdirir — kare başına en fazla bir kez.
+   *
+   * `onRender` çıktı akarken saniyede onlarca kez tetikleniyor. Her seferinde
+   * React'i çalıştırmak katmanı terminalden daha pahalı hâle getirirdi.
+   */
+  private scheduleBlockSync() {
+    if (this.blockSyncFrame !== null) return;
+    this.blockSyncFrame = window.requestAnimationFrame(() => {
+      this.blockSyncFrame = null;
+      this.blockListener?.();
+    });
+  }
+
+  private notifyBlocks() {
+    this.blockListener?.();
+  }
+
+  /**
+   * Çalışan komutun çıktısındaki sunucu adreslerini toplar.
+   *
+   * Neden AKAN VERİDEN, ekrandan değil: adres bir kez, en başta yazılıyor ve
+   * loglar aktıkça yukarı süzülüyor; uzun süren bir işte kaydırma geçmişinden
+   * büsbütün düşüyor. Ekranı taramak onu bulamaz — geçtiği anda yakalamak
+   * gerekiyor.
+   *
+   * Yalnızca komut ÇALIŞIRKEN: istemde bekleyen kabuğun çıktısında sunucu
+   * adresi aramak anlamsız, üstelik orada yazdığınız her şeyin yankısı var.
+   */
+  private collectServerUrls(bytes: Uint8Array) {
+    if (!this.running) return;
+    if (this.runUrls.length >= RUN_URL_LIMIT) return;
+
+    /*
+     * `stream: true` ŞART. PTY verisi rastgele yerlerden bölünüyor ve bölünme
+     * bir UTF-8 karakterinin ORTASINA denk gelebiliyor. Akış kipinde çözücü
+     * yarım kalan baytı bir sonraki parçaya taşıyor; olmadan o karakter "�"
+     * oluyor ve tam o noktadaki adres bozuluyor.
+     */
+    const chunk = this.decoder.decode(bytes, { stream: true });
+
+    let degisti = false;
+    for (const url of extractServerUrls(chunk, RUN_URL_LIMIT)) {
+      if (this.runUrls.includes(url)) continue;
+      if (this.runUrls.length >= RUN_URL_LIMIT) break;
+      this.runUrls.push(url);
+      degisti = true;
+    }
+    if (degisti) this.callbacks.onRunLinks?.([...this.runUrls]);
+  }
+
+  /** İstem durumu değiştiyse arayüze bildirir. */
+  private setAtPrompt(value: boolean) {
+    if (this.atPrompt === value) return;
+    this.atPrompt = value;
+    this.emitInputSignals();
+  }
+
+  private emitInputSignals() {
+    this.callbacks.onInputSignals?.({
+      atPrompt: this.atPrompt,
+      altScreen: this.altScreen,
+      integration: this.integration,
+    });
+  }
+
+  /**
+   * Uygulama kipi: tuşlar terminale değil, arayüzdeki kutuya gidiyor.
+   *
+   * `disableStdin` ŞART. Odak yalnızca kutuda diye varsaymak yetmiyor:
+   * kullanıcı metin seçmek için terminale tıkladığında odak oraya geçiyor ve
+   * o andan sonra yazdığı her şey İKİ yoldan birden kabuğa ulaşırdı — hem
+   * kutudan hem xterm'den. Bayrak veri yolunu tek kapıya indiriyor.
+   */
+  setAppInput(active: boolean) {
+    if (this.term.options.disableStdin === active) return;
+    this.term.options.disableStdin = active;
+
+    /*
+     * İmleç de gizleniyor — üst alan artık YAZILAN bir yer değil.
+     *
+     * Ölçülen belirti: kutuya yazılırken terminalin dibinde bir imleç daha
+     * yanıp sönüyordu. İki imleç "hangisi benim" sorusunu doğuruyor, üstelik
+     * yukarıdaki asla yazı almıyor — orada `disableStdin` açık. Warp'ta üst
+     * alan salt görüntü ve imleci yok.
+     *
+     * `cursorInactiveStyle: "none"` TEK BAŞINA yetmiyor: terminal odaktayken
+     * imleç yine çiziliyor. `blur()` odağı da alıyor, ikisi birlikte alanı
+     * gerçekten sessizleştiriyor.
+     */
+    this.appInputActive = active;
+    this.applyCursorVisibility();
+    if (active) this.term.blur();
+  }
+
+  /**
+   * Üst alanda imleç görünsün mü?
+   *
+   * AYRI BİR YÖNTEM ve bu şart. İlk hâlinde kural `setAppInput` içindeydi ve
+   * tema değiştirilince kayboluyordu: `applySettings` temayı olduğu gibi
+   * yeniden yazıyor, imlecin gizlendiği rengi de silip götürüyordu. Belirti
+   * sinsi — özellik çalışıyor, kullanıcı temayı değiştiriyor, imleç geri
+   * geliyor ve sebebi görünmüyor. Kural tek yerde olunca iki çağıran da aynı
+   * sonucu veriyor.
+   *
+   * `cursorInactiveStyle` TEK BAŞINA yetmiyor: terminal odaktayken imleç yine
+   * çiziliyor. Tıklama xterm'e odağı veriyor → odaklı imleç çiziliyor →
+   * `mouseup` odağı kutuya geri alıyor. Arada kalan kare gözle görülüyor.
+   * İmleci arka plan rengine boyamak o kareyi de kapatıyor.
+   */
+  private applyCursorVisibility() {
+    const gizli = this.appInputActive;
+    const theme = getTheme(this.settings.appearance.theme);
+    const bg = theme.xterm.background ?? "#000000";
+
+    this.term.options.cursorInactiveStyle = gizli ? "none" : "outline";
+    this.term.options.cursorBlink = gizli ? false : this.settings.appearance.cursorBlink;
+    this.term.options.theme = gizli
+      ? { ...theme.xterm, cursor: bg, cursorAccent: bg }
+      : theme.xterm;
+  }
+
+  /** Kutudan gelen metni olduğu gibi kabuğa yazar. */
+  sendKeys(data: string) {
+    if (!data) return;
+    void api.ptyWrite(this.tabId, data).catch(() => {});
+  }
+
+  private syncCellHeight() {
+    const el = this.container;
+    if (!el) return;
+    const screen = el.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen || this.term.rows < 1) return;
+    const height = screen.getBoundingClientRect().height / this.term.rows;
+    if (height > 0) el.style.setProperty("--cell-h", `${height}px`);
   }
 
   private safeFit() {
@@ -597,11 +1024,25 @@ export class TerminalSession {
         this.callbacks.onTitle?.(title);
       }),
       this.term.onBell(() => this.callbacks.onBell?.()),
+      // İkincil ekran tamponu: vim, less, htop. Girdi kipi buna bakıyor —
+      // entegrasyon sinyali gecikse bile tam ekran program yakalanmalı.
+      this.term.buffer.onBufferChange(() => {
+        const alt = this.term.buffer.active.type === "alternate";
+        if (alt === this.altScreen) return;
+        this.altScreen = alt;
+        this.emitInputSignals();
+      }),
       this.term.onSelectionChange(() => this.handleSelectionChange()),
       // Bağlantı renklendirmesi görünür satırlara bakıyor; hem yeni çıktı
       // hem kaydırma görünür satırları değiştiriyor.
-      this.term.onRender(() => this.scheduleLinkHighlight()),
-      this.term.onScroll(() => this.scheduleLinkHighlight()),
+      this.term.onRender(() => {
+        this.scheduleLinkHighlight();
+        this.scheduleBlockSync();
+      }),
+      this.term.onScroll(() => {
+        this.scheduleLinkHighlight();
+        this.scheduleBlockSync();
+      }),
     );
 
     // OSC 133: anlamsal istem işaretleri (prompt / komut / çıkış kodu)
@@ -808,23 +1249,35 @@ ${dim}[${
         // İstem çiziliyor: bir önceki komutun işareti artık geçersiz.
         this.promptEndMark = null;
         this.openedForCurrentPrompt = false;
+        // İstem HENÜZ bitmedi. Kutuyu burada açmak erken olurdu: kabuk hâlâ
+        // istemi yazıyor ve o sırada gönderilen metin istemin ortasına düşer.
+        this.setAtPrompt(false);
+        // Yeni istem = yeni blok. Bir öncekinin sonu buranın bir üstü.
+        this.openBlock();
         break;
       case "B":
         // İstem bitti, komut girişi burada başlıyor: tam olarak işaretlemek
         // istediğimiz nokta bu.
         this.promptEndMark = this.currentMark();
         this.openedForCurrentPrompt = false;
+        this.setAtPrompt(true);
         break;
       case "C":
+        // Komut çalışmaya başladı: artık tuşlar doğrudan ona gitmeli.
+        // `openedForCurrentPrompt` kısa devresinden ÖNCE, çünkü o yalnızca
+        // geçmiş kaydını ilgilendiriyor; kip her durumda değişmeli.
+        this.setAtPrompt(false);
         // Yedek zamanlayıcı bu istem için kaydı zaten açtıysa ikinci kayıt
         // açmıyoruz - komut metni ikisinde de aynı satırdan geliyor.
         if (this.openedForCurrentPrompt) break;
+        this.markBlockRunning(this.oscCommand ?? this.enterSnapshot);
         this.beginCommand(
           this.oscCommand ?? this.enterSnapshot,
           this.oscCommand ? "integration" : "buffer",
         );
         break;
       case "D":
+        this.closeBlock(exitCode);
         this.endCommand(exitCode);
         break;
       default:
@@ -844,6 +1297,13 @@ ${dim}[${
         // Kabuk komut onerisini acabildi mi? Acamadiysa arayuz ne
         // yapilmasi gerektigini soyluyor - sessiz kalmak "uygulama
         // bozuk" izlenimi veriyordu.
+        // Kabuk gorunur istem yerine bos satir birakiyor mu? Baslik yalnizca
+        // BILDIREN kabukta cizilebilir; bildirmeyen bir kabukta o satir bos
+        // degil ve baslik ciktinin ustunu orterdi.
+        if (parsed.key === "BlockHeader") {
+          this.blockHeaderMode = parsed.value === "1";
+          this.notifyBlocks();
+        }
         if (parsed.key === "Prediction") {
           this.prediction = parsed.value as PredictionState;
           this.callbacks.onPrediction?.(this.prediction);
@@ -932,6 +1392,10 @@ ${dim}[${
 
     this.openedForCurrentPrompt = true;
     this.running = true;
+    // Adresler KOMUTA ait: yeni komut, yeni liste. Temizlemezsek bir önceki
+    // sunucunun portu yenisinin yanında durmaya devam ederdi.
+    this.runUrls = [];
+    this.callbacks.onRunLinks?.([]);
     this.activeCommand = text;
     this.activeStartedAt = Date.now();
     this.callbacks.onCommandStart?.(text);

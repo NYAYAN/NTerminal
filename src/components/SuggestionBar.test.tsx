@@ -18,6 +18,8 @@ import { SuggestionBar } from "./SuggestionBar";
 
 const rows = (container: HTMLElement) => [...container.querySelectorAll(".suggest-row")];
 const selected = (container: HTMLElement) => container.querySelector(".suggest-row.on");
+/** Satırın komut metni. Satırda ayrıca istem işareti ve zaman damgası var. */
+const cmd = (row: Element | null) => row?.querySelector(".suggest-cmd")?.textContent;
 
 function setSuggest(items: string[], index = 0, input = "np") {
   const ui = useStore.getState().ui;
@@ -45,8 +47,8 @@ describe("öneri çubuğu", () => {
     setSuggest(["npm test", "npm run dev"]);
     const { container } = render(<SuggestionBar />);
     expect(rows(container)).toHaveLength(2);
-    expect(rows(container)[0].textContent).toBe("npm test");
-    expect(rows(container)[1].textContent).toBe("npm run dev");
+    expect(cmd(rows(container)[0])).toBe("npm test");
+    expect(cmd(rows(container)[1])).toBe("npm run dev");
   });
 
   it("yazılan kısım ile önerinin devamı ayrı gösteriliyor", () => {
@@ -60,14 +62,42 @@ describe("öneri çubuğu", () => {
   it("seçili öneri işaretli", () => {
     setSuggest(["a1", "a2", "a3"], 1, "a");
     const { container } = render(<SuggestionBar />);
-    expect(selected(container)!.textContent).toBe("a2");
+    expect(cmd(selected(container))).toBe("a2");
     expect(container.querySelectorAll(".suggest-row.on")).toHaveLength(1);
   });
 
   it("sayaç seçimi gösteriyor", () => {
     setSuggest(["a1", "a2", "a3"], 2, "a");
     const { container } = render(<SuggestionBar />);
-    expect(container.querySelector(".suggest-foot .kbd")!.textContent).toBe("3/3");
+    expect(container.querySelector(".suggest-head .kbd")!.textContent).toBe("3/3");
+  });
+
+  it("başlık şeridi var", () => {
+    // Kabuğun kendi tahmin listesi de ekranda olabiliyor; hangisinin
+    // uygulamaya ait olduğu okunabilmeli.
+    setSuggest(["a1"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+    expect(container.querySelector(".suggest-title")!.textContent).toBe("GEÇMİŞ");
+  });
+
+  it("komutun en son çalıştırıldığı an satırda yazıyor", () => {
+    // Aynı ön ekle başlayan iki komut arasındaki seçim çoğu zaman buna
+    // bakılarak yapılıyor.
+    const now = new Date();
+    now.setHours(9, 5, 0, 0);
+    useStore.setState({
+      suggestHistory: [{ command: "npm test", cwd: null, at: now.getTime() }],
+    });
+    setSuggest(["npm test"], 0, "np");
+    const { container } = render(<SuggestionBar />);
+    expect(container.querySelector(".suggest-when")!.textContent).toContain("09");
+  });
+
+  it("zamanı bilinmeyen komutta alan boş kalıyor", () => {
+    // Geçmiş henüz yüklenmediyse satır yine de çizilmeli.
+    setSuggest(["npm test"], 0, "np");
+    const { container } = render(<SuggestionBar />);
+    expect(container.querySelector(".suggest-when")!.textContent).toBe("");
   });
 
   it("gezinme seçimi değiştiriyor ve başa dönüyor", async () => {
@@ -75,17 +105,17 @@ describe("öneri çubuğu", () => {
     const { container } = render(<SuggestionBar />);
 
     await act(async () => useStore.getState().moveSuggestion(1));
-    expect(selected(container)!.textContent).toBe("a2");
+    expect(cmd(selected(container))).toBe("a2");
 
     await act(async () => useStore.getState().moveSuggestion(1));
-    expect(selected(container)!.textContent).toBe("a3");
+    expect(cmd(selected(container))).toBe("a3");
 
     // Sonda ileri gitmek başa dönüyor.
     await act(async () => useStore.getState().moveSuggestion(1));
-    expect(selected(container)!.textContent).toBe("a1");
+    expect(cmd(selected(container))).toBe("a1");
 
     await act(async () => useStore.getState().moveSuggestion(-1));
-    expect(selected(container)!.textContent).toBe("a3");
+    expect(cmd(selected(container))).toBe("a3");
   });
 
   it("satıra tıklamak O ÖNERİYİ kabul ediyor", async () => {
@@ -138,11 +168,21 @@ describe("öneri çubuğu", () => {
   it("ipucu metni dile göre", async () => {
     setSuggest(["a1"], 0, "a");
     const { container } = render(<SuggestionBar />);
-    expect(container.querySelector(".suggest-foot .dim")!.textContent).toContain("kabul et");
+    const foot = () => container.querySelector(".suggest-foot")!.textContent;
+    expect(foot()).toContain("kabul et");
 
     await act(async () => {
       setLanguage("en");
     });
-    expect(container.querySelector(".suggest-foot .dim")!.textContent).toContain("accept");
+    expect(foot()).toContain("accept");
+  });
+
+  it("tuşlar rozet olarak çiziliyor", () => {
+    // Düz metin olarak yazıldığında hangi işaretin TUŞ olduğu okunmuyordu.
+    setSuggest(["a1"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+    // Üç ok + Esc.
+    expect(container.querySelectorAll(".suggest-foot .keycap")).toHaveLength(4);
+    expect(container.querySelector(".keycap-word")!.textContent).toBe("Esc");
   });
 });
