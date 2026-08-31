@@ -757,8 +757,10 @@ yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
 
 ### GitHub Actions
 
-`.github/workflows/build.yml`: main'e her itmede, her PR'de ve elle
-tetiklendiğinde koşuyor.
+`.github/workflows/build.yml`: her dala itmede ve elle tetiklendiğinde
+koşuyor. `pull_request` tetikleyicisi yok — aynı depoda push ile PR iki ayrı
+koşu demek; koşu head commit'e bağlı olduğu için PR'ın denetimlerinde yine
+görünüyor.
 
 - **Arayüz** (ubuntu) — tip denetimi + vitest. jsdom platformdan bağımsız,
   bir kez koşması yeterli; her platformda tekrarlamak iki katı runner dakikası

@@ -11,10 +11,15 @@
 
 name: Derleme
 
+# Her dala itmede koşuyor. İş dallarda yapılıyor; yalnızca main'i denetlemek
+# haberi dal birleştikten SONRA veriyor, yani düzeltmenin en pahalı olduğu anda.
+#
+# `pull_request` tetikleyicisi bilerek yok: aynı depodaki bir dal için push ile
+# PR iki ayrı koşu (ve iki katı macOS dakikası) demek. Koşu head commit'e bağlı
+# olduğu için PR'ın denetimler listesinde yine görünüyor.
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches: ["**"]
   workflow_dispatch:
 
 # Aynı dala yeni bir itme gelirse eski koşu iptal edilir: macOS runner'ı pahalı
