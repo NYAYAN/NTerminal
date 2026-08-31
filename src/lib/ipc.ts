@@ -5,6 +5,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  DirEntry,
+  FileText,
   GitInfo,
   Bootstrap,
   BundleInfo,
@@ -89,7 +91,14 @@ export const api = {
   /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   listDirs: (path: string) => invoke<string[]>("list_dirs", { path }),
+  listFiles: (path: string) => invoke<string[]>("list_files", { path }),
+  listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
+  readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
+  gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
+  gitFingerprint: (path: string) => invoke<string | null>("git_fingerprint", { path }),
+  gitDiff: (path: string, file: string, untracked: boolean) =>
+    invoke<string | null>("git_diff", { path, file, untracked }),
   /**
    * Menü çubuğu / bildirim alanı simgesinin menü metinleri.
    *
