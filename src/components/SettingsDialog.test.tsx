@@ -126,7 +126,12 @@ describe("ayarlar penceresi", () => {
 
     fireEvent.click([...container.querySelectorAll(".settings-nav button")][2]);
     await settle();
-    expect(headings(container)).toEqual(["Kopyala ve yapıştır", "Bağlantılar", "Komut önerisi"]);
+    expect(headings(container)).toEqual([
+      "Kopyala ve yapıştır",
+      "Bağlantılar",
+      "Komut satırı",
+      "Komut önerisi",
+    ]);
   });
 
   it("aynı başlık iki bölümde geçmiyor", async () => {

@@ -249,24 +249,47 @@ input[type="color"] {
   height: 26px;
 }
 
+/* Kaydirma cubugu INCE.
+ *
+ * Onceki hali 10px genislikte, 2px seffaf kenarlikla 6px gorunur bir cubuktu
+ * ve terminalin kenarinda kalin bir serit gibi duruyordu. Terminal ekranin
+ * BUTUN yuksekligini kapliyor, yani cubuk da bastan asagi uzuyor - ince
+ * olmayan bir sey orada surekli goz ucunda kaliyor.
+ *
+ * Simdi 5px gorunur (9px iz + 2px kenarlik). Tutmasi zorlasmasin diye
+ * karsitlik yukseltildi: incelen bir cubuk ayni tonda kalirsa gozden
+ * kayboluyor.
+ *
+ * `scrollbar-width: thin` BILINCLI OLARAK kullanilmiyor: Chromium o ozellik
+ * verildiginde `::-webkit-scrollbar` kurallarini tumden yok sayiyor ve
+ * genisligi kendi seciyor. Kalinligi piksel piksel belirlemek istiyoruz, o
+ * yuzden denetim webkit kurallarinda kaliyor. (Cubugu tumden gizleyen yerler
+ * `scrollbar-width: none` kullanmaya devam ediyor; orada amac olcu degil,
+ * yoklugu.) */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 26%, transparent);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text) 32%, transparent);
+  background: color-mix(in srgb, var(--text) 45%, transparent);
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Kose karesi: iki cubuk kesistiginde kalan kutu, varsayilan olarak acik gri
+   bir blok cikiyor ve ince cubuklarin yaninda kaba duruyor. */
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -815,16 +838,52 @@ html[data-platform="macos"] .titlebar {
  *
  * `fixed` konumlandirma bilincli: kutuyu imlece gore JS yerlestiriyor ve
  * gorunum koordinatlari en basit ortak zemin. z-index 20, terminalin ustunde
- * ama menulerin (300+) altinda. */
+ * ama menulerin (300+) altinda.
+ *
+ * KENARDAN KENARA SERIT, yuzen kart DEGIL. Panel terminal alaninin tam
+ * genisligini kapliyor, dibine yapisik duruyor ve yalnizca ust kenarligi var.
+ *
+ * Onceki hali yuvarlak koseli, golgeli, kenarlardan bosluklu bir kutuydu -
+ * yani bir ipucu balonu. Sorun estetik degil anlamsal: balon "gecici, imlece
+ * ait" der; bu liste ise ekranin bir BOLGESI, komut satirinin ustunde duran
+ * sabit bir serit. Golge ve yuvarlaklik kalkinca terminalin parcasi gibi
+ * okunuyor.
+ *
+ * Genislik ve dip `cursorAnchor()` icinde KAPSAYICI dikdortgeninden geliyor:
+ * ekran dikdortgeni `.xterm` dolgusu kadar iceride oldugu icin kenarlarda
+ * bosluk birakiyordu. */
 .suggest-bar {
   position: fixed;
   z-index: 20;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: none;
+  border-top: 1px solid var(--border);
   background: var(--surface-alt);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   min-width: 0;
+}
+
+/* Baslik seridi: panelin ne oldugunu bir bakista soyluyor.
+ *
+ * Gerekli cunku ayni anda ekranda KABUGUN kendi tahmin listesi de olabiliyor
+ * (PSReadLine ListView, zsh-autosuggestions). Iki liste alt alta durdugunda
+ * "hangisi uygulamanin?" sorusunu bu serit cevapliyor. */
+.suggest-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+}
+
+.suggest-title {
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.suggest-head .spacer {
+  flex: 1;
 }
 
 /* Ters siralama: en yeni komut en ALTTA, istem satirina en yakin. Kabuk
@@ -841,7 +900,7 @@ html[data-platform="macos"] .titlebar {
 .suggest-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   padding: 3px 10px 3px 7px;
   border: none;
@@ -853,7 +912,6 @@ html[data-platform="macos"] .titlebar {
   line-height: 1.5;
   white-space: pre;
   overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
   color: var(--text-dim);
 }
@@ -862,7 +920,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--hover);
 }
 
-/* Secili satir UC ayri isaretle belli oluyor: isaret oku, daha guclu arka
+/* Secili satir UC ayri isaretle belli oluyor: sol cizgi, daha guclu arka
  * plan tonu ve metnin parlaklasmasi.
  *
  * Onceki hali yalnizca %16 arka plan ve 2px cizgiydi; olculdugunde secili ve
@@ -875,22 +933,29 @@ html[data-platform="macos"] .titlebar {
   color: var(--text);
 }
 
+/* Istem isareti HER satirda gorunuyor: satirin bir komut oldugunu soyluyor.
+   Eskiden yalnizca secili satirda cizilen bir oktu; secimi zaten arka plan ve
+   sol cizgi tasidigi icin bu is bosa cikiyordu. */
 .suggest-mark {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  width: 9px;
-  color: var(--accent);
-  /* Gorunmez ama yer tutuyor: yalnizca secilide cizmek satirlari kaydirirdi. */
-  visibility: hidden;
-}
-
-.suggest-mark svg {
-  display: block;
+  color: var(--text-dim);
+  opacity: 0.65;
+  font-size: 11px;
 }
 
 .suggest-row.on .suggest-mark {
-  visibility: visible;
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Komut metni tasan tarafi: zaman damgasi sagda yerini korusun diye komut
+   kisaliyor, damga degil. */
+.suggest-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 /* Yazilan kisim soluk, onerinin devami belirgin: "bunu yazdiniz, su
@@ -910,8 +975,6 @@ html[data-platform="macos"] .titlebar {
 .suggest-rest {
   color: var(--text-dim);
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .suggest-row.on .suggest-rest {
@@ -919,13 +982,58 @@ html[data-platform="macos"] .titlebar {
   font-weight: 700;
 }
 
+/* Komutun en son ne zaman calistirildigi. Sagda, soluk ve kucuk: secimi bu
+   belirliyor ama okunmasi gereken asil sey komutun kendisi. */
+.suggest-when {
+  flex: none;
+  color: var(--text-dim);
+  opacity: 0.7;
+  font-family: var(--ui-font);
+  font-size: 10.5px;
+}
+
 .suggest-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 10px 4px;
+  gap: 5px;
+  padding: 4px 10px 5px;
   border-top: 1px solid var(--border);
   font-size: 10.5px;
+}
+
+/* Ipucundaki tus rozeti.
+ *
+ * Duz metin olarak "↑↓ gez · → kabul et" yazildiginda hangi isaretin TUS
+ * hangisinin sus oldugu okunmuyordu. Rozetin siniri bu ayrimi tasiyor: cerceve
+ * icindeki sey basilacak sey.
+ *
+ * `min-width` kare tutuyor: tek ok ile "Esc" yan yana geldiginde ikisinin
+ * yuksekligi ayni, genisligi iceriginden. */
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 15px;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--sunken);
+  color: var(--text-dim);
+}
+
+.keycap-word {
+  padding: 0 5px;
+  font-family: var(--ui-font);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+/* Rozetten SONRA gelen aciklama; rozetle arasi dar, bir sonraki rozetle
+   arasi genis olsun ki "tus + ne yaptigi" ikilisi gorsel olarak baglansin. */
+.suggest-foot .dim + .keycap {
+  margin-left: 7px;
 }
 
 .suggest-foot .spacer {
@@ -943,11 +1051,13 @@ html[data-platform="macos"] .titlebar {
   /* Oneri listesi burada YOK: kendi izgara satirindayken yuksekligi her tus
      vurusunda degisiyor ve terminali yeniden olculendiriyordu. Artik yuzuyor
      (bkz. `.suggest-bar`). */
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto auto;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "tabbar tabbar"
     "terminal panel"
+    "links panel"
+    "input panel"
     "status status";
   min-width: 0;
   min-height: 0;
@@ -1312,6 +1422,19 @@ html[data-platform="macos"] .titlebar {
   display: none;
 }
 
+/* Terminal ile blok katmanini saran kap.
+ *
+ * Katman `.term-host`un COCUGU olamaz: o dugumun icini xterm dolduruyor ve
+ * oraya bir React cocugu koymak iki sahibin ayni dugumu duzenlemesi demek.
+ * Kardes olarak durunca ikisi de kendi alaninda kaliyor. */
+.term-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
 .term-host {
   position: relative;
   flex: 1 1 auto;
@@ -1319,6 +1442,704 @@ html[data-platform="macos"] .titlebar {
   min-height: 0;
   /* Dolgu BURADA olmamali - bkz. asagidaki .xterm kurali. */
   padding: 0;
+}
+
+/* ---------------------------------------------------------- komut bloklari */
+
+/* Blok katmani terminalin USTUNDE duruyor.
+ *
+ * `pointer-events: none` SART: katman metnin uzerinde ve olaylari yutarsa
+ * terminalde secim yapilamaz, baglantilar tiklanamaz. Yalnizca uzerine
+ * gelince beliren arac cubugu olaylari geri aliyor.
+ *
+ * Konum JS'ten geliyor (bkz. blockGeometry): `.xterm` ogesinin dolgusu var,
+ * yani ilk satir kabin tepesinde baslamiyor. */
+.blocks-layer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 4;
+  overflow: hidden;
+}
+
+.block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+/* Bloklar arasi ayirici. Serit bir blogun NEREDE bittigini soyluyor, bu cizgi
+   ise bir sonrakinin NEREDE basladigini - uzun ciktilarda ikisi ayni sey degil,
+   goz once cizgiyi buluyor. Cok soluk: her komutta bir tane var. */
+.block::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
+  opacity: 0.55;
+}
+
+/* Blogun kendi basligi: kabugun yazmadigi, bos biraktigi ILK satirda.
+ *
+ * Warp'in ust alandaki duzeni bu: ekranda 'PS C:\Users\...>' yok, dizin
+ * bir rozet olarak duruyor. Bilgi zaten arayuze OSC ile geliyor; ikinci kez
+ * metin olarak yazmak her komutun basina uzun bir yol dizesi koymak demekti.
+ *
+ * Yukseklik JS'ten (satir yuksekligi): rozet tam o satira oturmali, yoksa
+ * altindaki komut satirina tasiyor. */
+.block-head {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 90px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.block-cwd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--text-dim);
+  font-family: var(--ui-font);
+  font-size: 10px;
+  /* Bir terminal satiri ~17px ve rozet 17px olursa satiri tumden dolduruyor;
+     ustunde ayirici cizgi varken "yapisik" gorunuyor. 14px, kalan bosluk
+     ustte ve altta esit paylasilacak kadar yer birakiyor. */
+  line-height: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block-cwd svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+/* Serit blogun BUTUN yuksekliginde: ciktinin nerede bittigi ancak surekli bir
+   cizgiyle okunuyor. Ince ve sola yaslanmis - blok isareti metnin okunmasina
+   karismamali. */
+.block-stripe {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  opacity: 0.35;
+}
+
+.block-ok .block-stripe {
+  background: var(--ok);
+  opacity: 0.5;
+}
+
+.block-fail .block-stripe {
+  background: var(--err);
+  opacity: 0.85;
+}
+
+.block-running .block-stripe {
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+/* Uzerine gelince zemin: blogun NEREYE kadar uzandigini bir bakista veriyor.
+ * Cok soluk, cunku altinda okunacak metin var. */
+.block.on {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.block.on .block-stripe {
+  opacity: 1;
+}
+
+/* Sure ve cikis kodu: blogun ILK satirinda, sagda.
+ * Blok gorunumun ustunden tasmissa rozet de yukarida kalir ve gorunmez -
+ * istenen bu, rozet komuta ait ve komut yukarida. */
+.block-badge {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--ui-font);
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.75;
+}
+
+.block-code {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--err) 22%, transparent);
+  color: var(--err);
+  font-weight: 700;
+}
+
+/* Arac cubugu YALNIZCA uzerine gelince; her blokta durmasi ekrani dolduruyor
+   ve okunacak sey ciktinin kendisi. */
+.block-tools {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  display: none;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.block.on .block-tools {
+  display: flex;
+}
+
+/* Arac cubugu gorununce rozet gizleniyor: ikisi ayni koseye denk geliyor ve
+   ust uste binmeleri ikisini de okunmaz yapiyordu. */
+.block.on .block-badge {
+  display: none;
+}
+
+.block-tools button {
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-alt);
+  color: var(--text-dim);
+  font-family: var(--ui-font);
+  font-size: 10px;
+  line-height: 17px;
+  cursor: pointer;
+}
+
+.block-tools button:hover {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+
+/* Komut satirinin USTUNDEKI ayirici cizgi.
+ *
+ * Istendi: "komut yazma yeri oldugu belli olsun". Istem dipte sabitken girdi
+ * alani her zaman SON satir; cizgi de onun ustune, dipten bir satir yukari
+ * geliyor.
+ *
+ * `--cell-h` satir yuksekligini TerminalSession yaziyor (bkz. syncCellHeight):
+ * yazi tipine, boyuta ve satir araligina bagli oldugu icin CSS tek basina
+ * bilemiyor. 10px `.xterm` ogesinin alt dolgusu.
+ *
+ * Yalnizca `data-prompt-bottom="1"` iken ciziliyor: ayar kapaliyken istem
+ * ekranin herhangi bir yerinde olabilir, dipten bir satir yukaridaki cizgi de
+ * ciktinin ortasindan gecerdi.
+ *
+ * `pointer-events: none` sart - cizgi terminalin uzerinde duruyor ve secim,
+ * tiklama, baglanti tiklamasi onun altindan gecmeli. */
+.term-host[data-prompt-bottom="1"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(10px + var(--cell-h, 17px));
+  border-top: 1px solid var(--border);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Git rozeti: dal adi, ileri/geri sayaci ve degisiklik sayisi.
+ *
+ * Dizin rozetiyle AYNI govde, farkli renk: ikisi de baslikta yan yana duruyor
+ * ve ayni bicimde olmalari "bunlar baglam bilgisi" diyor. Renk ayirimi ise
+ * hangisinin ne oldugunu soyluyor.
+ *
+ * Yalnizca bekleyen blokta ciziliyor (bkz. TerminalBlocks): bitmis bir blogun
+ * yaninda GUNCEL dal ve sayac gostermek "o komut bu durumda calisti" demek
+ * olurdu ve yanlis olurdu. */
+.git-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 8px 0 6px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
+  border-radius: 999px;
+  background: var(--sunken);
+  color: color-mix(in srgb, var(--ok) 75%, var(--text-dim));
+  font-family: var(--ui-font);
+  font-size: 10px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.git-chip svg {
+  flex: none;
+  opacity: 0.85;
+}
+
+.git-num {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-chip.as-button {
+  pointer-events: auto;
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.git-chip.as-button:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Degisen dosyalar penceresi. */
+.git-panel {
+  display: flex;
+  flex-direction: column;
+  width: 480px;
+  max-height: 400px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-alt);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.git-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+}
+
+.git-title {
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.git-head .spacer {
+  flex: 1;
+}
+
+.git-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.git-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.git-row:hover {
+  background: var(--hover);
+}
+
+/* Durum etiketi SABIT genislikte: degisken genislikte yol sutunu her satirda
+   baska yerden basliyor ve liste taranmasi zorlasiyor. */
+.git-tag {
+  flex: none;
+  width: 88px;
+  font-family: var(--ui-font);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.git-tag.mod {
+  color: var(--accent);
+}
+
+.git-tag.new {
+  color: var(--ok);
+}
+
+.git-tag.del {
+  color: var(--err);
+}
+
+/* Yol SONDAN degil BASTAN kirpiliyor: uzun yollarda ayirt edici olan dosya
+   adi, klasor zinciri degil. `direction: rtl` yon degistirmenin en ucuz yolu;
+   `unicode-bidi: plaintext` metnin okunma yonunu bozmuyor. */
+.git-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+
+/* Dizin secici.
+ *
+ * Yol rozetine tiklayinca aciliyor. Warp'takiyle ayni is: baska bir klasore
+ * gecmek icin `cd` yazip yolu hatirlamak ya da sekme tamamlamasiyla harf harf
+ * ilerlemek gerekiyordu; yol zaten ekranda, ona tiklayip listeden secmek ayni
+ * isi bir hamlede yapiyor. */
+.dir-overlay {
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 0 64px 12px;
+}
+
+.dir-picker {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-height: 340px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-alt);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.dir-search {
+  flex: none;
+  margin: 0;
+  padding: 8px 11px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 12.5px;
+}
+
+.dir-search:focus {
+  box-shadow: none;
+}
+
+.dir-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.dir-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Secim FARE ve KLAVYE icin ayni: `:hover` yerine tek bir `.on` sinifi.
+   Iki ayri gosterge oldugunda fare bir satirda, klavye baskasinda duruyor ve
+   Enter'in hangisini secece gi belirsizlesiyor. */
+.dir-row.on {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.dir-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 13px;
+  opacity: 0.75;
+}
+
+.dir-empty {
+  padding: 10px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* Tiklanabilir yol rozeti: gorunusu `span` haliyle ayni kalmali, yalnizca
+   isaretci ve olay alani degisiyor. */
+.block-cwd.as-button {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--ui-font);
+  font-size: 10px;
+}
+
+.block-cwd.as-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
+}
+
+/* Yazi tipi "Ozel" alani: menunun hemen altinda, ayni sutunda. */
+.font-custom {
+  margin-top: 6px;
+}
+
+/* Calisan sunucunun adres seridi.
+ *
+ * Kendi izgara satirinda ve yalnizca adres VARKEN ciziliyor; yoksa bilesen
+ * null donuyor ve `auto` satir sifira iniyor - bos bir serit yer kaplamiyor.
+ *
+ * Neden burada, terminalin icinde degil: adres ciktinin icinde bir kez
+ * yaziliyor ve loglar aktikca yukari suzuluyor. Sabit bir yerde olmasinin
+ * butun anlami bu - kaydirmadan etkilenmemesi.
+ *
+ * Vurgu rengi bilincli: bu satir "sunucu ayakta" demek, durum bildiriyor. */
+.run-links {
+  grid-area: links;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 7%, var(--term-bg));
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.run-links::-webkit-scrollbar {
+  display: none;
+}
+
+.run-links-label {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.run-link {
+  flex: none;
+  padding: 1px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.run-link:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Komut satiri: terminalin IZGARASININ DISINDA, kendi izgara satirinda.
+ *
+ * Yuzen degil, gercek bir satir - ve bu bilincli. Oneri listesi yuzuyor cunku
+ * yuksekligi her tus vurusunda degisiyor ve terminali yeniden olculendirip
+ * titreme uretiyordu. Kutu oyle degil: yuksekligi yalnizca cok satirli komut
+ * yazilinca degisiyor, o da nadir. Izgarada olmasi karsiliginda terminali ASLA
+ * ortmuyor - yuzen bir kutu son satiri kapatirdi.
+ *
+ * Arka plan terminalinkiyle ayni (`--term-bg`): kutu terminalin devami gibi
+ * okunsun, ustune yapistirilmis ayri bir arac cubugu gibi degil. Ayirici tek
+ * bir ust cizgi. */
+.command-input {
+  grid-area: input;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px 7px;
+  border-top: 1px solid var(--border);
+  background: var(--term-bg);
+  min-width: 0;
+}
+
+/* Baglam rozetleri satiri: komutun HANGI dizinde calisacagi.
+ *
+ * Terminalde bu bilgi istemin icinde geciyor ve uzun yollarda satiri yiyor.
+ * Ayri bir rozet olunca hem her zaman ayni yerde duruyor hem de kisaltilabilir
+ * - tam yol `title` ile duruyor. */
+.command-input-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ci-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ci-chip svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.command-input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.command-input-mark {
+  flex: none;
+  padding-top: 2px;
+  color: var(--accent);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Metin kutusu ile renkli katmani UST USTE tutan kap. */
+.command-input-box {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Iki katmanin ORTAK yazi kurallari.
+ *
+ * Renklendirme saydam bir `textarea`nin arkasina cizilen ikinci bir katman;
+ * `textarea` icine renkli metin cizilemiyor (tek renk aliyor). Bu yuzden iki
+ * oge PIKSEL PIKSEL ayni akmak zorunda: ayni yazi tipi (JS'ten geliyor), ayni
+ * satir yuksekligi, ayni sarma kurali, sifir dolgu ve kenarlik. Birinde 1px
+ * fark harfleri kaydiriyor ve imlec renkli metnin uzerine denk gelmiyor. */
+.command-input-field,
+.command-input-hl {
+  margin: 0;
+  padding: 0;
+  border: none;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+.command-input-hl {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+}
+
+/* `resize: none` sart: tarayicinin sag alt kosedeki tutamagi izgara satirini
+   kullanicinin altindan cekip terminali yeniden olculendirirdi. Yukseklik
+   icerige gore JS'ten geliyor (bkz. CommandInput useLayoutEffect).
+
+   Metin SAYDAM: gorunen yazi alttaki renkli katman. Imlec ayri boyaniyor
+   (`caret-color`), yoksa o da kaybolurdu. */
+.command-input-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-height: 30vh;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+/* Secim: metin saydam oldugu icin varsayilan secim BOS bir dikdortgen
+   gosteriyordu. Rengi saydam birakip yalnizca zemini boyuyoruz - alttaki
+   renkli katman secimin altindan gorunmeye devam ediyor. */
+/* Odak halkasi YOK.
+ *
+ * Genel `textarea:focus` kurali bir `box-shadow` halkasi koyuyor; iletisim
+ * kutularindaki alanlar icin dogru, komut satiri icin degil. Bu kutu neredeyse
+ * HER ZAMAN odakta - halka da surekli ekranda duran, hicbir sey soylemeyen bir
+ * cerceveye donusuyor. Terminalin girdi satirinin cercevesi olmaz. */
+.command-input-field:focus {
+  box-shadow: none;
+}
+
+/* Kaydirma cubugu GIZLI - suslemek icin degil, HIZALAMA icin.
+ *
+ * Cubuk cizildiginde metin kutusunun ic genisligi ~15px azaliyor, arkasindaki
+ * renkli katmaninki ise degismiyor. Sonuc: uzun ve cok satirli komutlarda iki
+ * katman farkli yerlerde sariyor ve harfler renklerinden ayri dusuyor.
+ *
+ * Kaydirma calismaya devam ediyor (tekerlek, ok tuslari) ve renkli katman
+ * `onScroll` ile senkron tutuluyor. */
+.command-input-field {
+  scrollbar-width: none;
+}
+
+.command-input-field::-webkit-scrollbar {
+  display: none;
+}
+
+.command-input-field::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: transparent;
+}
+
+/* Yer tutucu saydamliktan MUAF: kendi rengi var, yoksa hic gorunmezdi. */
+.command-input-field::placeholder {
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+/* Sozdizimi renkleri.
+ *
+ * Dort ayrim yetiyor ve fazlasi gurultu: NE calisacak (komut), NASIL
+ * calisacak (bayrak), duz METIN (tirnak) ve satirin YAPISI (islecler).
+ * Renkler temadan geliyor, sabit degil - acik temada da okunur kalmali. */
+.tok-cmd {
+  color: var(--tok-cmd, var(--accent));
+  font-weight: 600;
+}
+
+.tok-flag {
+  color: var(--tok-flag, var(--ok));
+}
+
+.tok-str {
+  color: var(--tok-str, var(--err));
+}
+
+.tok-op {
+  color: var(--text-dim);
+  font-weight: 700;
 }
 
 /* ------------------------------------------------------------ bolme kipi */
@@ -2424,6 +3245,15 @@ html[data-platform="macos"] .titlebar {
 
 .field .hintline {
   grid-column: 2;
+}
+
+/* Ayarin SU AN calismadigini soyleyen ipucu. Soluk gri yetmiyordu: bu satir
+   "aciklama" degil "sectigin sey yurumuyor" diyor ve normal ipuclarinin
+   arasinda kaybolmamali. Sol cizgi renkten bagimsiz bir ikinci isaret. */
+.hintline.warn {
+  color: var(--err);
+  border-left: 2px solid color-mix(in srgb, var(--err) 45%, transparent);
+  padding-left: 7px;
 }
 
 .section {

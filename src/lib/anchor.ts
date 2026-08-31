@@ -8,9 +8,14 @@
  *
  * ## Kural
  *
- * Liste HER ZAMAN terminalin altında duruyor. Sabit bir yer, kayan bir yer
- * değil: imlece yapışıp her satırda yukarı aşağı zıplayan bir kutu, gözün
- * aradığı yeri sürekli değiştiriyor.
+ * Liste HER ZAMAN terminalin altında, alt kenara YAPIŞIK duruyor. Sabit bir
+ * yer, kayan bir yer değil: imlece yapışıp her satırda yukarı aşağı zıplayan
+ * bir kutu, gözün aradığı yeri sürekli değiştiriyor.
+ *
+ * Boşluksuz olması istendi (Warp'ın geçmiş paneli gibi): terminalin dibinde
+ * duran ama 4px havada yüzen bir kutu "buraya mı ait, oraya mı" diye
+ * duraksatıyor. Alt kenara yapıştığında durum çubuğunun devamı gibi okunuyor
+ * ve panelin sınırı ekranın sınırı oluyor.
  *
  * Tek istisna imleç satırı. Liste yazdığınız satırı ASLA örtmüyor; imleç
  * dibe yaklaşıp altta yer kalmadığında listenin üstüne çıkıyor.
@@ -30,7 +35,11 @@ export interface PlaceInput {
   height: number;
   /** Görünüm yüksekliği. */
   viewportHeight: number;
-  /** Kenarlardan ve imleç satırından bırakılan boşluk. */
+  /**
+   * İmleç satırından ve görünümün ÜST kenarından bırakılan boşluk.
+   *
+   * Alt kenarda kullanılmıyor: panel oraya yapışık duruyor.
+   */
   gap: number;
 }
 
@@ -38,13 +47,13 @@ export interface PlaceInput {
 export function placeSuggestions(input: PlaceInput): number {
   const { anchorTop, cellHeight, areaBottom, height, viewportHeight, gap } = input;
 
-  // Tercih edilen yer: terminalin dibi.
-  const dipte = areaBottom - gap - height;
+  // Tercih edilen yer: terminalin dibine yapışık.
+  const dipte = areaBottom - height;
   // İmleç satırının altı: liste buradan aşağıda başlıyorsa satırı örtmüyor.
   const imlecAlti = anchorTop + cellHeight + gap;
 
   const top = dipte >= imlecAlti ? dipte : anchorTop - gap - height;
 
-  // Görünümün dışına taşma: her iki uçtan da içeri çek.
-  return Math.max(gap, Math.min(top, viewportHeight - height - gap));
+  // Görünümün dışına taşma: üstte boşluk bırakarak, altta yapışık kalarak.
+  return Math.max(gap, Math.min(top, viewportHeight - height));
 }

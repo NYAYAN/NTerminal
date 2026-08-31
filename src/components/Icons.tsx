@@ -127,3 +127,44 @@ export function PlusIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/** Git dal rozetinin çatal işareti. */
+export function BranchIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="4.5" cy="3.5" r="1.8" />
+      <circle cx="4.5" cy="12.5" r="1.8" />
+      <circle cx="11.5" cy="4.5" r="1.8" />
+      <path d="M4.5 5.3 V10.7" />
+      <path d="M11.5 6.3 C11.5 9 9 9.2 6.4 10" />
+    </Svg>
+  );
+}
+
+/** Komut satırındaki dizin rozetinin klasörü. */
+export function FolderIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2 4.5 C2 3.7 2.7 3 3.5 3 H6 L7.5 4.8 H12.5 C13.3 4.8 14 5.5 14 6.3 V11.5 C14 12.3 13.3 13 12.5 13 H3.5 C2.7 13 2 12.3 2 11.5 Z" />
+    </Svg>
+  );
+}
+
+/**
+ * Tuş başlığındaki yön oku.
+ *
+ * Yazı tipi karakteri (`↑`) DEĞİL, aynı sebeple: rozetin içinde okun boyu ve
+ * taban hizası yazı tipine göre oynuyor, kimi tipte rozetten taşıyor.
+ */
+export function ArrowIcon({ dir, ...props }: IconProps & { dir: "up" | "down" | "right" }) {
+  const paths = {
+    up: "M8 12.5 V4 M4.5 7.5 L8 4 L11.5 7.5",
+    down: "M8 3.5 V12 M4.5 8.5 L8 12 L11.5 8.5",
+    right: "M3.5 8 H12 M8.5 4.5 L12 8 L8.5 11.5",
+  };
+  return (
+    <Svg {...props}>
+      <path d={paths[dir]} />
+    </Svg>
+  );
+}
