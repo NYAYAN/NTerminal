@@ -90,6 +90,10 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     only: ["windows", "linux"],
   },
   { section: "terminal", key: "settings.highlightLinks", hint: "settings.highlightLinksHint" },
+  { section: "terminal", key: "settings.commandBlocks", hint: "settings.commandBlocksHint" },
+  { section: "terminal", key: "settings.blockHeaders", hint: "settings.blockHeadersHint" },
+  { section: "terminal", key: "settings.appInput", hint: "settings.appInputHint" },
+  { section: "terminal", key: "settings.promptAtBottom", hint: "settings.promptAtBottomHint" },
   { section: "terminal", key: "settings.appSuggestions", hint: "settings.appSuggestionsHint" },
   { section: "terminal", key: "settings.predictionShell", hint: "settings.predictionHint", hintMac: "settings.predictionHintMac" },
   {

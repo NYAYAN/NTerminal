@@ -89,6 +89,42 @@ export interface Behavior {
   /** Kabukta komut önerisi: kapalı / satır içi hayalet metin / liste. */
   shellPrediction: ShellPrediction;
   /**
+   * Komut satırı her zaman pencerenin dibinde dursun.
+   *
+   * Kabuk entegrasyonu istemi çizmeden önce imleci son satıra indiriyor;
+   * üstte kalan boşluğa çıktılar ve öneri paneli yerleşiyor (Warp düzeni).
+   */
+  promptAtBottom: boolean;
+  /**
+   * Komut satırını uygulama çizsin (terminalin ızgarasının dışında).
+   *
+   * Açıkken yazdıklarınız pencerenin dibindeki kutuda toplanıyor ve kabuğa
+   * Enter'da gidiyor; kaydırma satırı oynatmıyor. Yalnızca kabuk istemde
+   * beklerken geçerli — komut çalışırken, tam ekran programlarda ve kabuk
+   * entegrasyonu olmayan profillerde tuşlar doğrudan terminale gidiyor
+   * (bkz. `lib/inputMode.ts`).
+   */
+  appInput: boolean;
+  /**
+   * Komut blokları: her komut ve çıktısı görsel olarak ayrı bir birim.
+   *
+   * Sınırlar kabuk entegrasyonundan (OSC 133) geliyor; entegrasyonu olmayan
+   * profillerde hiçbir şey çizilmiyor.
+   */
+  commandBlocks: boolean;
+  /**
+   * Kabugun istemi yerine blogun kendi basligi.
+   *
+   * Acikken kabuk gorunur bir istem yazmiyor (yalnizca isaretler ve bir bos
+   * satir); dizin, sure ve cikis durumu o bos satira uygulama tarafindan
+   * ciziliyor. `PS C:\\Users\\...>` ekrandan kalkiyor.
+   *
+   * Simdilik yalnizca PowerShell. Kabuk kipe girdigini BILDIRIYOR ve arayuz
+   * yalnizca bildirenlerde baslik ciziyor: bildirmeyen bir kabukta bos satir
+   * olmaz ve baslik ciktinin ustunu orterdi.
+   */
+  blockHeaders: boolean;
+  /**
    * YALNIZCA macOS: Option tuşu Meta gibi davransın.
    *
    * Açıkken Option+B / Option+F / Option+Backspace kabuğa ESC dizisi olarak
@@ -188,6 +224,24 @@ export interface SpawnResult {
   args: string[];
   cwd: string | null;
   integration: boolean;
+}
+
+// --------------------------------------------------------------------- git
+
+export interface GitChange {
+  /** Porcelain durum harfleri, iki karakter: `" M"`, `"A "`, `"??"`. */
+  status: string;
+  /** Depo köküne göre yol. */
+  path: string;
+}
+
+export interface GitInfo {
+  /** Dal adı; ayrık HEAD'de `"HEAD"`. */
+  branch: string;
+  detached: boolean;
+  ahead: number;
+  behind: number;
+  changes: GitChange[];
 }
 
 // ------------------------------------------------------------------ geçmiş

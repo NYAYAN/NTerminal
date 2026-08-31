@@ -218,6 +218,33 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   // yapiyoruz. Aksi halde koyu vurgu renginde koyu metin cikiyor.
   root.style.setProperty("--accent-fg", onColor(accent));
   root.style.setProperty("--err-fg", onColor(err));
+
+  /*
+   * Komut satırının sözdizimi renkleri.
+   *
+   * Ayrı türetiliyorlar çünkü ayrı bir ZEMİN üzerindeler: kutunun arka planı
+   * `--term-bg`, yukarıdaki `--ok`/`--err`/`--accent` ise arayüz yüzeyine
+   * (`surfaceAlt`) göre düzeltilmiş. İki yüzey her temada aynı değil —
+   * NTerminal Koyu'da terminal yüzeyden daha koyu, açık temalarda tersi
+   * olabiliyor. Yüzeye göre düzeltilmiş bir rengi başka bir zeminde kullanmak
+   * karşıtlık güvencesini sessizce kaybettirir.
+   *
+   * Renk seçimi terminal paletinden: kullanıcı zaten `ls` çıktısında bu
+   * renkleri görüyor, komut satırı da aynı dili konuşsun.
+   */
+  const termBg = theme.xterm.background ?? theme.ui.surface;
+  root.style.setProperty(
+    "--tok-cmd",
+    ensureContrast(theme.ui.accent, termBg, MIN_UI_TEXT_CONTRAST),
+  );
+  root.style.setProperty(
+    "--tok-flag",
+    ensureContrast(theme.xterm.green ?? "#3fb950", termBg, MIN_UI_TEXT_CONTRAST),
+  );
+  root.style.setProperty(
+    "--tok-str",
+    ensureContrast(theme.xterm.yellow ?? "#d29922", termBg, MIN_UI_TEXT_CONTRAST),
+  );
   root.dataset.theme = theme.id;
   // Açık temalarda arayüz metin/gölge tonlarının ters çevrilmesi gerekiyor.
   const isLight = theme.id.includes("light");

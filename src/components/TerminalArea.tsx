@@ -7,6 +7,7 @@ import { shellBadge, tabLabel } from "../lib/labels";
 import { normalizeViewMode, paneGrid, visibleTabIds } from "../lib/panes";
 import { canCloseTab, isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
+import { TerminalBlocks } from "./TerminalBlocks";
 import type { TerminalSession } from "../terminal/TerminalSession";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 import { TerminalFind } from "./TerminalFind";
@@ -32,6 +33,10 @@ function TerminalHost({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const booted = useRef(false);
+  const promptAtBottom = useStore((s) => s.settings.behavior.promptAtBottom);
+  // Uygulama komut satiri aciksa ayirici cizgiyi KUTU tasiyor (kendi ust
+  // kenarligi). Ikisini birden cizmek birbirine yakin iki cizgi demek.
+  const appInput = useStore((s) => s.settings.behavior.appInput);
 
   useEffect(() => {
     booted.current = false;
@@ -72,7 +77,27 @@ function TerminalHost({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId, epoch]);
 
-  return <div className="term-host" data-tab-id={tabId} ref={ref} />;
+  // `data-prompt-bottom`: komut satirinin USTUNDEKI ayirici cizgi yalnizca
+  // istem dipte sabitken dogru yerde durur (bkz. global.css .term-host::after).
+  // Ayar kapaliyken istem her yerde olabilir; cizgi orada yaniltici olurdu.
+  /*
+   * Blok katmanı `.term-host`un KARDEŞİ, çocuğu değil.
+   *
+   * `.term-host` içine xterm kendi DOM'unu koyuyor; oraya bir React çocuğu
+   * eklemek iki sahibin aynı düğümü düzenlemesi demek. Saran bir kap ikisini
+   * de ayrı tutuyor ve katman kabın koordinatlarına göre konumlanıyor.
+   */
+  return (
+    <div className="term-wrap">
+      <div
+        className="term-host"
+        data-tab-id={tabId}
+        data-prompt-bottom={promptAtBottom && !appInput ? "1" : undefined}
+        ref={ref}
+      />
+      <TerminalBlocks tabId={tabId} />
+    </div>
+  );
 }
 
 export function TerminalArea() {

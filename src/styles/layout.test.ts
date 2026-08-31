@@ -198,6 +198,50 @@ describe("öneri listesi", () => {
     expect(body).toMatch(/max-height:\s*\d/);
     expect(body).toMatch(/overflow-y:\s*auto/);
   });
+
+  it("kutu değil şerit: yuvarlak köşe ve gölge yok", () => {
+    // Yuvarlak köşeli, gölgeli, kenarlardan boşluklu bir kutu "geçici, imlece
+    // ait bir balon" diye okunuyordu. Liste ise ekranın bir bölgesi: komut
+    // satırının üstünde duran, kenardan kenara bir şerit.
+    const body = ruleBody(".suggest-bar");
+    expect(body, "yuvarlak köşe geri gelmiş").not.toMatch(/border-radius/);
+    expect(body, "gölge geri gelmiş").not.toMatch(/box-shadow/);
+    expect(body, "üst kenarlık şeridi ayıran tek çizgi").toMatch(
+      /border-top:\s*1px solid var\(--border\)/,
+    );
+  });
+});
+
+/**
+ * Komut satırının üstündeki ayırıcı çizgi.
+ *
+ * "Komut yazma yeri olduğu belli olsun" istendi. İstem dipte sabitken girdi
+ * alanı her zaman son satır, yani çizginin yeri ölçülebilir: dipten bir satır
+ * yukarı.
+ */
+describe("komut satırı ayırıcısı", () => {
+  const SEL = '.term-host[data-prompt-bottom="1"]::after';
+
+  it("dipten bir satır yukarıda duruyor", () => {
+    const body = ruleBody(SEL);
+    // Satır yüksekliği yazı tipine bağlı; CSS onu tek başına bilemiyor, bu
+    // yüzden TerminalSession `--cell-h` yazıyor. Sabit bir değere düşmek
+    // yazı tipi büyüdüğünde çizgiyi satırın ortasına getirirdi.
+    expect(body).toMatch(/bottom:\s*calc\(10px \+ var\(--cell-h/);
+    expect(body).toMatch(/border-top:\s*1px solid/);
+  });
+
+  it("tıklamayı yutmuyor", () => {
+    // Çizgi terminalin üzerinde duruyor; seçim ve bağlantı tıklaması onun
+    // altından geçmeli.
+    expect(ruleBody(SEL)).toMatch(/pointer-events:\s*none/);
+  });
+
+  it("yalnızca istem dipteyken çiziliyor", () => {
+    // Ayar kapalıyken istem ekranın herhangi bir yerinde olabilir; dipten bir
+    // satır yukarıdaki çizgi çıktının ortasından geçerdi.
+    expect(CSS).toContain('data-prompt-bottom="1"');
+  });
 });
 
 /**
