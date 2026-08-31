@@ -1,6 +1,7 @@
 //! NTerminal - Tauri komut yuzeyi ve uygulama durumu.
 
 mod favorites;
+mod git;
 mod history;
 mod model;
 mod osinfo;
@@ -539,6 +540,51 @@ fn open_external(url: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// Verilen dizinin git durumu; depo degilse `None`.
+///
+/// Cagri SEYREK olmali (dizin degisimi, komut sonu): her cagri bir `git`
+/// sureci baslatiyor.
+#[tauri::command]
+fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
+    Ok(git::read(&path))
+}
+
+/// Bir dizinin ALT DIZINLERI - dizin secici icin.
+///
+/// Yalnizca klasorler donuyor: secici bir dizine gecmek icin var, dosya
+/// gostermek listeyi uzatip aranani zorlastirirdi.
+///
+/// Gizli klasorler DAHIL. Terminalde `.config`, `.git`, `.vscode` gunluk
+/// kullanimda; onlari gizlemek dosya yoneticisi aliskanligi, kabuk aliskanligi
+/// degil.
+///
+/// Okunamayan girisler sessizce atlaniyor: izin verilmeyen tek bir alt klasor
+/// yuzunden butun listeyi kaybetmek kotu takas.
+#[tauri::command]
+fn list_dirs(path: String) -> CmdResult<Vec<String>> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("klasor degil: {path}"));
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(p).map_err(fail)? {
+        let Ok(entry) = entry else { continue };
+        // `file_type()` sembolik baglantiyi IZLEMIYOR; klasore isaret eden bir
+        // baglanti da secilebilmeli, o yuzden `is_dir()` ile dogruluyoruz.
+        if !entry.path().is_dir() {
+            continue;
+        }
+        if let Some(name) = entry.file_name().to_str() {
+            out.push(name.to_string());
+        }
+    }
+    // Buyuk/kucuk harf gozetmeden: `Docs` ile `bin` yan yana dururken ASCII
+    // siralamasi butun buyuk harfleri one atiyor ve liste karisik gorunuyor.
+    out.sort_by_key(|a| a.to_lowercase());
+    Ok(out)
+}
+
 /// Verilen klasoru sistemin dosya yoneticisinde acar (Gezgin / Finder).
 #[tauri::command]
 fn reveal_in_explorer(path: String) -> CmdResult<()> {
@@ -650,6 +696,8 @@ pub fn run() {
             config_import_apply,
             reveal_in_explorer,
             open_external,
+            list_dirs,
+            git_info,
             tray_labels,
         ])
         .on_window_event(|window, event| {

@@ -390,6 +390,17 @@ fn apply_integration(
             if !script.is_file() {
                 return false;
             }
+            // -NoLogo: "Windows PowerShell / Copyright (C) Microsoft ..."
+            // afisini susturur. Her sekmenin basinda dort satirlik degismez bir
+            // metin duruyordu; kullaniciya soyledigi bir sey yok ve ilk komut
+            // blogunu ekranin ortasina itiyordu.
+            //
+            // Profil argumanina DEGIL buraya konuyor: profiller bir kez tespit
+            // edilip kaydediliyor, yani orada degistirmek yalnizca yeni
+            // kurulumlari etkilerdi. Kullanici kendi yazdiysa tekrarlamiyoruz.
+            if !args.iter().any(|a| a.eq_ignore_ascii_case("-nologo")) {
+                args.push("-NoLogo".into());
+            }
             // -NoExit: betik kostuktan sonra etkilesimli kal.
             // -File: yol argumani olarak gectigi icin alintilama derdi yok.
             args.push("-NoExit".into());
