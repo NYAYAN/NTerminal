@@ -141,3 +141,32 @@ mod tests {
         assert!(!file_manager_name_en().is_empty());
     }
 }
+
+/// Konsol penceresi ACMADAN surec baslatan komut.
+///
+/// ## Neden gerekli
+///
+/// OLCULEN BELIRTI: kurulu surumde uygulama acilirken ve dizin degistikce
+/// "terminal gibi bir sey acilip kapaniyor" — ekranda bir an siyah konsol
+/// penceresi cakiyor.
+///
+/// Sebep: gelistirme kipinde uygulamanin bir konsolu var ve baslatilan alt
+/// surecler onu paylasiyor. Kurulu surum pencere altsistemiyle derleniyor
+/// (`windows_subsystem = "windows"`), konsolu yok; bu yuzden konsol gerektiren
+/// her alt surec KENDINE bir pencere aciyor. `git status` gibi arka planda
+/// siklikla kosan bir komut boylece gorunur bir cakmaya donusuyor.
+///
+/// `CREATE_NO_WINDOW` (0x0800_0000) tam bunu kapatiyor. Diger platformlarda
+/// karsiligi yok ve gerekmiyor.
+///
+/// Kullanici EYLEMIYLE acilan pencereler (dosya yoneticisi, tarayici) bu
+/// yardimciyi kullanmiyor: orada pencere zaten istenen sey.
+pub fn quiet_command(program: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd
+}
