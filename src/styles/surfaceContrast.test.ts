@@ -180,13 +180,19 @@ describe("öneri listesi okunabilirliği", () => {
   });
 
   it("seçili satırda üç ayrı işaret var", () => {
-    // Arka plan tonu, sol kenar çizgisi ve işaret oku. Biri kaldırılırsa
-    // seçim yeniden belirsizleşir.
+    // Arka plan tonu, sol kenar çizgisi ve istem işaretinin renklenmesi. Biri
+    // kaldırılırsa seçim yeniden belirsizleşir.
+    //
+    // İşaret eskiden yalnızca seçili satırda çizilen bir oktu (`visibility`).
+    // Artık her satırda duruyor — satırın bir komut olduğunu o söylüyor — ve
+    // seçimi rengiyle bildiriyor.
     const at = CSS.indexOf(".suggest-row.on {");
     const rule = CSS.slice(at, CSS.indexOf("}", at));
     expect(rule, "arka plan tonu").toMatch(/background:\s*color-mix/);
     expect(rule, "sol kenar çizgisi").toMatch(/border-left-color:\s*var\(--accent\)/);
-    expect(CSS, "işaret oku kuralı").toMatch(/\.suggest-row\.on\s+\.suggest-mark\s*\{[^}]*visible/);
+    expect(CSS, "istem işareti kuralı").toMatch(
+      /\.suggest-row\.on\s+\.suggest-mark\s*\{[^}]*var\(--accent\)/,
+    );
   });
 
   for (const meta of THEMES) {
@@ -201,6 +207,51 @@ describe("öneri listesi okunabilirliği", () => {
     it(`${meta.id}: seçili olmayan öneri okunabilir`, () => {
       const ratio = contrastRatio(theme.ui.textDim, theme.ui.surfaceAlt);
       expect(ratio, `karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(3.0);
+    });
+  }
+});
+
+/**
+ * Komut satırının sözdizimi renkleri.
+ *
+ * Riskli olan şey şu: `--ok` / `--err` / `--accent` ARAYÜZ yüzeyine göre
+ * düzeltiliyor, komut satırı ise TERMİNAL yüzeyinin üzerinde duruyor. İki
+ * yüzey her temada aynı değil. Bu yüzden ayrı değişkenler türetildi; test de
+ * onların gerçekten okunur olduğunu doğruluyor.
+ *
+ * Ayrıca üç rengin BİRBİRİNDEN ayırt edilebilmesi gerekiyor — hepsi okunur
+ * ama ikisi aynı tona düşerse renklendirmenin bir anlamı kalmıyor.
+ */
+describe("komut satırı sözdizimi renkleri", () => {
+  const MIN = 4.5;
+
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+    const termBg = theme.xterm.background ?? theme.ui.surface;
+    const renkler = {
+      komut: ensureContrast(theme.ui.accent, termBg, MIN),
+      bayrak: ensureContrast(theme.xterm.green ?? "#3fb950", termBg, MIN),
+      metin: ensureContrast(theme.xterm.yellow ?? "#d29922", termBg, MIN),
+    };
+
+    it(`${meta.id}: üç renk de terminal zemininde okunuyor`, () => {
+      for (const [ad, renk] of Object.entries(renkler)) {
+        const ratio = contrastRatio(renk, termBg);
+        expect(ratio, `${ad} (${renk}) / zemin ${termBg}: ${ratio.toFixed(2)}`)
+          .toBeGreaterThanOrEqual(MIN);
+      }
+    });
+
+    it(`${meta.id}: renkler birbirinden ayırt ediliyor`, () => {
+      // Aynı tona düşen iki renk, renklendirmeyi anlamsız kılar.
+      const ciftler: [string, string][] = [
+        [renkler.komut, renkler.bayrak],
+        [renkler.komut, renkler.metin],
+        [renkler.bayrak, renkler.metin],
+      ];
+      for (const [a, b] of ciftler) {
+        expect(a === b, `iki belirteç aynı renge düştü: ${a}`).toBe(false);
+      }
     });
   }
 });

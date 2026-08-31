@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SETTINGS_VERSION: u32 = 1;
+pub const SETTINGS_VERSION: u32 = 2;
 pub const WORKSPACE_VERSION: u32 = 1;
 pub const BUNDLE_VERSION: u32 = 1;
 
@@ -183,6 +183,10 @@ pub struct Behavior {
     /// Gecmiste tutulacak azami kayit sayisi (asinca en eskiler silinir).
     pub history_limit: u32,
     /// Gecmis panelinde ayni komutun tekrarlarini tek satirda topla.
+    ///
+    /// Varsayilan ACIK: gunde yirmi kez `npm test` calistiran biri icin
+    /// panelin tamami ayni satirin tekrari oluyor ve arama ise yaramiyor.
+    /// Tekrarlar toplanmis liste "ne calistirdim" sorusunun gercek cevabi.
     pub history_dedupe: bool,
     /// Kenar cubugunda yalnizca favori gruplari goster.
     pub show_only_favorite_groups: bool,
@@ -197,7 +201,44 @@ pub struct Behavior {
     /// Kabuga NTERMINAL_PREDICTION ile bildiriliyor; PowerShell tarafinda
     /// PSReadLine tahminini aciyor. "off" = dokunma (kullanicinin kendi
     /// profil ayari gecerli kalsin).
+    ///
+    /// Varsayilan "inline" ve bu bilincli: "list" iken ekranda IKI liste
+    /// olusuyordu. PSReadLine kendi listesini terminalin ICINE ciziyor (10
+    /// satir, sagda `[History]` etiketleri), uygulama da kendi panelini
+    /// istemin altina aciyor - ayni gecmis, iki farkli bicimde, ust uste.
+    /// Ustelik PSReadLine listesi komut basina suzulemiyor: `cd` yazinca
+    /// baska dizinlerde calistirilmis on `cd` satiri doluyor ve cogu bu
+    /// dizinde gecersiz. "inline" birakildiginda kabuk yalnizca tek satirlik
+    /// hayalet metni ciziyor, liste isini uygulamanin paneli yapiyor.
     pub shell_prediction: String,
+    /// Komut satiri her zaman pencerenin dibinde dursun.
+    ///
+    /// Kabuga NTERMINAL_PROMPT_BOTTOM ile bildiriliyor; kabuk entegrasyonu
+    /// istemi cizmeden once imleci son satira indiriyor. Ustte kalan bosluga
+    /// ciktilar ve oneri paneli yerlesiyor - Warp'in duzeni.
+    ///
+    /// Neden kabukta: satiri kabuk ciziyor. Arayuz tarafindan bosluk eklemek
+    /// (xterm'e bos satir yazmak) ayni akista degil, yani istem bazen
+    /// bosluklardan ONCE ciziliyor ve ekran zipliyor.
+    pub prompt_at_bottom: bool,
+    /// Komut satirini uygulama cizsin (terminalin izgarasinin disinda).
+    ///
+    /// Acikken tuslar pencerenin dibindeki kutuda toplaniyor ve kabuga
+    /// Enter'da gidiyor. Yalnizca kabuk istemde beklerken; komut calisirken,
+    /// tam ekran programlarda (vim, less) ve entegrasyonsuz profillerde
+    /// tuslar dogrudan terminale gidiyor.
+    pub app_input: bool,
+    /// Komut bloklari: her komut ve ciktisi gorsel olarak ayri bir birim.
+    ///
+    /// Sinirlar kabuk entegrasyonundan (OSC 133) geliyor; entegrasyonu olmayan
+    /// profillerde hicbir sey cizilmiyor.
+    pub command_blocks: bool,
+    /// Kabugun istemi yerine blogun kendi basligi.
+    ///
+    /// Acikken kabuk gorunur bir istem yazmiyor (yalnizca isaretler ve bir bos
+    /// satir); dizin, sure ve cikis durumu o bos satira uygulama tarafindan
+    /// ciziliyor. Simdilik yalnizca PowerShell.
+    pub block_headers: bool,
     /// YALNIZCA macOS: Option tusu Meta gibi davransin.
     ///
     /// Acikken Option+B / Option+F / Option+Backspace kabuga ESC dizisi olarak
@@ -236,11 +277,15 @@ impl Default for Behavior {
             ctrl_c_copies_selection: true,
             inherit_cwd: true,
             history_limit: 50_000,
-            history_dedupe: false,
+            history_dedupe: true,
             show_only_favorite_groups: false,
             mac_option_is_meta: false,
             app_suggestions: true,
-            shell_prediction: "list".into(),
+            shell_prediction: "inline".into(),
+            prompt_at_bottom: true,
+            app_input: true,
+            command_blocks: true,
+            block_headers: true,
             close_action: "background".into(),
         }
     }

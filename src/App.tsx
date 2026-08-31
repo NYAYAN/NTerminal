@@ -7,6 +7,9 @@ import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { SidePanel } from "./components/SidePanel";
+import { CommandInput } from "./components/CommandInput";
+import { DirPicker } from "./components/DirPicker";
+import { RunningLinks } from "./components/RunningLinks";
 import { StatusBar } from "./components/StatusBar";
 import { SuggestionBar } from "./components/SuggestionBar";
 import { TabBar } from "./components/TabBar";
@@ -350,6 +353,8 @@ export function App() {
       <div className="main">
         <TabBar />
         <TerminalArea />
+        <RunningLinks />
+        <CommandInput />
         <SuggestionBar />
         {ui.historyOpen && <SidePanel />}
         <StatusBar />
@@ -357,6 +362,9 @@ export function App() {
 
       {ui.paletteOpen && <CommandPalette />}
       {ui.searchOpen && <HistoryRecall />}
+      {ui.dirPicker && (
+        <DirPicker cwd={ui.dirPicker} onClose={() => useStore.getState().setUi({ dirPicker: null })} />
+      )}
       {ui.settingsOpen && <SettingsDialog />}
       {ui.transferOpen && <TransferDialog />}
 

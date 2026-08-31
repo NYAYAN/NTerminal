@@ -72,6 +72,23 @@ pub fn load_settings(paths: &DataPaths) -> Settings {
     // dosyayi bir kez yazip guncel tutuyoruz.
     let mut changed = !existed;
 
+    /*
+     * Surum 2: gecmiste tekrarlari gizle ACIK.
+     *
+     * Varsayilani degistirmek YETMIYOR ve bu olculdu: kullanici ayari istedi,
+     * kod degisti, ama onun dosyasinda alan zaten `false` yaziliyken duruyordu
+     * ve arayuzde hala tiksiz geliyordu. Varsayilan yalnizca YENI kurulumlari
+     * etkiliyor.
+     *
+     * Tasima BIR KEZ kosuyor (surum damgasiyla): kullanici bundan sonra kapatmak
+     * isterse kapatabilsin, her acilista karari geri alinmasin.
+     */
+    if settings.version < 2 {
+        settings.behavior.history_dedupe = true;
+        settings.version = crate::model::SETTINGS_VERSION;
+        changed = true;
+    }
+
     // Profil listesi bossa (ilk acilis) makinede kurulu kabuklari tara.
     if settings.profiles.is_empty() {
         settings.profiles = shells::detect_profiles();

@@ -32,6 +32,7 @@ import type {
   TabState,
   ViewMode,
   Workspace,
+  GitInfo,
 } from "../types";
 
 /**
@@ -100,6 +101,15 @@ export interface UiState {
   paletteOpen: boolean;
   transferOpen: boolean;
   searchOpen: boolean;
+  /**
+   * Dizin seçicinin açık olduğu yol; kapalıyken null.
+   *
+   * Yol DEPODA tutuluyor çünkü seçiciyi açan yer (blok başlığındaki rozet)
+   * `overflow: hidden` bir katmanın içinde; pencereyi orada çizmek kırpardı.
+   * Uygulamanın kökünde çiziliyor, hangi dizin için açıldığını buradan
+   * öğreniyor.
+   */
+  dirPicker: string | null;
   findOpen: boolean;
   renamingTabId: string | null;
   editingGroupId: string | null;
@@ -143,6 +153,38 @@ interface Store {
    * sonra her yeni komut başa ekleniyor.
    */
   suggestHistory: SuggestEntry[];
+  /**
+   * Girdi kipini belirleyen sinyaller, sekme başına.
+   *
+   * Kip burada HESAPLANMIYOR: ayarla birleştirip karar veren yer
+   * `lib/inputMode.ts`. Depo yalnızca oturumun bildirdiğini taşıyor.
+   */
+  inputSignals: Record<string, { atPrompt: boolean; altScreen: boolean; integration: boolean }>;
+  /**
+   * Çalışan komutun çıktısında görülen sunucu adresleri, sekme başına.
+   *
+   * Depoda çünkü şeridi çizen bileşen terminalin dışında; oturumdan doğrudan
+   * okusaydı çıktı aktıkça yeniden çizilmesi için ayrı bir abonelik gerekirdi.
+   * Liste seyrek değişiyor (sunucu adresini bir kez yazıyor), yani depo
+   * güncellemesi ucuz.
+   */
+  runLinks: Record<string, string[]>;
+  /**
+   * Dizin başına git durumu; depo olmayan dizinler `null` olarak kayıtlı.
+   *
+   * `null` ile "hiç bakılmadı" (anahtar yok) AYRI tutuluyor: ikisini
+   * birleştirmek, depo olmayan bir dizinde her komut sonrası yeniden `git`
+   * çalıştırmak demekti.
+   */
+  gitInfo: Record<string, GitInfo | null>;
+  /**
+   * Uygulama komut satırı açıkken kabul edilen önerinin gideceği yer.
+   *
+   * `CommandInput` kendini buraya kaydediyor. Depodan bileşene doğrudan
+   * erişim yok; bu kayıt olmadan `acceptSuggestionAt` iki ayrı yola
+   * bölünürdü ve listeye tıklamak yalnızca ham kipte çalışırdı.
+   */
+  appInputSink: ((text: string) => void) | null;
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
   /**
@@ -209,6 +251,7 @@ interface Store {
   /** Onay penceresini açar; kullanıcı karar verene kadar bekler. */
   askConfirm: (request: Omit<ConfirmRequest, "id">) => Promise<boolean>;
   loadSuggestHistory: () => Promise<void>;
+  refreshGit: (cwd: string | null) => Promise<void>;
   noteCommand: (command: string, cwd: string | null) => void;
   /**
    * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
@@ -219,6 +262,8 @@ interface Store {
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
   closeSuggestions: () => void;
+  setAppInputSink: (sink: ((text: string) => void) | null) => void;
+  insertCommand: (command: string, execute: boolean) => void;
   toast: (text: string, tone?: "ok" | "err" | "info") => void;
 }
 
@@ -307,10 +352,14 @@ export const useStore = create<Store>((set, get) => ({
       ctrlCCopiesSelection: true,
       inheritCwd: true,
       historyLimit: 50000,
-      historyDedupe: false,
+      historyDedupe: true,
       showOnlyFavoriteGroups: false,
       appSuggestions: true,
-      shellPrediction: "list",
+      shellPrediction: "inline",
+      promptAtBottom: true,
+      appInput: true,
+      commandBlocks: true,
+      blockHeaders: true,
       // Varsayılan "background": uygulamanın menü çubuğunda / bildirim
       // alanında her zaman bir simgesi var, kapatma düğmesine basınca tümden
       // ölmesi bu varlıkla çelişiyordu — simge de kayboluyordu.
@@ -331,6 +380,10 @@ export const useStore = create<Store>((set, get) => ({
   statusTick: 0,
   favorites: [],
   suggestHistory: [],
+  inputSignals: {},
+  runLinks: {},
+  gitInfo: {},
+  appInputSink: null,
   ui: {
     historyOpen: false,
     historyScope: "tab",
@@ -339,6 +392,7 @@ export const useStore = create<Store>((set, get) => ({
     paletteOpen: false,
     transferOpen: false,
     searchOpen: false,
+    dirPicker: null,
     findOpen: false,
     renamingTabId: null,
     editingGroupId: null,
@@ -910,7 +964,11 @@ export const useStore = create<Store>((set, get) => ({
 
     session.setCallbacks({
       onTitle: (title) => get().updateTab(tab.id, { title }),
-      onCwd: (cwd) => get().updateTab(tab.id, { cwd }),
+      onCwd: (cwd) => {
+        get().updateTab(tab.id, { cwd });
+        // Yeni dizin başka bir depo (ya da hiç depo değil) olabilir.
+        void get().refreshGit(cwd);
+      },
       onCommandStart: (command) => {
         set({ running: { ...get().running, [tab.id]: true } });
         get().updateTab(tab.id, { lastCommand: command });
@@ -921,6 +979,9 @@ export const useStore = create<Store>((set, get) => ({
       },
       onCommandEnd: () => {
         set({ running: { ...get().running, [tab.id]: false } });
+        // Komut dosya değiştirmiş olabilir; rozet komutun SONRAKİ hâlini
+        // göstermeli. En sık örnek: `git add` sonrası sayacın düşmesi.
+        void get().refreshGit(sessions.get(tab.id)?.cwd ?? null);
       },
       onExit: () => {
         set({
@@ -939,6 +1000,14 @@ export const useStore = create<Store>((set, get) => ({
         // sekmenin yazdığı metin listeyi değiştirmesin.
         if (get().activeTab()?.tab.id !== tab.id) return;
         get().updateSuggestions(state);
+      },
+      onRunLinks: (urls) => {
+        set({ runLinks: { ...get().runLinks, [tab.id]: urls } });
+      },
+      onInputSignals: (signals) => {
+        // Sinyaller SEKME BAŞINA tutuluyor: bölme kipinde arkadaki sekmede
+        // komut çalışırken öndeki istemde bekliyor olabilir.
+        set({ inputSignals: { ...get().inputSignals, [tab.id]: signals } });
       },
     });
 
@@ -1090,7 +1159,7 @@ export const useStore = create<Store>((set, get) => ({
     if (favorite.cwd && favorite.cwd !== session.cwd) {
       session.insertCommand(`cd ${quoteForShell(favorite.cwd)}`, true);
     }
-    session.insertCommand(favorite.command, execute);
+    get().insertCommand(favorite.command, execute);
     await api.favoritesMarkUsed(id).catch(() => {});
     await get().loadFavorites();
   },
@@ -1106,6 +1175,19 @@ export const useStore = create<Store>((set, get) => ({
     set({ ui: { ...get().ui, ...patch } });
   },
 
+  /**
+   * Bir dizinin git durumunu tazeler.
+   *
+   * Her çağrı bir `git` süreci başlatıyor, o yüzden çağıran yerler SEYREK:
+   * dizin değiştiğinde ve komut bittiğinde. Aynı dizin için eşzamanlı ikinci
+   * bir çağrı zararsız — sonuç aynı yere yazılıyor.
+   */
+  async refreshGit(cwd) {
+    if (!cwd) return;
+    const info = await api.gitInfo(cwd).catch(() => null);
+    set({ gitInfo: { ...get().gitInfo, [cwd]: info } });
+  },
+
   async loadSuggestHistory() {
     // Tekrarlar zaten `rankSuggestions` içinde ayıklanıyor; burada dedupe
     // istemiyoruz ki sıra (en yeni önce) bozulmasın.
@@ -1113,14 +1195,20 @@ export const useStore = create<Store>((set, get) => ({
       .historyQuery({ limit: SUGGEST_SOURCE_LIMIT, dedupe: false })
       .catch(() => null);
     if (!page) return;
-    set({ suggestHistory: page.entries.map((e) => ({ command: e.command, cwd: e.cwd ?? null })) });
+    set({
+      suggestHistory: page.entries.map((e) => ({
+        command: e.command,
+        cwd: e.cwd ?? null,
+        at: e.startedAt,
+      })),
+    });
   },
 
   noteCommand(command, cwd) {
     const text = command.trim();
     if (!text) return;
     const next = [
-      { command: text, cwd },
+      { command: text, cwd, at: Date.now() },
       ...get().suggestHistory.filter((e) => e.command !== text),
     ];
     // Liste sınırsız büyümesin: öneri için son birkaç yüz komut yeterli.
@@ -1179,6 +1267,15 @@ export const useStore = create<Store>((set, get) => ({
     const ui = get().ui;
     const suggestion = ui.suggest?.items[index];
     if (!suggestion || !ui.suggest) return;
+    // Uygulama komut satırı açıkken satır kabukta DEĞİL, kutuda: öneriyi
+    // kabuğa DEL tuşlarıyla yazmak yanlış olurdu (kabuğun satırı zaten boş).
+    // Kabul etme yine tek yerden geçiyor, yalnızca varış noktası değişiyor.
+    const sink = get().appInputSink;
+    if (sink) {
+      sink(suggestion);
+      set({ ui: { ...get().ui, suggest: null } });
+      return;
+    }
     const session = get().activeSession();
     // Satırdaki metin olarak öneriyi ÜRETEN öneki veriyoruz; ekranı yeniden
     // okumak hayalet metin yüzünden yanlış sonuç veriyordu.
@@ -1187,6 +1284,29 @@ export const useStore = create<Store>((set, get) => ({
     // Listeye tıklanarak kabul edilmiş olabilir: odak terminale dönmeli,
     // yoksa kullanıcı yazmaya devam edemiyor.
     session?.focus();
+  },
+
+  setAppInputSink(sink) {
+    set({ appInputSink: sink });
+  },
+
+  /**
+   * Hazır bir komutu satıra koyar (geçmiş, favoriler, geçmiş paneli).
+   *
+   * Neden depoda ve tek yerde: uygulama komut satırı açıkken satır kabukta
+   * değil, kutuda. Metni kabuğa yazmak onu ızgarada gösterir ve kutu boş
+   * kalırdı — kullanıcı düzenleyemediği bir komuta bakar.
+   *
+   * ÇALIŞTIRMA hâli ayrı: komut Enter'ıyla birlikte gidiyor, satırda
+   * kalmıyor, dolayısıyla iki kipte de aynı iş.
+   */
+  insertCommand(command, execute) {
+    const sink = get().appInputSink;
+    if (sink && !execute) {
+      sink(command);
+      return;
+    }
+    get().activeSession()?.insertCommand(command, execute);
   },
 
   closeSuggestions() {

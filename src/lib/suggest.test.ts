@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_SUGGESTIONS, MIN_PREFIX, acceptKeys, canSuggest, cycleIndex, rankSuggestions } from "./suggest";
+import {
+  MAX_SUGGESTIONS,
+  MIN_PREFIX,
+  acceptKeys,
+  canSuggest,
+  cycleIndex,
+  effectiveShellPrediction,
+  rankSuggestions,
+} from "./suggest";
 
 /**
  * Komut önerisinin saf mantığı.
@@ -240,5 +248,27 @@ describe("öneri gösterme koşulu", () => {
     // Bayrak yalnızca SAĞDAKİ metni yok sayıyor. Önek satırın başında değilse
     // durum yine "imleç ortada" ve öneri gösterilmemeli.
     expect(canSuggest("start", "yarn start:dev", true)).toBe(false);
+  });
+});
+
+describe("kabuğa bildirilen tahmin kipi", () => {
+  it("istem dipteyken liste yerine satır içi bildiriliyor", () => {
+    // ÖLÇÜLEN BELİRTİ: istem dibe iniyor, PSReadLine 10 satırlık listesini
+    // çizmek için altında yer bulamayıp ekranı yukarı kaydırıyor ve istem
+    // 10 satır yukarı fırlıyor. Yani "sabit" olması istenen yer oynuyor.
+    expect(effectiveShellPrediction("list", true)).toBe("inline");
+  });
+
+  it("dipte durma kapalıyken liste olduğu gibi kalıyor", () => {
+    expect(effectiveShellPrediction("list", false)).toBe("list");
+  });
+
+  it("diğer kipler her iki durumda da değişmiyor", () => {
+    // Yalnızca liste çakışıyor; "kapalı" ayarını satır içine çevirmek
+    // kullanıcının kapattığı şeyi geri açardı.
+    for (const bottom of [true, false]) {
+      expect(effectiveShellPrediction("inline", bottom)).toBe("inline");
+      expect(effectiveShellPrediction("off", bottom)).toBe("off");
+    }
   });
 });

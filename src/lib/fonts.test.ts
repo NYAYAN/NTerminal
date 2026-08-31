@@ -3,7 +3,13 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { BUNDLED_FONTS } from "./fonts";
+import {
+  BUNDLED_FONTS,
+  CANDIDATE_FONTS,
+  detectInstalled,
+  fontStack,
+  isFontInstalled,
+} from "./fonts";
 
 /**
  * Gömülü yazı tipleri üç yerde birden doğru olmak zorunda: listede
@@ -95,5 +101,60 @@ describe("gömülü yazı tipleri", () => {
     for (const dosya of readdirSync(DIR).filter((f) => f.endsWith(".woff2"))) {
       expect(CSS, `${dosya} hiçbir @font-face tarafından kullanılmıyor`).toContain(dosya);
     }
+  });
+});
+
+/**
+ * Kurulu yazı tiplerinin bulunması.
+ *
+ * Neden ölçüme dayanıyor: tarayıcı "kurulu olanları say" diye bir yol vermiyor.
+ * Aynı metni "aile, jenerik" ve yalnızca "jenerik" ile çizip genişlikleri
+ * karşılaştırıyoruz; aile yoksa tarayıcı jeneriğe düşüyor ve iki ölçüm eşit
+ * çıkıyor.
+ */
+describe("kurulu yazı tipi bulma", () => {
+  /** Yalnızca `kurulu` kümesindeki aileleri tanıyan sahte ölçer. */
+  const olcer = (kurulu: string[]) => (spec: string) => {
+    const aile = /^"([^"]+)"/.exec(spec)?.[1];
+    if (aile && kurulu.includes(aile)) return 500;
+    // Jenerikler ve bilinmeyen aileler taban genişliğe düşüyor.
+    return spec.includes("sans-serif") ? 400 : 300;
+  };
+
+  it("kurulu aileyi buluyor", () => {
+    expect(isFontInstalled("Hack", olcer(["Hack"]))).toBe(true);
+  });
+
+  it("kurulu olmayanı elemiyor", () => {
+    expect(isFontInstalled("Hack", olcer([]))).toBe(false);
+  });
+
+  it("sistemin varsayılan eş aralıklısını KAÇIRMIYOR", () => {
+    // ÖNEMLİ DURUM: aile sistemin varsayılan `monospace`i olduğunda o jenerikle
+    // ölçüm eşit çıkıyor ve kurulu bir yazı tipi "yok" sayılıyordu. Windows'ta
+    // Consolas tam olarak böyle. İkinci jenerik (`sans-serif`) bunu yakalıyor.
+    const varsayilan = (spec: string) => {
+      if (spec.includes("sans-serif")) return spec.startsWith('"Consolas"') ? 300 : 400;
+      return 300; // hem "Consolas, monospace" hem düz "monospace" aynı
+    };
+    expect(isFontInstalled("Consolas", varsayilan)).toBe(true);
+  });
+
+  it("sırayı koruyor ve yalnızca kurulu olanları veriyor", () => {
+    const out = detectInstalled(["A", "B", "C"], olcer(["C", "A"]));
+    expect(out).toEqual(["A", "C"]);
+  });
+
+  it("aday listesi boş değil ve tekrarsız", () => {
+    expect(CANDIDATE_FONTS.length).toBeGreaterThan(5);
+    expect(new Set(CANDIDATE_FONTS).size).toBe(CANDIDATE_FONTS.length);
+  });
+
+  it("yığın aileyle başlıyor, jenerikle bitiyor", () => {
+    // Gömülü ailelerdeki kuralın aynısı: aile başta olmazsa seçim işe
+    // yaramıyor, sonda jenerik olmazsa eksik glif tanımsız davranışa düşüyor.
+    const stack = fontStack("Fira Code");
+    expect(stack.startsWith("Fira Code")).toBe(true);
+    expect(stack.trim().endsWith("monospace")).toBe(true);
   });
 });

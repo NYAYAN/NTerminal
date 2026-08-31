@@ -97,8 +97,14 @@ describe("büyük harf düzeni", () => {
    * Bunları büyütmek cümleyi ortasından büyük harfle böler:
    * "Ctrl+A kapsam: Tüm sekmeler", "3 kayıt · Okunuyor…". Sondaki dosya adı
    * ise arayüz metni değil.
+   *
+   * `suggest.hint*` üçlüsü de öyle: her biri bir TUŞ ROZETİNİN ardından
+   * geliyor ("[↑][↓] gez"), yani cümlenin başı değil ortası.
    */
   const PARCA = new Set<string>([
+    "suggest.hintNav",
+    "suggest.hintAccept",
+    "suggest.hintDismiss",
     "recall.scopeAll",
     "recall.scopeTab",
     "settings.historyReading",

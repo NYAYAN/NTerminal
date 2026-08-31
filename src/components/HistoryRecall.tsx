@@ -113,12 +113,11 @@ export function HistoryRecall() {
       setUi({ searchOpen: false });
       return;
     }
-    const session = store.activeSession();
-    if (!session) {
+    if (!store.activeSession()) {
       store.toast("Etkin bir terminal yok", "err");
       return;
     }
-    session.insertCommand(row.command, execute);
+    store.insertCommand(row.command, execute);
     setUi({ searchOpen: false });
   };
 

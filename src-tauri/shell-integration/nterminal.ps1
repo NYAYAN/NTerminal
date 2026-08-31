@@ -25,6 +25,12 @@ $Global:__NTermLastHistoryId = -1
 # basmak (komut yok, dolayisiyla SawCommand false) yedegi tetikler ve onceki
 # komut ikinci kez kaydedilir.
 $Global:__NTermUseHistoryFallback = $true
+# Komut satiri pencerenin dibinde dursun mu? Arayuz bildirmediyse HAYIR:
+# eski bir surumle calisirken davranisi sessizce degistirmiyoruz.
+$Global:__NTermPromptBottom = ($env:NTERMINAL_PROMPT_BOTTOM -eq '1')
+# Gorunur istem yerine blok basligi. Arayuz bildirmediyse HAYIR: istemi
+# gizlemek gorunumu tumden degistiriyor, sessizce yapilmamali.
+$Global:__NTermBlockHeader = ($env:NTERMINAL_BLOCK_HEADER -eq '1')
 
 function Global:__NTermOsc([string]$Body) {
     try { [Console]::Write($Global:__NTermESC + ']' + $Body + $Global:__NTermBEL) } catch { }
@@ -55,6 +61,38 @@ function Global:__NTermReportCwd() {
         $slashed = $path -replace '\\', '/'
         __NTermOsc ('7;file:///' + $slashed)
     } catch { }
+}
+
+# --- istemi ekranin dibine itme ---------------------------------------------
+#
+# Warp'ta komut satiri her zaman pencerenin altindadir; ustunde kalan bosluga
+# ciktilar ve oneri listesi yerlesir. Ayni sey burada kabuga yaptiriliyor:
+# istem cizilmeden once imlecin altinda kalan satir sayisi kadar bos satir
+# yaziyoruz, imlec son satira iniyor ve istem oraya cizilyor.
+#
+# NEDEN KABUK YAPIYOR: satiri kabuk ciziyor. Ayni boslugu arayuz tarafindan
+# (xterm'e bos satir yazarak) eklemek ayni akista olmadigi icin sirayi
+# bozuyor - istem bazen bosluklardan ONCE cizilip ekran zipliyor.
+#
+# LF secildi, "imleci son satira tasi" (CUP) DEGIL: LF imleci asagi indirirken
+# tamponu da kaydiriyor, yani onceki cikti yukari suzuluyor ve kayboluyor
+# degil. CUP yalnizca imleci tasir; istem ekranda duran ciktinin uzerine
+# cizilirdi.
+function Global:__NTermBottomPad([string]$Prompt) {
+    if (-not $Global:__NTermPromptBottom) { return '' }
+    try {
+        # Cok satirli istemde (git dali ustte, `>` altta gibi) dibe oturmasi
+        # gereken SON satir; ustteki satirlar kadar daha az bosluk birakiyoruz.
+        $promptLines = ([regex]::Matches($Prompt, "`n")).Count
+        $sonSatir = [Console]::WindowTop + [Console]::WindowHeight - 1
+        $bosluk = $sonSatir - [Console]::CursorTop - $promptLines
+        if ($bosluk -gt 0) { return ("`n" * $bosluk) }
+    } catch {
+        # Konsol tamponu okunamiyor (cikti yonlendirilmis ya da kabuk gomulu
+        # calisiyor). Bosluk eklemiyoruz: ozellik gorsel, calismamasi bir sey
+        # bozmuyor.
+    }
+    return ''
 }
 
 # --- istem sarmalayici ------------------------------------------------------
@@ -117,8 +155,8 @@ function Global:prompt {
 
     __NTermReportCwd
 
-    $out += $Global:__NTermESC + ']133;A' + $Global:__NTermBEL
-
+    # Istem metni bosluk hesabindan ONCE uretiliyor: kac satir oldugunu
+    # bilmeden dibe kac satir kalacagini hesaplayamayiz.
     $userPrompt = ''
     try {
         if ($null -ne $Global:__NTermOriginalPrompt) {
@@ -129,6 +167,30 @@ function Global:prompt {
         $userPrompt = 'PS ' + $executionContext.SessionState.Path.CurrentLocation + '> '
     }
 
+    # --- gorunur istem yerine blok basligi ---
+    #
+    # Warp'in ust alandaki duzeni: ekranda 'PS C:\Users\...>' yok, onun
+    # yerine blogun kendi basligi var - dizin, sure, cikis durumu. Bu bilgilerin
+    # hepsi zaten arayuze OSC ile gidiyor; ikinci kez metin olarak yazmak
+    # tekrardan ibaret ve her komutun basina uzun bir yol dizesi koyuyor.
+    #
+    # Istem BOS SATIRA cevriliyor, tumden kaldirilmiyor. Bosluk sart: baslik
+    # ekranda bir satir yer istiyor ve arayuz izgaraya satir EKLEYEMEZ, yalnizca
+    # var olan satirin uzerine cizebilir. Sira soyle olusuyor:
+    #
+    #   133;A     -> blok burada basliyor (arayuz isaretini buraya koyuyor)
+    #   bos satir -> basligin cizilecegi yer
+    #   133;B     -> komut girisi bir alt satirda basliyor
+    if ($Global:__NTermBlockHeader) {
+        $userPrompt = "`n"
+    }
+
+    # Bosluklar 133;A'DAN ONCE yaziliyor. O isaret "istem burada basliyor"
+    # demek ve arayuz yazdiginiz satiri oradan okuyor; sonra yazsaydik isaret
+    # bos bir satiri gosterir, satir okuma bozulurdu.
+    $out += __NTermBottomPad $userPrompt
+
+    $out += $Global:__NTermESC + ']133;A' + $Global:__NTermBEL
     $out += $userPrompt
     $out += $Global:__NTermESC + ']133;B' + $Global:__NTermBEL
     return $out
@@ -202,6 +264,26 @@ if ([string]::IsNullOrEmpty($Global:__NTermPredict) -or $Global:__NTermPredict -
                 } else {
                     Set-PSReadLineOption -PredictionViewStyle ListView -ErrorAction Stop
                     $state = 'list'
+
+                    # OLCULEN HATA: acik temada secili satir okunmuyordu.
+                    #
+                    # PSReadLine'in varsayilani (`ListPredictionSelected`)
+                    # yalnizca ARKA PLANI koyu griye cekiyor (48;5;238) ve yazi
+                    # rengine dokunmuyor. Koyu temada is goruyor; acik temada
+                    # yazi da koyu oldugu icin koyu-uzerine-koyu cikiyor ve
+                    # satirin uzerine geldiginizde metin kayboluyor.
+                    #
+                    # Ters video (SGR 7) terminalin KENDI iki rengini takas
+                    # ediyor: arka plan yazi rengi, yazi arka plan rengi olur.
+                    # Her temada okunabilir ve tema renklerini kabuga
+                    # bildirmemiz gerekmiyor - tek satir, sifir bakim.
+                    try {
+                        Set-PSReadLineOption -Colors @{
+                            ListPredictionSelected = ($Global:__NTermESC + '[7m')
+                        } -ErrorAction Stop
+                    } catch {
+                        # Renk anahtari bu surumde yoksa liste yine calisir.
+                    }
                 }
             }
         }
@@ -211,6 +293,14 @@ if ([string]::IsNullOrEmpty($Global:__NTermPredict) -or $Global:__NTermPredict -
         $state = 'unsupported'
     }
     __NTermOsc ('633;P;Prediction=' + $state)
+}
+
+# Blok basligi kipini bildir. Arayuz bunu bekliyor: bildirmeyen bir kabukta
+# (bash, cmd, eski surum) bos satir olusmaz ve baslik ciktinin ustunu orterdi.
+if ($Global:__NTermBlockHeader) {
+    __NTermOsc '633;P;BlockHeader=1'
+} else {
+    __NTermOsc '633;P;BlockHeader=0'
 }
 
 # Ilk istem icin dizin bilgisini hemen gonder.

@@ -36,6 +36,17 @@ export function HistoryPanel() {
 
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<Outcome>("all");
+  /**
+   * Tekrarları gizle.
+   *
+   * Yerel durum AYARDAN doğuyor ve değiştirilince ayara geri yazılıyor.
+   *
+   * ÖLÇÜLEN BELİRTİ: kutucuk işaretleniyor, panel kapanıp açılınca yeniden boş
+   * geliyordu. Sebep, değerin hiçbir yere kaydedilmemesiydi — panel her
+   * açılışta ayarın (varsayılan) değeriyle yeniden doğuyordu. Bir SÜZGECİN
+   * kullanıcının kurduğu gibi kalması gerekiyor; her seferinde yeniden
+   * kurmak zorunda kalmak süzgeci kullanılmaz yapıyor.
+   */
   const [dedupe, setDedupe] = useState(dedupeDefault);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -103,7 +114,7 @@ export function HistoryPanel() {
       store().toast(t("history.noActiveTerminal"), "err");
       return;
     }
-    session.insertCommand(command, execute);
+    useStore.getState().insertCommand(command, execute);
   };
 
   const copy = async (commands: string[]) => {
@@ -265,7 +276,14 @@ export function HistoryPanel() {
             </button>
           </div>
           <label className="check-row" style={{ marginLeft: "auto", padding: 0 }}>
-            <input type="checkbox" checked={dedupe} onChange={(e) => setDedupe(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={dedupe}
+              onChange={(e) => {
+                setDedupe(e.target.checked);
+                void useStore.getState().patchBehavior({ historyDedupe: e.target.checked });
+              }}
+            />
             <span className="dim">{t("history.hideDupes")}</span>
           </label>
         </div>

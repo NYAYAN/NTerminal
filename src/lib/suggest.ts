@@ -7,6 +7,34 @@
  * görüyor. Bulanık arama ayrı bir iş ve `Ctrl+R` onu yapıyor.
  */
 
+/**
+ * Kabuğa gerçekten bildirilecek tahmin kipi.
+ *
+ * ## Neden bir kural gerekiyor
+ *
+ * "İstemin altında liste" (PSReadLine ListView) ile "komut satırı dipte
+ * dursun" AYNI ANDA çalışamıyor. Liste imlecin ALTINA çiziliyor; istem son
+ * satırdayken orada yer yok, PSReadLine da ekranı on satır yukarı kaydırarak
+ * kendine yer açıyor. Sonuç, ölçülen belirti: istem dibe iniyor, liste
+ * açılıyor, istem on satır yukarı fırlıyor — yani "sabit" olması istenen yer
+ * her tuş vuruşunda oynuyor.
+ *
+ * Bu ikisi çelişkili DEĞİL, biri diğerini teknik olarak imkânsız kılıyor. Kural
+ * bu yüzden burada, tek yerde: kabuğa liste yerine satır içi hayalet metin
+ * bildiriyoruz. Kaybedilen bir şey yok — listeyi zaten uygulama kendi paneliyle
+ * çiziyor (bkz. `SuggestionBar`), üstelik yazdığınız satırı örtmeden.
+ *
+ * Kullanıcının AYARI değişmiyor; yalnızca o ayarın bu oturumdaki karşılığı
+ * hesaplanıyor. Dipte durma kapatılırsa liste geri geliyor.
+ */
+export function effectiveShellPrediction(
+  setting: string,
+  promptAtBottom: boolean,
+): string {
+  if (promptAtBottom && setting === "list") return "inline";
+  return setting;
+}
+
 /** Öneri gösterilmesi için gereken en az ön ek uzunluğu. */
 export const MIN_PREFIX = 2;
 
@@ -25,6 +53,14 @@ export interface SuggestEntry {
   command: string;
   /** Komutun çalıştırıldığı dizin; bilinmiyorsa null. */
   cwd: string | null;
+  /**
+   * Komutun çalıştırıldığı an (ms). Bilinmiyorsa yok.
+   *
+   * Sıralamaya girmiyor — `history` zaten en yeniden eskiye sıralı. Listede
+   * "ne zaman kullanmıştım" bilgisini göstermek için taşınıyor: aynı ön ekle
+   * başlayan iki komut arasında seçim çoğu zaman buna bakılarak yapılıyor.
+   */
+  at?: number | null;
 }
 
 /**

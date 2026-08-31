@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  GitInfo,
   Bootstrap,
   BundleInfo,
   ExportOptions,
@@ -87,6 +88,8 @@ export const api = {
   revealInExplorer: (path: string) => invoke<void>("reveal_in_explorer", { path }),
   /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
   openExternal: (url: string) => invoke<void>("open_external", { url }),
+  listDirs: (path: string) => invoke<string[]>("list_dirs", { path }),
+  gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
   /**
    * Menü çubuğu / bildirim alanı simgesinin menü metinleri.
    *
