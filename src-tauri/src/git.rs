@@ -16,8 +16,8 @@
 //! Surec baslatmak bedava degil; bu yuzden cagri SEYREK: dizin degistiginde ve
 //! komut bittiginde. Her tus vurusunda degil.
 
+use crate::platform::quiet_command;
 use serde::Serialize;
-use std::process::Command;
 
 /// Rozette gosterilen tek bir degisiklik.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -120,7 +120,7 @@ fn parse_branch_line(head: &str, info: &mut GitInfo) {
 /// gosterilmez. Kullaniciya hata bildirmek burada gurultu olurdu; rozet zaten
 /// bir kolaylik, bir sozlesme degil.
 pub fn read(path: &str) -> Option<GitInfo> {
-    let out = Command::new("git")
+    let out = quiet_command("git")
         .args([
             "-C",
             path,
@@ -155,7 +155,7 @@ pub fn read(path: &str) -> Option<GitInfo> {
 /// gosterirdi; o da yerel bir izleme dali OLUSTURUYOR, yani "gecis yaptim"
 /// sandigin yerde yeni bir dal yaratmis oluyorsun. Ayri bir is.
 pub fn branches(path: &str) -> Vec<String> {
-    let Ok(out) = Command::new("git")
+    let Ok(out) = quiet_command("git")
         .args([
             "-C",
             path,
@@ -201,7 +201,7 @@ pub fn diff(path: &str, file: &str, untracked: bool) -> Option<String> {
         args.extend(["--", file]);
     }
 
-    let out = Command::new("git").args(&args).output().ok()?;
+    let out = quiet_command("git").args(&args).output().ok()?;
     // `--no-index` fark VARSA 1 donuyor; basarisizlik degil.
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     if text.is_empty() && !out.status.success() {

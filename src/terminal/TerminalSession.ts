@@ -706,10 +706,6 @@ export class TerminalSession {
         running: block.running,
       };
 
-      // Ekranı silen komutlar (`clear`) kendi bloklarını da siliyor; geriye
-      // gösterilecek bir şey kalmıyor (bkz. `hasVisibleContent`).
-      if (!hasVisibleContent(view, (from, to) => this.readBlockText(from, to))) continue;
-
       out.push(view);
     }
     return out;
@@ -765,6 +761,24 @@ export class TerminalSession {
       viewportTop: this.term.buffer.active.viewportY,
       rows: this.term.rows,
     };
+  }
+
+  /**
+   * Blokta gösterilecek bir şey var mı (`clear` sonrası boş kalmış olabilir).
+   *
+   * BURADA ve tek tek soruluyor, `snapshotBlocks` içinde topluca DEĞİL.
+   *
+   * ÖLÇÜLEN SORUN: kurulu sürümde uygulama "donarak hareket ediyor" ve sekme
+   * geçişinde takılıyordu. Sebep buydu: denetim bütün bloklar için (yüz taneye
+   * kadar) ve HER ÇİZİMDE koşuyordu — çıktı akarken çizim kare başına bir kez
+   * tetikleniyor, yani saniyede binlerce satır okuması.
+   *
+   * Katman yalnızca GÖRÜNEN blokları çiziyor (bkz. `blockRect`); denetimi de
+   * oraya taşımak işi bir avuç bloğa indiriyor. Görünmeyen bir bloğun boş olup
+   * olmadığı zaten hiçbir şeyi değiştirmiyor.
+   */
+  blockHasContent(block: BlockView): boolean {
+    return hasVisibleContent(block, (from, to) => this.readBlockText(from, to));
   }
 
   /** Bloğun kapsadığı satırların düz metni (çıktıyı kopyalamak için). */
