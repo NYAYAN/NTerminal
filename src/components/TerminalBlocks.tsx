@@ -114,6 +114,17 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
       {blocks.map((block) => {
         const rect = blockRect(block, view);
         if (!rect) return null;
+        /*
+         * Boşluk denetimi GÖRÜNÜR blokta ve dikdörtgen hesabından SONRA.
+         *
+         * `clear` sonrası bloğun satırları boşalıyor ve geriye anlamsız bir
+         * şerit kalıyor; onu ayıklamak için içeriğe bakmak gerekiyor. Ama bu
+         * denetim satır okuması demek: bütün bloklar için her çizimde koşarsa
+         * (yüz blok x yirmi dört satır x kare başına) uygulama donuyor —
+         * ölçülen belirti buydu. Görünmeyen bloğun boş olması ise hiçbir şeyi
+         * değiştirmiyor.
+         */
+        if (!session.blockHasContent(block)) return null;
         const tone = blockTone(block);
         const on = hovered === block.id;
 
