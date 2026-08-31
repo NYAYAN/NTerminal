@@ -106,20 +106,43 @@ export type BlockTone = "running" | "ok" | "fail" | "unknown";
  * göre değişiyor; "satırları boşsa gösterme" her iki yolda da doğru sonucu
  * veriyor.
  *
- * `maxProbeRows` bir başarım sınırı: uzun bir bloğun içeriği olduğu kesin ve
- * her karede binlerce satır okumak katmanı terminalden pahalı hâle getirirdi.
+ * ## Neden ÖRNEKLEME
+ *
+ * İlk hâli yalnızca KISA blokları (üç satıra kadar) denetliyordu; uzun bloğun
+ * içeriği olduğu varsayılıyordu. Ölçülen belirti bu varsayımı çürüttü: `ls`
+ * çıktısı otuz satırlık bir blok, `clear` ekranı siliyor ve blok "uzun" olduğu
+ * için hiç denetlenmiyor — geriye metinsiz, upuzun bir şerit kalıyor.
+ *
+ * Bütün satırları okumak da doğru değil: bir blok binlerce satır olabiliyor ve
+ * bu denetim her karede koşuyor. Onun yerine bloğa YAYILMIŞ en fazla
+ * `maxProbes` satır okunuyor. Hepsi boşsa blok boş sayılıyor.
+ *
+ * Yanılma payı: aralara serpilmiş boş satırlarla dolu, içeriği tam da
+ * örneklenmeyen satırlarda olan bir blok gizlenebilir. Yirmi dört örnekte bunun
+ * olması için bloğun kasten öyle kurulması gerekiyor.
  */
 export function hasVisibleContent(
   block: BlockView,
   read: (from: number, to: number) => string,
-  maxProbeRows = 3,
+  maxProbes = 24,
 ): boolean {
   // Bekleyen istem: gösterilecek çıktısı zaten yok, başlık tek başına anlamlı.
   if (!block.command) return true;
   // Açık blok: komut çalışıyor, çıktısı henüz gelmemiş olabilir.
   if (block.endLine === null) return true;
-  if (block.endLine - block.startLine > maxProbeRows) return true;
-  return read(block.startLine, block.endLine).trim().length > 0;
+
+  const satir = block.endLine - block.startLine + 1;
+  if (satir <= maxProbes) {
+    return read(block.startLine, block.endLine).trim().length > 0;
+  }
+
+  // Yayılmış örnekleme: ilk ve son satır her zaman içeride.
+  const adim = (satir - 1) / (maxProbes - 1);
+  for (let i = 0; i < maxProbes; i++) {
+    const y = block.startLine + Math.round(i * adim);
+    if (read(y, y).trim().length > 0) return true;
+  }
+  return false;
 }
 
 export function blockTone(block: BlockView): BlockTone {

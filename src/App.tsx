@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { CommandPalette } from "./components/CommandPalette";
+import { FilePalette } from "./components/FilePalette";
+import { SearchIcon, TreeIcon } from "./components/Icons";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { SidePanel } from "./components/SidePanel";
 import { CommandInput } from "./components/CommandInput";
+import { BranchPicker } from "./components/BranchPicker";
+import { ContextBar } from "./components/ContextBar";
 import { DirPicker } from "./components/DirPicker";
 import { RunningLinks } from "./components/RunningLinks";
 import { StatusBar } from "./components/StatusBar";
@@ -141,6 +145,32 @@ export function App() {
 
   // ------------------------------------------------------------ kısayollar
 
+  /*
+   * WebView2'nin KENDİ sağ tık menüsünü kapat.
+   *
+   * ÖLÇÜLEN SORUN: terminalin dışında bir yere sağ tıklamak tarayıcı menüsünü
+   * açıyordu — Geri, Yenile, Farklı kaydet, Yazdır, İncele. Bunların hiçbiri
+   * bir terminalde anlamlı değil; "Yenile" ise doğrudan zararlı: uygulamayı
+   * yeniden yükleyip bütün sekmeleri düşürüyor.
+   *
+   * Uygulamanın kendi menüsü olan yerler (sekme, grup, geçmiş, favoriler,
+   * terminal) varsayılanı zaten kendileri engelliyor; bu kural geri kalan her
+   * yeri kapsıyor.
+   *
+   * METİN ALANLARI MUAF: orada menü kes/kopyala/yapıştır veriyor ve bu gerçek
+   * bir iş. Tümden kapatmak, ayarlardaki bir alana yapıştırma yolunu elden
+   * alırdı.
+   */
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea")) return;
+      event.preventDefault();
+    };
+    document.addEventListener("contextmenu", onContextMenu);
+    return () => document.removeEventListener("contextmenu", onContextMenu);
+  }, []);
+
   useEffect(() => {
     if (!ready) return;
 
@@ -154,6 +184,7 @@ export function App() {
         store.ui.settingsOpen ||
         store.ui.transferOpen ||
         store.ui.paletteOpen ||
+        store.ui.filePaletteOpen ||
         store.ui.searchOpen ||
         store.ui.confirm !== null;
 
@@ -164,6 +195,7 @@ export function App() {
         if (store.ui.suggest) return store.closeSuggestions();
         if (store.ui.findOpen) return store.setUi({ findOpen: false });
         if (store.ui.paletteOpen) return store.setUi({ paletteOpen: false });
+        if (store.ui.filePaletteOpen) return store.setUi({ filePaletteOpen: false });
         if (store.ui.searchOpen) return store.setUi({ searchOpen: false });
         if (store.ui.settingsOpen) return store.setUi({ settingsOpen: false });
         if (store.ui.transferOpen) return store.setUi({ transferOpen: false });
@@ -177,7 +209,26 @@ export function App() {
       // sekme adini yazarken Ctrl+W sekmeyi kapatir.
       const target = event.target as HTMLElement | null;
       const inTerminal = !!target?.closest(".xterm");
-      if (!inTerminal && target?.closest("input, textarea, select")) return;
+      /*
+       * Uygulamanın komut satırı bir `textarea` ama SIRADAN bir metin kutusu
+       * DEĞİL: terminalin girdi satırı, yani kısayolların asıl çalışması
+       * gereken yer.
+       *
+       * ÖLÇÜLEN BELİRTİ: Ctrl+P tarayıcının yazdırma penceresini açıyordu.
+       * Sebep bu satırdı — odak kutuda olduğu için işleyici tümden çıkıyor,
+       * `preventDefault` hiç çağrılmıyor ve tarayıcının varsayılanı kazanıyor.
+       * Aynı sebeple Ctrl+T, Ctrl+W, Ctrl+Shift+P de kutuya yazarken ölüydü;
+       * yani neredeyse her zaman.
+       *
+       * Dinleyici capture fazında olduğu için burada ele alınan tuş kutuya hiç
+       * ulaşmıyor (`run` içinde `stopPropagation`); kutunun kendi tuşları
+       * (Enter, Tab, oklar, Ctrl+C) burada bir eşleşme bulmadığı için
+       * dokunulmadan geçiyor.
+       */
+      const inCommandInput = !!target?.closest(".command-input");
+      if (!inTerminal && !inCommandInput && target?.closest("input, textarea, select")) {
+        return;
+      }
 
       const run = (fn: () => void) => {
         event.preventDefault();
@@ -246,6 +297,10 @@ export function App() {
       if (matchCombo(event, keys.prevTab)) return run(() => store.cycleTab(-1));
       if (matchCombo(event, keys.newGroup)) return run(() => store.addGroup());
       if (matchCombo(event, keys.commandPalette)) return run(() => store.setUi({ paletteOpen: true }));
+      // Ctrl+P: bulunulan dizindeki dosyalarda arama. Seçilen yol komut
+      // satırının sonuna ekleniyor.
+      if (matchCombo(event, keys.filePalette))
+        return run(() => store.setUi({ filePaletteOpen: true }));
       if (matchCombo(event, keys.historyPanel))
         return run(() => store.setUi({ historyOpen: !store.ui.historyOpen }));
       if (matchCombo(event, keys.historySearch)) return run(() => store.setUi({ searchOpen: true }));
@@ -315,6 +370,20 @@ export function App() {
   return (
     <div className="app">
       <div className="titlebar" data-tauri-drag-region>
+        {/* Dosya agaci: bulunulan dizini sag panelde acar.
+         *
+         * Baslik cubugundaki IKINCI eylem. Kural "baslik cubugu bir eylem
+         * cubugu degil" idi ve bu ona uyuyor: agac bir PENCERE degil, bir
+         * gorunum ve baska hicbir yerden acilamiyor. Sekme cubugunda yeri yok
+         * (sekmeye ait degil), durum cubugunda da yer kalmadi. */}
+        <button
+          className="icon-btn tree-btn"
+          title={t("app.filesTitle")}
+          onClick={() => setUi({ historyOpen: true, panelMode: "files" })}
+        >
+          <TreeIcon size={13} />
+        </button>
+
         <div className="brand">
           <span className="mark">&gt;_</span>
           N-Terminal
@@ -339,6 +408,26 @@ export function App() {
           {t("app.settings")}
         </button>
 
+        {/* Arama alani ORTADA: iki yanindaki esnek surukleme alanlari onu
+            merkezde tutuyor. Warp'ta da ustte, ortada duruyor. */}
+        <div className="drag" data-tauri-drag-region />
+
+        {/* Arama alani: Ctrl+P ile ayni seyi aciyor.
+         *
+         * Kisayolu bilmek gerekmemeli - Warp'ta da ustte duran bu alan ayni
+         * isi yapiyor. Gercek bir metin kutusu DEGIL, dugme: yazmaya baslamak
+         * icin paletin kendi kutusu aciliyor ve odak orada. Iki ayri kutu
+         * tutmak "hangisine yaziyorum" sorusunu doguruyordu. */}
+        <button
+          className="titlebar-search"
+          title={t("app.searchTitle", { keys: key("filePalette") })}
+          onClick={() => setUi({ filePaletteOpen: true })}
+        >
+          <SearchIcon size={12} />
+          <span>{t("app.searchFiles")}</span>
+          <span className="kbd">{key("filePalette")}</span>
+        </button>
+
         <div className="drag" data-tauri-drag-region />
 
         {/* Pencere dugmeleri en sagda ve kosenin ta kendisine dayali; yerel
@@ -353,6 +442,7 @@ export function App() {
       <div className="main">
         <TabBar />
         <TerminalArea />
+        <ContextBar />
         <RunningLinks />
         <CommandInput />
         <SuggestionBar />
@@ -361,9 +451,17 @@ export function App() {
       </div>
 
       {ui.paletteOpen && <CommandPalette />}
+      {ui.filePaletteOpen && <FilePalette />}
       {ui.searchOpen && <HistoryRecall />}
       {ui.dirPicker && (
         <DirPicker cwd={ui.dirPicker} onClose={() => useStore.getState().setUi({ dirPicker: null })} />
+      )}
+      {ui.branchPicker && (
+        <BranchPicker
+          cwd={ui.branchPicker.cwd}
+          current={ui.branchPicker.current}
+          onClose={() => useStore.getState().setUi({ branchPicker: null })}
+        />
       )}
       {ui.settingsOpen && <SettingsDialog />}
       {ui.transferOpen && <TransferDialog />}

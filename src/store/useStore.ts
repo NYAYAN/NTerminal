@@ -74,7 +74,15 @@ export function resolveConfirm(id: number, ok: boolean) {
 
 export type HistoryScope = "tab" | "group" | "all";
 /** Sag panel hangi listeyi gosteriyor. */
-export type SidePanelMode = "history" | "favorites";
+/**
+ * Dizin başına son okunan git imzası.
+ *
+ * Depoda DEĞİL: bu bir önbellek, arayüzün çizdiği bir şey değil. Depoya
+ * yazmak her yoklamada bütün aboneleri boşuna uyandırırdı.
+ */
+const gitFingerprints = new Map<string, string | null>();
+
+export type SidePanelMode = "history" | "favorites" | "git" | "files";
 
 /**
  * Onay penceresi isteği.
@@ -99,6 +107,8 @@ export interface UiState {
   panelMode: SidePanelMode;
   settingsOpen: boolean;
   paletteOpen: boolean;
+  /** Ctrl+P: bulunulan dizindeki dosyalarda arama. */
+  filePaletteOpen: boolean;
   transferOpen: boolean;
   searchOpen: boolean;
   /**
@@ -110,6 +120,22 @@ export interface UiState {
    * öğreniyor.
    */
   dirPicker: string | null;
+  /**
+   * Dal seçicinin açık olduğu depo; kapalıyken null.
+   *
+   * Depoda tutuluyor çünkü seçiciyi açan yer (blok başlığındaki rozet) bir
+   * katmanın içinde ve o katman `pointer-events: none`: orada çizilen bir
+   * pencere tıklama almıyor, dolayısıyla KAPATILAMIYOR. Uygulamanın kökünde
+   * çiziliyor, hangi depo için açıldığını buradan öğreniyor.
+   */
+  branchPicker: { cwd: string; current: string } | null;
+  /**
+   * Görüntüleyicide açık dosyanın yolu; ağaç görünümündeyken null.
+   *
+   * "Dosyalar" sekmesinin iki durumu var ve ayrım burada: yol varsa içerik,
+   * yoksa ağaç. Beşinci bir sekme çoğu zaman boş dururdu.
+   */
+  viewerPath: string | null;
   findOpen: boolean;
   renamingTabId: string | null;
   editingGroupId: string | null;
@@ -184,7 +210,7 @@ interface Store {
    * erişim yok; bu kayıt olmadan `acceptSuggestionAt` iki ayrı yola
    * bölünürdü ve listeye tıklamak yalnızca ham kipte çalışırdı.
    */
-  appInputSink: ((text: string) => void) | null;
+  appInputSink: ((text: string, mode: "replace" | "append") => void) | null;
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
   /**
@@ -252,6 +278,7 @@ interface Store {
   askConfirm: (request: Omit<ConfirmRequest, "id">) => Promise<boolean>;
   loadSuggestHistory: () => Promise<void>;
   refreshGit: (cwd: string | null) => Promise<void>;
+  pollGit: (cwd: string | null) => Promise<void>;
   noteCommand: (command: string, cwd: string | null) => void;
   /**
    * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
@@ -262,7 +289,9 @@ interface Store {
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
   closeSuggestions: () => void;
-  setAppInputSink: (sink: ((text: string) => void) | null) => void;
+  setAppInputSink: (sink: ((text: string, mode: "replace" | "append") => void) | null) => void;
+  insertPath: (path: string) => void;
+  openFile: (path: string) => void;
   insertCommand: (command: string, execute: boolean) => void;
   toast: (text: string, tone?: "ok" | "err" | "info") => void;
 }
@@ -390,9 +419,12 @@ export const useStore = create<Store>((set, get) => ({
     panelMode: "history",
     settingsOpen: false,
     paletteOpen: false,
+    filePaletteOpen: false,
     transferOpen: false,
     searchOpen: false,
     dirPicker: null,
+    branchPicker: null,
+    viewerPath: null,
     findOpen: false,
     renamingTabId: null,
     editingGroupId: null,
@@ -1185,7 +1217,34 @@ export const useStore = create<Store>((set, get) => ({
   async refreshGit(cwd) {
     if (!cwd) return;
     const info = await api.gitInfo(cwd).catch(() => null);
+    const imza = await api.gitFingerprint(cwd).catch(() => null);
+    gitFingerprints.set(cwd, imza);
     set({ gitInfo: { ...get().gitInfo, [cwd]: info } });
+  },
+
+  /**
+   * Dışarıdan yapılan değişiklikleri yakalar — ucuza.
+   *
+   * ÖLÇÜLEN SORUN: dal başka bir uygulamadan (IDE, başka bir terminal)
+   * değiştirildiğinde rozet eski dalı göstermeye devam ediyordu. Tazeleme
+   * yalnızca dizin değişince ve komut bitince koşuyordu, yani NTerminal'de bir
+   * şey yapmadıkça hiçbir şey fark edilmiyordu.
+   *
+   * Her yoklamada `git status` koşturmak çözüm DEĞİL: büyük bir depoda saniye
+   * mertebesinde bir süreç ve bu saniyede bir tekrarlanırdı. Onun yerine iki
+   * dosya okumasından bir imza alınıyor (`HEAD` içeriği + `index` zamanı) ve
+   * tam sorgu ancak imza değişince koşuyor.
+   */
+  async pollGit(cwd) {
+    if (!cwd) return;
+    const imza = await api.gitFingerprint(cwd).catch(() => null);
+    // Bilinmeyen dizin: ilk okuma tam sorguyu da tetiklesin.
+    if (!gitFingerprints.has(cwd)) {
+      await get().refreshGit(cwd);
+      return;
+    }
+    if (gitFingerprints.get(cwd) === imza) return;
+    await get().refreshGit(cwd);
   },
 
   async loadSuggestHistory() {
@@ -1272,7 +1331,7 @@ export const useStore = create<Store>((set, get) => ({
     // Kabul etme yine tek yerden geçiyor, yalnızca varış noktası değişiyor.
     const sink = get().appInputSink;
     if (sink) {
-      sink(suggestion);
+      sink(suggestion, "replace");
       set({ ui: { ...get().ui, suggest: null } });
       return;
     }
@@ -1291,6 +1350,37 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   /**
+   * Bir dosyayı görüntüleyicide açar.
+   *
+   * Sekmeyi de açıyor: kullanıcı paletten ya da ağaçtan bir dosya seçtiğinde
+   * içeriğin nerede göründüğünü aramak zorunda kalmamalı.
+   */
+  openFile(path) {
+    set({ ui: { ...get().ui, historyOpen: true, panelMode: "files", viewerPath: path } });
+  },
+
+  /**
+   * Bir dosya yolunu yazılanın SONUNA ekler.
+   *
+   * `insertCommand` yerine ayrı bir yol, çünkü işi farklı: orada komutun
+   * TAMAMI geliyor ve satırı değiştiriyor. Dosya yolu ise yarım bir komutun
+   * argümanı — `code ` yazıp Ctrl+P'ye basan biri yolun yazdığının yerine
+   * geçmesini değil, arkasına eklenmesini bekliyor.
+   *
+   * Boşluk içeren yol tırnaklanıyor: tırnaksız gönderilen böyle bir yol kabukta
+   * iki ayrı argümana bölünüyor ve komut sessizce yanlış çalışıyor.
+   */
+  insertPath(path) {
+    const text = /[\s'"`]/.test(path) ? `"${path}"` : path;
+    const sink = get().appInputSink;
+    if (sink) {
+      sink(text, "append");
+      return;
+    }
+    get().activeSession()?.insertCommand(text, false);
+  },
+
+  /**
    * Hazır bir komutu satıra koyar (geçmiş, favoriler, geçmiş paneli).
    *
    * Neden depoda ve tek yerde: uygulama komut satırı açıkken satır kabukta
@@ -1303,7 +1393,7 @@ export const useStore = create<Store>((set, get) => ({
   insertCommand(command, execute) {
     const sink = get().appInputSink;
     if (sink && !execute) {
-      sink(command);
+      sink(command, "replace");
       return;
     }
     get().activeSession()?.insertCommand(command, execute);

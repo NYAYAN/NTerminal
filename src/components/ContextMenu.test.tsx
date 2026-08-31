@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +29,33 @@ afterEach(cleanup);
 function menu(entries: MenuEntry[], onClose = () => {}) {
   return render(<ContextMenu state={{ x: 40, y: 40, entries }} onClose={onClose} />);
 }
+
+/**
+ * Tarayıcının kendi sağ tık menüsü kapalı olmalı.
+ *
+ * ÖLÇÜLEN SORUN: terminalin dışında bir yere sağ tıklamak WebView2'nin
+ * menüsünü açıyordu — Geri, Yenile, Farklı kaydet, Yazdır, İncele. "Yenile"
+ * doğrudan zararlı: uygulamayı yeniden yükleyip bütün sekmeleri düşürüyor.
+ *
+ * Kaynak üzerinden denetliyoruz: kural `App.tsx` içinde belge düzeyinde bir
+ * dinleyici ve gerçek bir sağ tıklama olmadan davranışı kurmak WebView2
+ * gerektiriyor.
+ */
+describe("tarayıcı sağ tık menüsü", () => {
+  const APP = readFileSync(join(process.cwd(), "src/App.tsx"), "utf8");
+
+  it("belge düzeyinde engelleniyor", () => {
+    expect(APP).toContain('document.addEventListener("contextmenu"');
+    // İşleyici gövdesi varsayılanı gerçekten engelliyor mu.
+    expect(APP).toMatch(/onContextMenu[\s\S]{0,300}preventDefault\(\)/);
+  });
+
+  it("metin alanları MUAF", () => {
+    // Orada menü kes/kopyala/yapıştır veriyor; tümden kapatmak ayarlardaki bir
+    // alana yapıştırma yolunu elden alırdı.
+    expect(APP).toMatch(/closest\("input, textarea"\)/);
+  });
+});
 
 describe("bağlam menüsü", () => {
   it("girdi türlerini çiziyor", () => {

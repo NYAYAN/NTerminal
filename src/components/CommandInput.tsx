@@ -1,11 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { tokenizeCommand } from "../lib/cmdline";
-import { shortenPath } from "../lib/format";
 import { passThroughSequence, resolveInputMode } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { sessions, useStore } from "../store/useStore";
-import { FolderIcon } from "./Icons";
 
 /**
  * Komut satırı — terminalin ızgarasının DIŞINDA.
@@ -46,6 +44,7 @@ export function CommandInput() {
   // Kutu terminalle AYNI yazı tipinde: yazdığınız komut, bir satır sonra
   // ekranda göreceğiniz komutla aynı görünmeli.
   const appearance = useStore((s) => s.settings.appearance);
+  const allRunning = useStore((s) => s.running);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
@@ -63,7 +62,18 @@ export function CommandInput() {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const highlightRef = useRef<HTMLPreElement | null>(null);
 
-  const signals = tabId ? allSignals[tabId] : undefined;
+  /*
+   * Sinyaller OTURUMDAN okunuyor; depodaki kopya yalnızca yeniden çizimi
+   * tetikliyor.
+   *
+   * ÖLÇÜLEN HATA: yalnızca depodaki kopyaya bakılıyordu. O kopya bir OLAYLA
+   * yazılıyor ve olay ancak bir DEĞİŞİM olunca geliyor; kaçan ya da durum
+   * bilinmeden önce gelen tek bir olay depoyu kalıcı olarak eski bırakıyordu.
+   * Belirti: komut kutusu hiç açılmıyor, sekmeyi yeniden başlatmak düzeltiyor.
+   */
+  const stored = tabId ? allSignals[tabId] : undefined;
+  const signals = (tabId ? sessions.get(tabId)?.inputSignals() : undefined) ?? stored;
+  const running = tabId ? !!allRunning[tabId] : false;
   const mode = resolveInputMode({
     enabled: appInput && !handedOff,
     integration: signals?.integration ?? false,
@@ -153,8 +163,14 @@ export function CommandInput() {
       useStore.getState().setAppInputSink(null);
       return;
     }
-    useStore.getState().setAppInputSink((text) => {
-      setValue(text);
+    useStore.getState().setAppInputSink((text, mode) => {
+      // Ekleme kipinde araya boşluk konuyor: `code` + `src/a.ts` birleşip
+      // `codesrc/a.ts` olmamalı. Zaten boşlukla bitiyorsa ikincisi eklenmiyor.
+      setValue((prev) => {
+        if (mode === "replace") return text;
+        if (!prev) return text;
+        return prev.endsWith(" ") ? prev + text : `${prev} ${text}`;
+      });
       ref.current?.focus();
     });
     return () => useStore.getState().setAppInputSink(null);
@@ -168,16 +184,51 @@ export function CommandInput() {
     el.style.height = `${el.scrollHeight}px`;
   }, [value, active]);
 
+  /*
+   * Komut çalışırken kutu kapanıyor — ama YERİNE bir şerit geliyor.
+   *
+   * ÖLÇÜLEN SORUN: "Komut yazdım, Enter'a bastım, komut satırı kayboldu.
+   * Durdurmak istersem nasıl yapacağım?" Kip doğru çalışıyordu (tuşlar
+   * çalışan komuta gitsin diye kutu kapanıyor) ama ekranda bunu söyleyen ve
+   * durdurmanın yolunu gösteren hiçbir şey yoktu; kullanıcı kutunun
+   * kaybolmasını bir arıza gibi görüyordu.
+   *
+   * Şerit AYNI yerde duruyor: gözün baktığı yer değişmiyor.
+   *
+   * Tam ekran programlarda (vim, less) çizilmiyor: orada ekranı program
+   * yönetiyor ve Ctrl+C'nin anlamı programın kendisine ait.
+   */
+  if (!active && running && signals?.integration && !signals.altScreen) {
+    return (
+      <div className="command-running">
+        <span className="running-dot" aria-hidden="true" />
+        <span className="running-text">{t("input.running")}</span>
+        <span className="spacer" />
+        <button
+          type="button"
+          className="running-stop"
+          // Ctrl+C'nin baytı TEK YERDEN geliyor (`passThroughSequence`):
+          // burada elle yazmak, iki tarafın ayrışması hâlinde düğmenin
+          // çalışmayan bir bayt göndermesine yol açardı.
+          onClick={() =>
+            sessions.get(tabId!)?.sendKeys(passThroughSequence({ key: "c", ctrl: true }) ?? "")
+          }
+        >
+          {t("input.stop")}
+        </button>
+      </div>
+    );
+  }
+
   if (!active || !tabId) return null;
 
   /*
-   * Dizin rozeti YALNIZCA blok başlığı yokken.
+   * Dizin rozeti BURADA YOK.
    *
-   * Başlık açıkken kabuğun bekleyen istem satırı zaten kutunun hemen üstünde
-   * ve orada aynı dizin rozeti duruyor. İkisini birden çizmek aynı bilgiyi iki
-   * satır üst üste tekrarlamak olurdu.
+   * Kutunun hemen üstündeki bağlam şeridi (`ContextBar`) dizini, dalı ve
+   * değişiklik sayısını birlikte taşıyor ve komut çalışırken de görünür
+   * kalıyor. Kutunun kendi rozeti aynı bilgiyi bir satır arayla tekrarlıyordu.
    */
-  const cwd = sessions.get(tabId)?.hasBlockHeaders() ? null : (tab?.cwd ?? null);
   // Renkli katman ile metin kutusu AYNI yazı tipini kullanmak zorunda: iki
   // katman üst üste duruyor ve tek piksellik fark bile harfleri kaydırıyor.
   const typography = {
@@ -280,15 +331,6 @@ export function CommandInput() {
 
   return (
     <div className="command-input">
-      {cwd && (
-        <div className="command-input-meta">
-          <span className="ci-chip" title={cwd}>
-            <FolderIcon size={11} />
-            {shortenPath(cwd, 3)}
-          </span>
-        </div>
-      )}
-
       <div className="command-input-row">
         <span className="command-input-mark" aria-hidden="true">
           {">_"}
