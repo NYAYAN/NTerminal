@@ -7,6 +7,10 @@ Türkçe/İngilizce arayüz ve ayarların makineler arası taşınması.
 Tauri 2 (Rust) + xterm.js 6 üzerine kurulu. PTY katmanı `portable-pty`
 üzerinden: Windows'ta ConPTY, macOS'ta yerel Unix PTY.
 
+> Yalnızca kurup kullanmak istiyorsan: **[KURULUM.md](KURULUM.md)** — hangi
+> dizinde hangi komut, hangi dosya oluşuyor. Bu dosya nedenleri ve ayrıntıları
+> anlatıyor.
+
 ---
 
 ## Ne yapar

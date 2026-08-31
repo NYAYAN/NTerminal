@@ -53,7 +53,6 @@ mod win {
     use crate::store::new_id;
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
-    use std::process::Command;
 
     fn env_path(key: &str) -> Option<PathBuf> {
         std::env::var_os(key).map(PathBuf::from)
@@ -127,7 +126,8 @@ mod win {
         let Some(wsl) = find_wsl() else {
             return Vec::new();
         };
-        let output = Command::new(wsl).args(["-l", "-q"]).output();
+        // Konsol penceresi cakmasin: profil taramasi arka planda kosuyor.
+        let output = crate::platform::quiet_command(&wsl.to_string_lossy()).args(["-l", "-q"]).output();
         let Ok(out) = output else { return Vec::new() };
         if !out.status.success() {
             return Vec::new();
