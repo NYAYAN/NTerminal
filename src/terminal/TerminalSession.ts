@@ -359,6 +359,51 @@ export class TerminalSession {
       );
     }
 
+    /*
+     * Dinleyiciler SPAWN'DAN ÖNCE kuruluyor. Sıra süs değil, hatanın kendisi.
+     *
+     * ÖLÇÜLEN BELİRTİ: yeni bir sekmede komut kutusu hiç açılmıyor; sekmeyi
+     * yeniden başlatmak düzeltiyor.
+     *
+     * KÖK NEDEN: Rust tarafı PTY'yi doğurur doğurmaz okumaya başlıyor ve
+     * çıktıyı `app.emit` ile yayımlıyor. Tauri'nin olay yayını TAMPONSUZ — o an
+     * kayıtlı dinleyici yoksa veri düşüyor, birikmiyor. Kurulum tersken
+     * `ptySpawn`ın yanıtı ile `listen` kaydı arasında en az bir IPC gidiş
+     * dönüşü vardı ve kabuğun ilk istemi o aralığa denk gelebiliyordu. Kutu
+     * "istemde miyiz" bilgisini o istemin OSC 133;B işaretinden alıyor; işaret
+     * kaçınca kabuk istemde SESSİZCE beklediği için bir daha gelmiyor ve kutu
+     * kalıcı olarak kapalı kalıyordu.
+     *
+     * Yarış olduğu için belirti aralıklıydı: makine meşgulken (oturum geri
+     * yüklenirken, yeni grubun sekmesi on sekmenin yanında açılırken) sık.
+     *
+     * Bu sırada pencere tümden kapanıyor: olay adı sekme kimliğinden türüyor ve
+     * kimlik spawn'dan önce belli, yani dinlemeye erken başlamanın sakıncası
+     * yok. Kayıt spawn başarısız olsa da duruyor; o kimlik için hiç olay
+     * gelmiyor ve `dispose` ikisini de kapatıyor.
+     */
+    this.unlisteners.push(
+      await onPtyData(this.tabId, (bytes) => {
+        /*
+         * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
+         *
+         * Ayni parca hem komut baslangici isaretini (OSC 133;C) hem sunucunun
+         * adresini tasiyabiliyor. Tarama once kossaydi adres, o parcadaki
+         * baslangic isareti daha ayristirilmamisken toplanir ve hemen ardindan
+         * gelen "yeni komut, yeni liste" temizligi onu silerdi. Tersi de oluyor:
+         * eski listeye eklenip iki rozet yan yana kaliyordu.
+         *
+         * `write` ESZAMANSIZ: parcayi kuyruga alip zamanlanmis olarak
+         * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor - sirayi
+         * ancak geri cagirma garantiliyor.
+         */
+        this.term.write(bytes, () => this.scanNewLines());
+      }),
+    );
+    this.unlisteners.push(
+      await onPtyExit(this.tabId, (code) => this.handleExit(code)),
+    );
+
     try {
       const result = await api.ptySpawn({
         id: this.tabId,
@@ -411,28 +456,6 @@ export class TerminalSession {
       this.exited = true;
       return;
     }
-
-    this.unlisteners.push(
-      await onPtyData(this.tabId, (bytes) => {
-        /*
-         * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
-         *
-         * Ayni parca hem komut baslangici isaretini (OSC 133;C) hem sunucunun
-         * adresini tasiyabiliyor. Tarama once kossaydi adres, o parcadaki
-         * baslangic isareti daha ayristirilmamisken toplanir ve hemen ardindan
-         * gelen "yeni komut, yeni liste" temizligi onu silerdi. Tersi de oluyor:
-         * eski listeye eklenip iki rozet yan yana kaliyordu.
-         *
-         * `write` ESZAMANSIZ: parcayi kuyruga alip zamanlanmis olarak
-         * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor - sirayi
-         * ancak geri cagirma garantiliyor.
-         */
-        this.term.write(bytes, () => this.scanNewLines());
-      }),
-    );
-    this.unlisteners.push(
-      await onPtyExit(this.tabId, (code) => this.handleExit(code)),
-    );
   }
 
   /**
