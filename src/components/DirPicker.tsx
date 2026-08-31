@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { filterDirs, joinDir, parentDir } from "../lib/dirs";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import { anchorAbove } from "../lib/popover";
 import { useStore } from "../store/useStore";
 import { FolderIcon } from "./Icons";
 
@@ -29,6 +30,7 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
 
   const parent = parentDir(cwd);
 
@@ -65,9 +67,19 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
     setIndex(0);
   }, [query]);
 
+  /*
+   * Pencere ROZETİN ÜSTÜNDE açılıyor.
+   *
+   * Yerleşim listeden SONRA hesaplanıyor (`names` bağımlılığı): pencerenin
+   * yüksekliği içeriğe göre değişiyor ve üstüne oturması için o yüksekliğin
+   * bilinmesi gerekiyor. Boş listeyken hesaplayıp sonra doldurmak pencereyi
+   * dayanağın üstüne bindiriyordu.
+   */
+  useEffect(() => anchorAbove(boxRef.current, ".ctx-chip.dir"), [names]);
+
   // Seçili satır listeden taşmasın; klavyeyle gezinirken görünür kalmalı.
   useEffect(() => {
-    listRef.current?.querySelector(".dir-row.on")?.scrollIntoView({ block: "nearest" });
+    listRef.current?.querySelector(".pop-row.on")?.scrollIntoView({ block: "nearest" });
   }, [index]);
 
   const goto = (path: string) => {
@@ -97,31 +109,36 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
   };
 
   return (
-    <div className="overlay dir-overlay" onMouseDown={onClose}>
-      <div className="dir-picker" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+    <div className="overlay popover-overlay" onMouseDown={onClose}>
+      <div
+        ref={boxRef}
+        className="pop-panel"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <input
           ref={inputRef}
-          className="dir-search"
+          className="pop-search"
           value={query}
           placeholder={t("dirs.search")}
           onChange={(e) => setQuery(e.target.value)}
           spellCheck={false}
         />
 
-        <div className="dir-list" ref={listRef}>
-          {names === null && <div className="dir-empty">{t("common.loading")}</div>}
+        <div className="pop-list" ref={listRef}>
+          {names === null && <div className="pop-empty">{t("common.loading")}</div>}
           {names !== null && rows.length === 0 && (
-            <div className="dir-empty">{t("dirs.empty")}</div>
+            <div className="pop-empty">{t("dirs.empty")}</div>
           )}
           {rows.map((row, i) => (
             <button
               key={row.key}
               type="button"
-              className={i === index ? "dir-row on" : "dir-row"}
+              className={i === index ? "pop-row on" : "pop-row"}
               onMouseEnter={() => setIndex(i)}
               onClick={() => goto(row.path)}
             >
-              <span className="dir-mark" aria-hidden="true">
+              <span className="pop-mark" aria-hidden="true">
                 {row.up ? "\u2191" : <FolderIcon size={12} />}
               </span>
               {row.label}

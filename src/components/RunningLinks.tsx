@@ -1,7 +1,7 @@
 import { api } from "../lib/ipc";
 import { useT } from "../lib/i18n";
 import { shortUrl } from "../lib/serverLinks";
-import { useStore } from "../store/useStore";
+import { sessions, useStore } from "../store/useStore";
 
 /**
  * Çalışan komutun sunucu adresleri — sabit bir yerde.
@@ -25,13 +25,33 @@ export function RunningLinks() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const running = useStore((s) => s.running);
-  const allLinks = useStore((s) => s.runLinks);
+  /*
+   * Bu abonelik YENİDEN ÇİZİM tetikleyicisi; değeri kullanılmıyor.
+   *
+   * Gösterilen adresler oturumdan okunuyor (aşağıda). Ama React'i uyandıran
+   * şey depodaki bir değerin değişmesi, o yüzden abonelik gerekiyor.
+   */
+  useStore((s) => s.runLinks);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
   const tabId = tab?.id;
 
-  const urls = tabId ? (allLinks[tabId] ?? []) : [];
+  /*
+   * Adresler OTURUMDAN okunuyor; depodaki kopya yalnızca yeniden çizimi
+   * tetikliyor.
+   *
+   * ÖLÇÜLEN BELİRTİ: `ng serve` durdurulup yeniden çalıştırıldığında eski
+   * portun rozeti duruyor, tıklayınca yanlış yere gidiyordu. Yalnızca depodaki
+   * kopyaya bakılıyordu; o kopya bir olayla yazılıyor ve olayı kaçıran ya da
+   * sıralaması bozulan tek bir yol onu kalıcı olarak eski bırakıyordu.
+   */
+  /*
+   * Depodaki kopyaya DÜŞÜLMÜYOR: gösterilen değer her zaman oturumdan geliyor.
+   * Oturum yoksa (sekme kuruluyor ya da kapanıyor) gösterilecek bir şey de
+   * yok — kopyaya düşmek eski adresi ekranda tutuyordu.
+   */
+  const urls = (tabId ? sessions.get(tabId)?.runUrls() : undefined) ?? [];
   // Komut bittiyse gösterme: ölü bir porta tıklamak yalnızca hayal kırıklığı.
   if (!tabId || !running[tabId] || urls.length === 0) return null;
 

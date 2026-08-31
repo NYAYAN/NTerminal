@@ -57,18 +57,24 @@ const focus = vi.fn();
 const setAppInput = vi.fn();
 /** Seçim varken Ctrl+C kopyalamalı; kararı oturum veriyor. */
 const wantsCtrlCCopy = vi.fn(() => false);
-/** Blok başlığı varken kutu kendi dizin rozetini çizmiyor. */
-const hasBlockHeaders = vi.fn(() => false);
+/**
+ * Kip sinyalleri OTURUMDAN okunuyor; depodaki kopya yalnızca yeniden çizimi
+ * tetikliyor. Sahte oturum da bunu vermek zorunda.
+ */
+const inputSignals = vi.fn(() => ({ atPrompt: true, altScreen: false, integration: true }));
 
 /** Kabuğun bildirdiği sinyaller; varsayılan "istemde bekliyor". */
 function seed(signals: Partial<{ atPrompt: boolean; altScreen: boolean; integration: boolean }> = {}) {
+  const tam = { atPrompt: true, altScreen: false, integration: true, ...signals };
+  // Oturum ASIL kaynak; depodaki kopya yalnızca yeniden çizim tetikleyicisi.
+  inputSignals.mockReturnValue(tam);
   const state = useStore.getState();
   useStore.setState({
     groups: [group([tab(TAB)])],
     activeGroupId: "g1",
     ready: true,
     inputSignals: {
-      [TAB]: { atPrompt: true, altScreen: false, integration: true, ...signals },
+      [TAB]: tam,
     },
     settings: {
       ...state.settings,
@@ -86,13 +92,12 @@ beforeEach(() => {
   focus.mockClear();
   setAppInput.mockClear();
   wantsCtrlCCopy.mockReturnValue(false);
-  hasBlockHeaders.mockReturnValue(false);
   sessions.set(TAB, {
     sendKeys,
     focus,
     setAppInput,
     wantsCtrlCCopy,
-    hasBlockHeaders,
+    inputSignals,
   } as never);
   seed();
 });
@@ -109,7 +114,35 @@ describe("komut satırı kutusu", () => {
     expect(field(container)).not.toBe(null);
   });
 
-  it("komut çalışırken kapalı", () => {
+  it("komut çalışırken DURDUR şeridi geliyor", () => {
+    // ÖLÇÜLEN SORUN: "Enter'a bastım, komut satırı kayboldu. Durdurmak
+    // istersem nasıl yapacağım?" Kutunun kapanması doğru; ekranda bunu
+    // söyleyen ve yolu gösteren bir şey olmaması değil.
+    seed({ atPrompt: false });
+    useStore.setState({ running: { [TAB]: true } });
+
+    const { container } = render(<CommandInput />);
+    expect(field(container), "çalışırken kutu kapalı olmalı").toBe(null);
+
+    const stop = container.querySelector<HTMLButtonElement>(".running-stop");
+    expect(stop, "durdurma düğmesi yok").not.toBe(null);
+    fireEvent.click(stop!);
+    // Ctrl+C'nin baytı tek yerden geliyor; düğme de onu göndermeli.
+    expect(sendKeys).toHaveBeenCalledWith("");
+
+    useStore.setState({ running: {} });
+  });
+
+  it("tam ekran programda şerit de YOK", () => {
+    // vim/less ekranı kendisi yönetiyor; Ctrl+C'nin anlamı programa ait.
+    seed({ atPrompt: false, altScreen: true });
+    useStore.setState({ running: { [TAB]: true } });
+    const { container } = render(<CommandInput />);
+    expect(container.innerHTML).toBe("");
+    useStore.setState({ running: {} });
+  });
+
+  it("komut çalışırken kutu kapalı", () => {
     // Çalışan komut tuşları o an isteyebilir (parola, y/n). Kutu burada
     // açık kalsaydı kullanıcı ona cevap veremezdi.
     seed({ atPrompt: false });
@@ -173,23 +206,17 @@ describe("komut satırı kutusu", () => {
     expect(setAppInput).toHaveBeenCalledWith(false);
   });
 
-  it("blok başlığı varken kutu dizin rozetini tekrarlamıyor", () => {
-    // Başlık açıkken kabuğun bekleyen istem satırı kutunun HEMEN üstünde ve
-    // orada aynı rozet duruyor; ikisini birden çizmek aynı bilgiyi iki satır
-    // üst üste tekrarlamak olurdu.
+  it("kutu dizin rozetini çizmiyor", () => {
+    // Dizin, dal ve değişiklik sayısı kutunun hemen üstündeki bağlam
+    // şeridinde (`ContextBar`) ve komut çalışırken de görünür kalıyor. Kutunun
+    // kendi rozeti aynı bilgiyi bir satır arayla tekrarlıyordu.
     const state = useStore.getState();
     useStore.setState({
       groups: [{ ...state.groups[0], tabs: [{ ...state.groups[0].tabs[0], cwd: "/repo" }] }],
     });
 
-    hasBlockHeaders.mockReturnValue(false);
-    const { container, unmount } = render(<CommandInput />);
-    expect(container.querySelector(".ci-chip"), "başlık yokken rozet olmalı").not.toBe(null);
-    unmount();
-
-    hasBlockHeaders.mockReturnValue(true);
-    const ikinci = render(<CommandInput />);
-    expect(ikinci.container.querySelector(".ci-chip"), "başlık varken rozet olmamalı").toBe(null);
+    const { container } = render(<CommandInput />);
+    expect(container.querySelector(".ci-chip")).toBe(null);
   });
 
   it("Enter komutu kabuğa gönderiyor ve kutuyu boşaltıyor", () => {

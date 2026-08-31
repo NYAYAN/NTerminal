@@ -212,6 +212,42 @@ describe("öneri listesi okunabilirliği", () => {
 });
 
 /**
+ * Açılır liste satırlarının okunabilirliği.
+ *
+ * ÖLÇÜLEN SORUN: seçili satır dolgulu `--accent` zeminle çiziliyordu ve dosya
+ * yolları okunmuyordu. Yol metni ince, küçük ve uzun; gövde metninde yeten bir
+ * karşıtlık burada yetmiyor.
+ *
+ * Çözüm öneri listesindekiyle aynı: soluk zemin, metnin rengine dokunulmuyor.
+ * Bu test o kararı bağlıyor — dolgulu zemine geri dönmek testi düşürür.
+ */
+describe("açılır liste okunabilirliği", () => {
+  const SELECTED = mixPercent(".pop-row.on", "accent");
+
+  it("seçili satırın vurgu oranı okunabildi", () => {
+    expect(SELECTED).toBeGreaterThan(0);
+  });
+
+  it("seçili satırın metni TEMA METNİ, vurgu rengi üstü değil", () => {
+    // `color: var(--accent-fg)` dolgulu zemin demek; testin engellediği şey bu.
+    const at = CSS.indexOf(".pop-row.on {");
+    const rule = CSS.slice(at, CSS.indexOf("}", at));
+    expect(rule).toMatch(/color:\s*var\(--text\)/);
+    expect(rule, "dolgulu vurgu zemini geri gelmiş").toMatch(/background:\s*color-mix/);
+  });
+
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+
+    it(`${meta.id}: seçili satırdaki yol okunuyor`, () => {
+      const bg = mix(theme.ui.accent, theme.ui.surfaceAlt, SELECTED);
+      const ratio = contrastRatio(theme.ui.text, bg);
+      expect(ratio, `arka plan ${bg}, karşıtlık ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+/**
  * Komut satırının sözdizimi renkleri.
  *
  * Riskli olan şey şu: `--ok` / `--err` / `--accent` ARAYÜZ yüzeyine göre

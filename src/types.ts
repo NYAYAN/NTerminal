@@ -226,6 +226,24 @@ export interface SpawnResult {
   integration: boolean;
 }
 
+// -------------------------------------------------------------- dosya agaci
+
+export interface DirEntry {
+  name: string;
+  /** Klasör mü? Sembolik bağlantılar izlenerek belirleniyor. */
+  dir: boolean;
+}
+
+export interface FileText {
+  text: string;
+  /** Sınıra takıldı mı; görüntüleyici bunu söylemek zorunda. */
+  truncated: boolean;
+  /** İkili sezildi mi; içerik boş gelir. */
+  binary: boolean;
+  /** Dosyanın gerçek boyutu (bayt). */
+  size: number;
+}
+
 // --------------------------------------------------------------------- git
 
 export interface GitChange {

@@ -102,6 +102,8 @@ describe("büyük harf düzeni", () => {
    * geliyor ("[↑][↓] gez"), yani cümlenin başı değil ortası.
    */
   const PARCA = new Set<string>([
+    // Rozetin İÇİNDE duran etiket, cümle başı değil: "main [burada]".
+    "git.currentBranch",
     "suggest.hintNav",
     "suggest.hintAccept",
     "suggest.hintDismiss",

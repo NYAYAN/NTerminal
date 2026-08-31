@@ -10,7 +10,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { api, onPtyData, onPtyExit } from "../lib/ipc";
 import { t } from "../lib/i18n";
 import { hasVisibleContent, type BlockView } from "../lib/blocks";
-import { extractServerUrls } from "../lib/serverLinks";
+import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
@@ -68,6 +68,15 @@ const MAX_BLOCKS = 100;
  * ya da yerel + ag). Fazlasi rozet seridini komut satirindan genis yapiyor.
  */
 const RUN_URL_LIMIT = 4;
+
+/**
+ * Tek taramada okunacak en fazla satir.
+ *
+ * Maliyet siniri: buyuk bir cikti patlamasinda binlerce satiri tek karede
+ * okumak arayuzu bekletir. Adres bir sunucunun ciktisinda baslarda geciyor,
+ * dolayisiyla pratikte bir sey kacmiyor.
+ */
+const MAX_SCAN_LINES = 2000;
 
 /**
  * Kabuğun komut önerisi durumu.
@@ -207,9 +216,14 @@ export class TerminalSession {
   /** Uygulama komut satırı etkin mi (imleç gizli, stdin kapalı). */
   private appInputActive = false;
   /** Çalışan komutun çıktısında görülen sunucu adresleri. */
-  private runUrls: string[] = [];
-  /** Adres taraması için akış çözücü; xterm kendi çözücüsünü kullanıyor. */
-  private readonly decoder = new TextDecoder("utf-8");
+  private serverUrls: string[] = [];
+  /**
+   * Adres taramasının geldiği son satır (mutlak tampon satırı).
+   *
+   * Komut başlarken o anki satıra kuruluyor: bir komutun çıktısı yalnızca
+   * kendi ürettiği satırlardan okunuyor.
+   */
+  private scanLine = -1;
   private activeStartedAt = 0;
   /** Komut çalışıyor mu? Sekme kapatma onayı ve göstergeler için. */
   running = false;
@@ -375,6 +389,9 @@ export class TerminalSession {
       this.pid = result.pid;
       this.shell = result.shell;
       this.integration = result.integration;
+      // Temel durumu hemen bildir: arayüzün deposunda bir kayıt olmadan
+      // yeniden çizim tetiklenmiyor.
+      this.emitInputSignals();
       // `updateCwd` — duz atama DEGIL.
       //
       // Duz atama oturumun kendi alanini dolduruyordu ama `onCwd` cagrilmadigi
@@ -397,8 +414,20 @@ export class TerminalSession {
 
     this.unlisteners.push(
       await onPtyData(this.tabId, (bytes) => {
-        this.collectServerUrls(bytes);
-        this.term.write(bytes);
+        /*
+         * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
+         *
+         * Ayni parca hem komut baslangici isaretini (OSC 133;C) hem sunucunun
+         * adresini tasiyabiliyor. Tarama once kossaydi adres, o parcadaki
+         * baslangic isareti daha ayristirilmamisken toplanir ve hemen ardindan
+         * gelen "yeni komut, yeni liste" temizligi onu silerdi. Tersi de oluyor:
+         * eski listeye eklenip iki rozet yan yana kaliyordu.
+         *
+         * `write` ESZAMANSIZ: parcayi kuyruga alip zamanlanmis olarak
+         * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor - sirayi
+         * ancak geri cagirma garantiliyor.
+         */
+        this.term.write(bytes, () => this.scanNewLines());
       }),
     );
     this.unlisteners.push(
@@ -652,17 +681,17 @@ export class TerminalSession {
     for (let i = 0; i < canli.length; i++) {
       const block = canli[i];
       /*
-       * Komutu olmayan bloklar ELENİYOR — biri hariç: SONUNCUSU.
+       * Komutu olmayan bloklar ELENİYOR.
        *
-       * Sonuncu, kabuğun şu an beklediği istem. Onun başlık satırı ekranda
-       * duruyor ve boş bırakılırsa kullanıcı sebebini göremediği bir boşluk
-       * görüyor (ölçülen şikâyet buydu). Başlığı çizdiğimizde o satır bir
-       * anlam kazanıyor: "bir sonraki komut bu dizinde çalışacak".
+       * Boş satırda Enter'a basmak da bir istem üretiyor; onlara şerit ve
+       * başlık çizmek ekranı boş rozetlerle doldururdu.
        *
-       * Aradakiler yine eleniyor: boş satırda Enter'a basmak da istem
-       * üretiyor ve onlara başlık çizmek ekranı rozetlerle doldururdu.
+       * Bir ara bekleyen istem (sonuncusu) hariç tutuluyordu: başlığı orada
+       * çizmek kabuğun boş bıraktığı satırı anlamlı kılıyordu. Dizin ve dal
+       * rozetleri terminalin dışındaki bağlam şeridine taşınınca gerek kalmadı
+       * — üstelik orada komut çalışırken de görünüyorlar.
        */
-      if (!block.command && i !== canli.length - 1) continue;
+      if (!block.command) continue;
       const next = canli[i + 1];
       const endLine = next ? next.marker.line - 1 : null;
 
@@ -716,10 +745,22 @@ export class TerminalSession {
     const rect = screen.getBoundingClientRect();
     if (rect.height < 1) return null;
 
+    /*
+     * DİKEY ölçü ekran dikdörtgeninden, YATAY ölçü kapsayıcıdan.
+     *
+     * Satır hizası ekrana bağlı: bir bloğun kaçıncı pikselde başladığını
+     * yalnızca `.xterm-screen` biliyor. Yatayda ise katman terminalin
+     * TAMAMINI kaplıyor, çünkü çizdiği şeylerin bir kısmı metnin dışında:
+     * durum şeridi `.xterm` ögesinin sol dolgusunun içinde duruyor.
+     *
+     * ÖLÇÜLEN HATA: yatayda da ekran dikdörtgeni kullanılıyordu, yani katman
+     * 20px içeriden başlıyordu ve şerit 8px'lik kendi payıyla 28px'e düşüyor,
+     * metnin üstüne biniyordu. Kapsayıcıdan ölçünce şeridin 8px'i gerçek 8px.
+     */
     return {
       top: rect.top - hostRect.top,
-      left: rect.left - hostRect.left,
-      width: rect.width,
+      left: 0,
+      width: hostRect.width,
       cellHeight: rect.height / this.term.rows,
       viewportTop: this.term.buffer.active.viewportY,
       rows: this.term.rows,
@@ -770,26 +811,93 @@ export class TerminalSession {
    * Yalnızca komut ÇALIŞIRKEN: istemde bekleyen kabuğun çıktısında sunucu
    * adresi aramak anlamsız, üstelik orada yazdığınız her şeyin yankısı var.
    */
-  private collectServerUrls(bytes: Uint8Array) {
-    if (!this.running) return;
-    if (this.runUrls.length >= RUN_URL_LIMIT) return;
+  /**
+   * Çalışan komutun sunucu adresleri — ANLIK.
+   *
+   * ÖLÇÜLEN BELİRTİ: `ng serve` durdurulup yeniden çalıştırıldığında eski
+   * portun rozeti duruyor, tıklayınca yanlış yere gidiyordu. Arayüz depodaki
+   * KOPYAYA bakıyordu ve o kopya bir olayla yazılıyor; olayı kaçıran ya da
+   * sıralaması bozulan tek bir yol kopyayı kalıcı olarak eski bırakıyordu.
+   *
+   * Girdi sinyallerinde aynı hata çıkmıştı ve çözümü aynı: doğruyu her çizimde
+   * buradan okumak. Depodaki kopya yalnızca yeniden çizimi tetikliyor.
+   */
+  runUrls(): string[] {
+    // Komut çalışmıyorsa gösterilecek adres de yok. Rozet zaten `running`
+    // bayrağına bakıyor ama doğruyu iki yerde tutmamak için burada da
+    // kesiliyor: liste bir yolda temizlenmeden kalsa bile dışarı sızmıyor.
+    if (!this.running) return [];
+    return [...this.serverUrls];
+  }
 
+  /** Adres listesini boşaltır ve arayüze bildirir. */
+  private clearRunUrls() {
+    this.serverUrls = [];
     /*
-     * `stream: true` ŞART. PTY verisi rastgele yerlerden bölünüyor ve bölünme
-     * bir UTF-8 karakterinin ORTASINA denk gelebiliyor. Akış kipinde çözücü
-     * yarım kalan baytı bir sonraki parçaya taşıyor; olmadan o karakter "�"
-     * oluyor ve tam o noktadaki adres bozuluyor.
+     * Liste BOŞ olsa bile bildiriliyor.
+     *
+     * Erken çıkış vardı ("zaten boş, kimseye söyleme") ve bir sızıntı yolu
+     * açıyordu: arayüz doğruyu oturumdan okuyor ama YENİDEN ÇİZİM depodaki
+     * kopyanın değişmesiyle tetikleniyor. Oturumun listesi boşalıp depo eski
+     * kalırsa yeniden çizim hiç olmuyor ve ekranda eski rozet DURUYOR — veri
+     * doğru, görüntü yanlış.
      */
-    const chunk = this.decoder.decode(bytes, { stream: true });
+    this.callbacks.onRunLinks?.([]);
+  }
 
-    let degisti = false;
-    for (const url of extractServerUrls(chunk, RUN_URL_LIMIT)) {
-      if (this.runUrls.includes(url)) continue;
-      if (this.runUrls.length >= RUN_URL_LIMIT) break;
-      this.runUrls.push(url);
-      degisti = true;
-    }
-    if (degisti) this.callbacks.onRunLinks?.([...this.runUrls]);
+  /**
+   * Çalışan komutun ÇIKTISINDA sunucu adresi arar — yalnızca YENİ satırlarda.
+   *
+   * ## Neden akan baytlar değil
+   *
+   * İlk hâli PTY'den gelen baytları tarıyordu ve yanlıştı. ÖLÇÜLEN BELİRTİ:
+   * `ng serve` durdurulup yeniden çalıştırıldığında eski portun rozeti, henüz
+   * onay verilmemişken geri geliyordu.
+   *
+   * Sebep ConPTY'nin YENİDEN ÇİZİMİ. Komut başlayınca komut kutusu "Durdur"
+   * şeridine dönüşüyor, satır yüksekliği değişiyor, terminal yeniden
+   * ölçülüyor ve ConPTY görünen ekranın TAMAMINI yeniden yayımlıyor. Ekranda
+   * duran eski adres satırı ikinci kez akıştan geçiyor ve "yeni çıktı" gibi
+   * görünüyor. Pencereyi yeniden boyutlandırmak da aynı şeyi yapıyor, yani
+   * bayt taraması hiçbir yamayla doğru olamaz.
+   *
+   * Satır tabanlı tarama bunu yapısal olarak çözüyor: yeniden çizim VAR OLAN
+   * satırları yeniden yazıyor, yeni satır EKLEMİYOR. İmleç ilerlemediyse
+   * taranacak bir şey de yok.
+   *
+   * `scanLine` komut başlarken o anki satıra kuruluyor, yani bir komutun
+   * çıktısı yalnızca kendi ürettiği satırlardan okunuyor.
+   */
+  /**
+   * Çalışan komutun çıktısında sunucu adresi arar.
+   *
+   * Kural saf bir modülde ve GERÇEK BİR TERMINAL üzerinde testli
+   * (`lib/serverScan.ts`, `lib/serverScan.test.ts`). Burada yalnızca xterm'in
+   * o kurala verilmesi var.
+   *
+   * Uzun hikâye: bu iş önce akan baytları tarıyordu ve yanlıştı. ConPTY komut
+   * başlayınca (komut kutusu "Durdur" şeridine dönüşüyor, terminal yeniden
+   * ölçülüyor) görünen ekranın TAMAMINI yeniden yayımlıyor; ekranda duran eski
+   * adres satırı ikinci kez akıştan geçip yeni komuta yazılıyordu. Satır
+   * tabanlı tarama bunu yapısal olarak dışlıyor.
+   */
+  private scanNewLines() {
+    const buf = this.term.buffer.active;
+    const out = scanForServerUrls(
+      { scanLine: this.scanLine, urls: this.serverUrls },
+      {
+        baseY: buf.baseY,
+        cursorY: buf.cursorY,
+        readLine: (y) => buf.getLine(y)?.translateToString(true) ?? "",
+        running: this.running,
+        altScreen: buf.type === "alternate",
+      },
+      { maxUrls: RUN_URL_LIMIT, maxLines: MAX_SCAN_LINES },
+    );
+
+    this.scanLine = out.state.scanLine;
+    this.serverUrls = out.state.urls;
+    if (out.changed) this.callbacks.onRunLinks?.([...this.serverUrls]);
   }
 
   /** İstem durumu değiştiyse arayüze bildirir. */
@@ -799,12 +907,33 @@ export class TerminalSession {
     this.emitInputSignals();
   }
 
-  private emitInputSignals() {
-    this.callbacks.onInputSignals?.({
+  /**
+   * Girdi kipini belirleyen ANLIK sinyaller.
+   *
+   * Arayüz bunu doğrudan okuyor; depodaki kopya yalnızca yeniden çizimi
+   * tetiklemek için var.
+   *
+   * ÖLÇÜLEN HATA: kip tek seferlik bir olaya güveniyordu. Olay kaçtığında ya da
+   * durum bilinmeden önce geldiğinde (`integration` henüz atanmamışken) depo
+   * eski bilgiyle kalıyor ve bir daha güncellenmiyordu — çünkü sonraki emisyon
+   * ancak bir DEĞİŞİM olunca geliyor. Sonuç: komut kutusu hiç açılmıyor,
+   * sekmeyi yeniden başlatmak düzeltiyor. Doğruyu her çizimde buradan okumak o
+   * sınıfın tamamını kapatıyor.
+   *
+   * `altScreen` de burada TÜRETİLİYOR, saklanmıyor: `onBufferChange` kaçarsa
+   * (ya da geri yüklenen ekran çıktısı tamponu bir an ikincil kipe soksa)
+   * saklanan bayrak kalıcı olarak yanlış kalıyordu.
+   */
+  inputSignals(): { atPrompt: boolean; altScreen: boolean; integration: boolean } {
+    return {
       atPrompt: this.atPrompt,
-      altScreen: this.altScreen,
+      altScreen: this.term.buffer.active.type === "alternate",
       integration: this.integration,
-    });
+    };
+  }
+
+  private emitInputSignals() {
+    this.callbacks.onInputSignals?.(this.inputSignals());
   }
 
   /**
@@ -1027,6 +1156,8 @@ export class TerminalSession {
       // İkincil ekran tamponu: vim, less, htop. Girdi kipi buna bakıyor —
       // entegrasyon sinyali gecikse bile tam ekran program yakalanmalı.
       this.term.buffer.onBufferChange(() => {
+        // Değer `inputSignals()` içinde türetiliyor; burada yalnızca değişimi
+        // haber veriyoruz.
         const alt = this.term.buffer.active.type === "alternate";
         if (alt === this.altScreen) return;
         this.altScreen = alt;
@@ -1252,6 +1383,23 @@ ${dim}[${
         // İstem HENÜZ bitmedi. Kutuyu burada açmak erken olurdu: kabuk hâlâ
         // istemi yazıyor ve o sırada gönderilen metin istemin ortasına düşer.
         this.setAtPrompt(false);
+        /*
+         * Sunucu adresleri BURADA temizleniyor — en güvenilir yer bu.
+         *
+         * ÖLÇÜLEN BELİRTİ: `ng serve` durdurulup yeniden çalıştırıldığında eski
+         * portun rozeti duruyordu; tıklayınca yanlış yere gidiyordu.
+         *
+         * Temizlik önce komut başlangıcına (133;C) ve bitişine (133;D)
+         * bağlanmıştı, ama o iki işaret her yolda gelmiyor: komut metni
+         * bilinmediğinde, yedek zamanlayıcı devreye girdiğinde ya da program
+         * beklenmedik biçimde sonlandığında atlanabiliyorlar. 133;A ise HER
+         * yeni istemde geliyor — dizin ve dal rozetlerinin güncellenmesi bunun
+         * kanıtı.
+         *
+         * Anlamı da doğru: yeni bir istem çiziliyorsa bir önceki komut bitmiş,
+         * dolayısıyla o portu dinleyen bir şey de yok.
+         */
+        this.clearRunUrls();
         // Yeni istem = yeni blok. Bir öncekinin sonu buranın bir üstü.
         this.openBlock();
         break;
@@ -1387,15 +1535,27 @@ ${dim}[${
     this.enterSnapshot = null;
     this.promptEndMark = null;
 
+    /*
+     * Adres listesi burada, ERKEN ÇIKIŞTAN ÖNCE temizleniyor.
+     *
+     * ÖLÇÜLEN BELİRTİ: `ng serve` durdurulup yeniden çalıştırıldığında eski
+     * portun rozeti duruyor, ikinci sunucu açılınca da iki rozet yan yana
+     * kalıyordu. Sebep sıraydı: temizleme aşağıda, komut metni bilinmediğinde
+     * dönen `return`dan SONRAYDI — o yolda liste hiç temizlenmiyordu.
+     */
+    this.clearRunUrls();
+    // Tarama bu satırdan İTİBAREN: komutun çıktısı kendi satırlarından
+    // okunuyor. İmleç satırı da aralığa giriyor (bkz. `scanForServerUrls`).
+    {
+      const buf = this.term.buffer.active;
+      this.scanLine = buf.baseY + buf.cursorY;
+    }
+
     const text = command?.trim();
     if (!text) return;
 
     this.openedForCurrentPrompt = true;
     this.running = true;
-    // Adresler KOMUTA ait: yeni komut, yeni liste. Temizlemezsek bir önceki
-    // sunucunun portu yenisinin yanında durmaya devam ederdi.
-    this.runUrls = [];
-    this.callbacks.onRunLinks?.([]);
     this.activeCommand = text;
     this.activeStartedAt = Date.now();
     this.callbacks.onCommandStart?.(text);
@@ -1436,6 +1596,8 @@ ${dim}[${
 
     this.running = false;
     this.activeCommand = null;
+    // Adres KOMUTA ait: komut bittiyse o portu dinleyen bir şey de yok.
+    this.clearRunUrls();
     this.activeStartedAt = 0;
     this.openedForCurrentPrompt = false;
 

@@ -4,20 +4,32 @@ import { useT } from "../lib/i18n";
 import type { MsgKey } from "../lib/messages";
 import { useStore, type SidePanelMode } from "../store/useStore";
 import { FavoritesPanel } from "./FavoritesPanel";
+import { FileTree } from "./FileTree";
+import { FileViewer } from "./FileViewer";
+import { GitChanges } from "./GitChanges";
 import { HistoryPanel } from "./HistoryPanel";
 
 const MODE_KEYS: Record<SidePanelMode, MsgKey> = {
   history: "app.history",
   favorites: "app.favorites",
+  git: "app.changes",
+  files: "app.files",
 };
 
 /**
  * Sağ panelin kabuğu: başlık, kip sekmeleri ve genişlik tutamacı.
- * İçerik iki listeden biri — geçmiş ya da favoriler.
+ * İçerik dört listeden biri — geçmiş, favoriler, git değişiklikleri ya da
+ * dosya ağacı.
+ *
+ * Değişiklikler AYRI bir çekmece olarak yazılmıştı ve geri alındı: kullanıcının
+ * zaten bildiği çekmece bu. İkinci bir çekmece hem ikinci bir kapatma yolu hem
+ * ikinci bir genişlik tutamacı demekti; üçüncü bir sekme olarak eklemek
+ * öğrenilmiş olanı tekrar kullanıyor.
  */
 export function SidePanel() {
   const t = useT();
   const mode = useStore((s) => s.ui.panelMode);
+  const viewerPath = useStore((s) => s.ui.viewerPath);
   const favoriteCount = useStore((s) => s.favorites.length);
   const storedWidth = useStore((s) => s.settings.appearance.panelWidth);
   const patchAppearance = useStore((s) => s.patchAppearance);
@@ -88,7 +100,11 @@ export function SidePanel() {
         </button>
       </div>
 
-      {mode === "history" ? <HistoryPanel /> : <FavoritesPanel />}
+      {mode === "history" && <HistoryPanel />}
+      {mode === "favorites" && <FavoritesPanel />}
+      {mode === "git" && <GitChanges />}
+      {/* "Dosyalar" sekmesinin iki durumu: yol seçilmişse içerik, yoksa ağaç. */}
+      {mode === "files" && (viewerPath ? <FileViewer path={viewerPath} /> : <FileTree />)}
     </aside>
   );
 }
