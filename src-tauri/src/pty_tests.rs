@@ -72,11 +72,32 @@ fn powershell_argumanlari() {
     assert!(ok);
 
     // Kullanicinin argumanlari basta kalmali, sonra -NoExit -File <betik>.
+    // -NoLogo kullanicidan geldigi icin IKINCI kez eklenmemeli.
     assert_eq!(args[0], "-NoLogo");
     assert_eq!(args[1], "-NoExit");
     assert_eq!(args[2], "-File");
     assert!(args[3].ends_with("nterminal.ps1"));
+    assert_eq!(args.iter().filter(|a| a.eq_ignore_ascii_case("-nologo")).count(), 1);
     assert!(env.is_empty(), "PowerShell ortam degiskeni gerektirmiyor");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn powershell_afisi_susturuluyor() {
+    // "Windows PowerShell / Copyright (C) Microsoft ..." her sekmenin basinda
+    // dort satir yer kapliyordu; kullaniciya soyledigi bir sey yok.
+    let dir = fixture_dir("ps-nologo");
+    let mut args: Vec<String> = Vec::new();
+    let (ok, _) = integrate(ShellKind::PowerShell, &mut args, &dir);
+    assert!(ok);
+    assert!(
+        args.iter().any(|a| a.eq_ignore_ascii_case("-nologo")),
+        "afis susturulmamis: {args:?}"
+    );
+    // -File'dan ONCE gelmeli, yoksa betige arguman olarak gecer.
+    let nologo = args.iter().position(|a| a.eq_ignore_ascii_case("-nologo")).unwrap();
+    let file = args.iter().position(|a| a == "-File").unwrap();
+    assert!(nologo < file, "-NoLogo, -File'dan sonra: {args:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 

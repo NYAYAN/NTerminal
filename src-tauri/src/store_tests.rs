@@ -93,14 +93,23 @@ fn eski_ayar_dosyasi_eksik_alanlarla_okunabilir() {
     assert_eq!(settings.appearance.panel_width, 390);
     assert_eq!(settings.appearance.view_mode, "tabs");
     assert!(settings.appearance.highlight_links);
-    assert!(!settings.behavior.history_dedupe);
+    assert!(settings.behavior.history_dedupe);
+    assert_eq!(
+        settings.version,
+        crate::model::SETTINGS_VERSION,
+        "tasima kostuysa surum damgasi da guncellenmeli"
+    );
 
     // Kaldirilan alan (pasteOnRightClick) yoksayilmali; yerine gelen alanlar
     // varsayilanini almali. Sag tik artik menu aciyor.
     assert_eq!(settings.behavior.right_click_action, "menu");
     assert!(settings.behavior.ctrl_c_copies_selection);
     assert_eq!(settings.behavior.confirm_close_tab, "always");
-    assert_eq!(settings.behavior.shell_prediction, "list");
+    assert_eq!(settings.behavior.shell_prediction, "inline");
+    assert!(settings.behavior.prompt_at_bottom);
+    assert!(settings.behavior.app_input);
+    assert!(settings.behavior.command_blocks);
+    assert!(settings.behavior.block_headers);
     assert!(settings.behavior.app_suggestions);
 
     // Eksik kisayollar da tamamlanmali.
@@ -129,6 +138,25 @@ fn eski_ayar_dosyasi_eksik_alanlarla_okunabilir() {
 /// YASANMIS KAYIP: bes gruplu, dokuz sekmeli bir duzenin uzerine tek gruplu
 /// bos bir duzen yazildi. Geri donus yolu yoktu; duzen komut gecmisinden elle
 /// yeniden kuruldu ve grup adlari orada olmadigi icin tam kurtarilamadi.
+#[test]
+fn tekrarlari_gizle_tasimasi_bir_kez_kosuyor() {
+    // Kullanici tasimadan SONRA kapatabilmeli; her acilista karari geri almak
+    // ayari kullanilamaz yapardi. Surum damgasi bunu bagliyor.
+    let paths = temp_paths("dedupe-once");
+    let dosya = format!(
+        r#"{{ "version": {}, "behavior": {{ "historyDedupe": false }} }}"#,
+        crate::model::SETTINGS_VERSION
+    );
+    std::fs::write(paths.settings_file(), dosya).unwrap();
+
+    let settings = load_settings(&paths);
+    assert!(
+        !settings.behavior.history_dedupe,
+        "guncel surumde kullanicinin kapatmasi korunmali"
+    );
+    let _ = std::fs::remove_dir_all(&paths.root);
+}
+
 #[test]
 fn duzen_sicramali_kucullurse_onceki_hal_saklaniyor() {
     let paths = temp_paths("shrink");
@@ -244,6 +272,10 @@ fn bos_bolumler_varsayilanla_dolar() {
     assert_eq!(settings.behavior.right_click_action, "menu");
     assert!(settings.behavior.ctrl_c_copies_selection);
     assert_eq!(settings.behavior.confirm_close_tab, "always");
-    assert_eq!(settings.behavior.shell_prediction, "list");
+    assert_eq!(settings.behavior.shell_prediction, "inline");
+    assert!(settings.behavior.prompt_at_bottom);
+    assert!(settings.behavior.app_input);
+    assert!(settings.behavior.command_blocks);
+    assert!(settings.behavior.block_headers);
     assert!(settings.behavior.app_suggestions);
 }
