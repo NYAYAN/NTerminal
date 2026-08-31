@@ -1,0 +1,211 @@
+//! Dizin altindaki dosyalarin listesi — Ctrl+P dosya arama icin.
+//!
+//! ## Neden .gitignore okunmuyor
+//!
+//! Dogru cozum bu olurdu ve bir kutuphane (`ignore`) tam bunu yapiyor. Yeni bir
+//! bagimlilik eklemek yerine ATLANACAK KLASOR listesi kullaniliyor: pratikte
+//! agirligin tamami birkac bilinen klasorde (`node_modules`, `target`, `dist`)
+//! ve onlari atmak listeyi kullanilabilir kiliyor.
+//!
+//! Bedeli: .gitignore'da olan baska seyler listede gorunuyor. Bir dosya arama
+//! kutusunda bu yanlis sonuc degil, fazla sonuc.
+//!
+//! ## Neden sinir var
+//!
+//! Bir ev klasoru ya da surucu koku yuz binlerce dosya tutuyor. Sinirsiz
+//! yuruyus arayuzu dakikalarca bekletir ve bellegi doldurur. Sinira takilan
+//! yuruyus DURUYOR; arama kutusu eksik listeyle de ise yariyor, donmeyen bir
+//! arayuz eksiksiz listeden onemli.
+
+use serde::Serialize;
+use std::path::Path;
+
+/// Agactaki tek bir girdi.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Entry {
+    pub name: String,
+    /// Klasor mu? Sembolik baglantilar izlenerek belirleniyor.
+    pub dir: bool,
+}
+
+/// Bir dizinin girdileri: klasorler once, sonra dosyalar.
+///
+/// Gizli girdiler DAHIL: terminalde `.env`, `.gitignore`, `.github` gunluk
+/// kullanimda. Onlari gizlemek dosya yoneticisi aliskanligi, kabuk aliskanligi
+/// degil.
+///
+/// Bu islev TEK SEVIYE okuyor. Agaci tembel acmanin butun amaci bu: derin bir
+/// projede her seviyeyi onden okumak binlerce klasor gezmek demek.
+pub fn entries(dir: &Path) -> Vec<Entry> {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+
+    let mut out: Vec<Entry> = Vec::new();
+    for entry in read.flatten() {
+        let Some(name) = entry.file_name().to_str().map(String::from) else {
+            continue;
+        };
+        // `is_dir()` sembolik baglantiyi IZLIYOR: klasore isaret eden bir
+        // baglanti da acilabilir olmali.
+        out.push(Entry { dir: entry.path().is_dir(), name });
+    }
+
+    // Klasorler once: goz agacta once onlari arayip iciyor. Ikinci olcut
+    // buyuk/kucuk harf gozetmeyen ad - ASCII siralamasi butun buyuk harfleri
+    // one atiyor ve liste karisik gorunuyor.
+    out.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    out
+}
+
+/// Goruntuleyicinin okudugu en fazla bayt.
+///
+/// Yarim megabayt: bir kaynak dosyasi icin fazlasiyla yeterli, buyuk bir kutuk
+/// (log) ya da veri dosyasi ise arayuze tasinmamali - metni DOM'a cizmek
+/// megabayt basina yuzlerce milisaniye ve kimse yarim megabayttan fazlasini
+/// goruntuleyicide okumuyor.
+const MAX_READ: usize = 512 * 1024;
+
+/// Ikili dosya sezgisi icin bakilan ilk bayt sayisi.
+const SNIFF: usize = 8192;
+
+/// Goruntuleyiciye giden dosya icerigi.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileText {
+    pub text: String,
+    /// Sinira takildi mi; goruntuleyici bunu soylemek zorunda.
+    pub truncated: bool,
+    /// Ikili sezildi mi; icerik bos gelir.
+    pub binary: bool,
+    /// Dosyanin gercek boyutu (bayt).
+    pub size: u64,
+}
+
+/// Bir metin dosyasini okur.
+///
+/// ## Neden ikili sezgisi var
+///
+/// Bir `.png` ya da `.exe`yi metin olarak cizmek ekrani anlamsiz karakterlerle
+/// dolduruyor ve tarayiciyi zorluyor. Sezgi ilk sekiz kilobaytta NUL bayti
+/// aramak: metin dosyalarinda NUL bulunmuyor, ikili bicimlerin neredeyse
+/// tamaminda bulunuyor. Kusursuz degil ama yanilma bedeli dusuk - kullaniciya
+/// "ikili dosya" denir, olan bir sey yok.
+///
+/// ## Neden sinir var
+///
+/// Yarim megabayttan sonrasi kesiliyor ve bu BILDIRILIYOR. Sessizce kesmek
+/// "dosyanin sonu buymus" sanmaya yol acardi.
+pub fn read_text(path: &Path) -> Option<FileText> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let size = meta.len();
+
+    let bytes = std::fs::read(path).ok()?;
+    let ikili = bytes.iter().take(SNIFF).any(|b| *b == 0);
+    if ikili {
+        return Some(FileText { text: String::new(), truncated: false, binary: true, size });
+    }
+
+    let truncated = bytes.len() > MAX_READ;
+    let dilim = if truncated { &bytes[..MAX_READ] } else { &bytes[..] };
+    // `from_utf8_lossy`: gecersiz baytlar U+FFFD oluyor. Hata dondurmek yerine
+    // gostermek dogru - dosyanin cogu okunabilirse kullanici onu gormeli.
+    Some(FileText {
+        text: String::from_utf8_lossy(dilim).to_string(),
+        truncated,
+        binary: false,
+        size,
+    })
+}
+
+/// Yuruyuse girmeyen klasorler.
+///
+/// Iki ayri sebep var: `node_modules` / `target` / `dist` gibi olanlar URETILEN
+/// dosyalar ve aranmiyor; `.git` ise deponun ic yapisi.
+const SKIP: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "bin",
+    "obj",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".gradle",
+    ".idea",
+    "vendor",
+    "Pods",
+];
+
+/// Toplanacak en fazla dosya.
+///
+/// Yirmi bin: bulanik arama bu boyutta hala anlik ve listenin bellekteki
+/// agirligi birkac megabayt. Daha buyugu arama kutusunu yavaslatiyor, ustelik
+/// kimse yirmi binden fazla sonucun arasinda gezinmiyor.
+const MAX_FILES: usize = 20_000;
+
+/// En fazla inilecek derinlik.
+///
+/// Derin ic ice klasorlerde (uretilen kod, onbellek) yuruyus sinirsiz uzuyor.
+/// On seviye elle yazilan proje agaclarinin tamamini kapsiyor.
+const MAX_DEPTH: usize = 10;
+
+/// `root` altindaki dosyalarin `root`a gore yollari.
+///
+/// Genislik oncelikli (breadth-first): sinira takilirsa elde YUZEYDEKI dosyalar
+/// kaliyor, derinlerdekiler degil. Kullanicinin aradigi dosya cok daha sik
+/// yuzeye yakin; derinlik oncelikli yuruyus sinira ilk dalda takilip geri
+/// kalanini hic gormezdi.
+pub fn list(root: &Path) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut kuyruk: std::collections::VecDeque<(std::path::PathBuf, usize)> =
+        std::collections::VecDeque::new();
+    kuyruk.push_back((root.to_path_buf(), 0));
+
+    while let Some((dir, depth)) = kuyruk.pop_front() {
+        if out.len() >= MAX_FILES {
+            break;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            // Okunamayan klasor (izin, kopmus ag surucusu) yuruyusu durdurmuyor.
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = entry.file_name().to_str().map(String::from) else {
+                continue;
+            };
+            let Ok(kind) = entry.file_type() else { continue };
+
+            if kind.is_dir() {
+                if depth + 1 > MAX_DEPTH || SKIP.contains(&name.as_str()) {
+                    continue;
+                }
+                kuyruk.push_back((path, depth + 1));
+                continue;
+            }
+            if out.len() >= MAX_FILES {
+                break;
+            }
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    out
+}
+
+#[cfg(test)]
+#[path = "files_tests.rs"]
+mod files_tests;

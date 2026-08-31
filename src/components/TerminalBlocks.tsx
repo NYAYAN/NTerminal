@@ -4,8 +4,7 @@ import { blockRect, blockTone, type BlockView } from "../lib/blocks";
 import { formatDuration, shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { sessions, useStore } from "../store/useStore";
-import { GitChanges } from "./GitChanges";
-import { BranchIcon, FolderIcon } from "./Icons";
+import { FolderIcon } from "./Icons";
 
 /**
  * Komut bloklarının görsel katmanı.
@@ -27,8 +26,16 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
   const enabled = useStore((s) => s.settings.behavior.commandBlocks);
   const [, redraw] = useState(0);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [changesOpen, setChangesOpen] = useState(false);
-  const allGit = useStore((s) => s.gitInfo);
+  /*
+   * Pencereler BURADA ÇİZİLMİYOR, depoya bir bayrak yazılıyor.
+   *
+   * ÖLÇÜLEN HATA: ilk hâlinde dal seçici ve değişiklikler penceresi bu
+   * bileşenin içinde çiziliyordu. Katman `pointer-events: none` (metnin
+   * üstünde duruyor, seçimi engellememeli) ve `overflow: hidden`; sonuç iki
+   * belirti: pencere tıklama almıyor — yani KAPANMIYOR — ve kırpılıyor.
+   *
+   * Uygulamanın kökünde çizilmeleri gerekiyor; buradan yalnızca "aç" deniyor.
+   */
 
   /*
    * Yeniden çizim tetikleyicisi.
@@ -78,9 +85,6 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
   };
 
   const blocks = session.snapshotBlocks();
-  // Git durumu DİZİNE bağlı, sekmeye değil: aynı depoda iki sekme aynı rozeti
-  // görüyor ve `git` bir kez çalışıyor.
-  const git = session.cwd ? (allGit[session.cwd] ?? null) : null;
   /*
    * Başlık YALNIZCA kabuk boş satır bıraktığını bildirdiyse çiziliyor.
    *
@@ -111,108 +115,41 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
         const rect = blockRect(block, view);
         if (!rect) return null;
         const tone = blockTone(block);
-        /*
-         * Komutu olmayan blok = kabuğun ŞU AN beklediği istem.
-         *
-         * Ondan yalnızca başlık çiziliyor: şerit "bu komut şöyle bitti" diyor
-         * ama daha çalışmış bir komut yok; araç çubuğu da kopyalanacak bir şey
-         * bulamaz. Başlık ise anlamlı — bir sonraki komutun hangi dizinde
-         * çalışacağını söylüyor ve kutunun hemen üstünde duruyor.
-         */
-        const bekleyen = !block.command;
-        const on = !bekleyen && hovered === block.id;
+        const on = hovered === block.id;
 
         return (
           <div
             key={block.id}
-            className={`block block-${tone}${on ? " on" : ""}${bekleyen ? " pending" : ""}`}
+            className={`block block-${tone}${on ? " on" : ""}`}
             style={{ top: rect.top, height: rect.height }}
-            onMouseEnter={() => !bekleyen && setHovered(block.id)}
+            onMouseEnter={() => setHovered(block.id)}
             onMouseLeave={() => setHovered((id) => (id === block.id ? null : id))}
           >
             {/* Şerit bloğun BÜTÜN yüksekliğince: çıktının nerede bittiği
                 ancak sürekli bir çizgiyle okunuyor. */}
-            {!bekleyen && <span className="block-stripe" />}
+            <span className="block-stripe" />
 
             {/* Başlık bloğun İLK satırında — kabuğun istem yazmadığı, boş
                 bıraktığı satır. Blok görünümün üstünden taşmışsa (uzun çıktı)
                 başlık da yukarıda kalır ve görünmez; doğrusu bu, başlık komuta
                 ait ve komut yukarıda. */}
-            {headers && block.startLine >= view.top && (
-              /*
-               * Yükseklik bekleyen blokta BÜTÜN bloğu, bitmişte tek satırı
-               * kaplıyor.
-               *
-               * ÖLÇÜLEN BELİRTİ: bekleyen bloğun rozeti üstteki ayırıcı çizgiye
-               * yapışık duruyor, altında ise koca bir boşluk kalıyordu. Sebep:
-               * başlık satırı bir terminal satırı kadar (~17px) ve rozet
-               * neredeyse onu dolduruyor, üstte bir piksel kalıyor. Altındaki
-               * boşluk ise kabuğun kullanmadığı komut satırı.
-               *
-               * Bekleyen bloğun İKİ satırı da boş, dolayısıyla rozeti ikisinin
-               * ortasına almak hem güvenli hem simetrik. Bitmiş blokta bu
-               * yapılamaz: oradaki alt satırlar çıktı ve rozet onların üstüne
-               * biner.
-               */
-              <span
-                className="block-head"
-                style={{ height: bekleyen ? rect.height : view.cellHeight }}
-              >
-                {block.cwd &&
-                  (bekleyen ? (
-                    /* BEKLEYEN bloğun rozeti tıklanabilir: bir sonraki komut
-                       orada çalışacak, yani değiştirmek anlamlı. Bitmiş bir
-                       bloğunki değil — o komut çoktan çalıştı, dizinini
-                       değiştirmek geçmişi değiştirmez. */
-                    <button
-                      type="button"
-                      className="block-cwd as-button"
-                      title={t("dirs.open")}
-                      onClick={() => useStore.getState().setUi({ dirPicker: block.cwd })}
-                    >
-                      <FolderIcon size={10} />
-                      {shortenPath(block.cwd, 3)}
-                    </button>
-                  ) : (
-                    <span className="block-cwd" title={block.cwd}>
-                      <FolderIcon size={10} />
-                      {shortenPath(block.cwd, 3)}
-                    </span>
-                  ))}
-
-                {/* Git rozeti YALNIZCA bekleyen blokta.
-                    
-                    Bitmiş bir bloğunki yanıltıcı olurdu: durum ŞU ANKİ dal ve
-                    sayaç, o komut çalıştığı andaki değil. Geçmişteki bir
-                    satırın yanında güncel bir sayaç göstermek "o komut bu
-                    durumda çalıştı" demek olurdu. */}
-                {bekleyen && git && (
-                  <>
-                    <span className="git-chip" title={t("git.branch")}>
-                      <BranchIcon size={10} />
-                      {git.branch}
-                      {git.ahead > 0 && <span className="git-num">{`↑${git.ahead}`}</span>}
-                      {git.behind > 0 && <span className="git-num">{`↓${git.behind}`}</span>}
-                    </span>
-                    {git.changes.length > 0 && (
-                      <button
-                        type="button"
-                        className="git-chip as-button"
-                        title={t("git.viewChanges")}
-                        onClick={() => setChangesOpen(true)}
-                      >
-                        {`± ${git.changes.length}`}
-                      </button>
-                    )}
-                  </>
-                )}
+            {/* Başlık bloğun İLK satırında — kabuğun istem yazmadığı, boş
+                bıraktığı satır. Tarihsel bir kayıt: "bu komut şu dizinde
+                çalıştı". Tıklanmıyor; dizin değiştirmek şimdiki hâlle ilgili
+                ve o iş bağlam şeridinde. */}
+            {headers && block.startLine >= view.top && block.cwd && (
+              <span className="block-head" style={{ height: view.cellHeight }}>
+                <span className="block-cwd" title={block.cwd}>
+                  <FolderIcon size={10} />
+                  {shortenPath(block.cwd, 3)}
+                </span>
               </span>
             )}
 
             {/* Durum rozeti bloğun ilk satırında; blok görünümün üstünden
                 taşmışsa (uzun çıktı) rozet de yukarıda kalır ve görünmez —
                 istenen bu, rozet komuta ait ve komut yukarıda. */}
-            {!block.running && !bekleyen && (
+            {!block.running && (
               <span className="block-badge" style={{ height: view.cellHeight }}>
                 {block.durationMs !== null && (
                   <span className="block-dur">{formatDuration(block.durationMs)}</span>
@@ -223,7 +160,6 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
               </span>
             )}
 
-            {!bekleyen && (
             <span className="block-tools">
               <button
                 type="button"
@@ -247,16 +183,10 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
                 {t("block.rerunShort")}
               </button>
             </span>
-            )}
           </div>
         );
       })}
 
-      {/* Pencere katmanın DIŞINDA çiziliyor: katman `overflow: hidden` ve
-          `pointer-events: none`; içeride açılsa hem kırpılır hem tıklanamazdı. */}
-      {changesOpen && git && (
-        <GitChanges changes={git.changes} onClose={() => setChangesOpen(false)} />
-      )}
     </div>
   );
 }

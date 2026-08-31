@@ -267,10 +267,15 @@ describe("başlık çubuğu içeriği", () => {
   /** Başlık çubuğu bloğu: `.titlebar` açılışından `<GroupSidebar` satırına kadar. */
   const titlebar = APP.slice(APP.indexOf('className="titlebar"'), APP.indexOf("<GroupSidebar"));
 
-  it("tek eylem düğmesi: Ayarlar", () => {
+  it("iki eylem düğmesi: dosya ağacı ve Ayarlar", () => {
+    // Çubuk bir EYLEM ÇUBUĞU değil; buraya ancak başka yolu olmayan şeyler
+    // giriyor. Ağaç bir görünüm ve başka hiçbir yerden açılamıyor, Ayarlar da
+    // öyle. Üçüncüsü eklenmek istenirse önce "bunun başka yolu var mı"
+    // sorusunun yanıtlanması gerekiyor.
     const buttons = [...titlebar.matchAll(/className="icon-btn[^"]*"/g)];
-    expect(buttons, "başlık çubuğunda beklenenden fazla düğme var").toHaveLength(1);
+    expect(buttons, "başlık çubuğunda beklenenden fazla düğme var").toHaveLength(2);
     expect(titlebar, "Ayarlar düğmesi yok").toContain("app.settings");
+    expect(titlebar, "dosya ağacı düğmesi yok").toContain("app.filesTitle");
   });
 
   it("kaldırılan eylemler çubukta değil", () => {

@@ -145,6 +145,128 @@ pub fn read(path: &str) -> Option<GitInfo> {
     Some(parse_porcelain(&String::from_utf8_lossy(&out.stdout)))
 }
 
+/// Depodaki YEREL dallar, en son islenene gore sirali.
+///
+/// Sira `committerdate` ile: alfabetik siralama uzun dal listelerinde ise
+/// yaramiyor - aradigin dal genelde son dokundugun dal. Alfabetik listede o
+/// dal ortada bir yerde kaliyor.
+///
+/// Uzak dallar YOK. Listeye eklemek onlari `git checkout` ile secilebilir
+/// gosterirdi; o da yerel bir izleme dali OLUSTURUYOR, yani "gecis yaptim"
+/// sandigin yerde yeni bir dal yaratmis oluyorsun. Ayri bir is.
+pub fn branches(path: &str) -> Vec<String> {
+    let Ok(out) = Command::new("git")
+        .args([
+            "-C",
+            path,
+            "--no-optional-locks",
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname:short)",
+            "refs/heads/",
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Tek bir dosyanin farki (birlesik bicim), renk kacislari olmadan.
+///
+/// `--no-color`: arayuz satirlari kendisi boyuyor. Git'in ANSI kacislarini
+/// gecirmek metni kirletir ve ayristirmayi da zorlastirirdi.
+///
+/// `--no-ext-diff`: kullanicinin `diff.external` ayari olabilir ve o zaman
+/// cikti tumden baska bir bicimde gelirdi.
+///
+/// Takip edilmeyen dosya icin `git diff` BOS doner - dosya indekste yok.
+/// `--no-index` ile bos bir kaynaga karsi karsilastiriyoruz; sonuc "her satir
+/// eklendi" farki oluyor, yani kullanicinin gormek istedigi sey.
+pub fn diff(path: &str, file: &str, untracked: bool) -> Option<String> {
+    let mut args: Vec<&str> = vec!["-C", path, "--no-optional-locks", "diff", "--no-color", "--no-ext-diff"];
+    if untracked {
+        // NUL aygiti platforma gore degisiyor; git ikisini de taniyor ama
+        // Windows'ta `/dev/null` yok.
+        args.extend(["--no-index", "--", NUL_DEVICE, file]);
+    } else {
+        args.extend(["--", file]);
+    }
+
+    let out = Command::new("git").args(&args).output().ok()?;
+    // `--no-index` fark VARSA 1 donuyor; basarisizlik degil.
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    if text.is_empty() && !out.status.success() {
+        return None;
+    }
+    Some(text)
+}
+
+#[cfg(windows)]
+const NUL_DEVICE: &str = "NUL";
+#[cfg(not(windows))]
+const NUL_DEVICE: &str = "/dev/null";
+
+/// Deponun `.git` klasoru; bulunamazsa `None`.
+///
+/// Yukari dogru yuruyor cunku kabuk alt bir klasorde olabilir. `.git` bir
+/// DOSYA da olabilir: alt modullerde ve `git worktree` ile olusturulmus calisma
+/// agaclarinda icinde `gitdir: <yol>` yaziyor. O durumu ele almazsak worktree
+/// kullanan biri icin parmak izi hic bulunamaz ve tazeleme sessizce calismaz.
+pub fn git_dir(start: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut dir = Some(start);
+    while let Some(cur) = dir {
+        let aday = cur.join(".git");
+        if aday.is_dir() {
+            return Some(aday);
+        }
+        if aday.is_file() {
+            let text = std::fs::read_to_string(&aday).ok()?;
+            let yol = text.trim().strip_prefix("gitdir:")?.trim();
+            let yol = std::path::Path::new(yol);
+            return Some(if yol.is_absolute() { yol.to_path_buf() } else { cur.join(yol) });
+        }
+        dir = cur.parent();
+    }
+    None
+}
+
+/// Deponun durumunu ozetleyen ucuz bir imza; degistiyse tam sorgu gerekiyor.
+///
+/// ## Neden imza
+///
+/// Dal baska bir uygulamadan (IDE, baska bir terminal) degistirilebiliyor ve
+/// NTerminal bunu fark etmiyordu - rozet ancak burada bir komut kosunca
+/// tazeleniyordu. Cozum yoklama, ama her yoklamada `git status` kosturmak buyuk
+/// bir depoda saniyeler suren bir surec baslatmak demek.
+///
+/// Imza IKI DOSYA OKUMASI: `HEAD`in icerigi (dal adi) ve `index`in degisme
+/// zamani (asamalama, checkout). Ikisi de bayt mertebesinde; tam sorgu ancak
+/// imza degisince kosuyor.
+///
+/// SINIRI: yalnizca calisma agacindaki bir dosyayi duzenlemek `index`e
+/// dokunmuyor, dolayisiyla imza degismiyor. O durumu komut sonu ve pencereye
+/// donus tazelemeleri yakaliyor.
+pub fn fingerprint(path: &str) -> Option<String> {
+    let dir = git_dir(std::path::Path::new(path))?;
+    let head = std::fs::read_to_string(dir.join("HEAD")).unwrap_or_default();
+    let index = std::fs::metadata(dir.join("index"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    Some(format!("{}|{index}", head.trim()))
+}
+
 #[cfg(test)]
 #[path = "git_tests.rs"]
 mod git_tests;

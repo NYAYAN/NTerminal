@@ -128,6 +128,30 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+/** Başlık çubuğundaki dosya ağacı düğmesi. */
+export function TreeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 3.5 H7" />
+      <path d="M2.5 3.5 V12.5 H6" />
+      <path d="M2.5 8 H6" />
+      <path d="M8.5 3.5 H13.5" />
+      <path d="M8.5 8 H13.5" />
+      <path d="M8 12.5 H13.5" />
+    </Svg>
+  );
+}
+
+/** Başlık çubuğundaki arama alanının büyüteci. */
+export function SearchIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="7" cy="7" r="4.3" />
+      <path d="M10.2 10.2 L13.5 13.5" />
+    </Svg>
+  );
+}
+
 /** Git dal rozetinin çatal işareti. */
 export function BranchIcon(props: IconProps) {
   return (

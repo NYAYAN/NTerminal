@@ -138,12 +138,31 @@ describe("boş blok çizilmiyor", () => {
     expect(hasVisibleContent(block({ endLine: null, running: true }), bos)).toBe(true);
   });
 
-  it("uzun blok okunmadan çiziliyor", () => {
-    // Başarım sınırı: her karede binlerce satır okumak katmanı terminalden
+  it("UZUN blok da denetleniyor", () => {
+    // ÖLÇÜLEN BELİRTİ: `ls` çıktısı otuz satırlık bir blok; `clear` ekranı
+    // siliyor ve blok "uzun" olduğu için hiç denetlenmiyordu — geriye metinsiz,
+    // upuzun bir şerit kalıyordu.
+    expect(hasVisibleContent(block({ startLine: 100, endLine: 900 }), bos)).toBe(false);
+  });
+
+  it("uzun blokta içerik yakalanıyor", () => {
+    // Örnekleme bloğa YAYILMIŞ: 24 örnek, aralarında tam 10 satır. Onuncu
+    // örneğin denk geldiği satıra içerik koyup bulunmasını bekliyoruz.
+    const start = 100;
+    const end = start + 23 * 10;
+    const dolu = start + 10 * 10;
+    const oku = (from: number) => (from === dolu ? "bir sey" : " ");
+    expect(hasVisibleContent(block({ startLine: start, endLine: end }), oku)).toBe(true);
+  });
+
+  it("uzun blokta satır sayısı kadar okuma YAPILMIYOR", () => {
+    // Her karede koşan bir denetim; binlerce satır okumak katmanı terminalden
     // pahalı hâle getirirdi.
-    const oku = () => {
-      throw new Error("uzun blok okunmamalıydı");
-    };
-    expect(hasVisibleContent(block({ startLine: 100, endLine: 900 }), oku)).toBe(true);
+    let okuma = 0;
+    hasVisibleContent(block({ startLine: 0, endLine: 5000 }), () => {
+      okuma += 1;
+      return " ";
+    });
+    expect(okuma).toBeLessThanOrEqual(24);
   });
 });
