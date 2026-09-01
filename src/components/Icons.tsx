@@ -128,6 +128,23 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+/**
+ * Grup kenar çubuğunu daraltma/açma düğmesi.
+ *
+ * Pencere ve içindeki sol sütun: hangi panelin açılıp kapandığı simgenin
+ * kendisinden okunuyor. Dolu sütun "panel açık" demiyor — durum düğmenin `on`
+ * sınıfından ve ipucundan geliyor; simge her iki durumda da aynı kalıyor ki
+ * düğme yer değiştirmiş gibi görünmesin.
+ */
+export function SidebarIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 3.5 H13.5 V12.5 H2.5 Z" />
+      <path d="M6.5 3.5 V12.5" />
+    </Svg>
+  );
+}
+
 /** Başlık çubuğundaki dosya ağacı düğmesi. */
 export function TreeIcon(props: IconProps) {
   return (
@@ -148,6 +165,39 @@ export function SearchIcon(props: IconProps) {
     <Svg {...props}>
       <circle cx="7" cy="7" r="4.3" />
       <path d="M10.2 10.2 L13.5 13.5" />
+    </Svg>
+  );
+}
+
+/**
+ * Ayar açıklamalarını açan "i" düğmesinin simgesi.
+ *
+ * Yazı tipi karakteri (ⓘ, U+24D8) DEĞİL: dosyanın başındaki gerekçe burada da
+ * geçerli — o karakter kimi yazı tipinde satırdan taşıyor, kimisinde eksik.
+ * Ayrıca tek harflik metin arayüz metni taramasına (hardcodedText.test) takılır
+ * ve çeviri istemez; simge olması o yanlış pozitifi de ortadan kaldırıyor.
+ */
+export function InfoIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="6.2" />
+      <path d="M8 7.3 V11" />
+      <path d="M8 4.9 h0.01" />
+    </Svg>
+  );
+}
+
+/**
+ * "Varsayılana döndür" düğmesinin geri alma oku.
+ *
+ * Çöp kutusu ya da çarpı DEĞİL: ikisi de "sil" diyor, buradaki eylem ise
+ * silmek değil GERİ ALMAK — ayarın varsayılan değeri geri geliyor.
+ */
+export function UndoIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6 2.6 L3 5.6 L6 8.6" />
+      <path d="M3 5.6 H9 A3 3 0 1 1 9 11.6 H6.6" />
     </Svg>
   );
 }
@@ -189,6 +239,107 @@ export function ArrowIcon({ dir, ...props }: IconProps & { dir: "up" | "down" | 
   return (
     <Svg {...props}>
       <path d={paths[dir]} />
+    </Svg>
+  );
+}
+
+/**
+ * Git durum simgeleri.
+ *
+ * Metin etiketinin ("DEĞİŞTİ", "EKLENDİ") yerini aldılar. Etiket sabit 88px'lik
+ * bir sütun yiyordu ve o sütun dosya YOLUNDAN çalınmıştı — panel dar olduğunda
+ * asıl aranan bilgi, yolun kendisi, kırpılıyordu. Durum zaten renkle
+ * kodlanmış; simge o rengi taşıyıp ipucunda tam metni veriyor.
+ *
+ * Dördü de aynı çerçevede (16x16) ve aynı ağırlıkta: liste dikey tarandığı
+ * için simgelerin optik boyutu birbirinden ayrılmamalı.
+ */
+
+/** Değişti — kalem. */
+export function GitModifiedIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M11.2 2.8 L13.2 4.8 L5.5 12.5 L2.8 13.2 L3.5 10.5 Z" />
+    </Svg>
+  );
+}
+
+/** Eklendi — artı. */
+export function GitAddedIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M8 5.4 V10.6" />
+      <path d="M5.4 8 H10.6" />
+    </Svg>
+  );
+}
+
+/** Silindi — eksi. */
+export function GitDeletedIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M5.4 8 H10.6" />
+    </Svg>
+  );
+}
+
+/** Yeniden adlandırıldı — ok. */
+export function GitRenamedIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M5.2 8 H10.4" />
+      <path d="M8.4 5.9 L10.6 8 L8.4 10.1" />
+    </Svg>
+  );
+}
+
+/**
+ * Takip edilmiyor — BOŞ, kesik çizgili çember.
+ *
+ * İçinde ARTI YOK ve bu bilinçli: artı "eklendi" demek (dosya indekste, yani
+ * commit'e girecek). İlk hâlinde takipsiz simgesi de artı taşıyordu ve
+ * kullanıcı ikisini karıştırdı — "artı işaretli olan neden takip edilmiyor
+ * diyor?" Kesik çizgi tek başına doğru şeyi söylüyor: çerçeve var ama içi
+ * boş, yani dosya git'in gözünde henüz yok.
+ */
+export function GitUntrackedIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.6" strokeDasharray="2.6 2.2" />
+    </Svg>
+  );
+}
+
+/** Panoya kopyala — iki üst üste sayfa. */
+export function CopyIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5.5 5.5 H13 V13 H5.5 Z" />
+      <path d="M10.5 5.5 V3 H3 V10.5 H5.5" />
+    </Svg>
+  );
+}
+
+/** Geri al — sola dönen ok. */
+export function RevertIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 7.5 H10 C12 7.5 13 8.7 13 10.2 C13 11.7 12 13 10 13 H6" />
+      <path d="M6 4 L2.8 7.5 L6 11" />
+    </Svg>
+  );
+}
+
+/** Dosyayı aç — kutudan çıkan ok. */
+export function OpenFileIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12.5 9.5 V12.5 H3.5 V3.5 H6.5" />
+      <path d="M9 3.5 H12.5 V7" />
+      <path d="M12.5 3.5 L7.5 8.5" />
     </Svg>
   );
 }

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/ipc";
-import { hasCustomTitle, shellBadge, tabLabel, tabTooltip } from "../lib/labels";
+import { hasCustomTitle, resolveProfile, shellBadge, tabLabel, tabTooltip } from "../lib/labels";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { dropIndex, isLocked } from "../lib/tabs";
+import { readableAccent } from "../lib/themes";
 import { sessions, useStore } from "../store/useStore";
 import type { TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
@@ -16,6 +17,9 @@ export function TabBar() {
   const running = useStore((s) => s.running);
   const exited = useStore((s) => s.exited);
   const profiles = useStore((s) => s.settings.profiles);
+  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
+  const showBadge = useStore((s) => s.settings.appearance.showShellBadge);
+  const themeId = useStore((s) => s.settings.appearance.theme);
   const renamingTabId = useStore((s) => s.ui.renamingTabId);
   const viewMode = useStore((s) => s.settings.appearance.viewMode);
   const keybindings = useStore((s) => s.settings.keybindings);
@@ -187,8 +191,10 @@ export function TabBar() {
         {group.tabs.map((tab, index) => {
           const isActive = group.activeTabId === tab.id;
           const session = sessions.get(tab.id);
-          const profile = profiles.find((p) => p.id === tab.profileId);
-          const accent = profile?.color ?? group.color ?? "#6e7681";
+          const profile = resolveProfile(profiles, tab.profileId, defaultProfileId);
+          // Rozetin metni ve etkin sekmenin vurgu şeridi bu renkten geliyor;
+          // ikisi de okunabilirlik istiyor (bkz. `readableAccent`).
+          const accent = readableAccent(profile?.color ?? group.color, themeId) ?? "#6e7681";
           const isRenaming = renamingTabId === tab.id;
 
           return (
@@ -227,9 +233,11 @@ export function TabBar() {
                 }
               }}
             >
-              <span className="tab-badge" title={profile?.name}>
-                {shellBadge(profile)}
-              </span>
+              {showBadge && (
+                <span className="tab-badge" title={profile?.name}>
+                  {shellBadge(profile)}
+                </span>
+              )}
 
               {isRenaming ? (
                 <input

@@ -20,6 +20,7 @@ fn req(command: &str) -> NewFavorite {
         label: None,
         note: None,
         group_id: None,
+        folder: None,
         cwd: None,
     }
 }
@@ -33,6 +34,7 @@ fn ekleme_ve_listeleme() {
             label: Some("  Derle  ".into()),
             note: Some("".into()),
             group_id: None,
+            folder: None,
             cwd: None,
         })
         .unwrap();
@@ -70,6 +72,7 @@ fn guncelleme_alanlari_ayirt_eder() {
             label: Some("Test".into()),
             note: Some("hizli".into()),
             group_id: None,
+            folder: None,
             cwd: None,
         })
         .unwrap();
@@ -193,6 +196,7 @@ fn diskten_yeniden_okunabilir() {
                 label: Some("Izle".into()),
                 note: None,
                 group_id: Some("g1".into()),
+                folder: None,
                 cwd: Some("C:\\proje".into()),
             })
             .unwrap();
@@ -230,6 +234,7 @@ fn ice_alma_ayni_komutu_tekrarlamaz() {
             label: None,
             note: None,
             group_id: None,
+            folder: None,
             cwd: None,
             created_at: 1,
             used_count: 0,
@@ -241,6 +246,7 @@ fn ice_alma_ayni_komutu_tekrarlamaz() {
             label: Some("Gelen".into()),
             note: None,
             group_id: None,
+            folder: None,
             cwd: None,
             created_at: 2,
             used_count: 5,
@@ -263,6 +269,7 @@ fn ice_alma_replace_temizler() {
         label: None,
         note: None,
         group_id: None,
+        folder: None,
         cwd: None,
         created_at: 2,
         used_count: 0,
@@ -272,4 +279,79 @@ fn ice_alma_replace_temizler() {
     let list = store.list();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].command, "yeni");
+}
+
+/// Favori klasoru: ekleme, guncelleme, temizleme ve diskten geri okuma.
+///
+/// ISTEK: "favorilerde gruplama olsun". Klasor ayri bir varlik degil, favorinin
+/// uzerinde duran serbest bir metin - bu yuzden asil risk `clean()` ve yama
+/// semantiginde: `None` = dokunma, `Some(None)` = temizle. Ikisini karistirmak
+/// kullanicinin klasorunu sessizce silerdi.
+#[test]
+fn favori_klasoru_kaydediliyor_ve_temizlenebiliyor() {
+    let paths = temp_paths("folder");
+    let dir = paths.root.clone();
+    let store = FavoriteStore::load(paths);
+
+    let eklenen = store
+        .add(NewFavorite {
+            command: "npm test".into(),
+            label: None,
+            note: None,
+            group_id: None,
+            folder: Some("  Yayin  ".into()),
+            cwd: None,
+        })
+        .unwrap();
+    // Bosluklar kirpiliyor: "Yayin " ile "Yayin" iki ayri klasor olmamali.
+    assert_eq!(eklenen.folder.as_deref(), Some("Yayin"));
+
+    // Yama alani YAZILMAZSA klasore dokunulmuyor.
+    let dokunulmadi = store
+        .update(&eklenen.id, FavoritePatch { label: Some(Some("Testler".into())), ..Default::default() })
+        .unwrap()
+        .unwrap();
+    assert_eq!(dokunulmadi.folder.as_deref(), Some("Yayin"), "yama klasoru dusurdu");
+
+    // `Some(None)` = temizle.
+    let temizlendi = store
+        .update(&eklenen.id, FavoritePatch { folder: Some(None), ..Default::default() })
+        .unwrap()
+        .unwrap();
+    assert_eq!(temizlendi.folder, None);
+
+    // Bos metin de "klasorsuz" demek.
+    let bos = store
+        .update(&eklenen.id, FavoritePatch { folder: Some(Some("   ".into())), ..Default::default() })
+        .unwrap()
+        .unwrap();
+    assert_eq!(bos.folder, None);
+
+    // Diskten yeniden okundugunda klasor duruyor.
+    store
+        .update(&eklenen.id, FavoritePatch { folder: Some(Some("Test".into())), ..Default::default() })
+        .unwrap();
+    let yeniden = FavoriteStore::load(DataPaths { root: dir.clone(), portable: true });
+    assert_eq!(yeniden.list()[0].folder.as_deref(), Some("Test"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Klasor alanini BILMEYEN eski bir favorites.json okunabilmeli.
+#[test]
+fn eski_favori_dosyasi_klasorsuz_okunuyor() {
+    let paths = temp_paths("folder-eski");
+    let dir = paths.root.clone();
+    std::fs::write(
+        paths.favorites_file(),
+        r#"[{"id":"f1","command":"ls","createdAt":0,"usedCount":0}]"#,
+    )
+    .unwrap();
+
+    let store = FavoriteStore::load(paths);
+    let items = store.list();
+    assert_eq!(items.len(), 1, "eski dosya okunamadi");
+    assert_eq!(items[0].folder, None);
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

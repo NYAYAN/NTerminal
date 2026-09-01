@@ -73,6 +73,9 @@ export const MESSAGES = {
     "Bulunduğun dizinin dosya ağacı",
     "File tree of the current directory",
   ],
+  "app.filesCloseTitle": ["Dosya ağacını kapat", "Close the file tree"],
+  "app.sidebarHide": ["Grupları daralt", "Collapse groups"],
+  "app.sidebarShow": ["Grupları göster", "Show groups"],
   "tree.noDir": ["Dizin bilinmiyor", "Directory unknown"],
   "tree.empty": ["Boş klasör", "Empty folder"],
   "viewer.back": ["Ağaca dön", "Back to tree"],
@@ -89,7 +92,40 @@ export const MESSAGES = {
   "git.added": ["Eklendi", "Added"],
   "git.deleted": ["Silindi", "Deleted"],
   "git.renamed": ["Yeniden adlandırıldı", "Renamed"],
-  "git.untracked": ["Takipsiz", "Untracked"],
+  // "Takipsiz" ne dediği anlaşılmıyordu: git'in henüz izlemediği, yani
+  // depoya hiç eklenmemiş dosya. Tam sıfat yerine durumu söylüyoruz.
+  // "Takip edilmiyor" tek basina anlasilmadi: kullanici "bu ne demek, git add
+  // yapilmamis mi?" diye sordu. Cevap evet; ipucu artik onu yaziyor.
+  "git.untracked": [
+    "Takip edilmiyor — henüz git add yapılmamış",
+    "Untracked — not added to git yet",
+  ],
+  "git.copyPath": ["Dosya yolunu kopyala", "Copy file path"],
+  "git.openFile": ["Dosyayı aç", "Open the file"],
+  "git.revert": ["Değişiklikleri geri al", "Discard changes"],
+  "git.pathCopied": ["Yol kopyalandı", "Path copied"],
+  "confirm.revertTitle": ["Değişiklikleri geri al", "Discard changes"],
+  "confirm.revertMessage": [
+    "{path} dosyasındaki değişiklikler geri alınsın mı?",
+    "Discard the changes in {path}?",
+  ],
+  "confirm.revertDetail": [
+    "Dosya son commit'teki hâline döner. Kaydedilmemiş düzenlemeler kaybolur.",
+    "The file returns to its state in the last commit. Unsaved edits are lost.",
+  ],
+  "confirm.revertUntrackedTitle": ["Dosyayı sil", "Delete the file"],
+  "confirm.revertUntrackedMessage": [
+    "{path} silinsin mi?",
+    "Delete {path}?",
+  ],
+  // Takipsiz dosyada "geri al" diye bir sey yok: dosyanin kendisi degisiklik.
+  // Silmek geri ALINAMAZ, cunku git'te bir kaydi yok - bunu acikca yazmak sart.
+  "confirm.revertUntrackedDetail": [
+    "Bu dosya git'te takip edilmiyor, yani geri getirilemez.",
+    "This file is not tracked by git, so it cannot be brought back.",
+  ],
+  "confirm.revertButton": ["Geri al", "Discard"],
+  "confirm.deleteFile": ["Sil", "Delete"],
   "git.viewChanges": ["Değişiklikleri gör", "View changes"],
   "git.branch": ["Dal", "Branch"],
   "git.searchBranch": ["Dal ara…", "Search branches…"],
@@ -256,6 +292,7 @@ export const MESSAGES = {
   "term.toTabs": ["Sekme görünümüne dön", "Back to tab view"],
   "term.prevSessionEnded": ["Önceki oturum burada bitti", "Previous session ended here"],
   "term.spawnFailed": ["Kabuk başlatılamadı:", "Failed to start shell:"],
+  "term.scrollToBottom": ["En alta in", "Scroll to bottom"],
   "term.linkFailed": ["Bağlantı açılamadı: {uri}", "Could not open the link: {uri}"],
   "term.sessionEnded": ["Oturum sona erdi", "Session ended"],
   "term.sessionEndedCode": [
@@ -474,6 +511,15 @@ export const MESSAGES = {
     "Folder — empty means the active tab's folder",
   ],
   "fav.allGroups": ["Tüm gruplarda görünsün", "Show in all groups"],
+  // "Klasör" DEĞİL: hemen üstteki alan da klasör diyor (çalışma dizini) ve
+  // iki alan aynı kelimeyle karşılaşınca hangisinin ne olduğu belirsizleşiyor.
+  // Listedeki başlık da "Gruplanmamış" diyor; adlandırma onunla tutarlı.
+  "fav.folderPlaceholder": ["Grup adı (isteğe bağlı)", "Group name (optional)"],
+  // Klasörü olmayan favorilerin başlığı. Boş bırakmak bir eksiklik değil,
+  // bir seçim: liste düz de kullanılabilmeli.
+  "fav.collapseFolder": ["Grubu daralt", "Collapse group"],
+  "fav.expandFolder": ["Grubu aç", "Expand group"],
+  "fav.ungrouped": ["Gruplanmamış", "Ungrouped"],
   "fav.rowHint": [
     "Çift tık: çalıştır · tık: istem satırına yaz",
     "Double-click: run · click: insert at prompt",
@@ -628,19 +674,26 @@ export const MESSAGES = {
     "Gruplanabilir sekmeli terminal — Windows ve macOS. Tauri + Rust ve xterm.js üzerine kurulu.",
     "A terminal with groupable tabs for Windows and macOS. Built on Tauri + Rust and xterm.js.",
   ],
+  "settings.developerHeading": ["Geliştirici", "Developer"],
+  "settings.developerLabel": ["Geliştiren", "Developed by"],
   // Ad iki dilde de aynı; sözlükten geçiyor çünkü sabit kodlanmış arayüz
   // metni taraması JSX metinlerini yakalıyor.
-  "settings.developer": ["Geliştirici · Nurullah YAYAN", "Developer · Nurullah YAYAN"],
+  "settings.developerName": ["Nurullah YAYAN", "Nurullah YAYAN"],
+  "settings.sourceCode": ["Kaynak kodu", "Source code"],
+  "settings.openInBrowser": ["Tarayıcıda aç", "Open in the browser"],
+  "settings.licenseLabel": ["Lisans", "License"],
+  "settings.licenseValue": ["MIT lisansı", "MIT license"],
+  "settings.copyright": ["© 2026 Nurullah YAYAN", "© 2026 Nurullah YAYAN"],
   "settings.openFolderShort": ["Aç", "Open"],
-  "settings.resetButton": [
-    "Ayarları varsayılanlara döndür",
-    "Restore settings to defaults",
-  ],
   "settings.title": ["Ayarlar", "Settings"],
   "settings.general": ["Genel", "General"],
   "settings.searchPlaceholder": ["Ayarlarda ara…", "Search settings…"],
   "settings.searchNoResult": ["Eşleşen ayar yok.", "No matching setting."],
   "settings.searchClear": ["Aramayı temizle", "Clear search"],
+  "settings.hintShow": ["Açıklamayı göster", "Show description"],
+  "settings.undoOne": ["Değişikliği geri al", "Undo this change"],
+  "settings.resetAll": ["Ayarları sıfırla", "Reset settings"],
+  "settings.hintHide": ["Açıklamayı kapat", "Hide description"],
   "settings.searchCount.one": ["{n} sonuç", "{n} result"],
   "settings.searchCount.other": ["{n} sonuç", "{n} results"],
   "settings.session": ["Oturum", "Session"],
@@ -655,6 +708,12 @@ export const MESSAGES = {
   "settings.scrollbackHint": [
     "Terminalde geriye doğru kaç satır saklanacağı. Yüksek değer daha çok bellek kullanır.",
     "How many lines are kept for scrolling back. A higher value uses more memory.",
+  ],
+  "settings.tabsHeading": ["Sekmeler", "Tabs"],
+  "settings.shellBadge": ["Sekmelerde kabuk rozeti", "Shell badge on tabs"],
+  "settings.shellBadgeHint": [
+    "Sekme adının solunda hangi kabuğun çalıştığını gösteren kısa kod: PS, PS7, CMD, WSL. Kapatıldığında dar kenar çubuğunda sekme adına daha çok yer kalıyor.",
+    "The short code left of the tab name showing which shell is running: PS, PS7, CMD, WSL. Turning it off leaves more room for the tab name in a narrow sidebar.",
   ],
   "settings.restoreSessionLabel": [
     "Açılışta grup ve sekme düzenini geri yükle",
@@ -928,14 +987,16 @@ export const MESSAGES = {
   ],
   "settings.workspaceFile": ["Çalışma alanı", "Workspace"],
   "settings.integrationDir": ["Kabuk entegrasyonu", "Shell integration"],
-  "settings.reset": ["Sıfırlama", "Reset"],
 
   // ----------------------------------------------------------- aktarım penceresi
   "transfer.title": ["Yapılandırma aktarımı", "Configuration transfer"],
   "transfer.export": ["Dışa aktar", "Export"],
   "transfer.import": ["İçe al", "Import"],
-  "transfer.modeReplace": ["Değiştir", "Replace"],
-  "transfer.modeMerge": ["Birleştir", "Merge"],
+  // "Değiştir" neyin neyle değiştiğini söylemiyordu ve kullanıcı seçeneği
+  // arayıp bulamadı: aradığı şey "içerdekini ez" idi. Etiketler artık işlemi
+  // adlandırıyor, seçeneği değil.
+  "transfer.modeReplace": ["Üzerine yaz", "Overwrite"],
+  "transfer.modeMerge": ["Üzerine ekle", "Merge"],
   "transfer.modeSkip": ["Atla", "Skip"],
   "transfer.whatToExport": ["Neler aktarılsın?", "What should be exported?"],
   "transfer.exSettings": [
@@ -1008,6 +1069,25 @@ export const MESSAGES = {
   "transfer.mergeHistory": [
     "Gelen kayıtlar mevcut geçmişe eklenir, aynı kayıt iki kez yazılmaz.",
     "Incoming records are appended to the existing history; the same record is not written twice.",
+  ],
+  // "Üzerine yaz" geri dönüşü olmayan tarafı; ne SİLİNDİĞİ seçmeden önce
+  // yazıyor. Birleştirme ipuçları neyin ekleneceğini anlatıyor, bunlar neyin
+  // gideceğini.
+  "transfer.replaceSettings": [
+    "Yerel ayarların tamamı gelen dosyayla değişir; buradaki profiller silinir.",
+    "All local settings are replaced by the file; the profiles here are removed.",
+  ],
+  "transfer.replaceWorkspace": [
+    "Mevcut gruplar ve sekmeler silinir, yerlerine dosyadakiler gelir.",
+    "The existing groups and tabs are deleted and replaced by those in the file.",
+  ],
+  "transfer.replaceHistory": [
+    "Buradaki komut geçmişi silinir, yerine dosyadaki gelir.",
+    "The command history here is deleted and replaced by the one in the file.",
+  ],
+  "transfer.replaceFavorites": [
+    "Buradaki favoriler silinir, yerlerine dosyadakiler gelir.",
+    "The favorites here are deleted and replaced by those in the file.",
   ],
   "transfer.mergeFavorites": [
     "Gelen favoriler mevcutlara eklenir; aynı komut iki kez yazılmaz.",

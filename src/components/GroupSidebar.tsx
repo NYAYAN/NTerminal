@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { api } from "../lib/ipc";
-import { hasCustomTitle, shellBadge, tabLabel, tabSubtitle, tabTooltip } from "../lib/labels";
+import {
+  hasCustomTitle,
+  resolveProfile,
+  shellBadge,
+  tabLabel,
+  tabSubtitle,
+  tabTooltip,
+} from "../lib/labels";
 import {
   canDeleteGroup,
   dropIndex,
@@ -12,6 +19,7 @@ import {
   nextCollapsedAll,
   visibleGroups,
 } from "../lib/tabs";
+import { readableAccent } from "../lib/themes";
 import { sessions, useStore } from "../store/useStore";
 import type { Group, TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
@@ -44,6 +52,9 @@ export function GroupSidebar() {
   const running = useStore((s) => s.running);
   const exited = useStore((s) => s.exited);
   const profiles = useStore((s) => s.settings.profiles);
+  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
+  const showBadge = useStore((s) => s.settings.appearance.showShellBadge);
+  const themeId = useStore((s) => s.settings.appearance.theme);
   const sidebarWidth = useStore((s) => s.settings.appearance.sidebarWidth);
   const onlyFavorites = useStore((s) => s.settings.behavior.showOnlyFavoriteGroups);
   const patchAppearance = useStore((s) => s.patchAppearance);
@@ -534,7 +545,7 @@ export function GroupSidebar() {
                 <div className="group-tabs">
                   {group.tabs.map((tab, tabIndex) => {
                     const session = sessions.get(tab.id);
-                    const profile = profiles.find((p) => p.id === tab.profileId);
+                    const profile = resolveProfile(profiles, tab.profileId, defaultProfileId);
                     const isActiveTab = isActiveGroup && group.activeTabId === tab.id;
                     const isEditing = editing?.kind === "tab" && editing.id === tab.id;
                     const subtitle = tabSubtitle(tab);
@@ -571,13 +582,18 @@ export function GroupSidebar() {
                           }
                         }}
                       >
-                        <span
-                          className="tab-row-badge"
-                          style={{ color: profile?.color ?? undefined }}
-                          title={profile?.name}
-                        >
-                          {shellBadge(profile)}
-                        </span>
+                        {showBadge && (
+                          <span
+                            className="tab-row-badge"
+                            // Ham profil rengi DEĞİL: koyu bir profil rengi
+                            // (Windows PowerShell: #0e4d92) koyu temada
+                            // okunmuyordu — gerekçesi `readableAccent` içinde.
+                            style={{ color: readableAccent(profile?.color, themeId) }}
+                            title={profile?.name}
+                          >
+                            {shellBadge(profile)}
+                          </span>
+                        )}
 
                         {isEditing ? (
                           renameInput(t("tab.namePlaceholder"))

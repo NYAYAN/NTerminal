@@ -3,13 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/ipc";
 import { tSplit, useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
-import { shellBadge, tabLabel } from "../lib/labels";
+import { resolveProfile, shellBadge, tabLabel } from "../lib/labels";
 import { normalizeViewMode, paneGrid, visibleTabIds } from "../lib/panes";
 import { canCloseTab, isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
 import { TerminalBlocks } from "./TerminalBlocks";
 import type { TerminalSession } from "../terminal/TerminalSession";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
+import { ArrowIcon } from "./Icons";
 import { TerminalFind } from "./TerminalFind";
 
 /**
@@ -106,6 +107,9 @@ export function TerminalArea() {
   const exited = useStore((s) => s.exited);
   const running = useStore((s) => s.running);
   const profiles = useStore((s) => s.settings.profiles);
+  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
+  const showBadge = useStore((s) => s.settings.appearance.showShellBadge);
+  const scrollAtBottom = useStore((s) => s.scrollAtBottom);
   const findOpen = useStore((s) => s.ui.findOpen);
   const sessionEpoch = useStore((s) => s.sessionEpoch);
   const rightClickAction = useStore((s) => s.settings.behavior.rightClickAction);
@@ -323,9 +327,11 @@ export function TerminalArea() {
           >
             {tab && (
               <div className="pane-head">
-                <span className="pane-badge">
-                  {shellBadge(profiles.find((p) => p.id === tab.profileId))}
-                </span>
+                {showBadge && (
+                  <span className="pane-badge">
+                    {shellBadge(resolveProfile(profiles, tab.profileId, defaultProfileId))}
+                  </span>
+                )}
                 <span className="pane-title">{tabLabel(tab)}</span>
                 {running[tabId] && <span className="tab-dot busy" title={t("pane.running")} />}
                 {exited[tabId] && <span className="tab-dot dead" title={t("pane.exited")} />}
@@ -353,27 +359,58 @@ export function TerminalArea() {
               visible={visible}
               focused={focused}
             />
+
+            {/* "En alta in" düğmesi.
+             *
+             * Geçmişe kaydırıldığında canlı çıktıya dönmenin görünür bir yolu
+             * yoktu: `End` tuşunu bilmek ya da elle en dibe kaydırmak
+             * gerekiyordu; uzun çıktıda ikincisi gerçek bir iş.
+             *
+             * Yalnızca GEREKTİĞİNDE çiziliyor. En alttayken düğme hiçbir şey
+             * yapmaz ve terminalin üstünde duran kalıcı bir öğe çıktıdan yer
+             * çalar. Yokluğu (`undefined`) "en altta" sayılıyor: yeni açılan
+             * sekme canlı çıktıya bakıyor. */}
+            {visible && scrollAtBottom[tabId] === false && (
+              <button
+                type="button"
+                className="scroll-bottom"
+                title={t("term.scrollToBottom")}
+                aria-label={t("term.scrollToBottom")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sessions.get(tabId)?.scrollToBottom();
+                }}
+              >
+                <ArrowIcon dir="down" size={13} />
+              </button>
+            )}
           </div>
         );
       })}
 
       {findOpen && <TerminalFind />}
 
+      {/* "Kabuk kapandı" kutusu: metin ÜSTTE, düğmeler ALTTA.
+       *
+       * Üçü yan yanayken kutu dar kalıyor ve cümle kelime kelime alt alta
+       * kırılıyordu ("Bu / sekmedeki / kabuk / kapandı."). */}
       {activeTabId && exited[activeTabId] && (
         <div className="term-exited">
           <span className="dim">{t("term.exited")}</span>
-          <button
-            className="primary"
-            onClick={() => void useStore.getState().restartTab(activeTabId)}
-          >
-            {t("term.restart")}
-          </button>
-          <button
-            className="outline"
-            onClick={() => void useStore.getState().closeTab(activeTabId)}
-          >
-            {t("term.closeTab")}
-          </button>
+          <div className="term-exited-actions">
+            <button
+              className="primary"
+              onClick={() => void useStore.getState().restartTab(activeTabId)}
+            >
+              {t("term.restart")}
+            </button>
+            <button
+              className="outline"
+              onClick={() => void useStore.getState().closeTab(activeTabId)}
+            >
+              {t("term.closeTab")}
+            </button>
+          </div>
         </div>
       )}
 

@@ -26,9 +26,20 @@ pub struct Favorite {
     /// Serbest not: "yalnizca staging'de calistir" gibi.
     #[serde(default)]
     pub note: Option<String>,
-    /// Yalnizca bu grupta gosterilsin. None = her yerde.
+    /// Yalnizca bu SEKME grubunda gosterilsin. None = her yerde.
+    ///
+    /// `folder` ile karistirmayin: bu bir SUZGEC (hangi sekme grubunda
+    /// calisirken gorunsun), oteki bir DUZEN (listede hangi baslik altinda).
     #[serde(default)]
     pub group_id: Option<String>,
+    /// Favorinin ait oldugu klasor; liste bu baslikla gruplaniyor.
+    ///
+    /// Serbest metin, ayri bir varlik degil: klasor listesi favorilerden
+    /// TURETILIYOR. Boylece klasor olusturmak icin ayri bir ekleme/silme akisi
+    /// gerekmiyor - ad yazmak yetiyor, son favori tasininca klasor kendiliginden
+    /// kayboluyor. Bos birakilan favoriler "gruplanmamis" basligi altinda.
+    #[serde(default)]
+    pub folder: Option<String>,
     /// Bu klasorde calistirilsin. None = aktif sekmenin klasoru.
     #[serde(default)]
     pub cwd: Option<String>,
@@ -51,6 +62,8 @@ pub struct NewFavorite {
     #[serde(default)]
     pub group_id: Option<String>,
     #[serde(default)]
+    pub folder: Option<String>,
+    #[serde(default)]
     pub cwd: Option<String>,
 }
 
@@ -66,6 +79,8 @@ pub struct FavoritePatch {
     pub note: Option<Option<String>>,
     #[serde(default)]
     pub group_id: Option<Option<String>>,
+    #[serde(default)]
+    pub folder: Option<Option<String>>,
     #[serde(default)]
     pub cwd: Option<Option<String>>,
 }
@@ -121,6 +136,7 @@ impl FavoriteStore {
             label: clean(req.label),
             note: clean(req.note),
             group_id: clean(req.group_id),
+            folder: clean(req.folder),
             cwd: clean(req.cwd),
             created_at: now_ms(),
             used_count: 0,
@@ -151,6 +167,9 @@ impl FavoriteStore {
         }
         if let Some(group_id) = patch.group_id {
             item.group_id = clean(group_id);
+        }
+        if let Some(folder) = patch.folder {
+            item.folder = clean(folder);
         }
         if let Some(cwd) = patch.cwd {
             item.cwd = clean(cwd);

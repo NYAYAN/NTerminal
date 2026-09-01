@@ -49,6 +49,7 @@ function harness() {
         baseY: buf.baseY,
         cursorY: buf.cursorY,
         readLine: (y) => buf.getLine(y)?.translateToString(true) ?? "",
+        isWrapped: (y) => buf.getLine(y)?.isWrapped ?? false,
         running,
         altScreen: buf.type === "alternate",
       },
@@ -87,7 +88,39 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     h.begin();
     await h.out("Watch mode enabled.\r\n");
     await h.out("  Local:   http://localhost:52438/\r\n");
-    expect(h.urls()).toEqual(["http://localhost:52438/"]);
+    expect(h.urls()).toEqual(["http://localhost:52438"]);
+  });
+
+  it("SARILAN satırda adres ikiye bölünmüyor", async () => {
+    /*
+     * BİLDİRİLEN HATA: şeritte portsuz bir `localhost` rozeti çıkıyordu.
+     *
+     * ASP.NET günlük satırları uzun; terminal genişliğinde bitmiyor ve xterm
+     * devamını ayrı bir tampon satırında tutuyor. Tarama her satırın sonuna
+     * satır sonu koyunca adres tam ortasından ikiye bölünüyordu ve ilk parça
+     * (`http://localhost`) TEK BAŞINA geçerli bir adres olduğu için sessizce
+     * rozete dönüşüyordu. Yani belirti "adres bulunamadı" değil, yanlış adres
+     * göstermekti — daha kötüsü, çünkü sessiz.
+     *
+     * Dolgu 84 karakter: 100 sütunluk terminalde kırılma tam
+     * `http://localhost` ile `:1452` arasına düşüyor, yani gerçek hatanın
+     * bölünme noktası.
+     */
+    const h = harness();
+    h.begin();
+    const dolgu = "x".repeat(84);
+    await h.out(`${dolgu}http://localhost:1452 devam eden gunluk metni\r\n`);
+    expect(h.urls()).toEqual(["http://localhost:1452"]);
+  });
+
+  it("sarılmamış iki satır BİRLEŞTİRİLMİYOR", async () => {
+    // Ters hata: her satırı yapıştırmak, alt alta duran iki ayrı sözcüğü
+    // birleştirip olmayan bir adres uydururdu.
+    const h = harness();
+    h.begin();
+    await h.out("http://localhost\r\n");
+    await h.out(":1452/api\r\n");
+    expect(h.urls()).toEqual(["http://localhost"]);
   });
 
   it("EKRAN YENİDEN ÇİZİLİNCE adres tekrar toplanmıyor", async () => {
@@ -96,7 +129,7 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     const h = harness();
     h.begin();
     await h.out("  Local:   http://localhost:52438/\r\n");
-    expect(h.urls()).toEqual(["http://localhost:52438/"]);
+    expect(h.urls()).toEqual(["http://localhost:52438"]);
 
     // Komut bitti, liste boşaldı.
     h.end();
@@ -125,7 +158,7 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     await h.out("Would you like to use a different port? Yes\r\n");
     await h.out("  Local:   http://localhost:57054/\r\n");
 
-    expect(h.urls()).toEqual(["http://localhost:57054/"]);
+    expect(h.urls()).toEqual(["http://localhost:57054"]);
   });
 
   it("UZUN çıktıda adres kaçmıyor", async () => {
@@ -141,7 +174,7 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     const sonraki = Array.from({ length: 200 }, (_, i) => `sonraki satir ${i}`).join("\r\n");
     await h.out(`${sonraki}\r\n`);
 
-    expect(h.urls()).toEqual(["http://localhost:4200/"]);
+    expect(h.urls()).toEqual(["http://localhost:4200"]);
   });
 
   it("komut çalışmıyorken toplanmıyor", async () => {
@@ -156,7 +189,7 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     h.begin();
     await h.out("  Local:   http://localhost:4200/\r\n");
     await h.out("  Local:   http://localhost:4200/\r\n");
-    expect(h.urls()).toEqual(["http://localhost:4200/"]);
+    expect(h.urls()).toEqual(["http://localhost:4200"]);
   });
 
   it("iki farklı adres sırayla ekleniyor", async () => {
@@ -165,7 +198,7 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     h.begin();
     await h.out("  Local:   http://localhost:4200/\r\n");
     await h.out("  Debug:   http://127.0.0.1:9229/\r\n");
-    expect(h.urls()).toEqual(["http://localhost:4200/", "http://127.0.0.1:9229/"]);
+    expect(h.urls()).toEqual(["http://localhost:4200", "http://127.0.0.1:9229"]);
   });
 
   it("işaret imleçten geri gitmiyor", async () => {

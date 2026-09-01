@@ -598,3 +598,119 @@ describe("ipucu metni", () => {
     expect(body, "renk tekrar tanımlanmış").not.toMatch(/color/);
   });
 });
+
+/**
+ * "En alta in" düğmesi ile kaydırma çubuğunun çakışmaması.
+ *
+ * BİLDİRİLEN HATA: düğme çubuğun üstüne biniyordu. İkisinin yeri üç ayrı
+ * sayıdan çıkıyor ve üçü de farklı dosyalarda: çubuğun genişliği xterm
+ * seçeneğinden (`overviewRuler.width`), çubuğun kenardan uzaklığı `.xterm`in
+ * sağ dolgusundan, düğmenin yeri kendi kuralından. Biri değişince ötekiler
+ * sessizce çakışıyor — bu yüzden ilişki testle bağlı.
+ */
+describe("aşağı in düğmesi", () => {
+  const SESSION = readFileSync(join(process.cwd(), "src/terminal/TerminalSession.ts"), "utf8");
+
+  /** `padding: a b c d` içinden sağ (b) değerini piksel olarak verir. */
+  function rightPadding(selector: string): number {
+    const padding = paddingOf(selector)!;
+    return Number.parseFloat(padding.split(/\s+/)[1]);
+  }
+
+  it("çubuğun soluna, payla yerleşiyor", () => {
+    const rulerWidth = Number(/overviewRuler:\s*\{\s*width:\s*(\d+)\s*\}/.exec(SESSION)![1]);
+    const pad = rightPadding(".term-host .xterm");
+    const body = ruleBody(".scroll-bottom");
+    const right = Number.parseFloat(/(?:^|\s|;)right:\s*(\d+)px/.exec(body)![1]);
+
+    // Çubuğun sol kenarı: dolgu + genişlik. Düğme oradan başlamamalı.
+    expect(
+      right,
+      `düğme çubuğun üstünde: çubuk ${pad}-${pad + rulerWidth}px, düğme ${right}px'ten başlıyor`,
+    ).toBeGreaterThan(pad + rulerWidth);
+  });
+
+  it("süre rozeti de çubuğa yapışmıyor", () => {
+    // BİLDİRİLEN HATA: "52 ms yazısı scroll'a yakın". Rozetin yeri sağ dolgu
+    // 14px'ken metnin kenarına denk geliyordu; dolgu daralınca çubuğun üstüne
+    // düştü. İkisi arasında görünür bir pay kalmalı.
+    const rulerWidth = Number(/overviewRuler:\s*\{\s*width:\s*(\d+)\s*\}/.exec(SESSION)![1]);
+    const pad = rightPadding(".term-host .xterm");
+    const right = Number.parseFloat(
+      /(?:^|\s|;)right:\s*(\d+)px/.exec(ruleBody(".block-badge"))![1],
+    );
+    expect(
+      right - (pad + rulerWidth),
+      "süre rozeti ile kaydırma çubuğu arasında pay yok",
+    ).toBeGreaterThanOrEqual(6);
+  });
+
+  it("düğme düzende yer kaplamıyor", () => {
+    // Terminalin üstünde YÜZÜYOR. Akışa girseydi bir satırlık yer alır ve
+    // xterm'in satır hesabını kaydırırdı (bu dosyanın en başındaki ders).
+    expect(ruleBody(".scroll-bottom")).toMatch(/position:\s*absolute/);
+  });
+
+  it("sağ dolgu çubuğu pencere kenarına yaklaştırıyor", () => {
+    // 14px'ken çubuğun sağında ölü bir şerit kalıyordu; kullanıcı bunu
+    // "scroll'un sağında boşluk var" diye bildirdi.
+    expect(rightPadding(".term-host .xterm")).toBeLessThanOrEqual(6);
+  });
+});
+
+/**
+ * Ayar açıklamalarının "i" düğmesi ve satırların sol kenarı.
+ *
+ * İki BİLDİRİLEN hata, ikisi de aynı ızgaradan:
+ *
+ *  1. Düğmenin sütunu yazılmamıştı. `.section > *` varsayılanı her çocuğu
+ *     `1 / -1` yaptığı için bölüm düzeyindeki düğme kendi satırına düşüyor,
+ *     ekranda ayarın ALTINDA ve en solda görünüyordu.
+ *  2. Onay kutusu satırları denetim sütununa hizalıydı; solunda 180px boş
+ *     alan kalıyordu ve bölümün sol kenarı iki yerden okunuyordu. Kullanıcı:
+ *     "ayarlar sola yapışık olsun".
+ *
+ * Üç ızgara (`.field`, `.section`, `.settings-form`) aynı üç izi taşımak
+ * zorunda: biri ikili kalırsa o ızgaradaki düğme sütununu bulamaz.
+ */
+describe("ayar açıklaması sütunu", () => {
+  const GRIDS = [".field", ".section", ".settings-form"];
+
+  it("üç ızgarada da üçüncü iz var", () => {
+    for (const selector of GRIDS) {
+      expect(ruleBody(selector), `${selector}: bilgi sütunu izi yok`).toMatch(
+        /grid-template-columns:\s*var\(--label-col\)\s+minmax\(\s*0\s*,\s*1fr\s*\)\s+var\(--info-col\)\s+var\(--undo-col\)/,
+      );
+    }
+  });
+
+  it("bilgi sütunu sabit genişlikte tanımlı", () => {
+    // `auto` OLMAZ: açıklaması olmayan satırlarda sütun 0'a iner ve o satırın
+    // denetimi 20px genişler — denetimlerin sağ kenarı satır satır oynar.
+    expect(CSS, "--info-col tanımsız").toMatch(/--info-col:\s*\d+px/);
+    expect(CSS, "--undo-col tanımsız").toMatch(/--undo-col:\s*\d+px/);
+  });
+
+  it("düğme kesin sütunda", () => {
+    const body = ruleBody(".field > .info,\n.section > .info,\n.settings-form > .info");
+    expect(body, "düğmenin sütunu yazılmamış").toMatch(/grid-column:\s*3/);
+  });
+
+  it("onay kutusu satırı soldan başlıyor, bilgi sütununu yutmuyor", () => {
+    const body = ruleBody(".section > .check-row,\n.section > .seg");
+    expect(body, "onay kutusu hâlâ denetim sütununda").toMatch(/grid-column:\s*1\s*\/\s*3/);
+    expect(body, "satırın sonuna kadar uzuyor: bilgi sütunu kalmıyor").not.toMatch(
+      /grid-column:\s*1\s*\/\s*-1/,
+    );
+    expect(ruleBody(".settings-form > .check-row"), "profil formunda sol hizalama yok").toMatch(
+      /grid-column:\s*1\s*\/\s*3/,
+    );
+  });
+
+  it("açıklama katmanı akışta yer kaplamıyor", () => {
+    // Satırın altında yer açsaydı kazanılan yoğunluk geri giderdi.
+    const body = ruleBody(".info-pop");
+    expect(body, "katman akışta").toMatch(/position:\s*absolute/);
+    expect(body, "sağa hizalı değil: pencereden taşar").toMatch(/right:\s*0/);
+  });
+});

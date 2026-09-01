@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { CommandPalette } from "./components/CommandPalette";
 import { FilePalette } from "./components/FilePalette";
-import { SearchIcon, TreeIcon } from "./components/Icons";
+import { SearchIcon, SidebarIcon, TreeIcon } from "./components/Icons";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
@@ -35,6 +35,10 @@ export function App() {
   const settings = useStore((s) => s.settings);
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
+  const sidebarCollapsed = settings.appearance.sidebarCollapsed;
+  // Dosya ağacı düğmesi iki durumlu: panel AÇIK ve kip "files" ise düğme
+  // basılı görünüyor ve tıklamak paneli kapatıyor.
+  const treeOpen = ui.historyOpen && ui.panelMode === "files";
   const appVersion = useStore((s) => s.appVersion);
 
   const t = useT();
@@ -370,16 +374,49 @@ export function App() {
   return (
     <div className="app">
       <div className="titlebar" data-tauri-drag-region>
-        {/* Dosya agaci: bulunulan dizini sag panelde acar.
+        {/* Baslik cubugunun sol kosesindeki iki GORUNUM dugmesi.
          *
-         * Baslik cubugundaki IKINCI eylem. Kural "baslik cubugu bir eylem
-         * cubugu degil" idi ve bu ona uyuyor: agac bir PENCERE degil, bir
-         * gorunum ve baska hicbir yerden acilamiyor. Sekme cubugunda yeri yok
-         * (sekmeye ait degil), durum cubugunda da yer kalmadi. */}
+         * Kural "baslik cubugu bir eylem cubugu degil" ve ikisi de ona uyuyor:
+         * bunlar bir sey YAPMIYOR, bir bolmeyi acip kapatiyor. Ikisi de
+         * baska hicbir yerden acilip kapanamiyor - sekme cubugunda yerleri yok
+         * (sekmeye ait degiller), durum cubugunda da yer kalmadi.
+         *
+         * Siralari duzenin sirasini izliyor: soldaki en soldaki paneli
+         * (gruplar), sagdaki onun sagindaki gorunumu (dosya agaci) aciyor. */}
+
+        {/* Grup kenar cubugu.
+         *
+         * Durum AYARDA tutuluyor, gecici arayuz durumunda degil: cubugu
+         * kapatan kullanici uygulamayi yeniden actiginda da kapali bekliyor
+         * (bkz. `Appearance.sidebarCollapsed`).
+         *
+         * `on` sinifi bilincli olarak YOK: kenar cubugu varsayilan olarak acik
+         * ve surekli vurgulu duran bir dugme baslik cubugunda gurultu. Durumu
+         * zaten cubugun kendisi soyluyor. */}
         <button
-          className="icon-btn tree-btn"
-          title={t("app.filesTitle")}
-          onClick={() => setUi({ historyOpen: true, panelMode: "files" })}
+          className="icon-btn view-btn"
+          title={t(sidebarCollapsed ? "app.sidebarShow" : "app.sidebarHide")}
+          aria-pressed={!sidebarCollapsed}
+          onClick={() =>
+            void useStore.getState().patchAppearance({ sidebarCollapsed: !sidebarCollapsed })
+          }
+        >
+          <SidebarIcon size={13} />
+        </button>
+
+        {/* Dosya agaci: bulunulan dizini sag panelde aciyor.
+         *
+         * Iki durumlu - acikken ayni dugme kapatiyor. Tek yonlu halinde dugme
+         * actigi paneli kapatamiyordu; kapatmak icin panelin kendi "x"
+         * dugmesini bulmak gerekiyordu. Burada `on` sinifi VAR: acik olmak
+         * varsayilan degil, dolayisiyla vurgu bir bilgi tasiyor. */}
+        <button
+          className={treeOpen ? "icon-btn view-btn on" : "icon-btn view-btn"}
+          title={t(treeOpen ? "app.filesCloseTitle" : "app.filesTitle")}
+          aria-pressed={treeOpen}
+          onClick={() =>
+            setUi(treeOpen ? { historyOpen: false } : { historyOpen: true, panelMode: "files" })
+          }
         >
           <TreeIcon size={13} />
         </button>
@@ -437,7 +474,9 @@ export function App() {
         <WindowControls />
       </div>
 
-      <GroupSidebar />
+      {/* Daraltılmışken hiç çizilmiyor: ızgaranın `auto` sütunu sıfıra
+          iniyor ve terminal o alanı alıyor. */}
+      {!sidebarCollapsed && <GroupSidebar />}
 
       <div className="main">
         <TabBar />

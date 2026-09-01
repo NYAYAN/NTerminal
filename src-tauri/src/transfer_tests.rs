@@ -270,6 +270,7 @@ fn disa_aktar_ice_al_zinciri() {
             label: Some("Yayina al".into()),
             note: None,
             group_id: None,
+            folder: None,
             cwd: dirs::home_dir().map(|p| p.to_string_lossy().to_string()),
         })
         .unwrap();
@@ -401,4 +402,96 @@ fn disa_aktar_ice_al_zinciri() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Verilen kimliklerle bir grup: sekme kimliklerini elle vermek gerekiyor,
+/// yukaridaki `group()` her gruba `<id>-tab` uretiyor ve cakisma kurulamiyor.
+fn grup_sekmelerle(id: &str, name: &str, tab_ids: &[&str]) -> Group {
+    let mut g = group(id, name);
+    g.tabs = tab_ids
+        .iter()
+        .map(|t| TabState {
+            id: (*t).into(),
+            title: String::new(),
+            custom_title: None,
+            profile_id: "p".into(),
+            cwd: None,
+            created_at: 0,
+            last_active_at: 0,
+            has_scrollback: false,
+            last_command: None,
+            locked: false,
+        })
+        .collect();
+    g.active_tab_id = tab_ids.first().map(|t| (*t).to_string());
+    g
+}
+
+/// Birlestirmeli ice alma AYNI sekme kimligini iki kez eklememeli.
+///
+/// BILDIRILEN HATA: "GurselAPP" ve "GurselAPP (gelen)" yan yana duruyordu ve
+/// gelen gruptaki sekmeye tiklamak digerindeki sekmeyi etkinlestiriyordu.
+/// Arayuz sekmeyi kimlikle ariyor ve arama ilk eslesmede duruyor: ikinci kopya
+/// erisilemez, birincisi iki yerden yonetiliyor.
+#[test]
+fn birlestirme_sekme_kimliklerini_yeniliyor() {
+    let mut yerel = Workspace::default();
+    yerel.groups = vec![grup_sekmelerle("g1", "GurselAPP", &["t1", "t2"])];
+    // Ayni makinede alinmis bir paket: gruplar ve sekmeler birebir ayni kimlikte.
+    let gelen = yerel.clone();
+
+    let (birlesik, eklenen) = merge_workspace(&yerel, &gelen);
+
+    assert_eq!(eklenen, 1);
+    assert_eq!(birlesik.groups.len(), 2);
+
+    let kimlikler: Vec<String> = birlesik
+        .groups
+        .iter()
+        .flat_map(|g| g.tabs.iter().map(|t| t.id.clone()))
+        .collect();
+    let mut tekil = kimlikler.clone();
+    tekil.sort();
+    tekil.dedup();
+    assert_eq!(
+        kimlikler.len(),
+        tekil.len(),
+        "yinelenen sekme kimligi kaldi: {kimlikler:?}"
+    );
+
+    // Yerel taraf DOKUNULMADAN kaliyor: kullanicinin acik sekmeleri ayni.
+    assert_eq!(birlesik.groups[0].tabs[0].id, "t1");
+    assert_eq!(birlesik.groups[0].tabs[1].id, "t2");
+}
+
+/// Yenilenen sekmenin etkin isareti de tasinmali; yoksa grup, kendisinde
+/// olmayan bir sekmeyi etkin sayar.
+#[test]
+fn birlestirme_etkin_sekmeyi_yeni_kimlige_tasiyor() {
+    let mut yerel = Workspace::default();
+    yerel.groups = vec![grup_sekmelerle("g1", "A", &["t1"])];
+
+    let (birlesik, _) = merge_workspace(&yerel, &yerel.clone());
+
+    let gelen_grup = &birlesik.groups[1];
+    let etkin = gelen_grup.active_tab_id.as_deref().unwrap();
+    assert!(
+        gelen_grup.tabs.iter().any(|t| t.id == etkin),
+        "etkin sekme bu grupta yok: {etkin}"
+    );
+    assert_ne!(etkin, "t1", "etkin isaret eski kimlikte kalmis");
+}
+
+/// Cakisma YOKSA kimlikler korunmali: gereksiz yenileme scrollback baglarini
+/// koparir.
+#[test]
+fn birlestirme_cakismayan_kimlige_dokunmuyor() {
+    let mut yerel = Workspace::default();
+    yerel.groups = vec![grup_sekmelerle("g1", "A", &["t1"])];
+    let mut gelen = Workspace::default();
+    gelen.groups = vec![grup_sekmelerle("g9", "B", &["t9"])];
+
+    let (birlesik, _) = merge_workspace(&yerel, &gelen);
+    assert_eq!(birlesik.groups[1].tabs[0].id, "t9");
+    assert_eq!(birlesik.groups[1].active_tab_id.as_deref(), Some("t9"));
 }

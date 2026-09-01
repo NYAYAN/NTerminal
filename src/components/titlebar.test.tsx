@@ -336,3 +336,58 @@ describe("durum çubuğu panel düğmeleri", () => {
     expect(body, "flex: none yok — düğmeler daralabilir").toMatch(/flex:\s*none/);
   });
 });
+
+/**
+ * Başlık çubuğunun sol köşesindeki iki görünüm düğmesi.
+ *
+ * İkisi de AÇIP KAPATIYOR. Tek yönlü hâllerinde aynı kusur vardı: düğme
+ * açtığı şeyi kapatamıyordu, ikinci tıklama hiçbir şey yapmıyormuş gibi
+ * görünüyordu. Dosya ağacını kapatmak için panelin kendi "×" düğmesini bulmak
+ * gerekiyordu; grup listesini kapatmanın ise hiçbir yolu yoktu.
+ *
+ * Sıraları düzenin sırasıyla aynı: en soldaki düğme en soldaki paneli açıyor.
+ */
+describe("görünüm düğmeleri", () => {
+  it("kenar çubuğu düğmesi ağacın solunda", () => {
+    const sidebar = APP.indexOf("app.sidebarShow");
+    const tree = APP.indexOf("app.filesTitle");
+    expect(sidebar, "kenar çubuğu düğmesi yok").toBeGreaterThan(-1);
+    expect(sidebar, "düğme sırası düzenin sırasını izlemiyor").toBeLessThan(tree);
+  });
+
+  it("kenar çubuğu daraltılmışken çizilmiyor", () => {
+    // `display: none` DEĞİL: ızgaranın `auto` sütununun sıfıra inmesi ve
+    // terminalin o alanı alması gerekiyor.
+    expect(APP, "kenar çubuğu koşulsuz çiziliyor").toMatch(
+      /\{!sidebarCollapsed && <GroupSidebar \/>\}/,
+    );
+  });
+
+  it("kenar çubuğunun durumu ayarda tutuluyor", () => {
+    // Geçici arayüz durumu olsaydı uygulama her açılışta çubuğu geri
+    // getirirdi; kullanıcı onu kapattığını hatırlıyor, uygulama da hatırlamalı.
+    expect(APP).toMatch(/patchAppearance\(\{ sidebarCollapsed: !sidebarCollapsed \}\)/);
+  });
+
+  it("dosya ağacı düğmesi ikinci tıkta kapatıyor", () => {
+    expect(APP, "geçiş mantığı yok").toMatch(
+      /const treeOpen = ui\.historyOpen && ui\.panelMode === "files"/,
+    );
+    expect(APP, "kapatma dalı yok").toMatch(/treeOpen \? \{ historyOpen: false \}/);
+  });
+
+  it("iki düğme de basılı durumu bildiriyor", () => {
+    // Görsel durum yalnızca zeminde; ekran okuyucu için `aria-pressed` şart.
+    const titlebar = APP.slice(APP.indexOf('className="titlebar"'), APP.indexOf("<GroupSidebar"));
+    const count = [...titlebar.matchAll(/aria-pressed=/g)].length;
+    expect(count, "başlık çubuğunda aria-pressed eksik").toBeGreaterThanOrEqual(2);
+  });
+
+  it("açık ağaç düğmesi işaretli görünüyor", () => {
+    // Kapatabilen bir düğmenin açık olduğu tıklamadan ÖNCE belli olmalı.
+    expect(APP, "açık durumda 'on' sınıfı verilmiyor").toMatch(
+      /treeOpen \? "icon-btn view-btn on" : "icon-btn view-btn"/,
+    );
+    expect(CSS, "'on' sınıfının bir görünümü yok").toMatch(/\.icon-btn\.on \{/);
+  });
+});

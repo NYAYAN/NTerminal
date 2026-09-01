@@ -605,6 +605,12 @@ fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<Str
 }
 
 /// Depodaki yerel dallar; depo degilse bos liste.
+/// Bir dosyadaki degisiklikleri geri alir. Yikici; onay ARAYUZDE soruluyor.
+#[tauri::command]
+fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
+    git::revert(&path, &file, untracked)
+}
+
 #[tauri::command]
 fn git_branches(path: String) -> CmdResult<Vec<String>> {
     Ok(git::branches(&path))
@@ -764,6 +770,7 @@ pub fn run() {
             git_info,
             git_branches,
             git_diff,
+            git_revert,
             git_fingerprint,
             tray_labels,
         ])

@@ -66,6 +66,31 @@ export interface Appearance {
   highlightLinks: boolean;
   /** Terminal alanı: tek sekme mi, grubun tüm sekmeleri döşenmiş mi. */
   viewMode: ViewMode;
+  /**
+   * Sekmenin solundaki kabuk rozeti ("PS", "CMD", "WSL") görünsün mü.
+   *
+   * Kapatılabilir: tek profille çalışan kullanıcıda rozet her satırda aynı
+   * şeyi tekrar ediyor ve dar kenar çubuğunda sekme adına ayrılan yeri yiyor.
+   */
+  showShellBadge: boolean;
+  /**
+   * Grup kenar çubuğu daraltılmış mı.
+   *
+   * Geçici arayüz durumu değil ayar: kullanıcı çubuğu kapattıysa uygulamayı
+   * yeniden açtığında da kapalı bekliyor.
+   */
+  sidebarCollapsed: boolean;
+  /**
+   * Favoriler panelinde DARALTILMIŞ grup adları.
+   *
+   * Neden liste: favori grubu ayrı bir varlık değil, favorinin üzerinde duran
+   * serbest bir metin. Üzerine "daraltıldı" yazacak bir kayıt yok.
+   *
+   * Boş dize GRUPLANMAMIŞ bölümü demek — güvenli bir nöbetçi, çünkü grup
+   * adları kaydedilirken kırpılıyor ve boş olanlar gruplanmamış sayılıyor:
+   * gerçek bir grup asla `""` olamıyor.
+   */
+  collapsedFavoriteFolders: string[];
 }
 
 export interface Behavior {
@@ -318,8 +343,20 @@ export interface Favorite {
   command: string;
   label: string | null;
   note: string | null;
-  /** Yalnızca bu grupta gösterilsin. null = her yerde. */
+  /**
+   * Yalnızca bu SEKME grubunda gösterilsin. null = her yerde.
+   *
+   * `folder` ile karıştırmayın: bu bir SÜZGEÇ (nerede görünsün), öteki bir
+   * DÜZEN (listede hangi başlık altında).
+   */
   groupId: string | null;
+  /**
+   * Favorinin klasörü; liste bu başlıkla gruplanıyor. null = gruplanmamış.
+   *
+   * Serbest metin ve ayrı bir varlık değil — klasör listesi favorilerden
+   * türetiliyor (bkz. `lib/favoriteGroups.ts`).
+   */
+  folder: string | null;
   /** Bu klasörde çalıştırılsın. null = aktif sekmenin klasörü. */
   cwd: string | null;
   createdAt: number;
@@ -332,6 +369,7 @@ export interface NewFavorite {
   label?: string | null;
   note?: string | null;
   groupId?: string | null;
+  folder?: string | null;
   cwd?: string | null;
 }
 
@@ -344,6 +382,7 @@ export interface FavoritePatch {
   label?: string | null;
   note?: string | null;
   groupId?: string | null;
+  folder?: string | null;
   cwd?: string | null;
 }
 

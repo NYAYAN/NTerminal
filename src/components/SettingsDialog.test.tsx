@@ -122,7 +122,12 @@ describe("ayarlar penceresi", () => {
 
     fireEvent.click([...container.querySelectorAll(".settings-nav button")][1]);
     await settle();
-    expect(headings(container)).toEqual(["Tema", "Yazı tipi", "İmleç ve kaydırma"]);
+    expect(headings(container)).toEqual([
+      "Tema",
+      "Yazı tipi",
+      "İmleç ve kaydırma",
+      "Sekmeler",
+    ]);
 
     fireEvent.click([...container.querySelectorAll(".settings-nav button")][2]);
     await settle();
@@ -362,5 +367,141 @@ describe("profil silme", () => {
 
     expect(asked).toEqual([]);
     expect(useStore.getState().settings.profiles).toHaveLength(1);
+  });
+});
+
+/**
+ * "Hakkında" bölümündeki geliştirici bilgileri.
+ *
+ * Önceki hâli sürüm açıklamasının altındaki tek bir soluk satırdı ve orada
+ * kayboluyordu. Uygulamayı kimin yazdığı, kaynağın nerede olduğu ve hangi
+ * lisansla dağıtıldığı birbirine bağlı üç bilgi; kendi bölümlerinde ve
+ * etiketli duruyorlar.
+ */
+describe("hakkında bölümü", () => {
+  /** "Hakkında" bölümünü açar (dokuzuncu ve son gezinme düğmesi). */
+  async function openAbout() {
+    const view = render(<SettingsDialog />);
+    const buttons = [...view.container.querySelectorAll(".settings-nav button")];
+    fireEvent.click(buttons[buttons.length - 1]);
+    await settle();
+    return view;
+  }
+
+  it("geliştirici, kaynak ve lisans etiketli duruyor", async () => {
+    const { container } = await openAbout();
+    const labels = [...container.querySelectorAll(".modal-body .field label")].map((l) =>
+      l.textContent!.trim(),
+    );
+    expect(labels).toContain("Geliştiren");
+    expect(labels).toContain("Kaynak kodu");
+    expect(labels).toContain("Lisans");
+  });
+
+  it("ad, depo adresi, lisans ve telif görünüyor", async () => {
+    const { container } = await openAbout();
+    const body = container.querySelector(".modal-body")!;
+    expect(body.textContent).toContain("Nurullah YAYAN");
+    expect(body.textContent).toContain("MIT lisansı");
+    expect(body.textContent).toContain("© 2026");
+
+    const repo = [...body.querySelectorAll("input")].find((i) =>
+      i.value.includes("github.com"),
+    );
+    expect(repo, "depo adresi yok").not.toBe(undefined);
+    expect(repo!.readOnly, "adres elle değiştirilebiliyor").toBe(true);
+  });
+
+  it("sürüm başlıkta duruyor", async () => {
+    const { container } = await openAbout();
+    expect(headings(container)[0]).toBe("N-Terminal 0.1.0");
+  });
+});
+
+/**
+ * Ayar açıklamaları "i" düğmesinin arkasında.
+ *
+ * Ölçülen sorun: açıklamalar her ayarın altında duran soluk satırlardı ve
+ * açıklaması olan bir ayar, olmayanın iki katı yer kaplıyordu — Terminal
+ * bölümünde on ayarın sekizi açıklamalıydı, bölümün yüksekliğinin yarısı
+ * açıklamaydı. Kullanıcının sözleri: "çok yer kaplıyor ekranda ve bütünlük
+ * kayboluyor".
+ *
+ * Metin kaybolmuyor: aramada hâlâ eşleşiyor, tek tıkla ekranda. Bu testler
+ * bağladığı şey davranış: kapalı başlıyor, açılıyor, aynı anda tek tane açık
+ * kalıyor ve bölüm değişince kapanıyor.
+ */
+describe("ayar açıklamaları", () => {
+  const LANG_HINT = "Tarih ve saat biçimleri de dille birlikte değişir";
+
+  it("açıklama metni başta ekranda değil", () => {
+    const { container } = render(<SettingsDialog />);
+    expect(
+      container.querySelectorAll(".info-btn").length,
+      "açıklama düğmesi hiç yok",
+    ).toBeGreaterThan(0);
+    expect(container.querySelector(".info-pop"), "açıklama baştan açık").toBe(null);
+    expect(container.querySelector(".modal-body")!.textContent).not.toContain(LANG_HINT);
+  });
+
+  it("düğmeye basınca açılıyor, yeniden basınca kapanıyor", () => {
+    const { container } = render(<SettingsDialog />);
+    const button = container.querySelector(".info-btn") as HTMLButtonElement;
+
+    fireEvent.click(button);
+    expect(container.querySelector(".info-pop")!.textContent).toContain(LANG_HINT);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(button);
+    expect(container.querySelector(".info-pop"), "ikinci tıklama kapatmadı").toBe(null);
+  });
+
+  it("aynı anda tek açıklama açık kalıyor", () => {
+    // İkisi birden açıkken katmanlar alt alta ayarların üstüne biniyor ve
+    // hangisinin hangi satıra ait olduğu okunmuyor.
+    const { container } = render(<SettingsDialog />);
+    const buttons = [...container.querySelectorAll(".info-btn")] as HTMLButtonElement[];
+    expect(buttons.length, "tek düğmeli bölümde ölçülemez").toBeGreaterThan(1);
+
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    expect(container.querySelectorAll(".info-pop").length).toBe(1);
+    expect(buttons[0].getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("başka bir yere tıklamak kapatıyor", () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click(container.querySelector(".info-btn")!);
+    fireEvent.mouseDown(container.querySelector(".modal-body")!);
+    expect(container.querySelector(".info-pop")).toBe(null);
+  });
+
+  it("bölüm değişince açık açıklama kapanıyor", () => {
+    // `useId` ağaçtaki KONUMA göre kimlik üretiyor: kap yenilenmezse yeni
+    // bölümdeki aynı konumdaki açıklama eskisinin kimliğini alıp kendiliğinden
+    // açık görünürdü (gerekçe SettingHint.tsx içinde).
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click(container.querySelector(".info-btn")!);
+    fireEvent.click([...container.querySelectorAll(".settings-nav button")][2]);
+    expect(container.querySelector(".info-pop"), "bölüm değişti, katman açık kaldı").toBe(
+      null,
+    );
+  });
+
+  it("düğme bilgi sütununda, satırın kendi çocuğu olarak duruyor", () => {
+    // Yerleşim jsdom'da ölçülemiyor; bağlanabilen şey YAPI: düğme `.field`in
+    // ya da bölümün DOĞRUDAN çocuğu olmalı, çünkü sütununu (`grid-column: 3`)
+    // oradan alıyor. Bir sarmalayıcının içine düşerse ızgara sütunu kayboluyor
+    // ve düğme satırın altına, en sola geçiyor (bir kez oldu).
+    const { container } = render(<SettingsDialog />);
+    for (const info of container.querySelectorAll(".info")) {
+      const parent = info.parentElement!;
+      expect(
+        parent.classList.contains("field") ||
+          parent.classList.contains("section") ||
+          parent.classList.contains("settings-form"),
+        `açıklama düğmesinin ebeveyni ızgara değil: ${parent.className}`,
+      ).toBe(true);
+    }
   });
 });

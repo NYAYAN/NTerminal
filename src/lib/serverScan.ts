@@ -40,6 +40,15 @@ export interface ScanContext {
   cursorY: number;
   /** Mutlak satır numarasından metin. */
   readLine: (y: number) => string;
+  /**
+   * Bu satır bir öncekinin SARILMIŞ devamı mı.
+   *
+   * Uzun bir günlük satırı terminalin genişliğinde bitmiyor ve alt satırdan
+   * devam ediyor; xterm bunu ayrı bir tampon satırı olarak tutuyor ama
+   * `isWrapped` ile işaretliyor. Tarama bu işareti bilmek zorunda — gerekçesi
+   * aşağıda, birleştirmenin yapıldığı yerde.
+   */
+  isWrapped: (y: number) => boolean;
   /** Komut çalışıyor mu. */
   running: boolean;
   /** İkincil ekran tamponu etkin mi (vim, less). */
@@ -120,8 +129,25 @@ export function scanForServerUrls(
    */
   const ilk = Math.max(state.scanLine, son - limits.maxLines + 1, 0);
 
+  /*
+   * SARILAN satırlar araya satır sonu KONMADAN birleştiriliyor.
+   *
+   * ÖLÇÜLEN HATA: sunucu şeridinde portsuz bir `localhost` rozeti ve
+   * `localhost:1453/port` gibi yarım adresler çıkıyordu. Sebep buydu: uzun bir
+   * günlük satırı ekran genişliğinde bitmiyor, xterm devamını ayrı bir tampon
+   * satırında tutuyor ve her satırın sonuna satır sonu koymak adresi tam
+   * ortasından ikiye bölüyordu. Ortaya çıkan ilk parça (`http://localhost`)
+   * tek başına geçerli bir adres olduğu için sessizce rozete dönüşüyordu —
+   * yani hata "adres bulunamadı" değil, YANLIŞ adres göstermekti.
+   *
+   * Pencerenin İLK satırı sarılmış olabilir; başı yukarıda kalıyor ve geri
+   * getirilemiyor. Bu bir kayıp değil: o satır bir önceki taramada okundu.
+   */
   let metin = "";
-  for (let y = ilk; y <= son; y++) metin += `${ctx.readLine(y)}\n`;
+  for (let y = ilk; y <= son; y++) {
+    if (y > ilk && !ctx.isWrapped(y)) metin += "\n";
+    metin += ctx.readLine(y);
+  }
 
   const urls = [...state.urls];
   let changed = false;

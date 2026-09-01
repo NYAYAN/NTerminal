@@ -182,3 +182,159 @@ fn depo_olmayan_klasorde_imza_yok() {
     assert_eq!(fingerprint(root.to_str().unwrap()), None);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// --------------------------------------------------------- geri alma
+
+// Bu dosyadaki oteki testler salt metin ayristirmasi; asagidakiler GERCEK bir
+// depo kuruyor. Sebebi `revert`in yikici olmasi: davranisi metinden degil
+// git'in kendisinden okunmali. Ozellikle bir kose durumu kritik - indekste
+// olup HEAD'de OLMAYAN dosya SILINMEMELI.
+
+use std::process::Command;
+
+/// Bos bir depo kurar ve yolunu doner.
+fn temp_repo(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!(
+        "nterminal-git-{name}-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    git(&root, &["init", "--quiet"]);
+    // Commit atabilmek icin kimlik sart; makinede global ayar olmayabilir.
+    git(&root, &["config", "user.email", "test@nterminal"]);
+    git(&root, &["config", "user.name", "NTerminal Test"]);
+    /*
+     * Satir sonu cevrimi KAPALI.
+     *
+     * Git for Windows kurulumu `core.autocrlf=true` birakiyor; o zaman
+     * `checkout` dosyayi CRLF ile yaziyor ve icerik karsilastirmasi makinenin
+     * git ayarina bagli hale geliyor. Test uygulamanin davranisini olcmeli,
+     * kurulumun tercihini degil.
+     */
+    git(&root, &["config", "core.autocrlf", "false"]);
+    root
+}
+
+fn git(root: &std::path::Path, args: &[&str]) {
+    let out = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .expect("git calistirilamadi");
+    assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+}
+
+fn yaz(root: &std::path::Path, ad: &str, icerik: &str) {
+    std::fs::write(root.join(ad), icerik).unwrap();
+}
+
+fn oku(root: &std::path::Path, ad: &str) -> String {
+    std::fs::read_to_string(root.join(ad)).unwrap()
+}
+
+#[test]
+fn geri_alma_takip_edilen_dosyayi_head_e_donduruyor() {
+    let root = temp_repo("revert-tracked");
+    let yol = root.to_string_lossy().to_string();
+    yaz(&root, "a.txt", "ilk\n");
+    git(&root, &["add", "a.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+
+    yaz(&root, "a.txt", "bozuldu\n");
+    revert(&yol, "a.txt", false).unwrap();
+
+    assert_eq!(oku(&root, "a.txt"), "ilk\n", "dosya HEAD'e donmedi");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn geri_alma_indekslenmis_degisikligi_de_cozuyor() {
+    let root = temp_repo("revert-staged");
+    let yol = root.to_string_lossy().to_string();
+    yaz(&root, "a.txt", "ilk\n");
+    git(&root, &["add", "a.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+
+    // Hem indekste hem calisma agacinda degisiklik.
+    yaz(&root, "a.txt", "indekste\n");
+    git(&root, &["add", "a.txt"]);
+    yaz(&root, "a.txt", "agacta\n");
+
+    revert(&yol, "a.txt", false).unwrap();
+
+    assert_eq!(oku(&root, "a.txt"), "ilk\n");
+    let info = read(&yol).expect("depo okunamadi");
+    assert!(info.changes.is_empty(), "geri almadan sonra degisiklik kaldi: {:?}", info.changes);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn geri_alma_yeni_eklenen_dosyayi_silmiyor() {
+    /*
+     * KOSE DURUM ve bu testin asil sebebi.
+     *
+     * Dosya indekste ama HEAD'de yok. "HEAD'e dondur" dendiginde silmek
+     * teknik olarak tutarli gorunuyor ama kullanicinin yeni yazdigi dosyayi
+     * yok etmek demek - geri donusu olmayan bir veri kaybi. Dogru sonuc:
+     * indeksten cikar, dosyayi birak. Kullanici gercekten silmek istiyorsa
+     * artik takipsiz olarak gorunuyor ve ayri bir onayla silebiliyor.
+     */
+    let root = temp_repo("revert-added");
+    let yol = root.to_string_lossy().to_string();
+    yaz(&root, "eski.txt", "x\n");
+    git(&root, &["add", "eski.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+
+    yaz(&root, "yeni.txt", "onemli\n");
+    git(&root, &["add", "yeni.txt"]);
+
+    revert(&yol, "yeni.txt", false).unwrap();
+
+    assert!(root.join("yeni.txt").exists(), "yeni dosya SILINDI - veri kaybi");
+    assert_eq!(oku(&root, "yeni.txt"), "onemli\n", "icerik degisti");
+    let info = read(&yol).expect("depo okunamadi");
+    assert!(
+        info.changes.iter().any(|c| c.path == "yeni.txt" && c.status.trim() == "??"),
+        "dosya takipsiz hale donmedi: {:?}",
+        info.changes
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn geri_alma_takipsiz_dosyayi_siliyor() {
+    // Takipsiz dosyada geri alinacak bir degisiklik yok; dosyanin kendisi
+    // degisiklik. Arayuz bunu ayri bir metinle ve "Sil" dugmesiyle soruyor.
+    let root = temp_repo("revert-untracked");
+    let yol = root.to_string_lossy().to_string();
+    yaz(&root, "a.txt", "x\n");
+    git(&root, &["add", "a.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+
+    yaz(&root, "gecici.txt", "at\n");
+    revert(&yol, "gecici.txt", true).unwrap();
+
+    assert!(!root.join("gecici.txt").exists(), "takipsiz dosya silinmedi");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn geri_alma_klasoru_silmiyor() {
+    // Takipsiz bir KLASOR porcelain'de tek satir olarak gorunebiliyor;
+    // silmek icindeki her seyi goturur.
+    let root = temp_repo("revert-dir");
+    let yol = root.to_string_lossy().to_string();
+    std::fs::create_dir(root.join("klasor")).unwrap();
+    yaz(&root, "klasor/icerik.txt", "onemli\n");
+
+    let sonuc = revert(&yol, "klasor", true);
+
+    assert!(sonuc.is_err(), "klasor silindi");
+    assert!(root.join("klasor/icerik.txt").exists());
+    let _ = std::fs::remove_dir_all(&root);
+}

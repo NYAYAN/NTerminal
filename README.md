@@ -10,6 +10,10 @@ Tauri 2 (Rust) + xterm.js 6 üzerine kurulu. PTY katmanı `portable-pty`
 > Yalnızca kurup kullanmak istiyorsan: **[KURULUM.md](KURULUM.md)** — hangi
 > dizinde hangi komut, hangi dosya oluşuyor. Bu dosya nedenleri ve ayrıntıları
 > anlatıyor.
+>
+> Geliştirmeye devam edeceksen: **[NOTLAR.md](NOTLAR.md)** — hangi kararın
+> arkasında hangi ölçülmüş hata var, neler açık kaldı ve tekrar ısıracak
+> tuzaklar hangileri.
 
 ---
 
@@ -33,7 +37,17 @@ var. Gruplar favori işaretlenebilir (sağ tık → *Favori Gruba Ekle* ya da
 satırdaki yıldız) ve yıldız süzgeciyle yalnızca favoriler listelenir — çok
 grupla çalışırken
 listeyi kısaltmak için. Süzgeç açıkken **etkin grup favori olmasa da listede
-kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz.
+kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz. Başlık çubuğunun
+sol köşesindeki panel düğmesi kenar çubuğunu tümden daraltır — terminale bütün
+genişliği bırakmak için. Durum ayarda tutuluyor, yani uygulama onu hatırlıyor.
+
+**Kabuk rozeti.** Sekme adının solunda hangi kabuğun çalıştığını söyleyen kısa
+kod duruyor: `PS7`, `PS`, `CMD`, `SH`, `WSL`, `ZSH`. *Ayarlar › Görünüm ›
+Sekmeler* altından kapatılabilir — tek profille çalışırken her satırda aynı şeyi
+tekrarlıyor ve dar kenar çubuğunda sekme adına ayrılan yeri yiyor. Rozet
+sekmenin **gerçekte açtığı** kabuğu gösteriyor: profil silinmiş ya da ayarlar
+sıfırlanmışsa kimlik boşa düşüyor, kabuk varsayılan profille açılıyor ve rozet
+de onu yazıyor (eskiden burada `?` çıkıyordu).
 
 **Menüler.** Sağ tık menülerinde uzun listeler alt menüde açılıyor: on beş
 grubu olan bir kullanıcıda "Gruba taşı" altındaki düz liste menüyü uzatıp
@@ -109,6 +123,18 @@ zamanıyla kaydedilir. Sağdaki panelde bu sekmenin / bu grubun / tümünün ge�
 aranabilir, başarılı-hatalı filtrelenebilir, tekrarlar gizlenebilir. Satırlar
 seçilip istem satırına yazılabilir, çalıştırılabilir, kopyalanabilir veya
 silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a bas.
+
+**Değişiklikler.** Sağ panelin *Değişiklikler* sekmesi bulunulan dizin bir git
+deposuysa değişen dosyaları listeliyor; satıra tıklamak farkı **yerinde** açıyor,
+listeyi kaybetmeden. Fark yalnızca açılan dosya için isteniyor — yüz dosyalık bir
+değişiklikte önden `git diff` çalıştırmak yüz süreç demekti.
+
+Durum, satırın başındaki renkli bir **simge**: kalem değişti, artı eklendi, eksi
+silindi, ok yeniden adlandırıldı, kesik çizgili artı takipsiz. Metin ipucunda ve
+ekran okuyucuda duruyor. Önceki hâli yazıydı ("DEĞİŞTİ", "YENİDEN
+ADLANDIRILDI") ve 88px'lik sabit bir sütun tutuyordu; o sütun dosya **yolundan**
+çıkıyordu, yani dar panelde asıl aranan bilgi kırpılırken yerinde her satırda
+tekrarlanan aynı kelime duruyordu.
 
 **Görünüm: sekme ya da bölme.** Sekme çubuğundaki iki düğme (ya da
 `Ctrl+Shift+E`) terminal alanını iki kip arasında değiştirir. **Sekmeler** kipinde
@@ -462,6 +488,11 @@ yazı tipi, imleç), **Terminal** (kopyala/yapıştır, bağlantılar, komut ön
 **Oturum** (devamlılık, sekme kapatma onayı), **Geçmiş**, **Profiller**,
 **Gruplar**, **Kısayollar**, **Hakkında**.
 
+**Hakkında.** Sürüm ve veri dosyalarının yanında geliştirici bilgileri de burada:
+ad, kaynak deposunun adresi (yanındaki düğme varsayılan tarayıcıda açıyor) ve
+lisans. Bağlantının kendisi tıklanabilir değil — uygulama bir tarayıcı değil ve
+dış bağlantıyı açmak kazara tıklamayla değil, düğmeyle oluyor.
+
 **Arama.** Bölüm listesinin üstündeki kutuya ayarın adını (ya da ne yaptığını)
 yazınca sonuçlar bölüm adlarıyla listeleniyor; birine tıklamak o bölüme
 götürüyor **ve ilgili satırı kısa süre vurguluyor** — yalnızca bölüme götürmek
@@ -549,6 +580,13 @@ Kenar çubuğu başlığındaki üç düğme sırayla: yıldız favori grup süz
 kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Grupları Daralt** /
 **Grupları Aç**, artı yeni grup ekler. Sekme çubuğunun sağındaki iki düğme sekme /
 bölme görünümünü seçer.
+
+Başlık çubuğunun sol köşesindeki iki düğme birer **açma/kapama**: soldaki grup
+kenar çubuğunu daraltıp geri getirir, sağdaki bulunulan dizinin dosya ağacını
+açar ve ikinci tıkta kapatır. Sıraları düzenin sırasını izliyor — en soldaki
+düğme en soldaki paneli açıyor. Tek yönlü hâllerinde ikinci tıklama hiçbir şey
+yapmıyormuş gibi görünüyordu: ağacı kapatmak için panelin kendi `×` düğmesini
+bulmak gerekiyordu, kenar çubuğunu kapatmanın ise hiçbir yolu yoktu.
 
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
 gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan

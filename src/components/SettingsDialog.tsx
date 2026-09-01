@@ -4,13 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
 import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
-import {
-  BUNDLED_FONTS,
-  CANDIDATE_FONTS,
-  canvasMeasurer,
-  detectInstalled,
-  fontStack,
-} from "../lib/fonts";
+import { BUNDLED_FONTS, fontStack, installedMonoFonts } from "../lib/fonts";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { isMac } from "../lib/platform";
@@ -18,6 +12,8 @@ import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { THEMES } from "../lib/themes";
 import { useStore } from "../store/useStore";
 import type {
+  Appearance,
+  Behavior,
   CloseAction,
   ConfirmCloseTab,
   Lang,
@@ -28,6 +24,8 @@ import type {
   ViewMode,
 } from "../types";
 import { EnvEditor } from "./EnvEditor";
+import { SettingHint, SettingHints } from "./SettingHint";
+import { SettingUndo } from "./SettingUndo";
 
 
 const VIEW_MODES: { value: ViewMode; key: MsgKey }[] = [
@@ -107,6 +105,9 @@ function pickExe(t: Translate, current: string | null): Promise<string | null> {
 /** Menüdeki "özel" seçeneğinin değeri; hiçbir yazı tipi yığınına benzemiyor. */
 const CUSTOM_FONT = "__custom__";
 
+/** Kaynak deposu — "Hakkında › Geliştirici" bölümünde gösteriliyor. */
+const REPO_URL = "https://github.com/NYAYAN/NTerminal";
+
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
@@ -124,18 +125,11 @@ export function SettingsDialog() {
   /**
    * Makinede kurulu eş aralıklı yazı tipleri.
    *
-   * BİR KEZ, pencere açılınca hesaplanıyor: her aday için iki canvas ölçümü
-   * gerekiyor ve liste yirmi küçük ölçüm demek. Her çizimde yapmak ayarlar
-   * penceresini gereksiz yere ağırlaştırırdı; kurulu yazı tipleri de pencere
-   * açıkken değişmiyor.
+   * Ölçüm SÜREÇTE bir kez yapılıyor ve `lib/fonts` içinde önbellekte duruyor;
+   * gerekçe orada. Burada `useMemo` gereksiz: önbellek aynı diziyi döndürüyor,
+   * yani başvuru da kararlı.
    */
-  const installedFonts = useMemo(() => {
-    const measure = canvasMeasurer();
-    if (!measure) return [];
-    const bundled = new Set(BUNDLED_FONTS.map((f) => f.family));
-    // Gömülü aileler zaten listede; iki kez göstermek seçimi zorlaştırır.
-    return detectInstalled(CANDIDATE_FONTS, measure).filter((f) => !bundled.has(f));
-  }, []);
+  const installedFonts = installedMonoFonts();
 
   /**
    * Menüde seçili duran değer.
@@ -163,6 +157,101 @@ export function SettingsDialog() {
 
   const store = useStore.getState;
   const close = () => setUi({ settingsOpen: false, editingGroupId: null });
+
+  /**
+   * Pencere ACILDIGI ANDAKI ayarlar - satir basina "geri al"in olcutu.
+   *
+   * Fabrika varsayilani DEGIL, bilincli olarak: gerekce `SettingUndo` icinde
+   * (varsayilanla karsilastirmak, kullanicinin aylar once kurdugu her ayari
+   * "degismis" sayip neredeyse her satira bir dugme koyuyordu).
+   *
+   * Kopya cikarmaya gerek yok: depo yamalari BAGISIK, her yama ic nesneleri
+   * yeniden kuruyor (`patchAppearance`: `{ ...settings.appearance, ...patch }`).
+   * Yani ilk cizimde tutulan bu basvuru degismeden kaliyor.
+   *
+   * Pencere kapanip yeniden acildiginda bilesen sifirdan doguyor, dolayisiyla
+   * olcut de yenileniyor - kullanicinin istedigi tam buydu: "cikis yapip giris
+   * yaptiysam artik gormemeliyim".
+   */
+  const [opened] = useState(() => settings);
+
+  /**
+   * Tek bir ayarin degisikligini geri alan dugme.
+   *
+   * Besi ayri ayri yazilmis cunku bes ayri yol var: gorunum ve davranis
+   * alanlari icin genel yamalar, dil ve gorunum kipi icin kendi eylemleri
+   * (`setLanguage` yalniz ayari degil sozlugu de degistiriyor), kisayollar
+   * icinse eylem adi basina bir harita.
+   */
+  function undoAppearance<K extends keyof Appearance>(key: K) {
+    return (
+      <SettingUndo
+        changed={settings.appearance[key] !== opened.appearance[key]}
+        onUndo={() =>
+          void store().patchAppearance({ [key]: opened.appearance[key] } as Partial<Appearance>)
+        }
+      />
+    );
+  }
+
+  function undoBehavior<K extends keyof Behavior>(key: K) {
+    return (
+      <SettingUndo
+        changed={settings.behavior[key] !== opened.behavior[key]}
+        onUndo={() =>
+          void store().patchBehavior({ [key]: opened.behavior[key] } as Partial<Behavior>)
+        }
+      />
+    );
+  }
+
+  function undoLanguage() {
+    return (
+      <SettingUndo
+        changed={settings.language !== opened.language}
+        onUndo={() => void store().setLanguage(opened.language)}
+      />
+    );
+  }
+
+  function undoViewMode() {
+    return (
+      <SettingUndo
+        changed={settings.appearance.viewMode !== opened.appearance.viewMode}
+        onUndo={() => void store().setViewMode(opened.appearance.viewMode)}
+      />
+    );
+  }
+
+  function undoKey(action: string) {
+    const before = opened.keybindings[action];
+    if (before === undefined) return null;
+    return (
+      <SettingUndo
+        changed={settings.keybindings[action] !== before}
+        onUndo={() =>
+          void store().patchSettings({
+            keybindings: { ...settings.keybindings, [action]: before },
+          })
+        }
+      />
+    );
+  }
+
+  /** Pencere altligindaki genel sifirlama; onay sorup HER SEYI geri aliyor. */
+  const resetAll = () => {
+    void store()
+      .askConfirm({
+        title: t("confirm.resetSettingsTitle"),
+        message: t("confirm.resetSettingsMessage"),
+        detail: t("confirm.resetSettingsDetail"),
+        confirmLabel: t("confirm.reset"),
+        danger: true,
+      })
+      .then((ok) => {
+        if (ok) void store().resetSettings();
+      });
+  };
 
   // Cumlenin ortasinda `<span className="mono">` var; ceviriyi ikiye bolmek
   // yerine metni tek anahtarda tutup yer tutucudan boluyoruz - cumle yapisi
@@ -358,6 +447,11 @@ export function SettingsDialog() {
             )}
           </nav>
 
+          {/* Aciklama katmanlarinin kabi. `key={section}`: `useId` agactaki
+              KONUMA gore kimlik uretiyor, yani bolum degisince ayni konumdaki
+              yeni aciklama eskisinin kimligini alip kendiliginden acik
+              gorunurdu. Kap yenilenince acik olan sifirlaniyor. */}
+          <SettingHints key={section}>
           <div className="modal-body">
           {section === "general" && (
             <>
@@ -375,7 +469,8 @@ export function SettingsDialog() {
                       </option>
                     ))}
                   </select>
-                  <div className="hintline">{t("settings.languageHint")}</div>
+                  <SettingHint>{t("settings.languageHint")}</SettingHint>
+                  {undoLanguage()}
                 </div>
               </div>
 
@@ -394,12 +489,13 @@ export function SettingsDialog() {
                       </button>
                     ))}
                   </div>
-                  <div className="hintline">
+                  <SettingHint>
                     {t(settings.appearance.viewMode === "panes" ? "view.panesHint" : "view.tabsHint")}{" "}
                     {t("view.shortcut", {
                       keys: prettyCombo(settings.keybindings.toggleViewMode ?? "Ctrl+Shift+E"),
                     })}
-                  </div>
+                  </SettingHint>
+                  {undoViewMode()}
                 </div>
               </div>
             </>
@@ -421,6 +517,7 @@ export function SettingsDialog() {
                       </option>
                     ))}
                   </select>
+                  {undoAppearance("theme")}
                 </div>
               </div>
 
@@ -484,6 +581,7 @@ export function SettingsDialog() {
                       onKeyDown={(e) => e.stopPropagation()}
                     />
                   )}
+                  {undoAppearance("fontFamily")}
                 </div>
                 <div className="field" data-setting="settings.fontSize">
                   <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
@@ -496,6 +594,7 @@ export function SettingsDialog() {
                       void store().patchAppearance({ fontSize: Number(e.target.value) })
                     }
                   />
+                  {undoAppearance("fontSize")}
                 </div>
                 <div className="field" data-setting="settings.lineHeightLabel">
                   <label>
@@ -513,6 +612,7 @@ export function SettingsDialog() {
                       void store().patchAppearance({ lineHeight: Number(e.target.value) })
                     }
                   />
+                  {undoAppearance("lineHeight")}
                 </div>
                 <div className="field" data-setting="settings.letterSpacingLabel">
                   <label>
@@ -528,6 +628,7 @@ export function SettingsDialog() {
                       void store().patchAppearance({ letterSpacing: Number(e.target.value) })
                     }
                   />
+                  {undoAppearance("letterSpacing")}
                 </div>
               </div>
 
@@ -547,6 +648,7 @@ export function SettingsDialog() {
                     <option value="block">{t("settings.cursorBlock")}</option>
                     <option value="underline">{t("settings.cursorUnderline")}</option>
                   </select>
+                  {undoAppearance("cursorStyle")}
                 </div>
                 <div className="check-row" data-setting="settings.cursorBlink">
                   <input
@@ -557,6 +659,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="cursorBlink">{t("settings.cursorBlink")}</label>
                 </div>
+                {undoAppearance("cursorBlink")}
                 <div className="field" data-setting="settings.scrollbackLines">
                   <label>{t("settings.scrollbackLines")}</label>
                   <input
@@ -570,8 +673,26 @@ export function SettingsDialog() {
                     }
                     onKeyDown={(e) => e.stopPropagation()}
                   />
-                  <div className="hintline">{t("settings.scrollbackHint")}</div>
+                  <SettingHint>{t("settings.scrollbackHint")}</SettingHint>
+                  {undoAppearance("scrollback")}
                 </div>
+              </div>
+
+              <div className="section">
+                <h3>{t("settings.tabsHeading")}</h3>
+                <div className="check-row" data-setting="settings.shellBadge">
+                  <input
+                    id="showShellBadge"
+                    type="checkbox"
+                    checked={settings.appearance.showShellBadge}
+                    onChange={(e) =>
+                      void store().patchAppearance({ showShellBadge: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="showShellBadge">{t("settings.shellBadge")}</label>
+                </div>
+                <SettingHint>{t("settings.shellBadgeHint")}</SettingHint>
+                {undoAppearance("showShellBadge")}
               </div>
             </>
           )}
@@ -589,6 +710,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="copyOnSelect">{t("settings.copyOnSelect")}</label>
                 </div>
+                {undoBehavior("copyOnSelect")}
                 <div className="field" data-setting="settings.rightClick">
                   <label>{t("settings.rightClick")}</label>
                   <select
@@ -603,6 +725,7 @@ export function SettingsDialog() {
                     <option value="copyPaste">{t("settings.rightClickCopyPaste")}</option>
                     <option value="paste">{t("settings.rightClickPaste")}</option>
                   </select>
+                  {undoBehavior("rightClickAction")}
                 </div>
                 {/* macOS'ta bu ayarin islevi yok: kopyalama orada Cmd+C,
                     Ctrl+C ile bir cakisma olmuyor. Gostermek "acsam ne olur"
@@ -620,7 +743,8 @@ export function SettingsDialog() {
                       />
                       <label htmlFor="ctrlCCopiesSelection">{t("settings.ctrlCCopies")}</label>
                     </div>
-                    <div className="hintline">{t("settings.ctrlCHint")}</div>
+                    <SettingHint>{t("settings.ctrlCHint")}</SettingHint>
+                    {undoBehavior("ctrlCCopiesSelection")}
                   </>
                 )}
               </div>
@@ -638,7 +762,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="highlightLinks">{t("settings.highlightLinks")}</label>
                 </div>
-                <div className="hintline">{t("settings.highlightLinksHint")}</div>
+                <SettingHint>{t("settings.highlightLinksHint")}</SettingHint>
+                {undoAppearance("highlightLinks")}
               </div>
 
               <div className="section">
@@ -654,7 +779,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="commandBlocks">{t("settings.commandBlocks")}</label>
                 </div>
-                <div className="hintline">{t("settings.commandBlocksHint")}</div>
+                <SettingHint>{t("settings.commandBlocksHint")}</SettingHint>
+                {undoBehavior("commandBlocks")}
                 {/* Blok basligi bloklara BAGLI: bloklar kapaliyken cizilecek
                     bir baslik da yok. */}
                 <div className="check-row" data-setting="settings.blockHeaders">
@@ -669,7 +795,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="blockHeaders">{t("settings.blockHeaders")}</label>
                 </div>
-                <div className="hintline">{t("settings.blockHeadersHint")}</div>
+                <SettingHint>{t("settings.blockHeadersHint")}</SettingHint>
+                {undoBehavior("blockHeaders")}
                 <div className="check-row" data-setting="settings.appInput">
                   <input
                     id="appInput"
@@ -679,7 +806,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="appInput">{t("settings.appInput")}</label>
                 </div>
-                <div className="hintline">{t("settings.appInputHint")}</div>
+                <SettingHint>{t("settings.appInputHint")}</SettingHint>
+                {undoBehavior("appInput")}
                 <div className="check-row" data-setting="settings.promptAtBottom">
                   <input
                     id="promptAtBottom"
@@ -691,7 +819,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="promptAtBottom">{t("settings.promptAtBottom")}</label>
                 </div>
-                <div className="hintline">{t("settings.promptAtBottomHint")}</div>
+                <SettingHint>{t("settings.promptAtBottomHint")}</SettingHint>
+                {undoBehavior("promptAtBottom")}
               </div>
 
               <div className="section">
@@ -707,7 +836,8 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="appSuggestions">{t("settings.appSuggestions")}</label>
                 </div>
-                <div className="hintline">{t("settings.appSuggestionsHint")}</div>
+                <SettingHint>{t("settings.appSuggestionsHint")}</SettingHint>
+                {undoBehavior("appSuggestions")}
                 <div className="field" data-setting="settings.predictionShell">
                   <label>{t("settings.predictionShell")}</label>
                   <select
@@ -727,15 +857,20 @@ export function SettingsDialog() {
                     <option value="inline">{t("settings.predictionInline")}</option>
                     <option value="off">{t("settings.predictionOff")}</option>
                   </select>
+                  {/* Aciklama dugmesi uyaridan ONCE: izgarada kesin sutunu
+                      (bilgi sutunu) olan bir oge, kendinden onceki ogenin
+                      satirina yerlesiyor. Uyari araya girse dugme uyarinin
+                      satirina duserdi, denetimin degil. */}
+                  <SettingHint>
+                    {t(isMac() ? "settings.predictionHintMac" : "settings.predictionHint")}
+                  </SettingHint>
+                  {undoBehavior("shellPrediction")}
                   {settings.behavior.promptAtBottom &&
                     settings.behavior.shellPrediction === "list" && (
                       <div className="hintline warn">
                         {t("settings.predictionListBlocked")}
                       </div>
                     )}
-                  <div className="hintline">
-                    {t(isMac() ? "settings.predictionHintMac" : "settings.predictionHint")}
-                  </div>
                 </div>
               </div>
               {/* Option/Meta yalnizca macOS'ta anlamli: Windows'ta Alt zaten
@@ -754,7 +889,8 @@ export function SettingsDialog() {
                     />
                     <label htmlFor="macOptionIsMeta">{t("settings.macOptionIsMeta")}</label>
                   </div>
-                  <div className="hintline">{t("settings.macOptionIsMetaHint")}</div>
+                  <SettingHint>{t("settings.macOptionIsMetaHint")}</SettingHint>
+                  {undoBehavior("macOptionIsMeta")}
                 </div>
               )}
             </>
@@ -775,6 +911,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="restoreSession">{t("settings.restoreSessionLabel")}</label>
                 </div>
+                {undoBehavior("restoreSession")}
                 <div className="check-row" data-setting="settings.restoreScrollbackLabel">
                   <input
                     id="restoreScrollback"
@@ -786,6 +923,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="restoreScrollback">{t("settings.restoreScrollbackLabel")}</label>
                 </div>
+                {undoBehavior("restoreScrollback")}
                 <div className="field" data-setting="settings.scrollbackPerTab">
                   <label>{t("settings.scrollbackPerTab")}</label>
                   <input
@@ -799,7 +937,8 @@ export function SettingsDialog() {
                     }
                     onKeyDown={(e) => e.stopPropagation()}
                   />
-                  <div className="hintline">{t("settings.scrollbackPerTabHint")}</div>
+                  <SettingHint>{t("settings.scrollbackPerTabHint")}</SettingHint>
+                  {undoBehavior("scrollbackSaveLines")}
                 </div>
                 <div className="check-row" data-setting="settings.inheritCwd">
                   <input
@@ -810,6 +949,7 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="inheritCwd">{t("settings.inheritCwd")}</label>
                 </div>
+                {undoBehavior("inheritCwd")}
               </div>
 
               <div className="section">
@@ -828,7 +968,8 @@ export function SettingsDialog() {
                     <option value="running">{t("settings.confirmRunning")}</option>
                     <option value="never">{t("settings.confirmNever")}</option>
                   </select>
-                  <div className="hintline">{t("settings.confirmCloseTabHint")}</div>
+                  <SettingHint>{t("settings.confirmCloseTabHint")}</SettingHint>
+                  {undoBehavior("confirmCloseTab")}
                 </div>
 
                 <div className="field" data-setting="settings.closeAction">
@@ -842,7 +983,8 @@ export function SettingsDialog() {
                     <option value="quit">{t("settings.closeActionQuit")}</option>
                     <option value="background">{t("settings.closeActionBackground")}</option>
                   </select>
-                  <div className="hintline">{t("settings.closeActionHint")}</div>
+                  <SettingHint>{t("settings.closeActionHint")}</SettingHint>
+                  {undoBehavior("closeAction")}
                 </div>
               </div>
             </>
@@ -864,11 +1006,12 @@ export function SettingsDialog() {
                   }
                   onKeyDown={(e) => e.stopPropagation()}
                 />
-                <div className="hintline">
+                <SettingHint>
                   {t("settings.historyLimitHint", {
                     size: historySize || t("settings.historyReading"),
                   })}
-                </div>
+                </SettingHint>
+                {undoBehavior("historyLimit")}
               </div>
               <div className="check-row" data-setting="settings.historyDedupeDefault">
                 <input
@@ -879,6 +1022,7 @@ export function SettingsDialog() {
                 />
                 <label htmlFor="historyDedupe">{t("settings.historyDedupeDefault")}</label>
               </div>
+              {undoBehavior("historyDedupe")}
             </div>
           )}
 
@@ -945,7 +1089,7 @@ export function SettingsDialog() {
                           </option>
                         ))}
                       </select>
-                      <div className="hintline">{t("settings.shellKindHint")}</div>
+                      <SettingHint>{t("settings.shellKindHint")}</SettingHint>
                     </div>
                     <div className="field">
                       <label>{t("settings.executable")}</label>
@@ -1096,7 +1240,7 @@ export function SettingsDialog() {
                           </option>
                         ))}
                       </select>
-                      <div className="hintline">{t("settings.groupProfileHint")}</div>
+                      <SettingHint>{t("settings.groupProfileHint")}</SettingHint>
                     </div>
                     <div className="field">
                       <label>{t("settings.startFolder")}</label>
@@ -1177,6 +1321,7 @@ export function SettingsDialog() {
                       e.currentTarget.blur();
                     }}
                   />
+                  {undoKey(action)}
                 </div>
               ))}
             </div>
@@ -1187,13 +1332,52 @@ export function SettingsDialog() {
               <div className="section">
                 <h3>N-Terminal {appVersion}</h3>
                 <p className="dim">{t("settings.aboutBlurb")}</p>
-                <p className="dim">{t("settings.developer")}</p>
+              </div>
+
+              {/*
+                Geliştirici bilgileri kendi bölümünde.
+                
+                Önceki hâli "Hakkında"nın açıklama metninin altındaki tek bir
+                soluk satırdı ("Geliştirici · Nurullah YAYAN") — sürümün ve
+                teknoloji cümlesinin arasında kaybolan bir dipnot. Uygulamayı
+                kimin yazdığı, kaynağın nerede olduğu ve hangi lisansla
+                dağıtıldığı birbirine bağlı üç bilgi; birlikte ve etiketli
+                duruyorlar.
+                
+                Kaynak bağlantısı TIKLANABİLİR değil, yanında bir düğme var:
+                uygulama bir tarayıcı değil ve dış bağlantıyı açmak kullanıcının
+                kararı olmalı — kazara tıklamayla tarayıcı açılmıyor.
+              */}
+              <div className="section">
+                <h3>{t("settings.developerHeading")}</h3>
+                <div className="field" data-setting="settings.developerLabel">
+                  <label>{t("settings.developerLabel")}</label>
+                  <span>{t("settings.developerName")}</span>
+                </div>
+                <div className="field" data-setting="settings.sourceCode">
+                  <label>{t("settings.sourceCode")}</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input readOnly className="mono" style={{ flex: 1 }} value={REPO_URL} />
+                    <button
+                      className="outline"
+                      title={t("settings.openInBrowser")}
+                      onClick={() => void api.openExternal(REPO_URL).catch(() => {})}
+                    >
+                      {t("settings.openFolderShort")}
+                    </button>
+                  </div>
+                </div>
+                <div className="field" data-setting="settings.licenseLabel">
+                  <label>{t("settings.licenseLabel")}</label>
+                  <span>{t("settings.licenseValue")}</span>
+                </div>
+                <div className="hintline">{t("settings.copyright")}</div>
               </div>
               <div className="section">
                 <h3>{t("settings.fileLocations")}</h3>
                 {paths && (
                   <>
-                    <div className="field">
+                    <div className="field" data-setting="settings.dataFolder">
                       <label>{t("settings.dataFolder")}</label>
                       <div style={{ display: "flex", gap: 6 }}>
                         <input readOnly className="mono" style={{ flex: 1 }} value={paths.root} />
@@ -1201,15 +1385,15 @@ export function SettingsDialog() {
                           {t("settings.openFolderShort")}
                         </button>
                       </div>
-                      <div className="hintline">
+                      <SettingHint>
                         {t(paths.portable ? "settings.portableOn" : "settings.portableOff")}
-                      </div>
+                      </SettingHint>
                     </div>
                     <div className="field">
                       <label>{t("app.settings")}</label>
                       <input readOnly className="mono" value={paths.settingsFile} />
                     </div>
-                    <div className="field">
+                    <div className="field" data-setting="settings.workspaceFile">
                       <label>{t("settings.workspaceFile")}</label>
                       <input readOnly className="mono" value={paths.workspaceFile} />
                     </div>
@@ -1217,42 +1401,28 @@ export function SettingsDialog() {
                       <label>{t("settings.history")}</label>
                       <input readOnly className="mono" value={paths.historyFile} />
                     </div>
-                    <div className="field">
+                    <div className="field" data-setting="settings.integrationDir">
                       <label>{t("settings.integrationDir")}</label>
                       <input readOnly className="mono" value={paths.integrationDir} />
                     </div>
                   </>
                 )}
               </div>
-              <div className="section">
-                <h3>{t("settings.reset")}</h3>
-                <button
-                  className="danger"
-                  onClick={() => {
-                    void store()
-                      .askConfirm({
-                        title: t("confirm.resetSettingsTitle"),
-                        message: t("confirm.resetSettingsMessage"),
-                        detail: t("confirm.resetSettingsDetail"),
-                        confirmLabel: t("confirm.reset"),
-                        danger: true,
-                      })
-                      .then((ok) => {
-                        if (ok) void store().resetSettings();
-                      });
-                  }}
-                >
-                  {t("settings.resetButton")}
-                </button>
-              </div>
             </>
           )}
           </div>
+          </SettingHints>
         </div>
 
         <div className="modal-foot">
           <span className="dim">{t("settings.savedInstantly")}</span>
           <span className="spacer" />
+          {/* Genel sifirlama altlikta: onceki yeri Hakkinda bolumunun dibiydi,
+              yani ayari degistiren kullanicinin bulundugu yerden dort tik
+              uzakta. Altlik her bolumde gorunuyor. */}
+          <button className="outline" onClick={resetAll}>
+            {t("settings.resetAll")}
+          </button>
           <button className="outline" onClick={() => setUi({ settingsOpen: false, transferOpen: true })}>
             {t("settings.openTransfer")}
           </button>

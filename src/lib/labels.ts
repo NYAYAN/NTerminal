@@ -47,8 +47,45 @@ const SHELL_BADGES: Record<ShellKind, string> = {
 
 /** Profilin kabuk türü için kısa kod: sekmede tek bakışta hangi kabuk olduğu belli olsun. */
 export function shellBadge(profile: Profile | undefined): string {
+  // Buraya yalnızca profil listesi TÜMDEN boşken düşülüyor (hiç kabuk
+  // bulunamamış bir makine). Bilinmeyen bir kimlik `resolveProfile` içinde
+  // karşılanıyor — gerekçesi orada.
   if (!profile) return "?";
   return SHELL_BADGES[profile.kind] ?? "EXE";
+}
+
+/**
+ * Sekmenin profili.
+ *
+ * Kimlik bulunamazsa varsayılana, o da yoksa listenin ilkine düşüyor — Rust
+ * tarafındaki `store::resolve_profile` ile AYNI sıra.
+ *
+ * ## Neden düşüş gerekiyor
+ *
+ * ÖLÇÜLEN HATA: kenar çubuğundaki sekmeler `?` rozetiyle çiziliyordu. Sebep,
+ * sekmenin `profileId` alanının artık var olmayan bir profili göstermesi. İki
+ * yoldan oluyor: bir profil silindiğinde ona bağlı sekmeler olduğu gibi
+ * kalıyor, ve "Ayarları varsayılanlara döndür" profilleri yeniden üretip
+ * hepsine YENİ kimlik veriyor (`settings_reset` → `detect_profiles`).
+ *
+ * Sekme bu durumda çalışmaya devam ediyor: Rust tarafı açarken varsayılana
+ * düşüyor. Yani `?` gerçek bir bilinmezlik değildi, arayüzün tam eşleşme
+ * araması ile kabuğun düşüş kuralı arasındaki farktı — rozet, sekmenin
+ * gerçekte çalıştırdığı kabuktan başka bir şey söylüyordu.
+ *
+ * Bağı onarmak ayrı iş ve `tabs.ts` içindeki `healTabProfiles` yapıyor; burası
+ * onarım işlemeden önceki çizimi de doğru gösteriyor.
+ */
+export function resolveProfile(
+  profiles: Profile[],
+  profileId: string | null | undefined,
+  defaultProfileId?: string,
+): Profile | undefined {
+  return (
+    profiles.find((p) => p.id === profileId) ??
+    profiles.find((p) => p.id === defaultProfileId) ??
+    profiles[0]
+  );
 }
 
 /** Sekme için ipucu (tooltip) metni. */

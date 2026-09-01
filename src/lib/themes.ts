@@ -174,7 +174,22 @@ export function getTheme(id: string): TerminalTheme {
   // Palet okunabilirlik guvencesinden geciyor: acik zeminli temalarda arka
   // planla karisan renkler (Solarized Light'ta brightWhite arka planin
   // aynisidir) koyulastiriliyor. Bkz. contrast.ts.
-  const fixed: TerminalTheme = { ...base, xterm: harmonizeTheme(base.xterm) };
+  const xterm = harmonizeTheme(base.xterm);
+  /*
+   * Genel bakış sütununun ÇERÇEVESİ terminal zeminiyle aynı — yani görünmez.
+   *
+   * BİLDİRİLEN HATA: "scroll'un hemen sağında beyaz çizgi var, o neden var".
+   * Kaydırma çubuğunu 14px'ten 9px'e indirmenin tek yolu `overviewRuler.width`
+   * vermek (bkz. TerminalSession'daki gerekçe) ve xterm sütunu çizerken
+   * `_renderRulerOutline()` ile sol kenarına KOŞULSUZ 1px'lik dikey bir çizgi
+   * atıyor. Yani çizgi bir hata değil, sütunu açmanın bedeliydi.
+   *
+   * Sütunu buraya bir "ayrı bölge" olarak göstermek istemiyoruz: orası
+   * kaydırma çubuğunun kendisi ve arama işaretleri. Çerçeveyi zemine
+   * eşitlemek onu görünmez yapıyor, işaretler ise kendi renklerinde kalıyor.
+   */
+  xterm.overviewRulerBorder = xterm.background ?? base.ui.surface;
+  const fixed: TerminalTheme = { ...base, xterm };
   harmonized.set(base.id, fixed);
   return fixed;
 }
@@ -214,6 +229,22 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   root.style.setProperty("--accent", accent);
   root.style.setProperty("--ok", ok);
   root.style.setProperty("--err", err);
+  /*
+   * Ucuncu bir durum rengi: "dikkat", "yesil degil ama kirmizi da degil".
+   *
+   * Git'te takip edilmeyen dosya bunu gerektirdi. Once eklenen dosyayla ayni
+   * yesildeydi ve "yeni dosya eklendi" diye okunuyordu - oysa eklenen dosya
+   * indekste, takip edilmeyen hicbir yerde. Iki farkli durum ayni rengi
+   * paylasinca renk bilgi tasimiyor.
+   *
+   * NOT: `.statusbar .pill.warn` bu degiskeni KULLANMIYOR, `--err`i
+   * kullaniyor. Orasi bilincli kirmizi (kullanicidan bir sey isteyen bir
+   * eksik); buradaki sari "bilgi" tonu.
+   */
+  root.style.setProperty(
+    "--warn",
+    ensureContrast(theme.xterm.yellow ?? "#d29922", surface, MIN_UI_TEXT_CONTRAST),
+  );
   // Dolgulu dugmelerin metin rengi: CSS karsitlik hesabi yapamiyor, biz
   // yapiyoruz. Aksi halde koyu vurgu renginde koyu metin cikiyor.
   root.style.setProperty("--accent-fg", onColor(accent));
@@ -249,4 +280,29 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   // Açık temalarda arayüz metin/gölge tonlarının ters çevrilmesi gerekiyor.
   const isLight = theme.id.includes("light");
   root.dataset.tone = isLight ? "light" : "dark";
+}
+
+/**
+ * Kullanıcının seçtiği bir rengin (profil rengi, grup rengi) METİN olarak
+ * okunabilir hâli.
+ *
+ * ÖLÇÜLEN HATA: kenar çubuğundaki kabuk rozeti ekranda hiç görünmüyordu.
+ * Rozet çiziliyordu; rengi profilden geliyor ve Windows PowerShell profilinin
+ * rengi `#0e4d92` — koyu lacivert. Koyu tema yüzeyinde karşıtlık 1.4:1, yani
+ * 9px kalın bir metin için tümüyle okunmaz. Aynı sorun sekme çubuğundaki
+ * rozette ve etkin sekmenin vurgu şeridinde de vardı.
+ *
+ * Renk bir DOLGU olarak sorun değil (rozet zemini %18 karışımla kullanıyor);
+ * metin olarak sorun. `ensureContrast` tonu koruyup yalnızca gerektiği kadar
+ * itiyor, yani "PowerShell mavisi" mavi kalıyor — sadece görünür oluyor.
+ *
+ * Tema uygulanırken yazılan `--accent` / `--ok` / `--err` de aynı hesaptan
+ * geçiyor (yukarıda); bu, kullanıcının kendi seçtiği renkler için karşılığı.
+ */
+export function readableAccent(
+  color: string | null | undefined,
+  themeId: string,
+): string | undefined {
+  if (!color) return undefined;
+  return ensureContrast(color, getTheme(themeId).ui.surfaceAlt, MIN_UI_TEXT_CONTRAST);
 }

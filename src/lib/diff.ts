@@ -1,9 +1,17 @@
 /**
  * Birleşik fark (unified diff) çıktısının satır satır sınıflandırılması.
  *
- * Amaç dar: her satırın NE olduğunu söylemek, ki arayüz onu doğru renkte
- * çizsin. Fark ayrıştırmak (hunk'ları eşleştirmek, satır numaraları hesaplamak)
- * gerekmiyor — gösterilecek şey git'in ürettiği metnin kendisi.
+ * Her satırın NE olduğunu ve KAÇINCI satır olduğunu söylüyor: arayüz onu doğru
+ * renkte çizsin ve solda numarasını yazabilsin.
+ *
+ * ## Numaralar neden burada hesaplanıyor
+ *
+ * Fark metninde satır numarası YOK; yalnızca hunk başlığında (`@@ -a,b +c,d @@`)
+ * başlangıç numaraları duruyor, gerisi sayılarak bulunuyor. Sayma kuralı satır
+ * türüne göre değişiyor — bağlam satırı iki sayacı da ilerletir, ekleme
+ * yalnızca yeniyi, silme yalnızca eskiyi. Bunu çizim sırasında yapmak aynı
+ * sayacı React'in yeniden çizim döngüsünde tutmak demekti; saf bir geçişte
+ * yapmak hem bir kez oluyor hem test edilebiliyor.
  *
  * ## Neden sıra önemli
  *
@@ -17,11 +25,28 @@ export type DiffKind = "add" | "del" | "hunk" | "meta" | "same";
 export interface DiffLine {
   kind: DiffKind;
   text: string;
+  /** Satırın ESKİ dosyadaki numarası; eklenen satırda ve başlıkta `null`. */
+  oldLine: number | null;
+  /** Satırın YENİ dosyadaki numarası; silinen satırda ve başlıkta `null`. */
+  newLine: number | null;
 }
+
+/** `@@ -a,b +c,d @@` başlığından sayaçların başlangıcı. */
+const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
 /** Farkı satırlara ayırır ve her satırı sınıflandırır. */
 export function parseDiff(text: string): DiffLine[] {
   const out: DiffLine[] = [];
+  /*
+   * Hunk başlığı görülene kadar numara YOK.
+   *
+   * Her fark hunk içermiyor: ikili dosya bildirimi ("Binary files differ") ve
+   * yalnızca kip değişikliği olan farklar başlıktan ibaret. Sayacı sıfırdan
+   * yürütmek oralarda uydurma numaralar üretirdi.
+   */
+  let oldNo = 0;
+  let newNo = 0;
+  let inHunk = false;
 
   for (const raw of text.split("\n")) {
     // Boş satır atlanıyor. `split` sonda her zaman bir tane üretiyor ve onu
@@ -33,7 +58,13 @@ export function parseDiff(text: string): DiffLine[] {
     if (raw === "") continue;
 
     if (raw.startsWith("@@")) {
-      out.push({ kind: "hunk", text: raw });
+      const m = HUNK.exec(raw);
+      if (m) {
+        oldNo = Number(m[1]);
+        newNo = Number(m[2]);
+        inHunk = true;
+      }
+      out.push({ kind: "hunk", text: raw, oldLine: null, newLine: null });
       continue;
     }
     // ÖNCE başlıklar: `+++`/`---` ekleme/silme sanılmamalı.
@@ -50,18 +81,34 @@ export function parseDiff(text: string): DiffLine[] {
       raw.startsWith("new mode") ||
       raw.startsWith("Binary files")
     ) {
-      out.push({ kind: "meta", text: raw });
+      out.push({ kind: "meta", text: raw, oldLine: null, newLine: null });
       continue;
     }
     if (raw.startsWith("+")) {
-      out.push({ kind: "add", text: raw });
+      out.push({ kind: "add", text: raw, oldLine: null, newLine: inHunk ? newNo++ : null });
       continue;
     }
     if (raw.startsWith("-")) {
-      out.push({ kind: "del", text: raw });
+      out.push({ kind: "del", text: raw, oldLine: inHunk ? oldNo++ : null, newLine: null });
       continue;
     }
-    out.push({ kind: "same", text: raw });
+    /*
+     * `\ No newline at end of file` bir SATIR DEĞİL, bir nottur.
+     *
+     * Sayacı ilerletirse ondan sonraki bütün numaralar bir kayar — ve bu not
+     * dosyanın sonunda geldiği için hata gözden kaçmaya çok müsait.
+     */
+    if (raw.startsWith("\\")) {
+      out.push({ kind: "same", text: raw, oldLine: null, newLine: null });
+      continue;
+    }
+    // Bağlam satırı İKİ sayacı da ilerletiyor: numaralamanın çekirdeği bu.
+    out.push({
+      kind: "same",
+      text: raw,
+      oldLine: inHunk ? oldNo++ : null,
+      newLine: inHunk ? newNo++ : null,
+    });
   }
 
   return out;

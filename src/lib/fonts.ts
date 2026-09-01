@@ -104,6 +104,31 @@ export function isFontInstalled(
   return false;
 }
 
+/**
+ * Makinede kurulu eş aralıklı yazı tipleri — SÜREÇTE BİR KEZ ölçülüyor.
+ *
+ * Liste yirmi aday × iki canvas ölçümü demek ve ayarlar penceresi her
+ * açıldığında yeniden koşuyordu (`useMemo` bileşenle birlikte ölüyor).
+ * Kurulu yazı tipleri uygulama çalışırken değişmiyor; değişirse (kullanıcı
+ * yeni bir yazı tipi kurarsa) yeniden başlatmak gerekiyor — pencereyi her
+ * açılışta yavaşlatmaya değmeyecek bir kenar durum.
+ *
+ * Canvas yoksa önbelleğe ALINMIYOR: o bir kurulum hatası değil, o anın
+ * durumu; bir dahaki denemede ölçüm yapılabilir.
+ */
+let kuruluOnbellek: string[] | null = null;
+
+export function installedMonoFonts(): string[] {
+  if (kuruluOnbellek) return kuruluOnbellek;
+  const measure = canvasMeasurer();
+  if (!measure) return [];
+  const bundled = new Set(BUNDLED_FONTS.map((f) => f.family));
+  kuruluOnbellek = detectInstalled(CANDIDATE_FONTS, measure).filter(
+    (family) => !bundled.has(family),
+  );
+  return kuruluOnbellek;
+}
+
 /** Adaylardan kurulu olanlar, verilen sırada. */
 export function detectInstalled(
   candidates: readonly string[],

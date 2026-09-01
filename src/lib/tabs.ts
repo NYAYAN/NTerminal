@@ -103,3 +103,64 @@ export function visibleGroups<T extends { favorite?: boolean }>(
   if (!onlyFavorites) return groups;
   return groups.filter((g) => g.favorite === true);
 }
+
+// ------------------------------------------------------------ profil bagi
+
+/**
+ * Boşa düşmüş profil bağlarını onarır.
+ *
+ * ## Neden gerekiyor
+ *
+ * Sekme kabuğunu bir profil KİMLİĞİ ile tutuyor, profilin kendisiyle değil.
+ * Kimlik iki yoldan boşa düşüyor:
+ *
+ *   * Ayarlar › Profiller › Sil — o profile bağlı sekmeler olduğu gibi kalıyor.
+ *   * "Ayarları varsayılanlara döndür" — profiller yeniden taranıyor ve
+ *     hepsine YENİ kimlik veriliyor, yani listedeki her sekmenin bağı aynı
+ *     anda kopuyor.
+ *
+ * Görünen belirti kenar çubuğundaki `?` rozetiydi. Sekme aslında çalışıyordu:
+ * Rust tarafı açarken varsayılana düşüyor (`store::resolve_profile`). Yani
+ * yalnızca bir çizim sorunu gibi görünüyor ama değil — sekmenin ne olduğu
+ * bilgisi diskte de bozuk duruyor ve her açılışta yeniden aynı yere düşmek
+ * zorunda kalıyor.
+ *
+ * Burası bağı DÜZELTİYOR: kimliği artık geçmeyen sekme, kabuğun gerçekte
+ * düştüğü profile bağlanıyor. Düşüş sırası Rust'takiyle aynı: varsayılan
+ * profil, o da yoksa listenin ilki.
+ *
+ * Profil listesi boşsa hiçbir şey yapılmıyor — bağlanacak bir şey yok ve
+ * sekmenin kimliğini silmek bilgiyi tümden atmak olurdu.
+ */
+export function healTabProfiles(
+  groups: Group[],
+  profiles: { id: string }[],
+  defaultProfileId: string,
+): Group[] {
+  if (profiles.length === 0) return groups;
+  const known = new Set(profiles.map((p) => p.id));
+  const fallback = known.has(defaultProfileId) ? defaultProfileId : profiles[0].id;
+
+  let touched = false;
+  const next = groups.map((group) => {
+    let groupTouched = false;
+    const tabs = group.tabs.map((tab) => {
+      if (known.has(tab.profileId)) return tab;
+      groupTouched = true;
+      return { ...tab, profileId: fallback };
+    });
+    // Grubun varsayılan profili de boşa düşebiliyor; sonraki sekme onunla
+    // açılacağı için o da onarılıyor. `null` bilinçli olarak korunuyor:
+    // "varsayılanı kullan" demek ve bir kopuk bağ değil.
+    const defaults =
+      group.defaultProfileId !== null && !known.has(group.defaultProfileId)
+        ? { defaultProfileId: fallback }
+        : null;
+    if (!groupTouched && !defaults) return group;
+    touched = true;
+    return { ...group, tabs, ...defaults };
+  });
+
+  // Kimlik korunuyor: değişiklik yoksa çağıran taraf yeniden çizmesin.
+  return touched ? next : groups;
+}

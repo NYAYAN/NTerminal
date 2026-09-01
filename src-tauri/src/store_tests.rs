@@ -279,3 +279,70 @@ fn bos_bolumler_varsayilanla_dolar() {
     assert!(settings.behavior.block_headers);
     assert!(settings.behavior.app_suggestions);
 }
+
+/// Diskte duran YINELENEN sekme kimlikleri yuklemede onarilmali.
+///
+/// Birlestirmeli ice alma bir surum boyunca ayni kimligi iki kez ekledi
+/// (`transfer::merge_workspace`, orada duzeltildi). Kaynagi kapatmak DISKTE
+/// ZATEN DURAN dosyayi duzeltmiyor: arayuz sekmeyi kimlikle ariyor ve arama
+/// ilk eslesmede duruyor, yani ikinci kopya erisilemez kaliyor.
+#[test]
+fn yinelenen_sekme_kimlikleri_yuklemede_onariliyor() {
+    let paths = temp_paths("dupe");
+
+    let ws = serde_json::json!({
+        "version": 1,
+        "activeGroupId": "g1",
+        "savedAt": 0,
+        "groups": [
+            {
+                "id": "g1", "name": "GurselAPP", "color": null, "icon": null,
+                "collapsed": false, "favorite": false, "defaultProfileId": null,
+                "defaultCwd": null, "env": {}, "activeTabId": "t1",
+                "tabs": [{
+                    "id": "t1", "title": "", "customTitle": null, "profileId": "p",
+                    "cwd": null, "createdAt": 0, "lastActiveAt": 0,
+                    "hasScrollback": false, "lastCommand": null, "locked": false
+                }]
+            },
+            {
+                "id": "g2", "name": "GurselAPP (gelen)", "color": null, "icon": null,
+                "collapsed": false, "favorite": false, "defaultProfileId": null,
+                "defaultCwd": null, "env": {}, "activeTabId": "t1",
+                "tabs": [{
+                    "id": "t1", "title": "", "customTitle": null, "profileId": "p",
+                    "cwd": null, "createdAt": 0, "lastActiveAt": 0,
+                    "hasScrollback": false, "lastCommand": null, "locked": false
+                }]
+            }
+        ]
+    });
+    std::fs::write(paths.workspace_file(), serde_json::to_string(&ws).unwrap()).unwrap();
+
+    let mut settings = Settings::default();
+    settings.behavior.restore_session = true;
+    let loaded = load_workspace(&paths, &settings);
+
+    let kimlikler: Vec<String> = loaded
+        .groups
+        .iter()
+        .flat_map(|g| g.tabs.iter().map(|t| t.id.clone()))
+        .collect();
+    let mut tekil = kimlikler.clone();
+    tekil.sort();
+    tekil.dedup();
+    assert_eq!(
+        kimlikler.len(),
+        tekil.len(),
+        "yinelenen kimlik onarilmadi: {kimlikler:?}"
+    );
+    // Ilk gorulen korunuyor; ikincisi yenileniyor.
+    assert_eq!(loaded.groups[0].tabs[0].id, "t1");
+    assert_ne!(loaded.groups[1].tabs[0].id, "t1");
+    // Etkin isaret de yeni kimlige tasinmis olmali.
+    assert_eq!(
+        loaded.groups[1].active_tab_id.as_deref(),
+        Some(loaded.groups[1].tabs[0].id.as_str())
+    );
+
+}

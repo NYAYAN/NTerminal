@@ -96,6 +96,12 @@ export const api = {
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
+  /**
+   * Bir dosyadaki değişiklikleri geri alır. YIKICI: takip edilen dosya HEAD'e
+   * dönüyor, takipsiz dosya siliniyor. Onay çağıran tarafta soruluyor.
+   */
+  gitRevert: (path: string, file: string, untracked: boolean) =>
+    invoke<void>("git_revert", { path, file, untracked }),
   gitFingerprint: (path: string) => invoke<string | null>("git_fingerprint", { path }),
   gitDiff: (path: string, file: string, untracked: boolean) =>
     invoke<string | null>("git_diff", { path, file, untracked }),
@@ -122,33 +128,32 @@ export interface PtyExitEvent {
   code: number | null;
 }
 
-const B64_LOOKUP = (() => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const table = new Uint8Array(256).fill(255);
-  for (let i = 0; i < chars.length; i++) table[chars.charCodeAt(i)] = i;
-  return table;
-})();
-
-/** atob + charCodeAt döngüsünden belirgin şekilde hızlı; sıcak yol burası. */
+/**
+ * base64 -> bayt. Sıcak yol: her PTY parçası buradan geçiyor.
+ *
+ * `atob` + `charCodeAt` döngüsü, elle yazılmış altı-bitlik çözücüden HIZLI.
+ * Bunun tersi yazılıydı ve ölçüm yanlışladı (Chromium, aynı motor WebView2'de;
+ * parça başına en iyi üç turun en iyisi):
+ *
+ *   |  parça | elle | atob |
+ *   |    1KB |  5µs |  3µs |
+ *   |    8KB | 65µs | 32µs |
+ *   |   32KB |153µs | 89µs |
+ *   |  128KB |555µs |300µs |
+ *
+ * Sebebi tahmin edilebilir: `atob` motorun içinde, döngü de tek bir tipli
+ * dizi yazımı; elle çözücü karakter başına maske, kaydırma ve dal içeriyor.
+ * Çıktı bayt bayt AYNI (padli, padsiz ve yüksek baytlı girdide doğrulandı).
+ *
+ * Girdi Rust tarafının ürettiği standart base64; `atob` gerçekten geçersiz
+ * bir karakterde atıyor. Sessizce atlayıp bozuk bayt üretmektense bunu
+ * duymak doğru: kaynak makineyse hata gerçek bir hatadır.
+ */
 export function base64ToBytes(input: string): Uint8Array {
-  let length = input.length;
-  while (length > 0 && input.charCodeAt(length - 1) === 61 /* '=' */) length--;
-  const outLength = (length * 3) >> 2;
-  const out = new Uint8Array(outLength);
-  let o = 0;
-  let buffer = 0;
-  let bits = 0;
-  for (let i = 0; i < length; i++) {
-    const value = B64_LOOKUP[input.charCodeAt(i)];
-    if (value === 255) continue;
-    buffer = (buffer << 6) | value;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out[o++] = (buffer >> bits) & 0xff;
-    }
-  }
-  return o === outLength ? out : out.subarray(0, o);
+  const binary = atob(input);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 export function onPtyData(

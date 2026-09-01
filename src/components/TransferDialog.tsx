@@ -26,12 +26,22 @@ function ModeSelect({
   onChange,
   disabled,
   mergeHint,
+  replaceHint,
   t,
 }: {
   value: ImportMode;
   onChange: (mode: ImportMode) => void;
   disabled?: boolean;
   mergeHint?: string;
+  /**
+   * "Üzerine yaz" seçiliyken gösterilen açıklama.
+   *
+   * Birleştirme ipucu neyin EKLENECEĞİNİ anlatıyordu; geri dönüşü olmayan
+   * taraf ise neyin SİLİNECEĞİ ve o hiç yazmıyordu. Kullanıcı seçeneği
+   * "içerdekini ez" diye arayıp bulamadı — etiket de ipucu da ona bunu
+   * söylemiyordu.
+   */
+  replaceHint?: string;
   t: Translate;
 }) {
   return (
@@ -49,6 +59,7 @@ function ModeSelect({
         ))}
       </div>
       {mergeHint && value === "merge" && <div className="hintline">{mergeHint}</div>}
+      {replaceHint && value === "replace" && <div className="hintline warn">{replaceHint}</div>}
     </div>
   );
 }
@@ -408,6 +419,7 @@ export function TransferDialog() {
                         disabled={!preview.hasSettings}
                         onChange={(settings) => setImportOptions((p) => ({ ...p, settings }))}
                         mergeHint={t("transfer.mergeSettings")}
+                        replaceHint={t("transfer.replaceSettings")}
                         t={t}
                       />
                     </div>
@@ -421,6 +433,7 @@ export function TransferDialog() {
                         disabled={!preview.hasWorkspace}
                         onChange={(workspace) => setImportOptions((p) => ({ ...p, workspace }))}
                         mergeHint={t("transfer.mergeWorkspace")}
+                        replaceHint={t("transfer.replaceWorkspace")}
                         t={t}
                       />
                     </div>
@@ -434,6 +447,7 @@ export function TransferDialog() {
                         disabled={preview.history === 0}
                         onChange={(history) => setImportOptions((p) => ({ ...p, history }))}
                         mergeHint={t("transfer.mergeHistory")}
+                        replaceHint={t("transfer.replaceHistory")}
                         t={t}
                       />
                     </div>
@@ -447,6 +461,7 @@ export function TransferDialog() {
                         disabled={preview.favorites === 0}
                         onChange={(favorites) => setImportOptions((p) => ({ ...p, favorites }))}
                         mergeHint={t("transfer.mergeFavorites")}
+                        replaceHint={t("transfer.replaceFavorites")}
                         t={t}
                       />
                     </div>

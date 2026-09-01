@@ -74,6 +74,25 @@ export function SuggestionBar() {
    * mı açılacağını belirliyor), ama boyamadan ÖNCE uygulanmalı — yoksa liste
    * bir kare yanlış yerde görünüyor. `useLayoutEffect` tam olarak bu aralık.
    */
+  /*
+   * Seçili satır GÖRÜNÜR kalıyor.
+   *
+   * BİLDİRİLEN HATA: "ok yönleriyle yukarı doğru gittiğimde bir şeyi seçtim
+   * görünüyorum ama scroll ok ile beraber hareket etmediği için seçtiğim
+   * şeyin yazısı görünmüyor". Liste yüksekliği sınırlı ve kaydırılabilir
+   * (`max-height` + `overflow-y`), seçim ise sınırın dışına çıkabiliyordu —
+   * yani kullanıcı neyi kabul edeceğini göremeden Enter'a basıyordu.
+   *
+   * `block: "nearest"`: liste yalnızca GEREKTİĞİ KADAR kayıyor. Ortalamak
+   * her ok basışında listeyi zıplatır ve komşu satırların yerini değiştirir;
+   * göz sırayı takip edemez hâle gelir. Aynı çözüm sekme çubuğunda da var
+   * (etkin sekmeyi görünür tutan efekt).
+   */
+  useLayoutEffect(() => {
+    const secili = ref.current?.querySelector<HTMLElement>(".suggest-row.on");
+    secili?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [suggest?.index, suggest?.input]);
+
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || !tab) return;

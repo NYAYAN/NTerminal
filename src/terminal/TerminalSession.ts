@@ -109,6 +109,13 @@ export interface SessionCallbacks {
    */
   /** Çalışan komutun çıktısında bir sunucu adresi görüldü. */
   onRunLinks?: (urls: string[]) => void;
+  /**
+   * Görünüm en altta mı — yani kullanıcı geçmişe kaydırmış durumda mı.
+   *
+   * Yalnızca DEĞİŞTİĞİNDE bildiriliyor: her kaydırma karesinde depoyu
+   * güncellemek akan çıktıda saniyede onlarca yeniden çizim demek.
+   */
+  onScrollState?: (atBottom: boolean) => void;
   onInputSignals?: (signals: {
     atPrompt: boolean;
     altScreen: boolean;
@@ -167,6 +174,40 @@ export class TerminalSession {
   private inputTimer: number | null = null;
 
   private container: HTMLElement | null = null;
+  /**
+   * Terminal EKRANDA mi.
+   *
+   * Gizli sekmeler duzenden cikarilmiyor (`visibility: hidden`, gerekce
+   * `TerminalArea`da): xterm'in olcumu bozulmasin diye. Bedeli sessizce
+   * buraya biniyordu - gizli bir sekmeye cikti aktikca kare basina bir React
+   * yeniden cizimi (blok katmani) ve 90ms'de bir bag lanti taramasi kosuyordu,
+   * kimsenin gormedigi bir terminal icin. On sekmeli bir pencerede bu
+   * carpiliyor.
+   *
+   * Varsayilan `true` BILINCLI: `setDisplay` cagrilmayan bir yol kalirsa
+   * eksik cizim degil fazla is olur - sessizce bos ekran gostermekten iyi.
+   */
+  private visible = true;
+  /**
+   * Blok katmaninin OLCULEN geometrisi.
+   *
+   * `getBoundingClientRect` yerlesimi zorluyor (React'in bekleyen degisiklikleri
+   * varsa hemen hesaplaniyor) ve bu deger kare basina okunuyordu. Oysa yalnizca
+   * olcu degisince degisiyor: yeniden boyutlandirma, `fit`, yazi tipi/boyut.
+   * Onlar `invalidateGeometry` ile bu onbellegi dusuruyor. `viewportTop` ve
+   * `rows` onbellege GIRMIYOR: ikisi de ucuz alan okumasi ve her karede
+   * degisiyor.
+   */
+  private geometry: { top: number; left: number; width: number; cellHeight: number } | null =
+    null;
+  /**
+   * Son diske yazimdan bu yana ekrana yeni cikti geldi mi.
+   *
+   * `flushAllState` iki dakikada bir BUTUN sekmeleri seri hale getiriyordu;
+   * on sekme x 2000 satir, ana is parcaciginda. Ciktisi degismemis sekmenin
+   * diskteki dosyasi zaten dogru.
+   */
+  private outputSinceSave = false;
   private resizeObserver: ResizeObserver | null = null;
   private disposables: IDisposable[] = [];
   private unlisteners: UnlistenFn[] = [];
@@ -216,7 +257,24 @@ export class TerminalSession {
   /** Uygulama komut satırı etkin mi (imleç gizli, stdin kapalı). */
   private appInputActive = false;
   /** Çalışan komutun çıktısında görülen sunucu adresleri. */
+  /**
+   * Geri yükleme ayıracının satırı.
+   *
+   * Ayıraç terminale metin olarak yazılmıyor (gerekçesi `start` içinde);
+   * yalnızca boş bir satır açılıp işaretleniyor ve katman onu buradan
+   * buluyor. Terminal temizlenirse xterm işaretçiyi düşürüyor ve satır
+   * `-1` oluyor — o zaman ayıraç da çizilmiyor.
+   */
+  private restoreMarker: IMarker | null = null;
   private serverUrls: string[] = [];
+  /**
+   * Görünüm en altta mı. Başlangıçta evet: yeni açılan terminal en altta.
+   *
+   * Doğru değer her zaman xterm'in tamponundan okunuyor (`readAtBottom`); bu
+   * alan yalnızca "değişti mi" karşılaştırması için duruyor, yoksa her
+   * kaydırma karesinde arayüz yeniden çizilirdi.
+   */
+  private atBottom = true;
   /**
    * Adres taramasının geldiği son satır (mutlak tampon satırı).
    *
@@ -250,6 +308,23 @@ export class TerminalSession {
       scrollback: init.settings.appearance.scrollback,
       theme: theme.xterm,
       convertEol: false,
+      /*
+       * Kaydırma çubuğunun genişliği BURADAN geliyor.
+       *
+       * xterm kendi çubuğunu çiziyor (VS Code'un kaydırılabilir öğesi), yani
+       * `::-webkit-scrollbar` kuralları ona ULAŞMIYOR — uygulamanın geri kalanı
+       * 9px'ken terminalinki 14px kalıyordu ve gözle farkı belliydi.
+       * Genişliği veren tek seçenek bu: xterm içeride
+       * `verticalScrollbarSize = overviewRuler?.width || 14` diyor.
+       *
+       * İkinci etkisi bilinçli: `width` verilmeden genel bakış sütunu HİÇ
+       * çizilmiyor. Arama eklentisi zaten `matchOverviewRuler` ve
+       * `activeMatchColorOverviewRuler` renklerini veriyordu
+       * (bkz. TerminalFind.tsx) ama sütun kapalı olduğu için o renkler
+       * ölüydü — artık eşleşmeler çubuğun yanında işaretleniyor ve uzun
+       * çıktıda eşleşmenin nerede olduğu kaydırmadan görünüyor.
+       */
+      overviewRuler: { width: 9 },
       // macOS'ta Option'ı Meta yapmak kullanıcının seçimi. Varsayılan kapalı:
       // Türkçe Mac klavyesinde `@` = Option+Q ve açık olsa `@` yazılamazdı —
       // terminalde `@angular/cli` ya da bir e-posta adresi yazmak imkânsız
@@ -330,11 +405,15 @@ export class TerminalSession {
     if (this.container === container) return;
     this.container = container;
     this.term.open(container);
+    this.invalidateGeometry();
     this.safeFit();
 
     this.syncCellHeight();
 
     this.resizeObserver = new ResizeObserver(() => {
+      // Kap boyu degisti: `safeFit` satir/sutun ayni kalirsa erken donuyor,
+      // ama dikdortgen yine kaymis olabiliyor - onbellek her durumda dusuyor.
+      this.invalidateGeometry();
       this.safeFit();
       this.syncCellHeight();
     });
@@ -351,12 +430,27 @@ export class TerminalSession {
 
     if (restoreData) {
       this.term.write(restoreData);
-      const dim = "\x1b[38;5;240m";
-      const reset = "\x1b[0m";
-      const line = "\u2500".repeat(Math.max(8, Math.min(60, this.term.cols - 24)));
-      this.term.write(
-        `\r\n${dim}${line} ${t("term.prevSessionEnded")} ${line}${reset}\r\n`,
-      );
+      /*
+       * Ay\u0131ra\u00e7 terminale YAZILMIYOR; uygulama \u00e7iziyor.
+       *
+       * \u00d6L\u00c7\u00dcLEN HATA: "\u00f6nceki oturum burada bitti" sat\u0131r\u0131 yaz\u0131ld\u0131\u011f\u0131 andaki
+       * geni\u015fli\u011fe donuyordu. Sa\u011fdaki \u00e7ekmece a\u00e7\u0131l\u0131p terminal daral\u0131nca sat\u0131r
+       * ta\u015f\u0131p alt sat\u0131ra sark\u0131yor, pencere geni\u015fleyince de eski dar
+       * geni\u015fli\u011finde kal\u0131p ortalanm\u0131\u015f de\u011fil SOLA YAPI\u015eIK g\u00f6r\u00fcn\u00fcyordu.
+       *
+       * Bu, metin olarak yazman\u0131n ka\u00e7\u0131n\u0131lmaz sonucu: tampona giren bir sat\u0131r
+       * art\u0131k sabit bir metin, yeniden \u00f6l\u00e7\u00fclendirmede kendini ortalayamaz.
+       * Tek \u00e7\u00f6z\u00fcm onu DOM'da \u00e7izmek \u2014 blok ba\u015fl\u0131klar\u0131 da ayn\u0131 sebeple \u00f6yle
+       * \u00e7iziliyor (bkz. `TerminalBlocks`) ve ayn\u0131 geometriyi kullan\u0131yor.
+       *
+       * Terminale yaln\u0131zca BO\u015e bir sat\u0131r a\u00e7\u0131l\u0131yor ve o sat\u0131r i\u015faretleniyor;
+       * katman i\u015faret\u00e7inin bulundu\u011fu sat\u0131r\u0131n \u00fcst\u00fcne yaz\u0131y\u0131 ve \u00e7izgileri
+       * \u00e7iziyor. Bo\u015f sat\u0131r \u015fart: katman kayd\u0131rmayla birlikte hareket ediyor
+       * ama alt\u0131ndaki metni \u00f6rtmemeli.
+       */
+      await new Promise<void>((resolve) => this.term.write("\r\n", () => resolve()));
+      this.restoreMarker = this.term.registerMarker(0);
+      await new Promise<void>((resolve) => this.term.write("\r\n", () => resolve()));
     }
 
     /*
@@ -397,6 +491,7 @@ export class TerminalSession {
          * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor - sirayi
          * ancak geri cagirma garantiliyor.
          */
+        this.outputSinceSave = true;
         this.term.write(bytes, () => this.scanNewLines());
       }),
     );
@@ -472,14 +567,28 @@ export class TerminalSession {
    * kayıp hızlı akan çıktıdaki kare sayısı.
    */
   setDisplay(visible: boolean, focused: boolean) {
+    const wasVisible = this.visible;
+    this.visible = visible;
     if (!visible) {
       this.disableWebgl();
       return;
     }
     if (focused) this.enableWebgl();
     else this.disableWebgl();
+    // Sekme gizliyken pencere yeniden boyutlanmis olabilir.
+    this.invalidateGeometry();
     this.safeFit();
     if (focused) this.focusTerminal();
+    /*
+     * Gizliyken atlanan iki isi burada BIR KEZ yapiyoruz: katmanin yeniden
+     * cizimi ve baglanti renklendirmesi. Yoksa sekmeye donuldugunde bloklar
+     * bir sonraki ciktiya kadar eski yerinde kalirdi - komut bitmis, sekme
+     * sessiz duruyorsa hic gelmeyebilir.
+     */
+    if (!wasVisible) {
+      this.notifyBlocks();
+      this.scheduleLinkHighlight();
+    }
   }
 
   /** Görünür ve odaklı olmanın çakıştığı sekme kipi için kısayol. */
@@ -547,9 +656,13 @@ export class TerminalSession {
     // Tema ve imleç TEK YERDEN: burada `theme.xterm`i doğrudan yazmak, uygulama
     // komut satırı açıkken gizlenmiş imleci geri getiriyordu.
     this.applyCursorVisibility();
+    // Yazi tipi, boyut ve satir araligi hucre olcusunu degistiriyor.
+    this.invalidateGeometry();
     this.safeFit();
-    // Yazi tipi/boyut/satir araligi degistiyse satir yuksekligi de degisti.
     this.syncCellHeight();
+    // Kaydedilecek satir sayisi degismis olabilir: diskteki kopya artik
+    // ayarla ortusmuyor.
+    this.outputSinceSave = true;
     // Vurgu rengi temayla degisiyor ve renklendirme kapatilabiliyor: ikisi de
     // mevcut dekorasyonlari gecersiz kiliyor.
     this.clearLinkDecorations();
@@ -757,6 +870,13 @@ export class TerminalSession {
   } | null {
     const host = this.container;
     if (!host) return null;
+    if (this.geometry) {
+      return {
+        ...this.geometry,
+        viewportTop: this.term.buffer.active.viewportY,
+        rows: this.term.rows,
+      };
+    }
     const screen = host.querySelector<HTMLElement>(".xterm-screen");
     if (!screen || this.term.rows < 1) return null;
 
@@ -776,14 +896,32 @@ export class TerminalSession {
      * 20px içeriden başlıyordu ve şerit 8px'lik kendi payıyla 28px'e düşüyor,
      * metnin üstüne biniyordu. Kapsayıcıdan ölçünce şeridin 8px'i gerçek 8px.
      */
-    return {
+    this.geometry = {
       top: rect.top - hostRect.top,
       left: 0,
       width: hostRect.width,
       cellHeight: rect.height / this.term.rows,
+    };
+    return {
+      ...this.geometry,
       viewportTop: this.term.buffer.active.viewportY,
       rows: this.term.rows,
     };
+  }
+
+  /** Olcu degisti: geometri bir sonraki okumada yeniden olculecek. */
+  private invalidateGeometry() {
+    this.geometry = null;
+  }
+
+  /** Son kaydetmeden bu yana yeni cikti geldi mi (bkz. `flushAllState`). */
+  hasUnsavedOutput(): boolean {
+    return this.outputSinceSave;
+  }
+
+  /** Ekran ciktisi diske yazildi. */
+  markOutputSaved() {
+    this.outputSinceSave = false;
   }
 
   /**
@@ -826,6 +964,9 @@ export class TerminalSession {
    * React'i çalıştırmak katmanı terminalden daha pahalı hâle getirirdi.
    */
   private scheduleBlockSync() {
+    // Gizli sekmenin katmanini kare basina yeniden cizmek bos is; sekme
+    // gorunur olunca `setDisplay` bir kez tazeliyor.
+    if (!this.visible) return;
     if (this.blockSyncFrame !== null) return;
     this.blockSyncFrame = window.requestAnimationFrame(() => {
       this.blockSyncFrame = null;
@@ -865,6 +1006,42 @@ export class TerminalSession {
     // kesiliyor: liste bir yolda temizlenmeden kalsa bile dışarı sızmıyor.
     if (!this.running) return [];
     return [...this.serverUrls];
+  }
+
+  /**
+   * Görünüm gerçekten en altta mı.
+   *
+   * `viewportY` görünümün tampondaki yeri, `baseY` ise en alta kaydırılmış
+   * hâlin yeri. İkisi eşitse kullanıcı canlı çıktıya bakıyor demek.
+   */
+  private readAtBottom(): boolean {
+    const buf = this.term.buffer.active;
+    return buf.viewportY >= buf.baseY;
+  }
+
+  /** En alta iner. "Aşağı in" düğmesi bunu çağırıyor. */
+  scrollToBottom() {
+    this.term.scrollToBottom();
+    this.syncScrollState();
+  }
+
+  /** Kaydırma durumu değiştiyse arayüze bildirir. */
+  private syncScrollState() {
+    const now = this.readAtBottom();
+    if (now === this.atBottom) return;
+    this.atBottom = now;
+    this.callbacks.onScrollState?.(now);
+  }
+
+  /**
+   * Geri yükleme ayıracının bulunduğu MUTLAK tampon satırı; yoksa `null`.
+   *
+   * Katman bunu görünümün üstüyle (`viewportTop`) çıkarıp ekrandaki satırı
+   * buluyor; kaydırmayla birlikte hareket etmesi böyle oluyor.
+   */
+  restoreDividerLine(): number | null {
+    const line = this.restoreMarker?.line ?? -1;
+    return line >= 0 ? line : null;
   }
 
   /** Adres listesini boşaltır ve arayüze bildirir. */
@@ -926,6 +1103,7 @@ export class TerminalSession {
         baseY: buf.baseY,
         cursorY: buf.cursorY,
         readLine: (y) => buf.getLine(y)?.translateToString(true) ?? "",
+        isWrapped: (y) => buf.getLine(y)?.isWrapped ?? false,
         running: this.running,
         altScreen: buf.type === "alternate",
       },
@@ -1071,6 +1249,10 @@ export class TerminalSession {
    * fark edilmiyor ama işi bir kat azaltıyor.
    */
   private scheduleLinkHighlight() {
+    // Gorunmeyen terminalde dekorasyon uretmek olculebilir bir maliyet:
+    // gorunur satir sayisi kadar `translateToString` + dekorasyon yikip
+    // yeniden kurma, 90ms'de bir.
+    if (!this.visible) return;
     if (this.linkTimer !== null) return;
     this.linkTimer = window.setTimeout(() => {
       this.linkTimer = null;
@@ -1206,10 +1388,14 @@ export class TerminalSession {
       this.term.onRender(() => {
         this.scheduleLinkHighlight();
         this.scheduleBlockSync();
+        // Yeni çıktı da tabanı aşağı itiyor: kullanıcı kaydırmadan da "en
+        // altta değil" hâline geçilebiliyor.
+        this.syncScrollState();
       }),
       this.term.onScroll(() => {
         this.scheduleLinkHighlight();
         this.scheduleBlockSync();
+        this.syncScrollState();
       }),
     );
 

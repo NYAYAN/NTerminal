@@ -130,6 +130,31 @@ pub struct Appearance {
     /// "tabs" tek terminal, "panes" etkin grubun tum sekmelerini doseyerek
     /// ayni ekranda gosterir.
     pub view_mode: String,
+    /// Sekmenin solundaki kabuk rozeti ("PS", "CMD", "WSL") gorunsun mu.
+    ///
+    /// Varsayilan ACIK: tek bakista hangi kabugun calistigi belli oluyor.
+    /// Kapatilabilir olmasi bilincli - tek profille calisan kullanicida rozet
+    /// her satirda ayni seyi tekrar ediyor ve dar kenar cubugunda sekme adina
+    /// ayrilan yeri yiyor.
+    pub show_shell_badge: bool,
+    /// Grup kenar cubugu daraltilmis mi (baslik cubugundaki panel dugmesi).
+    ///
+    /// Ayarda tutuluyor, gecici arayuz durumunda degil: kullanici cubugu
+    /// kapattiysa uygulamayi yeniden actiginda da kapali bekliyor.
+    pub sidebar_collapsed: bool,
+    /// Favoriler panelinde DARALTILMIS grup adlari.
+    ///
+    /// Neden liste: favori grubu ayri bir varlik degil, favorinin uzerinde
+    /// duran serbest bir metin (bkz. `Favorite::folder`). Uzerine "daraltildi"
+    /// yazacak bir kayit yok, o yuzden durum adlarla tutuluyor.
+    ///
+    /// Bos dize GRUPLANMAMIS bolumu demek. Guvenli bir nobetci: grup adlari
+    /// kaydedilirken kirpiliyor ve bos olanlar `None` sayiliyor, yani gercek
+    /// bir grup asla `""` olamiyor.
+    ///
+    /// Sekme gruplarinin daraltma durumu da kalici (bkz. `Group::collapsed`);
+    /// burasi ayni beklentiyi karsiliyor.
+    pub collapsed_favorite_folders: Vec<String>,
 }
 
 impl Default for Appearance {
@@ -147,6 +172,9 @@ impl Default for Appearance {
             panel_width: 390,
             highlight_links: true,
             view_mode: "tabs".into(),
+            show_shell_badge: true,
+            sidebar_collapsed: false,
+            collapsed_favorite_folders: Vec::new(),
         }
     }
 }

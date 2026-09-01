@@ -340,10 +340,10 @@ html[data-platform="macos"] .titlebar {
   padding-left: 78px;
 }
 
-/* Dosya agaci dugmesi: baslik cubugunun EN SOLUNDA, markanin oncesinde.
-   Agac bir gorunum ve solda aciliyor; dugmenin de solda olmasi ikisini
-   baglıyor. */
-.titlebar .tree-btn {
+/* Gorunum dugmeleri (grup kenar cubugu, dosya agaci): baslik cubugunun EN
+   SOLUNDA, markanin oncesinde. Ikisi de solda acilan bir bolmeyi acip
+   kapatiyor; dugmelerin de solda olmasi ikisini baglıyor. */
+.titlebar .view-btn {
   flex: none;
   padding: 0 6px;
 }
@@ -1027,7 +1027,10 @@ html[data-platform="macos"] .titlebar {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  /* Başlık ile altındaki yol arasında bir tık nefes payı. 1px'te iki satır
+     tek bir blok gibi okunuyordu; 3px onları ayırmaya yetiyor ve satır
+     yüksekliğini büyütmüyor. */
+  gap: 3px;
 }
 
 .tab-row-title {
@@ -1834,7 +1837,17 @@ html[data-platform="macos"] .titlebar {
 .block-badge {
   position: absolute;
   top: 0;
-  right: 14px;
+  /* Kaydirma cubugunun SOLUNDA, arada nefes payiyla.
+   *
+   * Olcu: cubuk `.xterm`in 4px sag dolgusunun solunda ve 9px genis, yani
+   * pencere kenarindan 4-13px arasinda. 22px, sure rozetiyle cubuk arasinda
+   * ~9px birakiyor. Onceki 14px sag dolgu 14px'ken metnin sag kenarina
+   * denk geliyordu; dolgu daralinca rozet cubuga yapisti ve kullanicinin
+   * gordugu buydu.
+   *
+   * `.scroll-bottom` ile ayni uc sayiya bagli; biri degisirse otekini de
+   * gozden gecirin (layout.test bunu bagliyor). */
+  right: 22px;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -2016,6 +2029,11 @@ html[data-platform="macos"] .titlebar {
   border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 
+/* Eylemler mutlak konumlu; satir onlarin dayanagi. */
+.git-item {
+  position: relative;
+}
+
 .git-item.open {
   background: var(--sunken);
   border-radius: 6px;
@@ -2062,8 +2080,36 @@ html[data-platform="macos"] .titlebar {
 }
 
 .diff-line {
-  padding: 0 10px 0 22px;
+  display: flex;
+  padding: 0 10px 0 0;
   white-space: pre;
+}
+
+/* Satir numarasi sutunu.
+ *
+ * Sabit genislik ve tabular rakam: numaralar 99'dan 100'e gecerken metin
+ * sutununun kaymasi, farki okurken gozun her satirda yeniden hizalanmasi
+ * demek.
+ *
+ * `user-select: none`: farki kopyalayan kisi kodu istiyor, numaralari degil.
+ * Numaralar secime girseydi yapistirdiginda her satirin basinda bir sayi
+ * olurdu ve metin dogrudan kullanilamazdi. */
+.diff-no {
+  flex: none;
+  width: 44px;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--text-dim);
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+/* Metin sutunu sikisabiliyor; uzun satir YATAY kaydirmaya gidiyor (gerekcesi
+   `.git-diff` kuralinda), sarmiyor. */
+.diff-text {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Zeminler cok soluk: renk isareti olarak yeterli ve altindaki metin okunur
@@ -2097,26 +2143,79 @@ html[data-platform="macos"] .titlebar {
   background: var(--hover);
 }
 
-/* Durum etiketi SABIT genislikte: degisken genislikte yol sutunu her satirda
-   baska yerden basliyor ve liste taranmasi zorlasiyor. */
-.git-tag {
+/* Durum simgesi. Metin etiketinin yerini aldi.
+ *
+ * ONCEKI HALI 88px'lik sabit bir sutundu ("DEGISTI", "YENIDEN ADLANDIRILDI").
+ * Sabit genislik dogru karardi - degisken etiketle yol sutunu her satirda
+ * baska yerden basliyor ve liste taranamiyordu - ama o 88px dosya YOLUNDAN
+ * cikiyordu: dar panelde asil aranan bilgi kirpiliyor, yerinde her satirda
+ * tekrarlanan ayni kelime duruyordu.
+ *
+ * Simge 16px: hizalama korunuyor, 72px yol sutununa donuyor. Metin
+ * kaybolmuyor, `title` ve `aria-label` icinde. */
+.git-icon {
   flex: none;
-  width: 88px;
-  font-family: var(--ui-font);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
 }
 
-.git-tag.mod {
+.git-icon.mod {
   color: var(--accent);
 }
 
-.git-tag.new {
+.git-icon.new {
   color: var(--ok);
 }
 
-.git-tag.del {
+/* Takip edilmeyen dosya YEŞİL DEĞİL.
+ *
+ * Eklenen dosyayla aynı yeşilde duruyordu ve "yeni dosya eklendi" diye
+ * okunuyordu — oysa eklenen dosya indekste, takip edilmeyen hiçbir yerde:
+ * commit'e girmesi için önce `git add` gerekiyor. Sarı o farkı taşıyor. */
+.git-icon.untracked {
+  color: var(--warn);
+}
+
+.git-icon.del {
+  color: var(--err);
+}
+
+/* Satir eylemleri: yolu kopyala, degisiklikleri geri al, dosyayi ac.
+ *
+ * Yalnizca satirin USTUNDEYKEN gorunuyorlar. Ucu birden her satirda durunca
+ * liste bir arac cubugu tarlasina donuyor ve asil bilgi olan yol geri plana
+ * dusuyor; klavyeyle gezenler icin `focus-within` de aciyor.
+ *
+ * `.git-item`in icinde ama `.git-row` DUGMESININ disinda: satirin kendisi
+ * katlama dugmesi ve ic ice dugme hem gecersiz isaretleme hem karisik
+ * tiklama demek. */
+.git-actions {
+  position: absolute;
+  right: 6px;
+  top: 2px;
+  display: none;
+  gap: 3px;
+}
+
+/* Dugmeler bir tik BUYUK: 12px simge ve dar dolgu ile ucu de ayni gri lekeye
+   donusuyordu, hangisinin ne oldugu ancak ipucuyla anlasiliyordu. */
+.git-actions .icon-btn {
+  padding: 3px 5px;
+}
+
+.git-item:hover .git-actions,
+.git-item:focus-within .git-actions {
+  display: flex;
+}
+
+/* Satirin arka planiyla karismasin: eylemler yolun uzerine binebiliyor. */
+.git-actions .icon-btn {
+  background: var(--surface-alt);
+}
+
+.git-actions .icon-btn.danger:hover {
   color: var(--err);
 }
 
@@ -2777,8 +2876,13 @@ html[data-platform="macos"] .titlebar {
      20px seride yer birakiyor ve ustunde ~10px nefes payi kaliyor.
 
      Dolgunun `.xterm` ogesinde olmasi sart, ebeveynde DEGIL: FitAddon satir
-     hesabinda yalnizca bu ogenin dolgusunu dusuyor (yukaridaki uzun aciklama). */
-  padding: 8px 14px 10px 20px;
+     hesabinda yalnizca bu ogenin dolgusunu dusuyor (yukaridaki uzun aciklama).
+
+     SAG dolgu kasitli olarak DAR (4px). Kaydirma cubugu xterm'in ICINDE, yani
+     dolgunun solunda duruyor: 14px'ken cubugun sagimda 14px'lik olu bir serit
+     kaliyordu ve cubuk metne gereginden yakin goruniyordu. 4px cubugu pencere
+     kenarina yaklastiriyor ve kazanilan yer metne gidiyor. */
+  padding: 8px 4px 10px 20px;
 }
 
 /*
@@ -2797,6 +2901,84 @@ html[data-platform="macos"] .titlebar {
   background-color: var(--term-bg);
 }
 
+/* "En alta in" dugmesi.
+ *
+ * Terminalin UZERINDE yuzuyor, duzende yer KAPLAMIYOR: bir satir bile yer
+ * almasi terminalin satir hesabini degistirirdi (bkz. layout.test - dolgunun
+ * neden xterm ogesinde durdugu). Sag altta, kaydirma cubugunun solunda.
+ *
+ * Yalnizca geriye kaydirilmisken ciziliyor; gorunurlugun karari React
+ * tarafinda (`scrollAtBottom`), burada yalnizca gorunumu var. */
+.scroll-bottom {
+  position: absolute;
+  /* Kaydirma cubugunun SOLUNDA duruyor, uzerinde degil.
+   *
+   * Olcu: cubuk 9px (`overviewRuler.width`) ve `.xterm`in 4px sag dolgusunun
+   * solunda, yani pencere kenarindan 4-13px arasinda. 20px, dugmenin 20px'ten
+   * baslamasi demek - cubukla arada 7px pay kaliyor. Onceki 18px'te ikisi
+   * ust uste biniyordu ve kullanicinin gordugu buydu.
+   *
+   * Bu iki sayi birbirine BAGLI; biri degisirse otekini de gozden gecirin
+   * (layout.test bunu bagliyor). */
+  right: 20px;
+  bottom: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-dim);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+
+.scroll-bottom:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+/* "Onceki oturum burada bitti" ayiraci.
+ *
+ * Cizgiler CSS'ten geliyor, metinden degil. Onceki hali terminale yazilan bir
+ * dizeydi ve yazildigi genisligie donuyordu: sagdaki cekmece acilinca satir
+ * tasip alt satira sarkiyor, pencere genisleyince eski dar genisliginde kalip
+ * ORTALANMIS DEGIL sola yapisik goruniyordu.
+ *
+ * Esneyen iki cizgi metni her genislikte ortaliyor ve yeniden olculendirmede
+ * hesap yapmak gerekmiyor - duzen kendisi yapiyor. */
+.restore-divider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  opacity: 0.75;
+  /* Katman metnin ustunde duruyor; secimi ve tiklamayi yutmamali. */
+  pointer-events: none;
+}
+
+.restore-divider::before,
+.restore-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid currentColor;
+  opacity: 0.55;
+}
+
+.restore-divider span {
+  white-space: nowrap;
+}
+
 /* Baglanti uzerinde imlec: WebLinksAddon'un `hover`/`leave` geri cagrilari
    bu sinifi ekleyip kaldiriyor. xterm baglantiyi kendisi alti cizili
    gosteriyor; eksik olan tek sey imlecin tiklanabilirligi belli etmesiydi. */
@@ -2806,20 +2988,46 @@ html[data-platform="macos"] .titlebar {
 
 /* Kabuk kapandiginda terminalin altinda cikan seritte satir ici stil
    yerine sinif kullaniyoruz; boylece tema degiskenleri tek yerden geliyor. */
+/* "Bu sekmedeki kabuk kapandi" kutusu.
+ *
+ * Metin USTTE, dugmeler ALTTA. Ucu yan yanayken kutu dar kaliyor ve cumle
+ * kelime kelime alt alta kiriliyordu ("Bu / sekmedeki / kabuk / kapandi.").
+ * Genislik icerige gore ama bir siniri var: uzun bir cumle kutuyu terminal
+ * boyunca uzatmasin. */
 .term-exited {
   position: absolute;
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
-  padding: 7px 12px;
+  max-width: min(360px, 80%);
+  padding: 11px 14px;
   background: var(--surface-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   z-index: 3;
+}
+
+.term-exited .dim {
+  /* Cumle tek satirda okunmali; kirilma yalnizca kutunun siniri gelince. */
+  line-height: 1.45;
+}
+
+.term-exited-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Iki dugme esit pay aliyor: farkli genislikte iki dugme kutuyu dengesiz
+   gosteriyordu ve gozun hangisinin birincil oldugunu bulmasi zorlasiyordu.
+   Birincil olan renkten belli (dolgu), olcuden degil. */
+.term-exited-actions button {
+  flex: 1;
+  justify-content: center;
 }
 
 .empty-state {
@@ -3222,6 +3430,77 @@ html[data-platform="macos"] .titlebar {
 
 /* --- favori satırı */
 
+/* Favori klasoru basligi.
+ *
+ * Klasor ayri bir varlik degil, favorilerden turetiliyor; baslik da bir
+ * dugme degil, bir AYIRICI. Tiklanabilir gormemesi bilincli - klasoru
+ * degistirmenin yolu favoriyi surukleyip birakmak ya da duzenleme
+ * formundaki alan. */
+.fav-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Tam genislikte bir DUGME: daraltmak icin kucuk oka nisan almak
+     gerekmemeli, basligin herhangi bir yeri calismali. */
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 8px 8px 3px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-radius: var(--radius);
+}
+
+.fav-folder:hover {
+  color: var(--text);
+}
+
+.fav-folder-caret {
+  display: inline-flex;
+  align-items: center;
+  width: 11px;
+  flex: none;
+}
+
+/* Baslik bir birakma hedefi: bos bir klasore tasimanin tek yolu bu. */
+.fav-folder.droppable {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.fav-folder-count {
+  margin-left: auto;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* Grup altindaki kayitlar GIRINTILI: baslikla icerigi ayiran sey yalnizca
+   yazi bicimi olmasin, hiyerarsi soldan da okunsun.
+ *
+ * Girinti `padding` ile, `margin` ile DEGIL: satirin tiklama ve birakma alani
+ * tam genislikte kalmali. Margin verilseydi solda olu bir serit olusur ve
+ * suruklerken oraya birakan kullanici hicbir sey olmadigini gorurdu. */
+.fav-section .fav-item {
+  padding-left: 18px;
+}
+
+/* Surukleneni SOLUKLASTIRIYORUZ, gizlemiyoruz: gizlemek liste yuksekligini
+   degistirip altindaki satirlari oynatiyor ve nisan aldigin yer kayiyor. */
+.fav-item.dragging {
+  opacity: 0.45;
+}
+
+/* Birakma cizgisi: satirin USTUNE, yani "bunun onune" anlamiyla. */
+.fav-item[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
 .fav-item {
   display: flex;
   align-items: flex-start;
@@ -3491,7 +3770,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -3502,9 +3781,10 @@ html[data-platform="macos"] .titlebar {
 }
 
 .modal-body {
-  /* Dikey dolgu yataydan az: kit olan dikey alan. Ayarlar penceresinde
-     ust+alt 28px, govdenin gorunur yuksekliginin (430px) %6,5'i idi. */
-  padding: 12px 14px;
+  /* Dikey dolgu yataydan az: kit olan dikey alan. Ikinci yogunluk gecisinde
+     ust+alt 24px'ten 20px'e indi - govdenin gorunur yuksekliginin (430px)
+     %6,5'i yerine %4,7'si. */
+  padding: 10px 12px;
   overflow-y: auto;
   flex: 1;
 }
@@ -3513,7 +3793,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 14px;
+  padding: 8px 12px;
   border-top: 1px solid var(--border);
 }
 
@@ -3548,7 +3828,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 8px;
+  padding: 6px;
   border-right: 1px solid var(--border);
   background: var(--surface);
   overflow-y: auto;
@@ -3574,7 +3854,7 @@ html[data-platform="macos"] .titlebar {
 .settings-search input {
   flex: 1;
   min-width: 0;
-  padding: 4px 7px;
+  padding: 3px 7px;
   font-size: 12px;
 }
 
@@ -3647,7 +3927,11 @@ html[data-platform="macos"] .titlebar {
 .settings-nav button {
   border: none;
   border-radius: var(--radius);
-  padding: 6px 10px;
+  /* Olculen: 6px dolgu ile satir 29px, dokuz bolum 261px. 4px'e inince 25px
+     ve 225px - dokuz bolum artik arama kutusuyla birlikte 430px'lik govdenin
+     yarisindan az yer kapliyor. Tiklama hedefi hala 25px, ustelik satirlar
+     bitisik degil (1px gap). */
+  padding: 4px 9px;
   background: transparent;
   color: var(--text-dim);
   text-align: left;
@@ -3668,7 +3952,9 @@ html[data-platform="macos"] .titlebar {
 .tabs-strip {
   display: flex;
   gap: 4px;
-  padding: 0 14px;
+  /* Yatay dolgu `.modal-body` ile AYNI olmali: serit govdenin hemen ustunde
+     ve iki farkli sol kenar goze carpiyor. */
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -3715,6 +4001,16 @@ html[data-platform="macos"] .titlebar {
    * kayiyor - olculdu (192'ye karsi 194) ve gozle fark edilmiyor ama duzen
    * "biraz bozuk" gorunuyor. */
   --label-gap: 10px;
+  /* Aciklama ("i") dugmesinin sutunu.
+   *
+   * SABIT genislik, `auto` DEGIL: `auto` olsa aciklamasi olmayan satirlarda
+   * sutun 0'a inip o satirin denetimini 20px genisletirdi ve denetimlerin sag
+   * kenari satir satir oynardi. Yer her satirda ayrilıyor, dugme olsun olmasin. */
+  --info-col: 20px;
+  /* "Degisikligi geri al" dugmesinin sutunu. Bilgi sutunu gibi SABIT: dugme
+     yalnizca bu oturumda degismis ayarlarda cikiyor, sutun daralip
+     genislerse denetimlerin sag kenari satir satir oynardi. */
+  --undo-col: 20px;
 }
 
 .field {
@@ -3728,13 +4024,16 @@ html[data-platform="macos"] .titlebar {
    * yani 1px tasma ve tam ekranda bile yatay kaydirma cubugu.
    *
    * Ayni ders `.main` ve bolme izgarasinda bir kez odendi (bkz. layout.test). */
-  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  grid-template-columns: var(--label-col) minmax(0, 1fr) var(--info-col) var(--undo-col);
   /* Sutun boslugu ortak degiskenden; satir boslugu ondan BAGIMSIZ ve daha dar:
      alanin altindaki ipucu denetime yapisik durmali, kit olan dikey alan. */
   column-gap: var(--label-gap);
-  row-gap: 4px;
+  row-gap: 3px;
   align-items: center;
-  padding: 4px 0;
+  /* Olculen (ikinci yogunluk gecisi): denetim + 4px dolgu ile satir 39px,
+     2px dolgu ve 27px'lik denetimle 31px. Sabit 430px'lik govdeye giren ayar
+     sayisini belirleyen sayi bu. */
+  padding: 2px 0;
 }
 
 /* Alan icindeki denetimler sikisabilmeli.
@@ -3771,7 +4070,9 @@ html[data-platform="macos"] .titlebar {
 }
 
 .field .hintline {
-  grid-column: 2;
+  /* Denetim sutunundan bilgi sutununun sonuna: ekranda kalan ipuclari
+     (calismiyor uyarisi, telif satiri) dugme sutununun altini da kullansin. */
+  grid-column: 2 / -1;
 }
 
 /* Ayarin SU AN calismadigini soyleyen ipucu. Soluk gri yetmiyordu: bu satir
@@ -3785,11 +4086,12 @@ html[data-platform="macos"] .titlebar {
 
 .section {
   display: grid;
-  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  grid-template-columns: var(--label-col) minmax(0, 1fr) var(--info-col) var(--undo-col);
   column-gap: var(--label-gap);
-  /* Bolumler arasi ayrimi baslik cizgisi zaten veriyor; 18px'in yarisi
-     gorsel olarak yeterli ve ucuncu bolumu ekrana sokuyor. */
-  margin-bottom: 12px;
+  /* Bolumler arasi ayrimi baslik cizgisi zaten veriyor; bosluga gerek
+     birakmiyor. 18px -> 12px -> 8px: her adimda bir bolum daha ekrana
+     girdi, ayrim hala baslik cizgisinden okunuyor. */
+  margin-bottom: 8px;
 }
 
 /* Varsayilan: bolum cocugu iki sutunu kapliyor (basliklar, alanlar, listeler). */
@@ -3800,10 +4102,18 @@ html[data-platform="macos"] .titlebar {
 
 /* Denetim sutununa hizalananlar: bolum duzeyindeki ipucu, onay kutusu satiri
    ve secim dugmeleri. */
-.section > .hintline,
+/* Onay kutusu satiri ve bolunmus secim SOLDAN basliyor.
+ *
+ * Onceki hali denetim sutununa hizaliydi (`grid-column: 2`): onay kutusunun
+ * solunda 180px bos alan kaliyordu ve bolumun sol kenari iki yerden
+ * okunuyordu - baslik ve alan etiketleri solda, onay kutulari ortada.
+ * Kullanicinin sozleri: "ayarlar sola yapisik olsun".
+ *
+ * `1 / 3`, `1 / -1` DEGIL: ucuncu iz aciklama dugmesine ayrilmis, satirin
+ * sonuna kadar uzamak o sutunu yutardi. */
 .section > .check-row,
 .section > .seg {
-  grid-column: 2;
+  grid-column: 1 / 3;
 }
 
 /* Profil ve grup formlari iki panelli duzenin sag tarafinda; alanlari bir
@@ -3812,7 +4122,7 @@ html[data-platform="macos"] .titlebar {
    denetim sutununa degil formun sol kenarina hizaliyordu. */
 .settings-form {
   display: grid;
-  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  grid-template-columns: var(--label-col) minmax(0, 1fr) var(--info-col) var(--undo-col);
   column-gap: var(--label-gap);
   align-content: start;
   min-width: 0;
@@ -3823,26 +4133,28 @@ html[data-platform="macos"] .titlebar {
   min-width: 0;
 }
 
-.settings-form > .hintline,
 .settings-form > .check-row {
-  grid-column: 2;
+  grid-column: 1 / 3;
 }
 
 .section > h3 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.7px;
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
+  padding-bottom: 3px;
 }
 
 .check-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 0;
+  /* Onay kutusu 14px; satir dolgusu 3px'ten 2px'e inince 23px yerine 21px.
+     Ust uste dort-bes onay kutusu olan bolumlerde (Girdi, Oturum) fark
+     satir basina degil bolum basina okunuyor. */
+  padding: 2px 0;
 }
 
 /* Tarayicinin onay kutusuna ve kaydiriciya verdigi varsayilan bosluk denetim
@@ -3854,8 +4166,191 @@ html[data-platform="macos"] .titlebar {
   margin: 0;
 }
 
+/* Pencere icindeki denetimler taban olcusunden bir tik kucuk.
+ *
+ * Olculen taban: `select` 31px, `input` 29px, dugme 26px. Ayarlar govdesi
+ * SABIT 430px, yani bir ayar satirinin yuksekligi dogrudan "ayni anda kac
+ * ayar goruyorum" demek. Dolgu 5px -> 3px: select 27px, input 25px.
+ *
+ * Kapsam `.modal-body`: ayni yogunluk butun pencerelerde (ayarlar, aktarim,
+ * onay) gecerli. Terminal ustundeki serit, kenar cubugu ve komut paleti
+ * DISARIDA - orada tiklama hedefi daralmamali.
+ *
+ * Onay kutusu, kaydirici ve renk secici de disarida: onlarin dolgusu taban
+ * kuralda tur secicisiyle kuruluyor (0px ve 2px) ve buradaki secici ayni
+ * ozgullukte oldugu icin, dosyada sonra geldigi icin onlari EZERDI. */
+.modal-body input:not([type="checkbox"]):not([type="range"]):not([type="color"]),
+.modal-body select,
+.modal-body textarea {
+  padding: 3px 7px;
+}
+
+/* Dugmeler de bir tik kisa. 26px'lik taban yuksekligi ayar satirini
+   denetimin kendisinden yuksek yapiyordu: "Gozat" dugmesi 26px, yanindaki
+   yol kutusu 25px. Altlik ve baslik dugmeleri de ayni olcuye giriyor,
+   yoksa pencerenin kromu govdeden daha genis nefes aliyor. */
+.modal-body button,
+.modal-foot button,
+.modal-head .icon-btn {
+  min-height: 24px;
+}
+
+/* Denetimlerin GENISLIGI: denetim sutunu ipuclari icin genis, denetimin
+ * kendisi icin degil.
+ *
+ * Olculen (880px'lik pencere): denetim sutunu 490px ve izgara ogesi
+ * varsayilan olarak gerildigi icin "Turkce" yazan bir acilir menu de 490px,
+ * yazi boyutu kaydiricisi da. Ekranda kalan izlenim "form bitmemis": kutu
+ * icerigin uc kati.
+ *
+ * Ust sinirlar iceriktan cikti - listelerdeki EN UZUN secenek 197px
+ * ("Sekmeyi kapat, pencere acik kalsin"), dolgu + kenarlik + acilir ok ile
+ * 235px eder; 280px hem onu hem de baska dilde uzayan cevirileri aliyor.
+ *
+ * METIN kutulari DISARIDA ve bu kasitli: onlarda dosya yolu duruyor ve
+ * kisaltmak dogrudan okunabilirlik kaybi. */
+.modal-body select {
+  max-width: 280px;
+}
+
+/* Kaydirici: fontSize 8-28, satir yuksekligi 1-2 (0,05 adim) - en ince
+   ayarda 21 durak. 220px'de durak basina 10px kaliyor, yani fare ile tek
+   adim secmek hala kolay. */
+.modal-body input[type="range"] {
+  max-width: 220px;
+}
+
+/* Sayi kutusu: en buyuk deger 200000 (alti hane, ~45px) + artir/azalt oku. */
+.modal-body input[type="number"] {
+  max-width: 120px;
+}
+
+/* Bolunmus secim icerigi kadar: gerildiginde dugmeler solda topluyor ve
+   sagda bos bir cerceve kaliyordu. */
+.modal-body .seg {
+  justify-self: start;
+}
+
 .check-row label {
   cursor: pointer;
+}
+
+/* ----------------------------------------------- ayar aciklamasi ("i") */
+
+/* Gerekce bileseninde (components/SettingHint.tsx): aciklamalar satirin
+ * ALTINDA soluk birer satirken acikli ayar, aciklamasiz ayarin iki kati yer
+ * kapliyordu ve satir ritmi bozuluyordu.
+ *
+ * Dugme her satirin en saginda, ayri bir sutunda (`--info-col`). Bolum
+ * duzeyindeki onay kutularinin dugmesi de ayni sutunda: butun "i"ler tek bir
+ * dikey cizgide duruyor, hangi satira ait oldugu satirin kendisinden okunuyor. */
+.info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Dugmenin sutunu KESIN.
+ *
+ * Iki sebep, ikisi de olculdu:
+ *
+ * 1. `.section > *` varsayilani her cocugu `1 / -1` yapiyor; kural olmadan
+ *    bolum duzeyindeki dugme kendi satirina dusuyor ve satirin ALTINDA, en
+ *    solda goruunuyordu (bildirilen hata).
+ * 2. Otomatik yerlesime birakildiginda dugme, kendinden onceki ogenin
+ *    satirina degil YERLESTIRME IMLECININ bulundugu satira gidiyor: kosullu
+ *    bir uyari satiri araya girdiginde (tahmin kabugu) uyarinin satirina
+ *    kayiyordu. Kesin sutunla, ucuncu izin bos oldugu ILK satira - yani
+ *    denetimin satirina - oturuyor. */
+.field > .info,
+.section > .info,
+.settings-form > .info {
+  grid-column: 3;
+}
+
+/* Geri al dugmesi dorduncu sutunda; bilgi dugmesinin SAGINDA.
+ *
+ * Sira onemli ve DOM sirasi da ayni olmali (once aciklama, sonra geri al):
+ * kesin sutunu olan bir oge, yerlestirme imlecinin GERISINDEKI bir sutuna
+ * donmuyor - geri al once gelse aciklama bir alt satira duserdi. */
+.field > .undo,
+.section > .undo,
+.settings-form > .undo {
+  grid-column: 4;
+}
+
+/* Yazi tipi "Ozel..." secilince cikan serbest metin kutusu.
+ *
+ * BILDIRILEN HATA: kutu ekranda 20px'lik bir dilim olarak goruunuyordu.
+ * Sebep: alanin dogrudan cocugu ve kendi sutunu yazilmadigi icin otomatik
+ * yerlesim onu BILGI sutununa (20px, sabit) koyuyordu. Denetim sutununda,
+ * acilir menunun hemen altinda duracak. */
+.field > .font-custom {
+  grid-column: 2;
+}
+
+.undo {
+  display: inline-flex;
+  align-items: center;
+}
+
+.undo-btn {
+  min-height: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-dim);
+  justify-content: center;
+}
+
+.undo-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.info-btn {
+  /* Taban dugme yuksekligini (26px) ve pencere icindeki 24px'i EZIYOR:
+     yuvarlak, satirdan kisa bir isaret. */
+  min-height: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-dim);
+  justify-content: center;
+}
+
+.info-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.info-btn.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+
+/* Aciklama katmani: dugmenin altinda, SAGA hizali - dugme satirin sag
+   kenarinda oldugu icin katman sola dogru aciliyor, yoksa pencereden tasardi. */
+.info-pop {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 320px;
+  padding: 7px 9px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  /* Ipucu satirlarindan bir tik parlak: burasi kullanicinin ISTEDIGI metin,
+     goz ucuyla gecilecek bir dipnot degil. */
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  user-select: text;
 }
 
 .mono {
@@ -3879,7 +4374,7 @@ html[data-platform="macos"] .titlebar {
 .profile-grid {
   display: grid;
   grid-template-columns: 210px 1fr;
-  gap: 12px;
+  gap: 10px;
   min-height: 320px;
 }
 
@@ -3894,7 +4389,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   cursor: pointer;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
@@ -3917,13 +4412,13 @@ html[data-platform="macos"] .titlebar {
 .env-editor {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .env-editor .pair {
   display: grid;
   grid-template-columns: 1fr 1.4fr auto;
-  gap: 5px;
+  gap: 4px;
 }
 
 /* ------------------------------------------- komut paleti / geri çağırma */

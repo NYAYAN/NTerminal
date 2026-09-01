@@ -169,6 +169,46 @@ pub fn load_workspace(paths: &DataPaths, settings: &Settings) -> Workspace {
         ws.groups.push(default_group(settings));
     }
 
+    /*
+     * Ayni sekme kimliginin iki kez gecmesini onar.
+     *
+     * BILDIRILEN HATA: birlestirmeli ice almadan sonra "GurselAPP" ve
+     * "GurselAPP (gelen)" gruplari yan yana duruyordu ve gelen gruptaki bir
+     * sekmeye tiklamak DIGER gruptaki sekmeyi etkinlestiriyordu. Sebep
+     * `transfer::merge_workspace` idi (orada duzeltildi): grup kimligi
+     * yenileniyor ama icindeki sekmelerinki yenilenmiyordu.
+     *
+     * Onarim BURADA da gerekiyor cunku birlestirmeyi duzeltmek DISKTE
+     * ZATEN DURAN bozuk dosyayi duzeltmiyor. Arayuz sekmeyi kimlikle ariyor
+     * ve arama ilk eslesmede duruyor: ikinci kopya erisilemez, birincisi iki
+     * yerden yonetiliyor. Yukleme aninda yeni kimlik vermek bunu sessizce
+     * ve tek seferde kapatiyor.
+     *
+     * `has_scrollback` dusuruluyor: kaydedilmis cikti eski kimligin
+     * dosyasinda; yeni kimlikte oyle bir dosya yok.
+     */
+    {
+        let mut gorulen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for group in &mut ws.groups {
+            for tab in &mut group.tabs {
+                if gorulen.insert(tab.id.clone()) {
+                    continue;
+                }
+                let yeni = new_id("tab");
+                if group.active_tab_id.as_deref() == Some(tab.id.as_str()) {
+                    group.active_tab_id = Some(yeni.clone());
+                }
+                eprintln!(
+                    "[nterminal] yinelenen sekme kimligi onarildi: {} -> {}",
+                    tab.id, yeni
+                );
+                tab.id = yeni.clone();
+                tab.has_scrollback = false;
+                gorulen.insert(yeni);
+            }
+        }
+    }
+
     // Diskte scrollback dosyasi kalmamis sekmelerin isaretini duzelt; yoksa
     // arayuz "gecmis var" der ama bos icerik yukler.
     for group in &mut ws.groups {

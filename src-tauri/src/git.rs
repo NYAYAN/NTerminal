@@ -270,3 +270,76 @@ pub fn fingerprint(path: &str) -> Option<String> {
 #[cfg(test)]
 #[path = "git_tests.rs"]
 mod git_tests;
+
+/// Bir dosyadaki degisiklikleri geri alir.
+///
+/// ## Iki ayri is, tek dugme
+///
+/// TAKIP EDILEN dosyada "geri al" HEAD'e donmek demek: once indeks
+/// cozuluyor (`restore --staged`), sonra calisma agaci HEAD'den yaziliyor
+/// (`checkout --`). Iki adim ayri cunku dosya indekste olup HEAD'de
+/// OLMAYABILIR (yeni eklenmis dosya): o durumda ikinci adim basarisiz olur ve
+/// bu DOGRU sonuctur - dosya takipsiz hale doner, SILINMEZ. Kullanicinin yeni
+/// yazdigi dosyayi "geri al" diye silmek veri kaybi olurdu.
+///
+/// TAKIPSIZ dosyada geri alinacak bir degisiklik yok; dosyanin kendisi
+/// degisiklik. Tek karsiligi silmek ve bu GERI ALINAMAZ - git'te kaydi yok.
+/// Bu yuzden karar arayuzde acikca soruluyor (bkz. `GitChanges`), burasi
+/// yalnizca uyguluyor.
+///
+/// Yol depo KOKUNE gore geliyor (porcelain oyle veriyor) ve `-C path` ile
+/// birlestiginde dogru dosyaya denk geliyor.
+pub fn revert(path: &str, file: &str, untracked: bool) -> Result<(), String> {
+    if untracked {
+        let root = repo_root(path).ok_or_else(|| "depo kokü bulunamadi".to_string())?;
+        let target = root.join(file);
+        // Klasor degil DOSYA siliyoruz: takipsiz bir klasor porcelain'de tek
+        // satir olarak gorunebiliyor ve `remove_dir_all` cok sey goturur.
+        if target.is_dir() {
+            return Err("klasor silinmiyor".into());
+        }
+        return std::fs::remove_file(&target).map_err(|e| e.to_string());
+    }
+
+    // Indeksi coz. Dosya indekste degilse git hata veriyor; bu bir sorun
+    // degil, yalnizca "cozecek bir sey yoktu" demek.
+    let _ = quiet_command("git")
+        .args(["-C", path, "--no-optional-locks", "restore", "--staged", "--", file])
+        .output();
+
+    let out = quiet_command("git")
+        .args(["-C", path, "--no-optional-locks", "checkout", "--", file])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if out.status.success() {
+        return Ok(());
+    }
+
+    /*
+     * HEAD'de olmayan dosya: yukaridaki `restore --staged` onu indeksten
+     * cikardi ve simdi takipsiz duruyor. Istenen sonuc bu, `checkout`un
+     * sikayeti bir hata degil.
+     */
+    let err = String::from_utf8_lossy(&out.stderr);
+    if err.contains("did not match any file") || err.contains("pathspec") {
+        return Ok(());
+    }
+    Err(err.trim().to_string())
+}
+
+/// Deponun calisma agaci koku.
+fn repo_root(path: &str) -> Option<std::path::PathBuf> {
+    let out = quiet_command("git")
+        .args(["-C", path, "--no-optional-locks", "rev-parse", "--show-toplevel"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if text.is_empty() {
+        return None;
+    }
+    Some(std::path::PathBuf::from(text))
+}

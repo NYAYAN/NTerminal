@@ -5,6 +5,7 @@ import { fitDropLevel, type FitPart } from "../lib/statusFit";
 import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
+import { resolveProfile } from "../lib/labels";
 import { isMac } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 import { ContextMenu, type MenuEntry, useContextMenu } from "./ContextMenu";
@@ -18,6 +19,7 @@ export function StatusBar() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const profiles = useStore((s) => s.settings.profiles);
+  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
   const running = useStore((s) => s.running);
   const paths = useStore((s) => s.paths);
   const restored = useStore((s) => s.restoredSession);
@@ -30,7 +32,7 @@ export function StatusBar() {
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((t) => t.id === group.activeTabId) ?? group?.tabs[0];
   const session = tab ? sessions.get(tab.id) : undefined;
-  const profile = profiles.find((p) => p.id === tab?.profileId);
+  const profile = resolveProfile(profiles, tab?.profileId, defaultProfileId);
 
   const [historyCount, setHistoryCount] = useState<number | null>(null);
 
@@ -138,6 +140,10 @@ export function StatusBar() {
   useEffect(() => {
     let alive = true;
     const read = () => {
+      // Pencere gizliyken (kucultulmus, baska masaustu) sayaci kimse gormuyor;
+      // her bes saniyede bir IPC + JSON uretmenin karsiligi yok. Geri
+      // donuldugunde `visibilitychange` hemen okuyor.
+      if (document.hidden) return;
       void api
         .historyStats()
         .then((stats) => {
@@ -147,9 +153,11 @@ export function StatusBar() {
     };
     read();
     const timer = window.setInterval(read, 5000);
+    document.addEventListener("visibilitychange", read);
     return () => {
       alive = false;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", read);
     };
   }, []);
 

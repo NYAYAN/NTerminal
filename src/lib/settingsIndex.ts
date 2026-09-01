@@ -78,6 +78,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "appearance", key: "settings.cursorStyle" },
   { section: "appearance", key: "settings.cursorBlink" },
   { section: "appearance", key: "settings.scrollbackLines", hint: "settings.scrollbackHint" },
+  { section: "appearance", key: "settings.shellBadge", hint: "settings.shellBadgeHint" },
 
   // --------------------------------------------------------------- terminal
   { section: "terminal", key: "settings.copyOnSelect" },
@@ -135,11 +136,23 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "keys", key: "settings.keysHeading", hint: "settings.keysHint" },
 
   // --------------------------------------------------------------- hakkında
+  { section: "about", key: "settings.developerLabel" },
+  { section: "about", key: "settings.sourceCode" },
+  { section: "about", key: "settings.licenseLabel" },
   { section: "about", key: "settings.dataFolder" },
   { section: "about", key: "settings.workspaceFile" },
   { section: "about", key: "settings.integrationDir" },
-  { section: "about", key: "settings.reset", hint: "settings.resetButton" },
 ];
+
+/*
+ * "Sifirlama" ARTIK BURADA DEGIL.
+ *
+ * Genel sifirlama Hakkinda bolumunun dibinden pencere altligina tasindi
+ * (gerekce `SettingsDialog` icinde). Indekste kalmasi, aramada cikan bir
+ * sonucun kullaniciyi Hakkinda bolumune goturup orada hicbir sey
+ * bulamamasi demekti - bagli olmayan bir arama sonucu, sonuc yokluğundan
+ * kotu. Altliktaki dugme her bolumde gorunuyor, aramaya ihtiyaci yok.
+ */
 
 /**
  * Arama için metin normalleştirme.

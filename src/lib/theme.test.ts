@@ -9,7 +9,7 @@ import {
   luminance,
   parseHex,
 } from "./contrast";
-import { THEMES, getTheme } from "./themes";
+import { THEMES, getTheme, readableAccent } from "./themes";
 import { hasCustomTitle, shellBadge, tabLabel, tabSubtitle } from "./labels";
 import type { Profile, TabState } from "../types";
 
@@ -200,5 +200,104 @@ describe("sekme etiketleri", () => {
     expect(shellBadge(profile({ kind: "wsl" }))).toBe("WSL");
     expect(shellBadge(profile({ kind: "custom" }))).toBe("EXE");
     expect(shellBadge(undefined)).toBe("?");
+  });
+});
+
+/**
+ * Kullanıcının seçtiği renklerin (profil, grup) METİN olarak okunabilirliği.
+ *
+ * BİLDİRİLEN HATA: "PS yazıyor ama okunmuyor". Kenar çubuğundaki kabuk rozeti
+ * çiziliyordu ama görünmüyordu — rengi profilden geliyordu ve Windows
+ * PowerShell profilinin rengi `#0e4d92`, koyu lacivert. Koyu tema yüzeyinde
+ * karşıtlık 1.4:1; 9px kalın bir metin için görünmez.
+ *
+ * Tema renkleri (`--accent`, `--ok`, `--err`) zaten bu hesaptan geçiyordu;
+ * atlanan yer kullanıcının kendi seçtiği renklerdi.
+ */
+describe("kullanıcı renklerinin okunabilirliği", () => {
+  /** Bildirilen hatanın tam girdisi. */
+  const POWERSHELL = "#0e4d92";
+
+  it("koyu profil rengi her temada okunur hâle geliyor", () => {
+    for (const theme of THEMES) {
+      const fixed = readableAccent(POWERSHELL, theme.id)!;
+      const ratio = contrastRatio(fixed, theme.ui.surfaceAlt);
+      expect(
+        ratio,
+        `${theme.id}: rozet metni okunmuyor (${ratio.toFixed(2)}:1)`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("ham renk koyu temalarda gerçekten okunmuyordu", () => {
+    // Testin bir şey ölçtüğünün kanıtı: düzeltme olmadan karşıtlık eşiğin
+    // altında kalıyor. Ölçülen: NTerminal Koyu'da 2.06:1, gereken 4.5:1.
+    // Bu testle bir üstteki birlikte "önce bozuktu, şimdi değil" diyor.
+    const koyu = THEMES.filter((theme) => !theme.id.includes("light"));
+    expect(koyu.length, "koyu tema kalmamış").toBeGreaterThan(0);
+    for (const theme of koyu) {
+      expect(
+        contrastRatio(POWERSHELL, theme.ui.surfaceAlt),
+        `${theme.id}: ham renk zaten okunuyormuş, örnek geçersiz`,
+      ).toBeLessThan(4.5);
+    }
+  });
+
+  it("açık temada aynı renge dokunulmuyor", () => {
+    // Aynı lacivert AÇIK zeminde 6.87:1 — zaten okunuyor. Düzeltme yön
+    // duyarlı: rengi körü körüne açmıyor, yalnızca zeminden uzaklaştırıyor.
+    // Körü körüne açsaydı açık temada okunmaz hâle getirirdi.
+    expect(readableAccent(POWERSHELL, "solarized-light")).toBe(POWERSHELL);
+  });
+
+  it("zaten okunan renge dokunulmuyor", () => {
+    // Düzeltme bir zorlama değil: yeterli karşıtlığı olan renk aynen kalıyor,
+    // yani kullanıcının seçtiği renk gereksiz yere kaydırılmıyor.
+    const same = readableAccent("#58a6ff", "nterminal-dark");
+    expect(same).toBe("#58a6ff");
+  });
+
+  it("ton korunuyor: mavi mavi kalıyor", () => {
+    // `ensureContrast` rengi siyaha/beyaza doğru itiyor, tonunu değiştirmiyor.
+    // "PowerShell mavisi" görünür oluyor ama mavi olmaktan çıkmıyor.
+    const fixed = parseHex(readableAccent(POWERSHELL, "nterminal-dark")!)!;
+    expect(fixed.b, "mavi kanal baskın kalmalı").toBeGreaterThan(fixed.r);
+    expect(fixed.b).toBeGreaterThan(fixed.g);
+  });
+
+  it("renk yoksa tanımsız dönüyor", () => {
+    // Rengi olmayan profil rozeti CSS'teki soluk varsayılanı kullanmalı.
+    expect(readableAccent(null, "nterminal-dark")).toBeUndefined();
+    expect(readableAccent(undefined, "nterminal-dark")).toBeUndefined();
+  });
+});
+
+/**
+ * Genel bakış sütununun çerçevesi.
+ *
+ * Kaydırma çubuğunu uygulamanın geri kalanıyla aynı genişliğe (9px) indirmenin
+ * tek yolu xterm'e `overviewRuler.width` vermek. xterm o sütunu çizerken sol
+ * kenarına KOŞULSUZ 1px'lik dikey bir çizgi atıyor (`_renderRulerOutline`) ve
+ * kullanıcı bunu "scroll'un sağındaki beyaz çizgi" olarak gördü.
+ *
+ * Çizgiyi kapatan bir seçenek yok; tek yol rengini zemine eşitlemek.
+ */
+describe("genel bakış sütunu", () => {
+  it("çerçeve rengi terminal zeminiyle aynı", () => {
+    for (const theme of THEMES) {
+      const t = getTheme(theme.id);
+      expect(
+        t.xterm.overviewRulerBorder,
+        `${theme.id}: çerçeve zeminden farklı — sağda görünür bir çizgi kalır`,
+      ).toBe(t.xterm.background);
+    }
+  });
+
+  it("çerçeve tanımsız bırakılmamış", () => {
+    // Tanımsız bırakmak xterm'in kendi varsayılanına düşmek demek ve
+    // hatanın kendisi buydu.
+    for (const theme of THEMES) {
+      expect(getTheme(theme.id).xterm.overviewRulerBorder).toBeTruthy();
+    }
   });
 });

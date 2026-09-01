@@ -6,6 +6,7 @@ import {
   canCloseTab,
   canDeleteGroup,
   closableOthers,
+  healTabProfiles,
   lockedTabs,
   nextCollapsedAll,
   reorder,
@@ -17,6 +18,8 @@ import {
   setPlatform as applyPlatform,
 } from "../lib/platform";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
+import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
+import { cdQuery, cdSuggestions } from "../lib/cdSuggest";
 import { canSuggest, cycleIndex, rankSuggestions, type SuggestEntry } from "../lib/suggest";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
@@ -196,6 +199,11 @@ interface Store {
    */
   runLinks: Record<string, string[]>;
   /**
+   * Sekme en altta mı. Yokluğu "en altta" demek: yeni açılan terminal canlı
+   * çıktıya bakıyor ve düğme görünmemeli.
+   */
+  scrollAtBottom: Record<string, boolean>;
+  /**
    * Dizin başına git durumu; depo olmayan dizinler `null` olarak kayıtlı.
    *
    * `null` ile "hiç bakılmadı" (anahtar yok) AYRI tutuluyor: ikisini
@@ -234,6 +242,12 @@ interface Store {
   toggleViewMode: () => Promise<void>;
   setProfiles: (profiles: Profile[], defaultProfileId?: string) => Promise<void>;
   resetSettings: () => Promise<void>;
+  /**
+   * Boşa düşmüş sekme-profil bağlarını onarır. Profil listesi her
+   * değiştiğinde çağrılıyor; gerekçe `lib/tabs.ts` içindeki
+   * `healTabProfiles` açıklamasında.
+   */
+  healProfileLinks: () => void;
 
   addGroup: (name?: string) => string;
   updateGroup: (id: string, patch: Partial<Group>) => void;
@@ -270,6 +284,11 @@ interface Store {
   removeFavorite: (id: string) => Promise<void>;
   toggleFavorite: (command: string) => Promise<void>;
   moveFavorite: (id: string, direction: -1 | 1) => Promise<void>;
+  /**
+   * Sürükleyerek taşıma: hem sırayı hem klasörü tek işlemde günceller.
+   * Hesap `lib/favoriteGroups.ts` içinde ve saf.
+   */
+  moveFavoriteTo: (id: string, target: DropTarget) => Promise<void>;
   runFavorite: (id: string, execute: boolean) => Promise<void>;
   isFavorite: (command: string) => boolean;
 
@@ -322,6 +341,28 @@ function quoteForShell(path: string): string {
   return `"${path.replace(/"/g, '""')}"`;
 }
 
+/**
+ * `cd` önerisi için son okunan dizin listesi.
+ *
+ * Modül düzeyinde, depoda DEĞİL: her tuş vuruşunda diske gitmemek için bir
+ * önbellek, ama arayüzün abone olması gereken bir durum değil — çizimi
+ * tetikleyen şey `ui.suggest`.
+ *
+ * Anahtar dizinin kendisi: başka bir klasöre inildiğinde liste kendiliğinden
+ * yenileniyor. Aynı klasörde yeni bir alt klasör açılırsa liste eskiyor;
+ * bedeli bir öneri satırı, kazancı her harfte bir dosya sistemi çağrısından
+ * kaçınmak.
+ */
+let dirListing: { dir: string; names: string[] } | null = null;
+/**
+ * Son öneri girdisi.
+ *
+ * Dizin listesi ASENKRON geliyor; geldiğinde hesabı aynı girdiyle yeniden
+ * çalıştırmak gerekiyor. Kullanıcı bu arada yazmaya devam etmiş olabilir, o
+ * yüzden saklanan şey "en son ne yazıldığı".
+ */
+let lastSuggestInput: { prefix: string; full: string; hintTail?: boolean } | null = null;
+
 let persistTimer: number | null = null;
 let settingsTimer: number | null = null;
 
@@ -370,6 +411,9 @@ export const useStore = create<Store>((set, get) => ({
       panelWidth: 390,
       highlightLinks: true,
       viewMode: "tabs",
+      showShellBadge: true,
+      sidebarCollapsed: false,
+      collapsedFavoriteFolders: [],
     },
     behavior: {
       restoreSession: true,
@@ -411,6 +455,7 @@ export const useStore = create<Store>((set, get) => ({
   suggestHistory: [],
   inputSignals: {},
   runLinks: {},
+  scrollAtBottom: {},
   gitInfo: {},
   appInputSink: null,
   ui: {
@@ -451,7 +496,14 @@ export const useStore = create<Store>((set, get) => ({
         windowsBuild: boot.windowsBuild,
         paths: boot.paths,
         settings: boot.settings,
-        groups: boot.workspace.groups,
+        // Diskteki çalışma alanı, diskteki ayarlardan bağımsız eskimiş
+        // olabiliyor (silinmiş profil, sıfırlanmış ayar dosyası). Bağı burada
+        // onarmak, ilk çizimden önce doğru rozetle açılmayı sağlıyor.
+        groups: healTabProfiles(
+          boot.workspace.groups,
+          boot.settings.profiles,
+          boot.settings.defaultProfileId,
+        ),
         activeGroupId: boot.workspace.activeGroupId,
         restoredSession: boot.restored,
       });
@@ -463,7 +515,23 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async persistNow() {
-    const { groups, activeGroupId } = get();
+    const { groups, activeGroupId, ready, bootError } = get();
+    /*
+     * Açılış tamamlanmadan YAZMA.
+     *
+     * ÖLÇÜLEN VERİ KAYBI: geliştirme kipinde Vite modülleri sıcak
+     * değiştirdiğinde depo yeni ve BOŞ bir örnekle kuruluyor (`groups: []`),
+     * `bootstrap()` ise henüz koşmamış oluyor. O aralıkta bir kaydetme
+     * tetiklenirse diskteki `workspace.json` dokuz sekmelik düzenin yerine
+     * boş bir dosyayla değiştiriliyordu — kullanıcının bütün grupları,
+     * Rust tarafının yedeği (`snapshot_if_shrinking`) olmasa gitmişti.
+     *
+     * Sıcak değiştirme yalnızca tetikleyiciydi, kural genel: açılıştan önceki
+     * durum "kaydedilecek bir şey" değil, "henüz okunmamış" demek. Aynı
+     * boşluk açılış hata verdiğinde (`bootError`) de var — orada da diskteki
+     * düzeni ezmek son kalan sağlam kopyayı yok etmek olurdu.
+     */
+    if (!ready || bootError) return;
     const workspace: Workspace = {
       version: 1,
       activeGroupId,
@@ -528,6 +596,17 @@ export const useStore = create<Store>((set, get) => ({
         ? settings.defaultProfileId
         : (profiles[0]?.id ?? ""));
     await get().patchSettings({ profiles, defaultProfileId: nextDefault });
+    // Silinen profile bağlı sekmeler geride kalmasın.
+    get().healProfileLinks();
+  },
+
+  healProfileLinks() {
+    const { groups, settings } = get();
+    const healed = healTabProfiles(groups, settings.profiles, settings.defaultProfileId);
+    // Kimlik korunuyorsa değişiklik yok: ne yeniden çizim ne disk yazımı.
+    if (healed === groups) return;
+    set({ groups: healed });
+    void get().persistNow();
   },
 
   async resetSettings() {
@@ -536,6 +615,9 @@ export const useStore = create<Store>((set, get) => ({
       set({ settings: fresh });
       applyThemeToDocument(getTheme(fresh.appearance.theme));
       for (const session of sessions.values()) session.applySettings(fresh);
+      // Sıfırlama profilleri yeniden tarıyor ve hepsine YENİ kimlik veriyor;
+      // bu çağrı olmadan açık her sekmenin bağı aynı anda kopuyor.
+      get().healProfileLinks();
       get().toast(t("store.settingsReset"), "ok");
     } catch (err) {
       get().toast(String(err), "err");
@@ -1036,6 +1118,10 @@ export const useStore = create<Store>((set, get) => ({
       onRunLinks: (urls) => {
         set({ runLinks: { ...get().runLinks, [tab.id]: urls } });
       },
+      onScrollState: (atBottom) => {
+        // Sekme başına: bölme kipinde her bölmenin kendi kaydırma durumu var.
+        set({ scrollAtBottom: { ...get().scrollAtBottom, [tab.id]: atBottom } });
+      },
       onInputSignals: (signals) => {
         // Sinyaller SEKME BAŞINA tutuluyor: bölme kipinde arkadaki sekmede
         // komut çalışırken öndeki istemde bekliyor olabilir.
@@ -1076,7 +1162,33 @@ export const useStore = create<Store>((set, get) => ({
       await session.dispose(true);
       sessions.delete(id);
     }
-    set({ running: {}, exited: {}, sessionEpoch: {} });
+
+    /*
+     * Epoch'lar SIFIRLANMIYOR, ARTIRILIYOR.
+     *
+     * BİLDİRİLEN HATA: içe aktarmadan sonra bir sekmede komut çalıştırmak
+     * "Etkin bir terminal yok" diyordu.
+     *
+     * Sebep: `TerminalArea` her sekme barındırıcısını `tabId:epoch`
+     * anahtarıyla çiziyor ve oturumu yaratan etki `[tabId, epoch]`e bağlı.
+     * Yukarıda bütün oturumlar kapatıldı; ama epoch'ları sıfırlamak hiç
+     * yeniden başlatılmamış bir sekmede (epoch zaten 0) anahtarı
+     * DEĞİŞTİRMİYOR. React barındırıcıyı yerinde bırakıyor, etki yeniden
+     * koşmuyor ve o sekme arkasında kabuk OLMADAN canlı görünüyor.
+     *
+     * Belirtinin yalnızca bazı sekmelerde çıkmasının sebebi de bu: daha önce
+     * yeniden başlatılmış bir sekmenin epoch'u 1+ olduğu için sıfırlama onu
+     * kazara düzeltiyordu.
+     *
+     * Artırma her sekme için anahtarı değiştiriyor; barındırıcı yeniden
+     * kuruluyor ve oturumunu yaratıyor. İçe aktarmayla GELEN yeni sekmeler
+     * zaten yeni kimlikte, onlar kendiliğinden kuruluyor.
+     */
+    const epochs = { ...get().sessionEpoch };
+    for (const group of get().groups) {
+      for (const tab of group.tabs) epochs[tab.id] = (epochs[tab.id] ?? 0) + 1;
+    }
+    set({ running: {}, exited: {}, sessionEpoch: epochs });
     await get().bootstrap();
   },
 
@@ -1174,6 +1286,32 @@ export const useStore = create<Store>((set, get) => ({
     [items[index], items[target]] = [items[target], items[index]];
     set({ favorites: items });
     await api.favoritesReorder(items.map((f) => f.id)).catch(() => {});
+  },
+
+  async moveFavoriteTo(id, target) {
+    const before = get().favorites;
+    const out = applyDrop(before, id, target);
+    if (!out) return;
+
+    /*
+     * Sıra ve klasör TEK karar, iki yazma.
+     *
+     * Önce bellekteki listeyi yeni hâline getiriyoruz: sürükleme bittiğinde
+     * satır beklemeden yerine oturmalı, yoksa bırakma "tutmadı" gibi görünüp
+     * kullanıcı ikinci kez sürüklüyor.
+     */
+    const byId = new Map(before.map((f) => [f.id, f]));
+    const next = out.ids
+      .map((fid) => byId.get(fid))
+      .filter((f): f is Favorite => !!f)
+      .map((f) => (f.id === id ? { ...f, folder: out.folder } : f));
+    set({ favorites: next });
+
+    const eski = before.find((f) => f.id === id)?.folder ?? null;
+    if (eski !== out.folder) {
+      await api.favoritesUpdate(id, { folder: out.folder }).catch(() => {});
+    }
+    await api.favoritesReorder(out.ids).catch(() => {});
   },
 
   /**
@@ -1285,12 +1423,56 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
+    const cwd = get().activeSession()?.cwd ?? null;
+
+    /*
+     * `cd` yazılıyorsa cevap GEÇMİŞTE değil, DİSKTE.
+     *
+     * Kullanıcının bildirdiği istek buydu: "cd ile yazmaya başlıyorsam
+     * bulunduğum konum altındaki klasörleri getirsin, eski kullandığım cd
+     * komutlarını değil". Eski bir `cd` başka bir projede yazılmış olabiliyor
+     * ve o yolun burada karşılığı yok.
+     *
+     * Ayrıştırma `lib/cdSuggest.ts` içinde ve saf; burada yalnızca listeyi
+     * getirip sonucu bağlıyoruz.
+     */
+    const query = cdQuery(state.prefix, cwd);
+    if (query) {
+      lastSuggestInput = state;
+      if (dirListing?.dir !== query.dir) {
+        void api
+          .listDirs(query.dir)
+          .then((names) => {
+            dirListing = { dir: query.dir, names };
+            // Liste geldi: kullanıcının O ANKİ girdisiyle yeniden hesapla.
+            if (lastSuggestInput) get().updateSuggestions(lastSuggestInput);
+          })
+          .catch(() => {
+            // Okunamayan klasör (izin, silinmiş) boş liste sayılıyor; tekrar
+            // tekrar denemek her tuşta bir hata çağrısı demek olurdu.
+            dirListing = { dir: query.dir, names: [] };
+          });
+        // Liste gelene kadar GEÇMİŞE DÜŞMÜYORUZ: bir an için yanlış cevabı
+        // gösterip hemen değiştirmek listeyi zıplatır.
+        if (ui.suggest) set({ ui: { ...ui, suggest: null } });
+        return;
+      }
+
+      const dirs = cdSuggestions(query, dirListing.names, quoteForShell);
+      if (dirs.length === 0) {
+        if (ui.suggest) set({ ui: { ...ui, suggest: null } });
+        return;
+      }
+      const index =
+        ui.suggest && ui.suggest.input === state.prefix
+          ? Math.min(ui.suggest.index, dirs.length - 1)
+          : 0;
+      set({ ui: { ...ui, suggest: { items: dirs, index, input: state.prefix } } });
+      return;
+    }
+
     // Dizin etkin oturumdan: aynı yerde çalıştırılmış komutlar önce gelsin.
-    const items = rankSuggestions(
-      get().suggestHistory,
-      state.prefix,
-      get().activeSession()?.cwd ?? null,
-    );
+    const items = rankSuggestions(get().suggestHistory, state.prefix, cwd);
     if (items.length === 0) {
       if (ui.suggest) set({ ui: { ...ui, suggest: null } });
       return;
@@ -1435,19 +1617,56 @@ export const useStore = create<Store>((set, get) => ({
 export async function flushAllState(): Promise<void> {
   await flushSettings();
   const state = useStore.getState();
+
+  /*
+   * Düzeni yalnızca açılış BAŞARIYLA tamamlandıysa yaz — gerekçe
+   * `persistNow` içinde. Ayarlar yukarıda zaten yazıldı: onlar kullanıcının
+   * o oturumda yaptığı gerçek düzenlemeler ve açılıştan bağımsız.
+   */
+  if (!state.ready || state.bootError) return;
   const saveScrollback = state.settings.behavior.restoreScrollback;
 
   const tasks: Promise<unknown>[] = [];
   const hasScrollback = new Set<string>();
 
   if (saveScrollback) {
+    /*
+     * Yalnizca ÇIKTISI DEĞİŞMİŞ sekme yeniden yazılıyor.
+     *
+     * Bu işlev iki dakikada bir de koşuyor (App içindeki güvenlik kaydı) ve
+     * her sekme için `serialize()` çağırmak on sekmede on kez 2000 satırın
+     * metne çevrilmesi demek — hepsi ana iş parçacığında, iki dakikada bir
+     * görünür bir takılma. Sekmeye yeni çıktı gelmediyse diskteki kopya
+     * zaten doğru.
+     *
+     * Atlanan sekmenin `hasScrollback` bayrağı ÖNCEKİ değerinden taşınıyor:
+     * kümeye eklemeyi atlamak "bu sekmenin kaydı yok" demek olurdu ve açılışta
+     * ekran çıktısı geri yüklenmezdi — dosya diskte dururken.
+     */
+    const oncekiKayit = new Set(
+      state.groups.flatMap((g) => g.tabs.filter((t) => t.hasScrollback).map((t) => t.id)),
+    );
     for (const [tabId, session] of sessions) {
+      if (!session.hasUnsavedOutput()) {
+        if (oncekiKayit.has(tabId)) hasScrollback.add(tabId);
+        continue;
+      }
       const data = session.serialize();
       if (data.trim().length > 0) {
         hasScrollback.add(tabId);
-        tasks.push(api.scrollbackSave(tabId, data).catch(() => {}));
+        tasks.push(
+          api
+            .scrollbackSave(tabId, data)
+            .then(() => session.markOutputSaved())
+            .catch(() => {}),
+        );
       } else {
-        tasks.push(api.scrollbackDelete(tabId).catch(() => {}));
+        tasks.push(
+          api
+            .scrollbackDelete(tabId)
+            .then(() => session.markOutputSaved())
+            .catch(() => {}),
+        );
       }
     }
   }

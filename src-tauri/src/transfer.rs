@@ -13,7 +13,7 @@
 use crate::favorites::{Favorite, FavoriteStore};
 use crate::history::HistoryStore;
 use crate::model::{
-    HistoryEntry, Profile, Settings, Workspace, BUNDLE_VERSION,
+    Group, HistoryEntry, Profile, Settings, Workspace, BUNDLE_VERSION,
 };
 use crate::paths::DataPaths;
 use crate::shells;
@@ -522,9 +522,22 @@ pub fn merge_settings(local: &Settings, incoming: &Settings) -> Settings {
 
 /// Calisma alanini birlestirir: gelen gruplar eklenir, ada gore cakisanlar
 /// "<ad> (gelen)" olarak yeniden adlandirilir - kullanicinin mevcut duzeni bozulmaz.
+///
+/// SEKME kimlikleri de cakismaya karsi yenileniyor; gerekcesi
+/// `ensure_unique_tab_ids` icinde.
 pub fn merge_workspace(local: &Workspace, incoming: &Workspace) -> (Workspace, usize) {
     let mut merged = local.clone();
     let mut added = 0;
+
+    // Mevcut TUM sekme kimlikleri. Cakisma grupla sinirli degil: ayni makinede
+    // alinmis bir paket geri alindiginda gelen sekmeler yerel olanlarla birebir
+    // ayni kimligi tasiyor, gruplarin adlari farkli olsa bile.
+    let mut tab_ids: std::collections::HashSet<String> = merged
+        .groups
+        .iter()
+        .flat_map(|g| g.tabs.iter().map(|t| t.id.clone()))
+        .collect();
+
     for group in &incoming.groups {
         let clash = merged
             .groups
@@ -538,10 +551,45 @@ pub fn merge_workspace(local: &Workspace, incoming: &Workspace) -> (Workspace, u
         if merged.groups.iter().any(|g| g.id == copy.id) {
             copy.id = store::new_id("grp");
         }
+        ensure_unique_tab_ids(&mut copy, &mut tab_ids);
         merged.groups.push(copy);
         added += 1;
     }
     (merged, added)
+}
+
+/// Gruptaki sekmelerden kimligi ZATEN KULLANILANLARA yeni kimlik verir.
+///
+/// ## Neden gerekiyor
+///
+/// BILDIRILEN HATA: birlestirmeli ice almadan sonra "GurselAPP" ve
+/// "GurselAPP (gelen)" gruplari yan yana duruyordu ve gelen gruptaki bir
+/// sekmeye tiklamak DIGER gruptaki sekmeyi etkinlestiriyordu.
+///
+/// Sebep: grup adi ve grup kimligi yenileniyordu ama icindeki sekmeler ayni
+/// kimlikle iki kez listeye giriyordu. Arayuz sekmeyi kimlikle ariyor
+/// (`setActiveTab`, `closeTab`, terminal oturumlari, scrollback dosyasi) ve
+/// arama ILK eslesmede duruyor - yani ikinci kopya erisilemez, birincisi ise
+/// iki yerden yonetiliyor. Tiklamanin yanlis sekmeyi secmesi bunun en gorunur
+/// belirtisiydi; sekme kapatmak ve terminal ciktisinin karismasi da ayni
+/// kokten geliyor.
+///
+/// Yenilenen sekmenin `has_scrollback` isareti dusuruluyor: kaydedilmis ekran
+/// ciktisi ESKI kimligin dosyasinda duruyor, yeni kimlikte oyle bir dosya yok.
+/// Isareti birakmak arayuze var olmayan bir gecmisi vaat ettirirdi.
+fn ensure_unique_tab_ids(group: &mut Group, taken: &mut std::collections::HashSet<String>) {
+    for tab in group.tabs.iter_mut() {
+        if taken.insert(tab.id.clone()) {
+            continue;
+        }
+        let fresh = store::new_id("tab");
+        if group.active_tab_id.as_deref() == Some(tab.id.as_str()) {
+            group.active_tab_id = Some(fresh.clone());
+        }
+        tab.id = fresh.clone();
+        tab.has_scrollback = false;
+        taken.insert(fresh);
+    }
 }
 
 #[cfg(test)]

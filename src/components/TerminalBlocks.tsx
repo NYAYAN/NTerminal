@@ -75,7 +75,15 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
   }, [tabId]);
 
   const session = sessions.get(tabId);
-  const geometry = enabled ? session?.blockGeometry() : null;
+  /*
+   * Geometri KOŞULSUZ okunuyor, `enabled`den bağımsız.
+   *
+   * Katman iki şey çiziyor: komut blokları (ayarla kapatılabilir) ve geri
+   * yükleme ayıracı (kapatılamaz). İkisi de aynı satır→piksel hesabını ve
+   * aynı yeniden çizim bildirimini kullandığı için ayrı bir katman açmak
+   * o düzeneğin ikinci bir kopyası olurdu.
+   */
+  const geometry = session?.blockGeometry() ?? null;
   if (!session || !geometry) return null;
 
   const view = {
@@ -84,7 +92,7 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
     cellHeight: geometry.cellHeight,
   };
 
-  const blocks = session.snapshotBlocks();
+  const blocks = enabled ? session.snapshotBlocks() : [];
   /*
    * Başlık YALNIZCA kabuk boş satır bıraktığını bildirdiyse çiziliyor.
    *
@@ -111,6 +119,30 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
         height: geometry.cellHeight * geometry.rows,
       }}
     >
+      {/* Geri yükleme ayıracı.
+       *
+       * Terminale metin olarak YAZILMIYOR (gerekçesi `TerminalSession.start`
+       * içinde): yazılan bir satır genişliğine donuyor ve pencere yeniden
+       * ölçülendiğinde ya taşıyor ya sola yapışık kalıyordu. DOM'da çizilince
+       * ortalama işini düzen yapıyor — her genişlikte kendiliğinden doğru.
+       *
+       * Yalnızca görünümdeyken çiziliyor; kaydırıldığında işaretçinin satırı
+       * görünümün dışına çıkıyor ve katman onu atlıyor. */}
+      {(() => {
+        const line = session.restoreDividerLine();
+        if (line === null) return null;
+        const row = line - view.top;
+        if (row < 0 || row >= view.rows) return null;
+        return (
+          <div
+            className="restore-divider"
+            style={{ top: row * view.cellHeight, height: view.cellHeight }}
+          >
+            <span>{t("term.prevSessionEnded")}</span>
+          </div>
+        );
+      })()}
+
       {blocks.map((block) => {
         const rect = blockRect(block, view);
         if (!rect) return null;

@@ -71,12 +71,42 @@ if ($LASTEXITCODE -ne 0 -or -not $lines) {
     return
 }
 
+# MSBuild'in OZELLIK olarak okudugu degiskenler iceri ALINMIYOR.
+#
+# OLCULEN HATA: gelistirme kipinde acilan NTerminal'de `dotnet run` dusuyor,
+# ayni komut Windows Terminal'de calisiyordu. Hata karma kipli (C++/CLI) bir
+# derlemenin yuklenememesiydi:
+#
+#   System.IO.FileNotFoundException: Could not load file or assembly
+#   'sapnco_utils.dll' -- The specified module could not be found
+#
+# Sebep bu donguydu. vcvars64.bat ortama Platform=x64 yaziyor; MSBuild ortam
+# degiskenlerini ozellik olarak okudugu icin $(Platform) x64 oluyor ve cikti
+# klasoru bin/Debug/<tfm> yerine bin/x64/Debug/<tfm> haline geliyor. Ikinci
+# klasorde karma kipli derlemeyi yuklemek icin gereken ijwhost.dll yoktu.
+#
+# Zincir uzun ama tek yonlu: bu betik ortami oturuma aliyor -> dev.ps1
+# `tauri dev` cagiriyor -> cargo nterminal.exe'i baslatiyor -> uygulama
+# ACTIGI HER KABUGA kendi ortamini veriyor. Yani bir terminal emulatoru
+# kullanicinin derleme ciktisinin YERINI degistiriyordu ve belirti
+# uygulamada degil KULLANICININ PROJESINDE cikiyordu.
+#
+# Rust'i derleyip baglamak icin gereken sey PATH, INCLUDE, LIB ve LIBPATH;
+# bunlarin MSBuild cikti yoluna etkisi yok. Asagidaki ikisi ise YALNIZCA
+# MSBuild icin var, cargo hicbirini okumuyor.
+$msbuildEtkili = @('Platform', 'PreferredToolArchitecture')
+
 $imported = 0
+$skipped = @()
 foreach ($line in $lines) {
     $idx = $line.IndexOf('=')
     if ($idx -lt 1) { continue }
     $name = $line.Substring(0, $idx)
     $value = $line.Substring($idx + 1)
+    if ($msbuildEtkili -contains $name) {
+        $skipped += $name
+        continue
+    }
     Set-Item -Path "env:$name" -Value $value
     $imported++
 }
@@ -86,3 +116,6 @@ foreach ($line in $lines) {
 $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $msvc.Link
 
 Write-Host "Ortam hazir ($imported degisken). Linker: $($msvc.Link)" -ForegroundColor Green
+if ($skipped.Count -gt 0) {
+    Write-Host "Alinmadi (MSBuild ciktisini kaydiriyor): $($skipped -join ', ')" -ForegroundColor DarkGray
+}
