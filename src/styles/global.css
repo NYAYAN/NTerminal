@@ -628,10 +628,26 @@ html[data-platform="macos"] .titlebar {
   min-width: 12px;
 }
 
+/* Uygulama adi: SARMAZ ve DARALMAZ.
+ *
+ * OLCULEN HATA: baslik cubugunda ad iki satira boluniyordu ("N-" / "Terminal")
+ * ve cubugun yuksekligi buyuyordu. Iki sebep birlikte:
+ *
+ * 1. `.brand` esnek bir oge ve `flex` bildirimi yoktu; varsayilan `flex
+ *    shrink: 1` ile icerigin altina sikisabiliyor.
+ * 2. "N-Terminal" icindeki kisa cizgi tarayici icin bir SATIR BOLME FIRSATI.
+ *    Yer daralinca oradan boluyor.
+ *
+ * Ikisi de kapatildi. Yer sikisirsa once yanindaki surukleme bosluklari
+ * (`.drag`, min 12px) ve arama kutusu (min 120px) daraliyor - uygulamanin adi
+ * kimligi, kirpilacak son sey. Arayuz yazi olcusu ayardan buyudugunde de
+ * gecerli (`--ui-font-size`). */
 .titlebar .brand {
   display: flex;
   align-items: center;
+  flex: none;
   gap: 7px;
+  white-space: nowrap;
   font-weight: 600;
   letter-spacing: 0.2px;
   padding-right: 8px;
@@ -3382,6 +3398,41 @@ html[data-platform="macos"] .titlebar {
 .statusbar .status-btn:hover {
   background: var(--hover);
   color: var(--text);
+}
+
+/* Yeni surum rozeti.
+ *
+ * Cubugun geri kalani soluk; bu bir HABER ve gorulmesi gerekiyor. Vurgu rengi
+ * kullaniliyor cunku eylem: tiklaninca Ayarlar > Hakkinda aciliyor. */
+.statusbar .status-btn.update {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+}
+
+.statusbar .status-btn.update:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Surum notlari: markdown metni OLDUGU GIBI.
+ *
+ * Bicimlendirilmiyor - bir markdown cizici eklemek bir yayin notu icin agir ve
+ * notlar zaten kisa listeler. Onemli olan okunabilmesi: satir sonlari korunuyor,
+ * uzun notlar kaydiriliyor. */
+.release-notes {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--sunken);
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+  font-size: 0.8462rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  user-select: text;
 }
 
 /* Acik panel: yalnizca renk degil ZEMIN de degisiyor - soluk bir cubukta tek

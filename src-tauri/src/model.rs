@@ -306,6 +306,12 @@ pub struct Behavior {
     /// uygulamalarin davranisi da bu. Tamamen cikmak icin simgedeki "Cikis"
     /// ya da bu ayar var.
     pub close_action: String,
+    /// Acilista yeni surum var mi diye baksin mi.
+    ///
+    /// Kapatilabilir olmasi sart: bu bir AG ISTEGI ve kullanicinin haberi
+    /// olmadan yapilan bir istek olmamali. Varsayilan acik - guncellemeyi
+    /// kacirmak, istegin kendisinden buyuk bir maliyet.
+    pub check_updates: bool,
 }
 
 impl Default for Behavior {
@@ -330,6 +336,7 @@ impl Default for Behavior {
             command_blocks: true,
             block_headers: true,
             close_action: "background".into(),
+            check_updates: true,
         }
     }
 }

@@ -752,3 +752,30 @@ describe("öneri paneli", () => {
     );
   });
 });
+
+/**
+ * Başlık çubuğundaki uygulama adı.
+ *
+ * BİLDİRİLEN HATA: ad iki satıra bölünüyordu ("N-" / "Terminal") ve çubuğun
+ * yüksekliği büyüyordu. İki sebep birlikte çalışıyordu: `.brand` esnek bir öğe
+ * ve `flex` bildirimi yoktu (varsayılan `shrink: 1` içeriğin altına sıkışmaya
+ * izin veriyor), "N-Terminal" içindeki kısa çizgi de tarayıcı için bir satır
+ * bölme fırsatı.
+ */
+describe("başlık çubuğundaki ad", () => {
+  it("sarmıyor ve daralmıyor", () => {
+    const body = ruleBody(".titlebar .brand");
+    expect(body, "ad sarabiliyor — kısa çizgiden bölünüyor").toMatch(
+      /white-space:\s*nowrap/,
+    );
+    expect(body, "ad daralabiliyor").toMatch(/flex:\s*none/);
+  });
+
+  it("yer sıkışınca ÖNCE komşuları daralıyor", () => {
+    // Uygulamanın adı kimliği; kırpılacak son şey o olmalı.
+    expect(ruleBody(".titlebar .drag"), "sürükleme boşluğu esnemiyor").toMatch(
+      /flex:\s*1/,
+    );
+    expect(ruleBody(".titlebar-search"), "arama kutusu esnemiyor").toMatch(/flex:\s*1 1 auto/);
+  });
+});

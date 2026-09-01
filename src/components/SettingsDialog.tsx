@@ -131,7 +131,18 @@ export function SettingsDialog() {
   const editingGroupId = useStore((s) => s.ui.editingGroupId);
   const setUi = useStore((s) => s.setUi);
 
-  const [section, setSection] = useState<Section>(editingGroupId ? "groups" : "general");
+  /*
+   * Açılış bölümü: istekle gelen (durum çubuğundaki güncelleme rozeti
+   * "Hakkında"yı açıyor), yoksa düzenlenen grup, yoksa "Genel".
+   */
+  const update = useStore((s) => s.update);
+  /** Elle denetim sürüyor mu ve son denetimin sonucu ne oldu. */
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<"ok" | "failed" | null>(null);
+
+  const [section, setSection] = useState<Section>(
+    editingGroupId ? "groups" : (useStore.getState().ui.settingsSection ?? "general"),
+  );
   const [selectedProfileId, setSelectedProfileId] = useState(settings.profiles[0]?.id ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingGroupId ?? groups[0]?.id ?? "");
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -1395,6 +1406,90 @@ export function SettingsDialog() {
               <div className="section">
                 <h3>N-Terminal {appVersion}</h3>
                 <p className="dim">{t("settings.aboutBlurb")}</p>
+              </div>
+
+              {/*
+                Güncelleme.
+
+                Uygulama kendini GÜNCELLEMİYOR, haber veriyor — indirme ve
+                kurulum kullanıcının. Kendi kendine güncelleyen bir akış imza
+                anahtarı, imzalı paket üreten bir CI ve yayımlanan bir sürüm
+                akışı istiyor; üçü kurulmadan çalışmıyor.
+
+                Sürüm notları BURADA gösteriliyor, bir düğmenin arkasında
+                değil: "güncelleyeyim mi" kararını veren şey tam olarak o
+                metin ve onu okumak için tarayıcı açmak gerekmemeli.
+              */}
+              <div className="section">
+                <h3>{t("update.heading")}</h3>
+
+                <div className="field" data-setting="update.check">
+                  <label>{t("update.check")}</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      className="outline"
+                      disabled={checking}
+                      onClick={() => {
+                        setChecking(true);
+                        setResult(null);
+                        void useStore
+                          .getState()
+                          .checkUpdate(true)
+                          .then((ok) => setResult(ok ? "ok" : "failed"))
+                          .finally(() => setChecking(false));
+                      }}
+                    >
+                      {checking ? t("update.checking") : t("update.check")}
+                    </button>
+                    {/* Elle denetimden sonra SONUÇ yazıyor: hiçbir şey
+                        değişmeyen bir düğme, çalışmamış gibi görünüyor.
+                        "Güncel" ile "denetlenemedi" ayrı: ağı olmayan bir
+                        makinede "bu sürüm güncel" demek, bilmediğimiz bir şeyi
+                        biliyormuş gibi yapmak olurdu. */}
+                    {!checking && result === "failed" && (
+                      <span className="err-text">{t("update.failed")}</span>
+                    )}
+                    {!checking && result === "ok" && !update && (
+                      <span className="dim">{t("update.upToDate")}</span>
+                    )}
+                  </div>
+                </div>
+
+                {update && (
+                  <>
+                    <div className="field" data-setting="update.newVersion">
+                      <label>{t("update.newVersion")}</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span className="mono">{update.version}</span>
+                        <button
+                          className="primary"
+                          onClick={() => void api.openExternal(update.url).catch(() => {})}
+                        >
+                          {t("update.openPage")}
+                        </button>
+                      </div>
+                    </div>
+                    {update.notes && (
+                      <div className="field" data-setting="update.notes">
+                        <label>{t("update.notes")}</label>
+                        <pre className="release-notes">{update.notes}</pre>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="check-row" data-setting="update.autoCheck">
+                  <input
+                    id="checkUpdates"
+                    type="checkbox"
+                    checked={settings.behavior.checkUpdates}
+                    onChange={(e) =>
+                      void store().patchBehavior({ checkUpdates: e.target.checked })
+                    }
+                  />
+                  <label htmlFor="checkUpdates">{t("update.autoCheck")}</label>
+                </div>
+                <SettingHint>{t("update.autoCheckHint")}</SettingHint>
               </div>
 
               {/*

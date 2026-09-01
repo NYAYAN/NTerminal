@@ -138,6 +138,10 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "keys", key: "settings.keysHeading", hint: "settings.keysHint" },
 
   // --------------------------------------------------------------- hakkında
+  { section: "about", key: "update.check" },
+  { section: "about", key: "update.newVersion" },
+  { section: "about", key: "update.notes" },
+  { section: "about", key: "update.autoCheck", hint: "update.autoCheckHint" },
   { section: "about", key: "settings.developerLabel" },
   { section: "about", key: "settings.sourceCode" },
   { section: "about", key: "settings.licenseLabel" },

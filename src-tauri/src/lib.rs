@@ -13,6 +13,7 @@ mod shellint;
 mod shells;
 mod store;
 mod transfer;
+mod update;
 mod tray;
 
 use base64::Engine;
@@ -553,6 +554,23 @@ fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
 /// Bir metin dosyasinin icerigi - goruntuleyici icin.
 ///
 /// Sinirlar ve ikili sezgisi `files` modulunde belgelenmis.
+/// GitHub'daki son yayin; yenisi yoksa ya da okunamazsa `None`.
+///
+/// `async` ve `spawn_blocking`: cagri bir ag istegi ve saniyeler surebiliyor.
+/// Es zamansiz olmayan bir komut Tauri'de ANA IS PARCACIGINDA kosuyor —
+/// acilista yapilan bu denetim pencereyi o sure boyunca dondururdu.
+///
+/// Karsilastirma da BURADA, arayuzde degil: "hangisi yeni" sorusunun tek bir
+/// dogru yaniti var ve iki yerde ayri yazilirsa biri guncellenip oteki
+/// unutuldugunda ya bildirim hic cikmiyor ya da her acilista cikiyor.
+#[tauri::command]
+async fn update_check(current: String) -> CmdResult<Option<update::ReleaseInfo>> {
+    let found = tauri::async_runtime::spawn_blocking(update::latest)
+        .await
+        .map_err(fail)?;
+    Ok(found.filter(|r| update::is_newer(&current, &r.version)))
+}
+
 #[tauri::command]
 fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
     Ok(files::read_text(std::path::Path::new(&path)))
@@ -767,6 +785,7 @@ pub fn run() {
             list_files,
             list_entries,
             read_text_file,
+            update_check,
             git_info,
             git_branches,
             git_diff,

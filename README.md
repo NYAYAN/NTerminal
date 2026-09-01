@@ -295,6 +295,27 @@ hemen üstünde **GEÇMİŞ** panelini açıyor: son komutlar, ne zaman
 seçileni kutuya yazar — çalıştırmaz; tek bir Enter'la geçmişten komut
 koşturmak geri dönüşü olmayan bir kaza demek.
 
+**Yeni sürüm bildirimi.** Uygulama her açılışta GitHub'daki son yayına bakar;
+daha yenisi varsa durum çubuğunda **⬆ 0.2.0 hazır** rozeti çıkar. Rozete
+tıklamak *Ayarlar › Hakkında*'yı açıyor — sürüm notları orada, indirme sayfasını
+açan düğme de. Tarayıcı kendiliğinden açılmıyor: dış bağlantı açmak
+kullanıcının kararı, küçük bir rozete kazara tıklamanın sonucu değil.
+
+Uygulama kendini **güncellemiyor**, haber veriyor. Kendi kendine güncelleyen
+bir akış (Tauri updater) bir imza anahtar çifti, imzalı paket üreten bir CI ve
+yayımlanan bir sürüm akışı istiyor; üçü kurulmadan çalışmıyor.
+
+Denetim *Ayarlar › Hakkında*'dan kapatılabiliyor — kapalıyken hiçbir ağ isteği
+yapılmıyor, aynı yerdeki düğmeyle elle denetlenebiliyor. "Yeni sürüm yok" ile
+"denetleyemedim" ayrı yazılıyor: ağı olmayan bir makinede "bu sürüm güncel"
+demek, bilinmeyen bir şeyi biliyormuş gibi göstermek olurdu.
+
+> İstek `curl` ile yapılıyor, bir HTTP kütüphanesiyle değil. Sebep kurumsal
+> ağlar: rustls kendi kök sertifika listesini taşıyıp sistemin güven deposunu
+> yok sayıyor ve araya giren bir kurumsal TLS proxy'sinde denetim hep
+> başarısız olurdu. `curl` sertifikaları da vekil sunucu ayarlarını da işletim
+> sisteminden alıyor — üstelik yeni bir bağımlılık gerekmiyor.
+
 **Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
 Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
 makinede de çalışır, kabuk konumları (PowerShell 7, Git Bash…) o makinede

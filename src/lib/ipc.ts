@@ -24,6 +24,7 @@ import type {
   NewHistoryEntry,
   PathsInfo,
   Profile,
+  ReleaseInfo,
   Settings,
   SpawnResult,
   SpawnSpec,
@@ -112,6 +113,15 @@ export const api = {
    * metinleri buradan geçiriyoruz.
    */
   trayLabels: (show: string, quit: string) => invoke<void>("tray_labels", { show, quit }),
+
+  /**
+   * GitHub'daki son yayın; yenisi yoksa `null`.
+   *
+   * Karşılaştırma Rust tarafında: "hangisi yeni" sorusunun tek bir doğru
+   * yanıtı var ve iki yerde ayrı yazılırsa biri güncellenip öteki
+   * unutulduğunda ya bildirim hiç çıkmıyor ya da her açılışta çıkıyor.
+   */
+  checkUpdate: (current: string) => invoke<ReleaseInfo | null>("update_check", { current }),
 };
 
 // PTY çıktısı base64 geliyor: terminal akışı geçerli UTF-8 olmak zorunda değil

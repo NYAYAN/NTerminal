@@ -321,6 +321,42 @@ olan onu boş satırda açan yoldu (`recentCommands` + `openHistorySuggestions`)
 ortasında bir örtü olarak. Panel açıkken Enter seçileni KUTUYA yazıyor,
 çalıştırmıyor: tek Enter'la geçmişten komut koşturmak `rm -rf` sınıfı bir kaza.
 
+### 1.11 Yeni sürüm bildirimi
+
+Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son
+yayınını okuyup sürümü karşılaştırıyor, yenisi varsa durum çubuğunda bir rozet
+çıkıyor. Kendi kendine güncelleyen bir akış (Tauri updater) imza anahtarı,
+imzalı paket üreten bir CI ve yayımlanan bir `latest.json` istiyor; üçü
+kurulmadan çalışmıyor — bildirim ise hiçbir kuruluma bağlı değil.
+
+**`curl`, HTTP kütüphanesi değil.** `ureq`/`reqwest` + rustls kendi kök
+sertifika listesini taşıyor ve sistemin güven deposunu yok sayıyor; araya giren
+bir kurumsal TLS proxy'sinde denetim hep başarısız dönerdi (kullanıcının
+çalıştığı ağ tam olarak öyle). `curl` sertifikayı da vekil sunucuyu da işletim
+sisteminden alıyor ve yeni bir bağımlılık gerektirmiyor. Bulunmama riski düşük
+(Windows 10 1803+, macOS her zaman) ve sonucu zararsız: denetim sessizce
+başarısız oluyor.
+
+**Karşılaştırma Rust tarafında** (`update::is_newer`), arayüzde değil: "hangisi
+yeni" sorusunun tek bir doğru yanıtı var ve iki yerde ayrı yazılırsa biri
+güncellenip öteki unutulduğunda ya bildirim hiç çıkmıyor ya da her açılışta
+çıkıyor. Kural noktayla ayrılmış sayısal parçalar + semver'in ön-yayın kuralı;
+taslak ve ön-yayınlar atlanıyor.
+
+**"Yeni sürüm yok" ile "denetleyemedim" AYRI.** Birleştirilirse ağı olmayan bir
+makinede "bu sürüm güncel" yazılırdı — bilmediğimiz bir şeyi biliyormuş gibi.
+Depo eylemi `undefined` (istek düştü) ile `null` (yeni yok) ayrımını taşıyor.
+
+**Ayar kapalıyken hiçbir istek yok**, ama Ayarlar'daki düğme yine çalışıyor:
+ayar KENDİLİĞİNDEN yapılan denetimi kapatıyor, düğmeye basmak isteğin kendisi.
+
+Testler: `src-tauri/src/update_tests.rs` (sürüm karşılaştırması ve yanıt
+ayrıştırma), `store/updateCheck.test.ts`, `components/updateBadge.test.tsx`.
+
+**Açık uç:** depoda henüz yayın yok, yani rozet hiç çıkmıyor. İlk GitHub
+Release yayımlandığında çalışmaya başlıyor; CI şu an paketleri yalnızca koşu
+çıktısı olarak yüklüyor, Release oluşturmuyor.
+
 ---
 
 ## 2. Açık işler

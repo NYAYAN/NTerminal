@@ -176,6 +176,13 @@ export interface Behavior {
   macOptionIsMeta: boolean;
   /** Kapatma düğmesi: tamamen çık ya da arka planda kal. */
   closeAction: CloseAction;
+  /**
+   * Açılışta yeni sürüm var mı diye baksın mı.
+   *
+   * Kapatılabilir olması şart: bu bir AĞ İSTEĞİ ve kullanıcının haberi olmadan
+   * yapılan bir istek olmamalı.
+   */
+  checkUpdates: boolean;
 }
 
 export interface Settings {
@@ -300,6 +307,23 @@ export interface FileText {
   binary: boolean;
   /** Dosyanın gerçek boyutu (bayt). */
   size: number;
+}
+
+// ------------------------------------------------------------- güncelleme
+
+/**
+ * GitHub'daki son yayın.
+ *
+ * Yalnızca yeni bir sürüm VARSA geliyor: karşılaştırmayı Rust yapıyor
+ * (bkz. `update.rs`), arayüz "hangisi yeni" sorusunu ikinci kez sormuyor.
+ */
+export interface ReleaseInfo {
+  /** Etiketten arındırılmış sürüm: `v0.2.0` → `0.2.0`. */
+  version: string;
+  /** Yayın sayfasının adresi. */
+  url: string;
+  /** Sürüm notları (markdown, olduğu gibi). Boş olabilir. */
+  notes: string;
 }
 
 // --------------------------------------------------------------------- git

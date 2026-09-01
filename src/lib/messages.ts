@@ -941,6 +941,36 @@ export const MESSAGES = {
     "Daha önce çalıştırdığınız komutlardan satırın kalanını yazarken tamamlar. Tamamlamayı kabuk çiziyor. zsh için gereken eklenti (zsh-autosuggestions) uygulamayla birlikte geliyor, kurmanız gereken bir şey yok; kendi kurulumunuz varsa o kullanılır. pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
     "Completes the rest of the line from commands you have run before. The shell draws the completion. The plugin zsh needs (zsh-autosuggestions) ships with the app, so there is nothing to install; if you have your own copy, that one is used. pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
   ],
+  // ---------------------------------------------------------- güncelleme
+  //
+  // Uygulama kendini GÜNCELLEMİYOR, haber veriyor: yeni sürümü indirip kuran
+  // bir akış imza anahtarı, imzalı paket üreten bir CI ve yayımlanan bir
+  // sürüm akışı istiyor; üçü kurulmadan çalışmıyor. Bildirim ise bugün
+  // çalışıyor ve hiçbir kuruluma bağlı değil.
+  "update.available": ["{v} hazır", "{v} available"],
+  "update.availableTitle": [
+    "Yeni sürüm yayımlandı. Ayrıntılar için Ayarlar › Hakkında.",
+    "A new version is out. See Settings › About for details.",
+  ],
+  "update.heading": ["Güncelleme", "Update"],
+  "update.newVersion": ["Yeni sürüm", "New version"],
+  "update.upToDate": ["Bu sürüm güncel.", "This version is up to date."],
+  "update.openPage": ["İndirme sayfasını aç", "Open the download page"],
+  "update.notes": ["Sürüm notları", "Release notes"],
+  "update.check": ["Güncellemeleri denetle", "Check for updates"],
+  "update.checking": ["Denetleniyor…", "Checking…"],
+  "update.failed": [
+    "Denetlenemedi — ağ bağlantısını kontrol edin.",
+    "Could not check — check your network connection.",
+  ],
+  "update.autoCheck": [
+    "Açılışta yeni sürüm denetle",
+    "Check for a new version at startup",
+  ],
+  "update.autoCheckHint": [
+    "Uygulama her açılışta GitHub'daki son yayına bakar ve yenisi varsa durum çubuğunda haber verir. İndirme ve kurulum size ait — uygulama kendini değiştirmiyor. Kapalıyken hiçbir ağ isteği yapılmaz; denetlemeyi buradaki düğmeyle elle de yapabilirsiniz.",
+    "The app checks the latest GitHub release at every startup and tells you in the status bar when a newer one exists. Downloading and installing is up to you — the app never replaces itself. When off, no network request is made; you can also check by hand with the button here.",
+  ],
   // Menü çubuğu / bildirim alanı simgesi.
   //
   // `tray.*` metinlerini işletim sistemi çiziyor ve arayüz yüklenmeden önce

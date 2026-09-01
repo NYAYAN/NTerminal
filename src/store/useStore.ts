@@ -29,6 +29,7 @@ import {
   recentCommands,
   type SuggestEntry,
 } from "../lib/suggest";
+import type { Section } from "../lib/settingsIndex";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
@@ -38,6 +39,7 @@ import type {
   NewFavorite,
   PathsInfo,
   Profile,
+  ReleaseInfo,
   Lang,
   Settings,
   TabState,
@@ -180,6 +182,14 @@ export interface UiState {
   findOpen: boolean;
   renamingTabId: string | null;
   editingGroupId: string | null;
+  /**
+   * Ayarlar penceresi hangi bölümde açılsın; `null` ise varsayılan.
+   *
+   * Durumda tutuluyor çünkü isteyen yer pencerenin DIŞINDA: durum çubuğundaki
+   * güncelleme rozeti "Hakkında"yı açıyor. Pencere içindeki gezinme yine
+   * kendi yerel durumunda — bu alan yalnızca AÇILIŞ bölümünü söylüyor.
+   */
+  settingsSection: Section | null;
   toast: { text: string; tone: "ok" | "err" | "info" } | null;
   /** Açık onay penceresi; yoksa null. */
   confirm: ConfirmRequest | null;
@@ -280,6 +290,14 @@ interface Store {
    * tuşu ve tek basışta gitmeli (gerekçesi `App.tsx`).
    */
   stopArmed: string | null;
+  /**
+   * GitHub'da bekleyen yeni sürüm; yoksa null.
+   *
+   * Yalnızca DAHA YENİ bir sürüm varsa doluyor — karşılaştırmayı Rust yapıyor
+   * (bkz. `update.rs`). Arayüz bu yüzden hiçbir yerde sürüm karşılaştırmıyor:
+   * dolu olması "güncelleme var" demek.
+   */
+  update: ReleaseInfo | null;
 
   bootstrap: () => Promise<void>;
   persistNow: () => Promise<void>;
@@ -330,6 +348,13 @@ interface Store {
   reloadWorkspace: () => Promise<void>;
   activeTab: () => { group: Group; tab: TabState } | null;
   activeSession: () => TerminalSession | null;
+  /**
+   * Yeni sürüm var mı diye bakar. Denetim YAPILABİLDİYSE `true`.
+   *
+   * `manual` elle basılan düğme için: ayar yalnızca KENDİLİĞİNDEN yapılan
+   * denetimi kapatıyor, düğmeye basmak isteğin kendisi.
+   */
+  checkUpdate: (manual?: boolean) => Promise<boolean>;
   /** Çalışan komuta SIGINT gönderir. */
   stopRunning: (tabId: string) => void;
   /** Durdurmayı silahlar; pencere dolunca kendiliğinden düşüyor. */
@@ -501,6 +526,7 @@ export const useStore = create<Store>((set, get) => ({
       // ölmesi bu varlıkla çelişiyordu — simge de kayboluyordu.
       closeAction: "background",
       macOptionIsMeta: false,
+      checkUpdates: true,
     },
     profiles: [],
     defaultProfileId: "",
@@ -515,6 +541,7 @@ export const useStore = create<Store>((set, get) => ({
   sessionEpoch: {},
   statusTick: 0,
   stopArmed: null,
+  update: null,
   favorites: [],
   suggestHistory: [],
   inputSignals: {},
@@ -537,6 +564,7 @@ export const useStore = create<Store>((set, get) => ({
     findOpen: false,
     renamingTabId: null,
     editingGroupId: null,
+    settingsSection: null,
     toast: null,
     confirm: null,
     suggest: null,
@@ -574,6 +602,9 @@ export const useStore = create<Store>((set, get) => ({
       });
       void get().loadFavorites();
       void get().loadSuggestHistory();
+      // Denetim ARKA PLANDA: açılışı bekletmiyor ve düşerse hiçbir şey
+      // olmuyor. Sürüm karşılaştırması Rust tarafında.
+      void get().checkUpdate();
     } catch (err) {
       set({ ready: true, bootError: String(err) });
     }
@@ -1385,6 +1416,34 @@ export const useStore = create<Store>((set, get) => ({
   activeSession() {
     const active = get().activeTab();
     return active ? (sessions.get(active.tab.id) ?? null) : null;
+  },
+
+  /**
+   * Yeni sürüm denetimi.
+   *
+   * Açılışta bir kez koşuyor ve Ayarlar › Hakkında'daki düğmeden elle de
+   * çağrılabiliyor. Hata YUTULUYOR: ağ yok, depo görünmüyor, hız sınırı
+   * aşılmış — hepsinin doğru karşılığı aynı, bildirim gösterilmemesi. Bir
+   * güncelleme denetimi kullanıcıya hata penceresi açmamalı; istediği bir şey
+   * değildi, bir kolaylık.
+   */
+  async checkUpdate(manual = false) {
+    // Ayar yalnızca KENDİLİĞİNDEN yapılan denetimi kapatıyor.
+    if (!manual && !get().settings.behavior.checkUpdates) return true;
+    const current = get().appVersion;
+    if (!current) return false;
+
+    /*
+     * `undefined` ile `null` AYRI şeyler ve ayrımın taşınması gerekiyor:
+     * `null` "yeni sürüm yok" (denetim başarılı), `undefined` ise "denetim
+     * yapılamadı". İkisini birleştirmek, ağı olmayan bir makinede "bu sürüm
+     * güncel" yazdırırdı — yani bilmediğimiz bir şeyi biliyormuş gibi.
+     */
+    const found = await api.checkUpdate(current).catch(() => undefined);
+    if (found === undefined) return false;
+    // `null` da yazılıyor: elle yapılan ikinci denetim eski haberi temizlesin.
+    set({ update: found });
+    return true;
   },
 
   /**

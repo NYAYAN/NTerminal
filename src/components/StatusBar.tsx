@@ -49,6 +49,7 @@ export function StatusBar() {
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
   const keybindings = useStore((s) => s.settings.keybindings);
+  const update = useStore((s) => s.update);
   // Oturum nesnesi React durumunda degil; bu sayac degisince yeniden ciziyoruz.
   useStore((s) => s.statusTick);
 
@@ -356,6 +357,29 @@ export function StatusBar() {
         )}
 
         <span className="spacer" />
+
+        {/*
+          Yeni sürüm bildirimi.
+
+          Çubuğun geri kalanı okuma, bu bir EYLEM ve yalnızca yapılacak bir şey
+          varken çiziliyor — durum çubuğunun sadeleştirilmesiyle çelişmiyor:
+          kalıcı bir rozet değil, geçici bir haber. Görüldüğü an tıklanıp
+          kapatılabilir olması bu yüzden önemli.
+
+          Tıklamak tarayıcıyı DEĞİL Ayarlar › Hakkında'yı açıyor: dış bağlantı
+          açmak kullanıcının kararı olmalı, küçük bir rozete kazara tıklamanın
+          sonucu değil. Sürüm notları da orada.
+        */}
+        {update && (
+          <button
+            className="status-btn update"
+            title={t("update.availableTitle")}
+            onClick={() => setUi({ settingsOpen: true, settingsSection: "about" })}
+          >
+            {"⬆ "}
+            {t("update.available", { v: update.version })}
+          </button>
+        )}
 
         {/* Durum okumalarının kapısı. Her zaman çubukta: içindekiler artık
             "sığmadığı için" değil, BİLİNÇLİ olarak orada. */}
