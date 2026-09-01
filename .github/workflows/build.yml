@@ -20,6 +20,9 @@ name: Derleme
 on:
   push:
     branches: ["**"]
+    # Etiket itmek YAYIN demek: asagidaki `yayin` isi paketleri GitHub
+    # Release'ine baglıyor ve uygulamanin surum denetimi oradan okuyor.
+    tags: ["v*"]
   workflow_dispatch:
 
 # Aynı dala yeni bir itme gelirse eski koşu iptal edilir: macOS runner'ı pahalı
@@ -129,3 +132,41 @@ jobs:
           path: ${{ matrix.cikti }}
           if-no-files-found: error
           retention-days: 14
+
+  # Yalnizca ETIKET itildiginde: paketleri GitHub Release'ine bagliyor.
+  #
+  # Neden gerekli: uygulamanin surum denetimi `releases/latest` uctan okuyor
+  # (bkz. src-tauri/src/update.rs). Kosu ciktilari (`upload-artifact`) o uca
+  # girmiyor ve 14 gunde siliniyor, yani yayin olmadan bildirim hic calismiyor.
+  #
+  # `gh` CLI runner'da kurulu; ucuncu bir eylem eklemeye gerek yok.
+  # `--generate-notes` notlari commit'lerden uretiyor, `--verify-tag` da
+  # yanlislikla var olmayan bir etikete yayin acilmasini engelliyor.
+  yayin:
+    name: Yayın
+    needs: paket
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Varsayilan `contents: read`; Release olusturmak yazma izni istiyor.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Paketleri indir
+        uses: actions/download-artifact@v7
+        with:
+          pattern: nterminal-*
+          path: paketler
+          merge-multiple: true
+
+      - name: Release oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --verify-tag \
+            paketler/*
