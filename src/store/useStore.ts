@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { api } from "../lib/ipc";
-import { tabLabel } from "../lib/labels";
+import { groupLabel, tabLabel } from "../lib/labels";
 import {
   canCloseTab,
   canDeleteGroup,
@@ -17,10 +17,18 @@ import {
   setFileManager as applyFileManager,
   setPlatform as applyPlatform,
 } from "../lib/platform";
+import { applyUiFont } from "../lib/fonts";
+import { passThroughSequence } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { cdQuery, cdSuggestions } from "../lib/cdSuggest";
-import { canSuggest, cycleIndex, rankSuggestions, type SuggestEntry } from "../lib/suggest";
+import {
+  canSuggest,
+  cycleIndex,
+  rankSuggestions,
+  recentCommands,
+  type SuggestEntry,
+} from "../lib/suggest";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
@@ -53,6 +61,36 @@ import type {
 const SUGGEST_SOURCE_LIMIT = 400;
 
 export const sessions = new Map<string, TerminalSession>();
+
+/**
+ * Durdurma silahının açık kalma süresi (ms).
+ *
+ * Ölçü niyetin ömrü: "durdurmak istiyorum" düşüncesiyle ikinci kez basmak bir
+ * saniyenin altında oluyor. Uzun bir pencere, çok daha sonra kopyalamak için
+ * basılan Ctrl+C'yi durdurmaya çevirirdi — sessiz ve şaşırtıcı bir kayıp.
+ */
+const STOP_ARM_MS = 1500;
+
+let stopTimer: number | null = null;
+
+/**
+ * Otomatik yeniden başlatmalar arasındaki en az süre (ms).
+ *
+ * Kabuk kapanınca sekme kendi kendine yeniden başlıyor — kullanıcının isteği
+ * buydu: "doğrudan yeniden başlatma işlemi gerçekleşsin". Ama koşulsuz bir
+ * yeniden başlatma, AÇILAMAYAN bir kabukta sonsuz döngü demek: profilde
+ * olmayan bir yürütülebilir, bozuk bir `.zshrc`, silinmiş bir çalışma dizini —
+ * hepsinde kabuk doğar doğmaz ölüyor ve uygulama saniyede yüzlerce süreç
+ * başlatmaya çalışırdı.
+ *
+ * Kural bu yüzden "arka arkaya HEMEN ölme": kabuk bu süreden kısa yaşadıysa
+ * ikinci kez denenmiyor, karar kullanıcıya bırakılıyor. Uzun yaşamışsa sorun
+ * kabukta değil, kullanıcı `exit` yazmıştır — orada yeniden başlatmak doğru.
+ */
+const AUTO_RESTART_GAP_MS = 3000;
+
+/** Sekme başına son otomatik yeniden başlatma anı. */
+const lastAutoRestart = new Map<string, number>();
 
 /**
  * Onay penceresi çözücüleri.
@@ -229,6 +267,19 @@ interface Store {
    * geldiğinde bir kez yeniden çizmek gerekiyor.
    */
   statusTick: number;
+  /**
+   * Durdurma isteği SİLAHLI olan sekme; hiçbiri değilse null.
+   *
+   * Ctrl+C çalışan komutu tek basışta durdurmuyor, çünkü aynı tuş kopyalama
+   * da demek (Windows'ta her yerde, terminalde seçim varken). İlk basış
+   * silahlıyor ve şeritte "tekrar basın" yazıyor; ikinci basış SIGINT
+   * gönderiyor. Kısa bir pencereden sonra kendiliğinden düşüyor — yarım
+   * kalmış bir niyet saatler sonra beklenmedik bir durdurmaya dönüşmemeli.
+   *
+   * Terminalin İÇİNDEKİ düz Ctrl+C bu kuralın dışında: orası kabuğun kendi
+   * tuşu ve tek basışta gitmeli (gerekçesi `App.tsx`).
+   */
+  stopArmed: string | null;
 
   bootstrap: () => Promise<void>;
   persistNow: () => Promise<void>;
@@ -250,6 +301,8 @@ interface Store {
   healProfileLinks: () => void;
 
   addGroup: (name?: string) => string;
+  /** Hiçbir gruba ait olmayan sekme; kova yoksa kuruluyor. */
+  addLooseTab: (opts?: { profileId?: string; cwd?: string | null }) => string | null;
   updateGroup: (id: string, patch: Partial<Group>) => void;
   deleteGroup: (id: string) => Promise<void>;
   setActiveGroup: (id: string) => void;
@@ -277,6 +330,11 @@ interface Store {
   reloadWorkspace: () => Promise<void>;
   activeTab: () => { group: Group; tab: TabState } | null;
   activeSession: () => TerminalSession | null;
+  /** Çalışan komuta SIGINT gönderir. */
+  stopRunning: (tabId: string) => void;
+  /** Durdurmayı silahlar; pencere dolunca kendiliğinden düşüyor. */
+  armStop: (tabId: string) => void;
+  disarmStop: () => void;
 
   loadFavorites: () => Promise<void>;
   addFavorite: (favorite: NewFavorite) => Promise<Favorite | null>;
@@ -307,6 +365,8 @@ interface Store {
   moveSuggestion: (direction: 1 | -1) => void;
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
+  /** Boş satırda yukarı ok: geçmiş panelini açar. Geçmiş boşsa `false`. */
+  openHistorySuggestions: () => boolean;
   closeSuggestions: () => void;
   setAppInputSink: (sink: ((text: string, mode: "replace" | "append") => void) | null) => void;
   insertPath: (path: string) => void;
@@ -403,6 +463,9 @@ export const useStore = create<Store>((set, get) => ({
       fontSize: 14,
       lineHeight: 1.2,
       letterSpacing: 0,
+      // Boş: arayüz sistemin kendi ailesini kullanıyor (CSS'teki `--ui-font`).
+      uiFontFamily: "",
+      uiFontSize: 13,
       theme: "nterminal-dark",
       cursorStyle: "bar",
       cursorBlink: true,
@@ -451,6 +514,7 @@ export const useStore = create<Store>((set, get) => ({
   exited: {},
   sessionEpoch: {},
   statusTick: 0,
+  stopArmed: null,
   favorites: [],
   suggestHistory: [],
   inputSignals: {},
@@ -490,6 +554,7 @@ export const useStore = create<Store>((set, get) => ({
       // Dil temadan once: hata iletileri de dogru dilde cikabilsin.
       applyLanguage(boot.settings.language);
       applyThemeToDocument(getTheme(boot.settings.appearance.theme));
+      applyUiFont(boot.settings.appearance.uiFontFamily, boot.settings.appearance.uiFontSize);
       set({
         ready: true,
         appVersion: boot.appVersion,
@@ -558,6 +623,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ settings: next });
     applyLanguage(next.language);
     applyThemeToDocument(getTheme(next.appearance.theme));
+    applyUiFont(next.appearance.uiFontFamily, next.appearance.uiFontSize);
     for (const session of sessions.values()) session.applySettings(next);
     scheduleSettingsWrite(next, (message) => get().toast(message, "err"));
   },
@@ -614,6 +680,7 @@ export const useStore = create<Store>((set, get) => ({
       const fresh = await api.resetSettings();
       set({ settings: fresh });
       applyThemeToDocument(getTheme(fresh.appearance.theme));
+      applyUiFont(fresh.appearance.uiFontFamily, fresh.appearance.uiFontSize);
       for (const session of sessions.values()) session.applySettings(fresh);
       // Sıfırlama profilleri yeniden tarıyor ve hepsine YENİ kimlik veriyor;
       // bu çağrı olmadan açık her sekmenin bağı aynı anda kopuyor.
@@ -636,6 +703,7 @@ export const useStore = create<Store>((set, get) => ({
       icon: null,
       collapsed: false,
       favorite: false,
+      ungrouped: false,
       defaultProfileId: settings.defaultProfileId || null,
       defaultCwd: null,
       env: {},
@@ -645,6 +713,51 @@ export const useStore = create<Store>((set, get) => ({
     set({ groups: [...groups, group], activeGroupId: id });
     void get().persistNow();
     return id;
+  },
+
+  /**
+   * GRUPTAN BAĞIMSIZ sekme.
+   *
+   * BİLDİRİLEN İSTEK: "Bir sekmeyi illa gruba eklemeye gerek olmamalı."
+   * Doğruydu — sekme açmanın her yolu bir grubun içine düşüyordu, çünkü her
+   * zaman bir grup seçili.
+   *
+   * Model DEĞİŞMEDİ: sekmeler yine bir grubun içinde yaşıyor. Değiştirmek
+   * "sekme nerede" sorusunu geçmiş kaydından favori süzgecine, bölme
+   * kipinden aktarıma kadar her yerde ikiye bölerdi. Bunun yerine TEK bir
+   * grup "gruplanmamış" olarak işaretleniyor ve kenar çubuğunda başlıksız,
+   * düz bir liste olarak çiziliyor. Kullanıcının gördüğü şey istenen şey:
+   * hiçbir gruba ait olmayan sekmeler.
+   *
+   * Kova TALEP ÜZERİNE kuruluyor ve listenin BAŞINA giriyor: gruplanmamış
+   * sekmeler grupların üstünde duruyor, tıpkı bir dosya yöneticisinde köke
+   * bırakılmış dosyalar gibi. Son sekmesi kapanınca kendiliğinden kayboluyor
+   * (bkz. `closeTab`) — boş ve adsız bir bölüm ekranda yalnızca soru
+   * doğururdu.
+   */
+  addLooseTab(opts) {
+    const existing = get().groups.find((g) => g.ungrouped);
+    if (!existing) {
+      const bucket: Group = {
+        id: newId("grp"),
+        // Ad BOŞ: etiketi `groupLabel` çeviriden veriyor, böylece dil
+        // değişince menülerde eski dilde takılı kalmıyor.
+        name: "",
+        color: null,
+        icon: null,
+        collapsed: false,
+        favorite: false,
+        ungrouped: true,
+        defaultProfileId: null,
+        defaultCwd: null,
+        env: {},
+        activeTabId: null,
+        tabs: [],
+      };
+      set({ groups: [bucket, ...get().groups] });
+      return get().addTab({ ...opts, groupId: bucket.id });
+    }
+    return get().addTab({ ...opts, groupId: existing.id });
   },
 
   updateGroup(id, patch) {
@@ -676,8 +789,8 @@ export const useStore = create<Store>((set, get) => ({
       title: t("confirm.deleteGroupTitle"),
       message:
         group.tabs.length === 0
-          ? t("confirm.deleteGroupEmptyMessage", { name: group.name })
-          : t("confirm.deleteGroupMessage", { name: group.name, n: group.tabs.length }),
+          ? t("confirm.deleteGroupEmptyMessage", { name: groupLabel(group) })
+          : t("confirm.deleteGroupMessage", { name: groupLabel(group), n: group.tabs.length }),
       confirmLabel: t("confirm.delete"),
       danger: true,
     });
@@ -742,7 +855,17 @@ export const useStore = create<Store>((set, get) => ({
     const groups = get().groups;
     const from = groups.findIndex((g) => g.id === id);
     if (from === -1) return;
-    const next = reorder(groups, from, targetIndex);
+    /*
+     * GRUPLANMAMIŞ kova her zaman en üstte kalıyor.
+     *
+     * Kova sürüklenemiyor (başlığı yok, tutunacak bir yer de yok) ama bir
+     * GRUP onun üstüne bırakılabiliyordu ve o zaman gruplanmamış sekmeler
+     * listenin ortasında bir yerde kalıyordu — başlıksız oldukları için de
+     * kime ait oldukları anlaşılmıyordu.
+     */
+    const hasBucket = groups[0]?.ungrouped === true;
+    const target = hasBucket && id !== groups[0].id ? Math.max(1, targetIndex) : targetIndex;
+    const next = reorder(groups, from, target);
     if (next === groups) return;
     set({ groups: next });
     get().schedulePersist();
@@ -855,10 +978,29 @@ export const useStore = create<Store>((set, get) => ({
       nextActive = neighbour?.id ?? null;
     }
 
+    /*
+     * Boşalan GRUPLANMAMIŞ kova kalkıyor.
+     *
+     * Kova bir grup değil, "grubu olmayanlar" için bir yer; boşken ekranda
+     * adsız ve başlıksız bir hiçlik olarak durması yalnızca "bu ne" sorusu
+     * doğururdu. Gerçek gruplar boş kalabiliyor ve kalmalı — kullanıcı onları
+     * kendisi kurdu, adları ve rengi var.
+     *
+     * Son grup asla silinmiyor: bir sonraki sekmenin gidecek yeri kalmalı.
+     */
+    const dropBucket = group.ungrouped && nextTabs.length === 0 && get().groups.length > 1;
+    const nextGroups = dropBucket
+      ? get().groups.filter((g) => g.id !== group.id)
+      : get().groups.map((g) =>
+          g.id === group.id ? { ...g, tabs: nextTabs, activeTabId: nextActive } : g,
+        );
+
     set({
-      groups: get().groups.map((g) =>
-        g.id === group.id ? { ...g, tabs: nextTabs, activeTabId: nextActive } : g,
-      ),
+      groups: nextGroups,
+      activeGroupId:
+        dropBucket && get().activeGroupId === group.id
+          ? (nextGroups[0]?.id ?? null)
+          : get().activeGroupId,
       running: Object.fromEntries(
         Object.entries(get().running).filter(([id]) => id !== tabId),
       ),
@@ -1097,11 +1239,32 @@ export const useStore = create<Store>((set, get) => ({
         // göstermeli. En sık örnek: `git add` sonrası sayacın düşmesi.
         void get().refreshGit(sessions.get(tab.id)?.cwd ?? null);
       },
+      /*
+       * Kabuk kapandı: SEKME KENDİ KENDİNE yeniden başlıyor.
+       *
+       * Önceki hâli "Bu sekmedeki kabuk kapandı" kutusunu çiziyor ve iki
+       * düğme sunuyordu. Kullanıcının isteği doğrudan yeniden başlatmaktı:
+       * kutunun sorduğu soru zaten çoğu zaman tek bir yanıta çıkıyor ve
+       * sekmeyi kapatmanın yolu (kenar çubuğu, sekme çubuğu) hep açık.
+       *
+       * Kutu tümden kalkmadı: kabuk AÇILAMIYORSA geriye o kalıyor. Ayrımı
+       * `AUTO_RESTART_GAP_MS` yapıyor — arka arkaya hemen ölen bir kabuk
+       * yeniden denenmiyor, yoksa saniyede yüzlerce süreç doğardı.
+       */
       onExit: () => {
-        set({
-          running: { ...get().running, [tab.id]: false },
-          exited: { ...get().exited, [tab.id]: true },
-        });
+        set({ running: { ...get().running, [tab.id]: false } });
+
+        const now = Date.now();
+        const last = lastAutoRestart.get(tab.id) ?? 0;
+        if (now - last >= AUTO_RESTART_GAP_MS) {
+          lastAutoRestart.set(tab.id, now);
+          void get().restartTab(tab.id);
+          return;
+        }
+
+        // İkinci kez hemen öldü: kabuk açılamıyor. Karar kullanıcının.
+        lastAutoRestart.delete(tab.id);
+        set({ exited: { ...get().exited, [tab.id]: true } });
       },
       // Sessizce yutmuyoruz: baglanti acilmiyorsa kullanici bunu bilmeli,
       // yoksa "tikliyorum hicbir sey olmuyor" durumu geri gelir.
@@ -1141,6 +1304,24 @@ export const useStore = create<Store>((set, get) => ({
   async restartTab(tabId) {
     const session = sessions.get(tabId);
     if (session) {
+      /*
+       * EKRAN KORUNUYOR.
+       *
+       * Yeniden başlatma xterm örneğini yeniden kuruyor (bkz. `sessionEpoch`)
+       * ve yeni örnek boş açılıyor — yani yeniden başlatmak kullanıcının
+       * çıktısını siliyordu. Elle basılan bir düğmede bu göze alınabilir bir
+       * bedeldi; kabuk kapanınca KENDİLİĞİNDEN yeniden başladığı için artık
+       * değil: `exit` yazan biri ekranının silinmesini beklemiyor.
+       *
+       * Yol yeni değil — oturum geri yükleme zaten böyle çalışıyor. Ekran
+       * kaydırma tamponu olarak yazılıyor, barındırıcı da onu okuyup
+       * "önceki oturum burada bitti" ayıracıyla birlikte çiziyor.
+       */
+      const screen = session.serialize();
+      if (screen.trim() && get().settings.behavior.restoreScrollback) {
+        await api.scrollbackSave(tabId, screen).catch(() => {});
+        get().updateTab(tabId, { hasScrollback: true });
+      }
       await session.dispose(true);
       sessions.delete(tabId);
     }
@@ -1204,6 +1385,47 @@ export const useStore = create<Store>((set, get) => ({
   activeSession() {
     const active = get().activeTab();
     return active ? (sessions.get(active.tab.id) ?? null) : null;
+  },
+
+  /**
+   * Çalışan komutu durdurur.
+   *
+   * Baytı `passThroughSequence` veriyor ve bu bilinçli: aynı bayt komut
+   * kutusunun kaçış kapısında da geçiyor. İki yerde elle yazılsaydı biri
+   * değiştiğinde öteki sessizce çalışmayan bir tuş göndermeye başlardı.
+   */
+  stopRunning(tabId) {
+    get().disarmStop();
+    const data = passThroughSequence({ key: "c", ctrl: true });
+    if (data) sessions.get(tabId)?.sendKeys(data);
+  },
+
+  armStop(tabId) {
+    if (stopTimer !== null) window.clearTimeout(stopTimer);
+    set({ stopArmed: tabId });
+    stopTimer = window.setTimeout(() => {
+      stopTimer = null;
+      if (get().stopArmed === tabId) set({ stopArmed: null });
+    }, STOP_ARM_MS);
+
+    /*
+     * Geri bildirim ŞERİTTE, yalnızca şerit yoksa bildirim balonunda.
+     *
+     * Hiçbir şey yapmıyormuş gibi görünen bir ilk basış, iki basış kuralını
+     * bir arızaya çeviriyor. Şerit ("Komut çalışıyor…") kullanıcının zaten
+     * baktığı yer ve orada duruyor; koşulu `CommandInput` ile aynı, o yüzden
+     * ikisi ayrışamıyor. Şeridin çizilmediği durumlar (tam ekran program,
+     * entegrasyonsuz profil) balona düşüyor.
+     */
+    const signals = get().inputSignals[tabId];
+    const stripVisible = !!signals?.integration && !signals.altScreen;
+    if (!stripVisible) get().toast(t("input.stopAgain"), "info");
+  },
+
+  disarmStop() {
+    if (stopTimer !== null) window.clearTimeout(stopTimer);
+    stopTimer = null;
+    if (get().stopArmed !== null) set({ stopArmed: null });
   },
 
   // -------------------------------------------------------------- favoriler
@@ -1579,6 +1801,30 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     get().activeSession()?.insertCommand(command, execute);
+  },
+
+  /**
+   * Boş komut satırında yukarı ok: geçmiş listesini açar.
+   *
+   * Warp'ın davranışı: kutuya odaklanıp yukarı oka basınca ÜSTÜNDE "HISTORY"
+   * başlıklı bir panel açılıyor, ok tuşlarıyla geziliyor, Esc kapatıyor.
+   * Bizde panel zaten var (`SuggestionBar`) ve başlığı da "GEÇMİŞ"; eksik olan
+   * yalnızca onu boş satırda AÇAN yoldu — öneri en az iki harf istiyor.
+   *
+   * Önceki hâli Ctrl+R penceresini açıyordu. Doğru işi yapıyordu ama ekranın
+   * ortasında bir ÖRTÜ olarak: göz komut satırından kopuyor ve kapatınca geri
+   * dönüyordu. Panel yazdığınız yerin hemen üstünde ve satırı örtmüyor.
+   *
+   * Geçmiş boşsa `false` dönüyor: gösterilecek bir şey yokken boş bir panel
+   * açmak, tuşun bozuk olduğunu düşündürür.
+   */
+  openHistorySuggestions() {
+    const items = recentCommands(get().suggestHistory);
+    if (items.length === 0) return false;
+    // `input: ""` sonradan okunuyor: kabul etme yolu bununla "kullanıcı
+    // hiçbir şey yazmamıştı" ayrımını yapıyor.
+    set({ ui: { ...get().ui, suggest: { items, index: 0, input: "" } } });
+    return true;
   },
 
   closeSuggestions() {

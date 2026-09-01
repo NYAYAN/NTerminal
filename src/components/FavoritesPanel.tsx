@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { formatWhen, fuzzyScore, shortenPath } from "../lib/format";
 import { tp, tSplit, useT } from "../lib/i18n";
 import { folderNames, sectionsOf } from "../lib/favoriteGroups";
+import { groupLabel } from "../lib/labels";
 import { useStore } from "../store/useStore";
 import type { Favorite } from "../types";
 import { api } from "../lib/ipc";
@@ -318,7 +319,7 @@ export function FavoritesPanel() {
             <option value="">{t("fav.allGroups")}</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
-                {t("fav.onlyGroup", { name: g.name })}
+                {t("fav.onlyGroup", { name: groupLabel(g) })}
               </option>
             ))}
           </select>
@@ -451,7 +452,7 @@ export function FavoritesPanel() {
                 <div className="fav-title">{favorite.label || favorite.command}</div>
                 {favorite.label && <div className="fav-cmd mono">{favorite.command}</div>}
                 <div className="fav-meta">
-                  {group && <span className="fav-tag" style={{ color: group.color ?? undefined }}>{group.name}</span>}
+                  {group && <span className="fav-tag" style={{ color: group.color ?? undefined }}>{groupLabel(group)}</span>}
                   {favorite.cwd && <span className="path">{shortenPath(favorite.cwd, 2)}</span>}
                   {favorite.note && <span>{favorite.note}</span>}
                   {favorite.usedCount > 0 && (

@@ -400,16 +400,47 @@ export class TerminalSession {
 
   // ------------------------------------------------------------- yaşam döngüsü
 
-  /** Terminali DOM'a bağlar. Yalnızca bir kez çağrılmalı. */
+  /**
+   * Terminali DOM'a bağlar. Aynı oturum için birden çok kez çağrılabilir.
+   *
+   * ## Neden ikinci çağrı `open()` DEĞİL
+   *
+   * ÖLÇÜLEN HATA: ilk grupta çalışan bir sekme varken yeni bir grup açmak, o
+   * sekmenin ekranını BOŞALTIYORDU — yazılanlar da, çalışan komutun çıktısı
+   * da gidiyordu.
+   *
+   * Zincir şöyleydi: yeni grubun sekmesi yok, `TerminalArea` bir çizim boyunca
+   * "hiç sekme yok" kutusuna dönüyor ve bütün barındırıcıları söküyordu
+   * (düzeltmesi orada). React yeni düğümleri kurunca `attach` yeniden
+   * çağrılıyor ve eskiden burada `term.open()` vardı — ama xterm ikinci
+   * çağrıda HİÇBİR ŞEY YAPMIYOR:
+   *
+   *     open(e) { ...; if (this.element?.ownerDocument.defaultView && this._coreBrowserService) return; ... }
+   *
+   * Yani terminalin kendi düğümü ESKİ (artık ağaçtan kopmuş) kabın içinde
+   * kalıyor, yeni kap boş duruyordu. Kabuk arkada yaşamaya devam ettiği için
+   * belirti "silinmiş" gibi görünüyordu, oysa ekran hiç taşınmamıştı.
+   *
+   * Doğrusu taşımak: xterm'in düğümü zaten kurulu, tampon ve kaydırma konumu
+   * onun içinde. Yeni kaba eklemek her ikisini de olduğu gibi getiriyor.
+   */
   attach(container: HTMLElement) {
     if (this.container === container) return;
     this.container = container;
-    this.term.open(container);
+
+    const opened = this.term.element;
+    if (opened) container.appendChild(opened);
+    else this.term.open(container);
+
     this.invalidateGeometry();
     this.safeFit();
 
     this.syncCellHeight();
 
+    // Eski kabın gözlemcisi burada bırakılıyor: kap değiştiğinde eskisi artık
+    // ölçülmemeli, yoksa kopmuş bir düğümün boyutu terminali yeniden
+    // boyutlandırmaya çalışır.
+    this.resizeObserver?.disconnect();
     this.resizeObserver = new ResizeObserver(() => {
       // Kap boyu degisti: `safeFit` satir/sutun ayni kalirsa erken donuyor,
       // ama dikdortgen yine kaymis olabiliyor - onbellek her durumda dusuyor.

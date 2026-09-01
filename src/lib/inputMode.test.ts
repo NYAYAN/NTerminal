@@ -7,6 +7,7 @@ const ACIK: InputSignals = {
   integration: true,
   atPrompt: true,
   altScreen: false,
+  exited: false,
 };
 
 describe("girdi kipi", () => {
@@ -18,6 +19,19 @@ describe("girdi kipi", () => {
     // Çalışan komut tuşları o an isteyebiliyor (parola istemi, y/n sorusu).
     // Enter'a kadar bekleyen bir kutu burada kilitlenmeye yol açardı.
     expect(resolveInputMode({ ...ACIK, atPrompt: false })).toBe("raw");
+  });
+
+  it("kabuk ÖLDÜYSE ham kip", () => {
+    /*
+     * BİLDİRİLEN HATA: "'Bu sekmedeki kabuk kapandı' diyor ama altta komut
+     * yazın kısmı aktif."
+     *
+     * `atPrompt` kabuğun BİLDİRDİĞİ bir durum; kabuk ölürken "artık istemde
+     * değilim" diye bir şey bildirmiyor, son değeri olduğu yerde kalıyor.
+     * Kutu o değere bakıp açık duruyor ve yazılan her şey olmayan bir sürece
+     * gidiyordu — çalışıyormuş gibi görünüp hiçbir şey yapmayan bir kutu.
+     */
+    expect(resolveInputMode({ ...ACIK, exited: true })).toBe("raw");
   });
 
   it("tam ekran programda ham kip", () => {

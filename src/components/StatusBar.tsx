@@ -5,14 +5,37 @@ import { fitDropLevel, type FitPart } from "../lib/statusFit";
 import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
-import { resolveProfile } from "../lib/labels";
+import { groupLabel, resolveProfile } from "../lib/labels";
 import { isMac } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 import { ContextMenu, type MenuEntry, useContextMenu } from "./ContextMenu";
 
 /** `data-drop` numaralarının en büyüğü. */
-const MAX_DROP_LEVEL = 9;
+const MAX_DROP_LEVEL = 3;
 
+/**
+ * Durum çubuğu.
+ *
+ * ## Çubukta ne var, menüde ne var
+ *
+ * Çubuk yalnızca KİMLİK taşıyor: hangi grup, hangi profil, hangi klasör.
+ * Okumalar — komut çalışıyor mu, komut takibi tam mı, geçmişten tamamlama
+ * açık mı, pid, kayıtlı komut ve sekme sayısı — "⋯" menüsünde.
+ *
+ * Ayrım önceden YER darlığına göreydi: hepsi çubuktaydı, sığmayan menüye
+ * düşüyordu. Sonuç, pencerenin genişliğine göre değişen bir şeritti; her
+ * açılışta aynı yerde aynı şeyi bulmak mümkün değildi ve çubuğun yarısı hiç
+ * değişmeyen üç rozetle doluydu ("Komut takibi tam" bir kez okunacak bir şey,
+ * sürekli değil).
+ *
+ * Bugün ayrım İŞLEVE göre: kimlik görünür, okuma bir tık uzakta. Hiçbir bilgi
+ * kaybolmadı ve rozetlerin ipuçları da menüye taşındı (bkz. `ContextMenu`
+ * içindeki `info` girdisinin `title` alanı) — "Sınırlı" tek başına ne
+ * yapılacağını söylemiyor, ipucu sebebi ve çözümü yazıyor.
+ *
+ * Kimlik alanı yine de sığmayabiliyor (grup adını kullanıcı koyuyor, yol uzun
+ * olabiliyor); sığmayanlar aynı menünün altına, ayrı bir bölüme düşüyor.
+ */
 export function StatusBar() {
   const t = useT();
   const lang = useLang();
@@ -42,9 +65,10 @@ export function StatusBar() {
   /**
    * Sığdırma.
    *
-   * Karar CSS'te değil burada, çünkü çubuğun içeriği duruma göre 200px'den
-   * fazla değişiyor ve sabit bir eşik iki ucu birden doğru yapamıyor
-   * (gerekçesi `statusFit.ts` içinde).
+   * Karar CSS'te değil burada, çünkü çubukta kalan üç öğenin ikisini KULLANICI
+   * adlandırıyor (grup adı, profil adı) ve üçüncüsü bulunulan dizin; sabit bir
+   * genişlik eşiği bu üçlüyü iki uçta birden doğru yapamıyor (gerekçesi
+   * `statusFit.ts` içinde).
    *
    * Yöntem: gizlemeyi kaldır, genişlikleri oku, kararı ver, uygula. Üçü de tek
    * bir düzen geçişinde — `useLayoutEffect` boyamadan önce koştuğu için ara
@@ -64,7 +88,6 @@ export function StatusBar() {
     for (const node of el.querySelectorAll<HTMLElement>("[data-drop]")) {
       delete node.dataset.out;
     }
-    more.dataset.in = "";
 
     const style = window.getComputedStyle(el);
     const gap = Number.parseFloat(style.columnGap) || 0;
@@ -100,8 +123,6 @@ export function StatusBar() {
       if (nodeLevel > 0 && nodeLevel <= level) node.dataset.out = "";
       else delete node.dataset.out;
     }
-    if (level > 0) more.dataset.in = "";
-    else delete more.dataset.in;
   };
 
   // İki ayrı tetikleyici var ve ikisi de gerekli: içerik değişince (yeni sekme,
@@ -164,46 +185,39 @@ export function StatusBar() {
   const totalTabs = groups.reduce((sum, g) => sum + g.tabs.length, 0);
 
   /**
-   * "⋯" menüsü — çubuğa sığmayanları tam metinle gösteriyor.
+   * "⋯" menüsü — bütün durum okumaları.
    *
-   * Neyin gizli olduğunu DOM'dan OKUYOR, ayrıca hesaplamıyor. Sebep: gizleme
-   * kararını CSS veriyor (`@container` eşikleri). Aynı kararı burada bir kez
-   * daha kurmak iki listenin zamanla ayrışması demek — eşiği değiştirip menüyü
-   * unutmak sessiz bir hata olurdu, menü olmayan bir şeyi gösterirdi.
-   *
-   * Ölçüm gerekmiyor: `display: none` zaten hesaplanmış durum, tıklama anında
-   * okumak yeterli. Bu yüzden ResizeObserver da yok.
+   * İki bölüm var. ÜSTTE her zaman duranlar: çubuktan bilinçli olarak
+   * çıkarılmış okumalar, yani menü onların tek yeri. ALTTA yalnızca çubuğa
+   * sığmadığı için düşenler — orada olup olmadıkları DOM'dan OKUNUYOR,
+   * ayrıca hesaplanmıyor: gizleme kararını `relayout` veriyor ve aynı kararı
+   * burada ikinci kez kurmak iki listenin zamanla ayrışması demek olurdu.
    */
   const openMore = (event: React.MouseEvent<HTMLButtonElement>) => {
     const bar = barRef.current;
-    if (!bar) return;
 
     const hidden = new Set<string>();
-    for (const el of bar.querySelectorAll<HTMLElement>("[data-status]")) {
+    for (const el of bar?.querySelectorAll<HTMLElement>("[data-status]") ?? []) {
       if (window.getComputedStyle(el).display === "none" && el.dataset.status) {
         hidden.add(el.dataset.status);
       }
     }
-    const has = (key: string) => hidden.has(key);
 
-    // Sıra çubuktaki okuma sırasıyla aynı; kullanıcı aynı yerde arıyor.
     const entries: MenuEntry[] = [{ kind: "header", label: t("status.moreHeader") }];
 
-    if (has("running")) entries.push({ kind: "info", label: t("status.running") });
-    if (has("group") && group) {
-      entries.push({ kind: "info", label: t("status.fieldGroup"), value: group.name });
-    }
-    if (has("profile") && profile) {
-      entries.push({ kind: "info", label: t("status.fieldProfile"), value: profile.name });
-    }
-    if (has("integration") && session) {
+    // Sıra kullanıcının okuma sırası: önce "şu an ne oluyor", sonra sabitler.
+    if (tab && running[tab.id]) entries.push({ kind: "info", label: t("status.running") });
+
+    if (session) {
       entries.push({
         kind: "info",
         label: t("status.fieldIntegration"),
         value: t(session.integration ? "status.valueIntegrationOn" : "status.valueIntegrationOff"),
+        title: t(session.integration ? "status.integrationOnTitle" : "status.integrationOffTitle"),
       });
     }
-    if (has("prediction") && session) {
+
+    if (session && session.prediction !== "unknown") {
       entries.push({
         kind: "info",
         label: t("status.fieldPrediction"),
@@ -214,37 +228,74 @@ export function StatusBar() {
               ? "status.valuePredictionOff"
               : "status.valuePredictionOn",
         ),
+        title:
+          session.prediction === "unsupported"
+            ? // Cozum yolu platforma gore farkli: Windows'ta PSReadLine
+              // guncellemesi, mac'te eklentinin yuklenememesi. Yanlis
+              // platformun tavsiyesini gostermek kullaniciyi bos yere
+              // ugrastirir.
+              t(
+                isMac()
+                  ? "status.predictionUnsupportedTitleMac"
+                  : "status.predictionUnsupportedTitle",
+              )
+            : session.prediction === "off"
+              ? t("status.predictionOffTitle")
+              : t("status.predictionOnTitle", { view: session.prediction }),
       });
     }
-    if (has("pid") && session?.pid != null) {
+
+    if (session?.pid != null) {
       entries.push({ kind: "info", label: t("status.fieldPid"), value: String(session.pid) });
     }
-    if (has("commands") && historyCount !== null) {
+    // Bu ikisi TEK SATIR: "Kayıtlı komut | 8" aynı şeyi iki sütuna bölüyordu.
+    if (historyCount !== null) {
       entries.push({
         kind: "info",
-        label: t("status.fieldCommands"),
-        value: historyCount.toLocaleString(localeTag(lang)),
+        label: tp("status.commands", historyCount, {
+          n: historyCount.toLocaleString(localeTag(lang)),
+        }),
       });
     }
-    if (has("tabs")) {
-      entries.push({ kind: "info", label: t("status.fieldTabs"), value: String(totalTabs) });
-    }
-    if (has("portable") && paths?.portable) {
-      entries.push({ kind: "info", label: t("status.portable"), value: shortenPath(paths.root, 2) });
-    }
-    if (has("restored")) entries.push({ kind: "info", label: t("status.restored") });
+    entries.push({ kind: "info", label: tp("status.tabs", totalTabs) });
 
+    if (paths?.portable) {
+      entries.push({
+        kind: "info",
+        label: t("status.portable"),
+        value: shortenPath(paths.root, 2),
+        title: t("status.portableTitle", { path: paths.root }),
+      });
+    }
+    if (restored) {
+      entries.push({
+        kind: "info",
+        label: t("status.restored"),
+        title: t("status.restoredTitle"),
+      });
+    }
+
+    // Çubuktan sığmadığı için düşenler — ayrı bir bölümde, çünkü burada
+    // olmaları pencerenin genişliğine bağlı.
+    const overflow: MenuEntry[] = [];
+    if (hidden.has("group") && group) {
+      overflow.push({ kind: "info", label: t("status.fieldGroup"), value: groupLabel(group) });
+    }
+    if (hidden.has("profile") && profile) {
+      overflow.push({ kind: "info", label: t("status.fieldProfile"), value: profile.name });
+    }
     // Yol menüde de TIKLANABİLİR: çubuktaki davranışın aynısı, kaybolduğu için
     // erişilemez hâle gelmemeli. Kısaltma baştan yapılıyor (`…/Works/Şablon`);
     // tam yol menüyü kendi genişliğinin dışına taşırıyordu.
-    if (has("cwd") && tab?.cwd) {
-      entries.push({
+    if (hidden.has("cwd") && tab?.cwd) {
+      overflow.push({
         kind: "item",
         label: t("status.fieldCwd"),
         hint: shortenPath(tab.cwd, 2),
         run: () => void api.revealInExplorer(tab.cwd!).catch(() => {}),
       });
     }
+    if (overflow.length > 0) entries.push({ kind: "separator" }, ...overflow);
 
     const rect = event.currentTarget.getBoundingClientRect();
     // Menü çubuğun ÜSTÜNE açılıyor; ContextMenu ekran dışına taşmayı zaten
@@ -257,46 +308,36 @@ export function StatusBar() {
    *
    * Durum çubuğu pencerenin genişliğini takip etmiyor; kendi genişliği kadar
    * yer var ve o da kenar çubuğu genişledikçe azalıyor. Sığmayan içerik iki
-   * kötü sondan birine varıyordu: ya rozet metni iki satıra sarıp komşusunun
-   * üstüne biniyordu, ya da `overflow: hidden` sağdaki DÜĞMELERİ kırpıyordu —
-   * yani kaybedilen ilk şey çubuğun tek tıklanabilir kısmı oluyordu.
+   * kötü sondan birine varıyordu: ya metin iki satıra sarıp komşusunun üstüne
+   * biniyordu, ya da `overflow: hidden` sağdaki DÜĞMELERİ kırpıyordu — yani
+   * kaybedilen ilk şey çubuğun tek tıklanabilir kısmı oluyordu.
    *
    * Çözüm sırayı elle vermek. Küçük sayı önce gider; numarasız olan hiç
    * gitmez.
    *
-   *   1  pid, "oturum geri yüklendi"   — teknik / tek seferlik
-   *   2  kayıtlı komut sayısı
-   *   3  sekme sayısı
-   *   4  profil adı                     — sekmenin üstünde de yazıyor
-   *   5  SAĞLIKLI durum rozetleri       — aşağıya bakın
-   *   6  grup adı, "taşınabilir"        — grup adı kenar çubuğunda da var
-   *   7  çalışma dizini                 — buraya gelmeden zaten kısalmış olur
+   *   1  profil adı        — sekmenin üstünde de yazıyor
+   *   2  grup adı          — kenar çubuğunda da yazıyor
+   *   3  çalışma dizini    — buraya gelmeden zaten kısalmış olur
    *
-   * Numarasız kalanlar: "komut çalışıyor", UYARI durumundaki rozetler ve
-   * Geçmiş / Favoriler düğmeleri (çubuktaki tek eylem — eski davranışta en
-   * sağda oldukları için kırpılan İLK şey onlardı).
-   *
-   * 5. sıradaki ayrım kasıtlı: rozetin değeri durumuna bağlı. "Komut takibi
-   * tam" kullanıcıdan bir şey istemiyor, dolayısıyla dar çubukta yolun yerini
-   * almamalı; "sınırlı" ve "desteklenmiyor" ise bir eksiği haber veriyor ve
-   * ipucunda çözümü yazıyor, o yüzden kalıyorlar.
+   * Numarasız kalanlar üç düğme: "⋯", Geçmiş ve Favoriler. Çubuktaki tek
+   * eylemler onlar; eski davranışta en sağda oldukları için kırpılan İLK şey
+   * oluyorlardı.
    *
    * Kaça kadar gizleneceğini `statusFit.ts` hesaplıyor — sabit bir genişlik
-   * eşiği yok, ölçüm var. Sebebi orada yazıyor: çubuğun içeriği duruma göre
-   * 200px'den fazla değişiyor ve tek bir eşik iki ucu birden doğru yapamıyor.
+   * eşiği yok, ölçüm var.
    */
   return (
     <>
       <div className="statusbar" ref={barRef}>
         {group && (
-          <span className="item" data-drop="6" data-status="group">
+          <span className="item" data-drop="2" data-status="group">
             <span className="dot" style={{ background: group.color ?? "#666", width: 7, height: 7, borderRadius: "50%" }} />
-            {group.name}
+            {groupLabel(group)}
           </span>
         )}
 
         {profile && (
-          <span className="item" data-drop="4" data-status="profile">
+          <span className="item" data-drop="1" data-status="profile">
             {profile.name}
           </span>
         )}
@@ -304,7 +345,7 @@ export function StatusBar() {
         {tab?.cwd && (
           <span
             className="item cwd"
-            data-drop="7"
+            data-drop="3"
             data-status="cwd"
             title={`${tab.cwd}\n${t("status.revealHint")}`}
             style={{ cursor: "pointer" }}
@@ -316,95 +357,8 @@ export function StatusBar() {
 
         <span className="spacer" />
 
-        {tab && running[tab.id] && (
-          <span className="pill" data-drop="9" data-status="running">
-            {t("status.running")}
-          </span>
-        )}
-
-        {session &&
-          (session.integration ? (
-            // Sağlıklı durum çekilebilir (5): kullanıcının yapması gereken bir
-            // şey yok, dolayısıyla dar çubukta yolun yerini almamalı.
-            <span className="pill ok" data-drop="5" data-status="integration" title={t("status.integrationOnTitle")}>
-              {t("status.integrationOn")}
-            </span>
-          ) : (
-            // Uyarı kalır: eksik olan bir şey var ve geçmişin güvenilirliğini
-            // etkiliyor.
-            <span
-              className="pill warn"
-              data-drop="8"
-              data-status="integration"
-              title={t("status.integrationOffTitle")}
-            >
-              {t("status.integrationOff")}
-            </span>
-          ))}
-
-        {session && session.prediction !== "unknown" && (
-          <span
-            className={session.prediction === "unsupported" ? "pill warn" : "pill"}
-            // Uyarı durumu en sona kalıyor (8), açık/kapalı bilgisi yolun
-            // önüne geçmemeli diye erken gidiyor (5).
-            data-drop={session.prediction === "unsupported" ? "8" : "5"}
-            data-status="prediction"
-            title={
-              session.prediction === "unsupported"
-                ? // Cozum yolu platforma gore farkli: Windows'ta PSReadLine
-                  // guncellemesi, mac'te zsh-autosuggestions kurulumu. Yanlis
-                  // platformun tavsiyesini gostermek kullaniciyi bos yere
-                  // ugrastirir.
-                  t(
-                    isMac()
-                      ? "status.predictionUnsupportedTitleMac"
-                      : "status.predictionUnsupportedTitle",
-                  )
-                : session.prediction === "off"
-                  ? t("status.predictionOffTitle")
-                  : t("status.predictionOnTitle", { view: session.prediction })
-            }
-          >
-            {session.prediction === "unsupported"
-              ? t("status.predictionUnsupported")
-              : session.prediction === "off"
-                ? t("status.predictionOff")
-                : t("status.predictionOn")}
-          </span>
-        )}
-
-        {session?.pid != null && (
-          <span className="item" data-drop="1" data-status="pid" title={t("status.pidTitle")}>
-            pid {session.pid}
-          </span>
-        )}
-
-        {historyCount !== null && (
-          <span className="item" data-drop="2" data-status="commands" title={t("status.commandsTitle")}>
-            {tp("status.commands", historyCount, {
-              n: historyCount.toLocaleString(localeTag(lang)),
-            })}
-          </span>
-        )}
-
-        <span className="item" data-drop="3" data-status="tabs" title={t("status.tabsTitle")}>
-          {tp("status.tabs", totalTabs)}
-        </span>
-
-        {paths?.portable && (
-          <span className="pill" data-drop="6" data-status="portable" title={t("status.portableTitle", { path: paths.root })}>
-            {t("status.portable")}
-          </span>
-        )}
-
-        {restored && (
-          <span className="pill" data-drop="1" data-status="restored" title={t("status.restoredTitle")}>
-            {t("status.restored")}
-          </span>
-        )}
-
-        {/* Sığmayanların kapısı. Yalnızca gerçekten bir şey gizlendiğinde
-            görünüyor; kararı yukarıdaki `relayout` veriyor. */}
+        {/* Durum okumalarının kapısı. Her zaman çubukta: içindekiler artık
+            "sığmadığı için" değil, BİLİNÇLİ olarak orada. */}
         <button
           className="status-btn status-more"
           title={t("status.moreTitle")}

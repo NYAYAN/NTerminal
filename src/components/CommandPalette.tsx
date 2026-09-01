@@ -4,6 +4,7 @@ import { fuzzyScore } from "../lib/format";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
+import { groupLabel } from "../lib/labels";
 import { useStore } from "../store/useStore";
 
 interface Action {
@@ -184,7 +185,7 @@ export function CommandPalette() {
     for (const group of groups) {
       list.push({
         id: `group:${group.id}`,
-        label: t("palette.switchGroup", { name: group.name }),
+        label: t("palette.switchGroup", { name: groupLabel(group) }),
         hint: tp("status.tabs", group.tabs.length),
         run: () => {
           close();
@@ -197,7 +198,7 @@ export function CommandPalette() {
           label: t("palette.switchTab", {
             name: tab.customTitle ?? tab.title ?? tab.cwd ?? tab.id,
           }),
-          hint: group.name,
+          hint: groupLabel(group),
           run: () => {
             close();
             store().setActiveTab(tab.id);

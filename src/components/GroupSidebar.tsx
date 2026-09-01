@@ -4,6 +4,7 @@ import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { api } from "../lib/ipc";
 import {
+  groupLabel,
   hasCustomTitle,
   resolveProfile,
   shellBadge,
@@ -278,6 +279,55 @@ export function GroupSidebar() {
     },
   ];
 
+  /**
+   * Kenar çubuğunun BOŞ yerine sağ tık.
+   *
+   * Buraya kadar yeni bir sekme açmanın yolu bir grubun içindeki "+" idi:
+   * önce bir grup seçmek, sonra onun satırını bulmak gerekiyordu. Oysa çoğu
+   * zaman istenen tek şey "bir sekme daha" — hangi gruba gideceği sorusu
+   * kullanıcının değil uygulamanın işi, o yüzden burası soruyu hiç sormuyor ve
+   * ETKİN gruba açıyor.
+   *
+   * Grup ve sekme satırlarının kendi menüleri var; onlar `menu.open` içinde
+   * olayı durdurduğu için buraya ulaşmıyor.
+   */
+  const sidebarMenu = (): MenuEntry[] => [
+    {
+      // Sekme GRUBA BAĞLI DEĞİL. Etkin gruba eklemek ilk hâliydi ve istenen bu
+      // değildi: "her zaman bir grup seçili olduğu için sağ tıklayıp sekme
+      // ekle dediğimde seçili gruba ekleniyor". Gruba eklemenin yolu duruyor
+      // — grubun kendi "+" düğmesi ve satır menüsü.
+      //
+      // Etiket bunu ANLATMIYOR, yalnızca "Yeni sekme" diyor: menü kenar
+      // çubuğunun boşluğuna ait, yani zaten bir grubun dışındasınız. Parantez
+      // içinde açıklama eklemek, gruba ekleyen ötekiyle yan yana durmadığı
+      // için karşılıksız bir uyarı olurdu.
+      kind: "item",
+      label: t("menu.newTab"),
+      hint: key("newTab"),
+      run: () => store().addLooseTab(),
+    },
+    {
+      kind: "item",
+      label: t("menu.newGroup"),
+      hint: key("newGroup"),
+      run: () => store().addGroup(),
+    },
+    { kind: "separator" },
+    {
+      kind: "item",
+      label: t(allCollapsed ? "group.expandAll" : "group.collapseAll"),
+      disabled: groups.length === 0,
+      run: () => store().toggleAllCollapsed(),
+    },
+    {
+      kind: "check",
+      label: t("group.favoritesOnly"),
+      checked: onlyFavorites,
+      run: () => void patchBehavior({ showOnlyFavoriteGroups: !onlyFavorites }),
+    },
+  ];
+
   const tabMenu = (group: Group, tab: TabState, index: number): MenuEntry[] => {
     const others = groups.filter((g) => g.id !== group.id);
     return [
@@ -336,7 +386,10 @@ export function GroupSidebar() {
               label: t("menu.moveToGroup"),
               entries: others.map((g) => ({
                 kind: "item" as const,
-                label: g.name,
+                // Gruplanmamış kovanın kayıtlı adı yok; etiketi çeviriden
+                // geliyor. Bu satır aynı zamanda bir sekmeyi gruptan
+                // ÇIKARMANIN yolu.
+                label: groupLabel(g),
                 run: () => store().moveTabToGroup(tab.id, g.id),
               })),
             },
@@ -356,7 +409,11 @@ export function GroupSidebar() {
   // --------------------------------------------------------------------- render
 
   return (
-    <aside className="sidebar" style={{ width: sidebarWidth }}>
+    <aside
+      className="sidebar"
+      style={{ width: sidebarWidth }}
+      onContextMenu={(e) => menu.open(e, sidebarMenu())}
+    >
       <div className="sidebar-head">
         <span>{t("group.heading")}</span>
         <span className="sidebar-head-actions">
@@ -401,10 +458,23 @@ export function GroupSidebar() {
           const groupRunning = group.tabs.some((t) => running[t.id]);
           const color = group.color ?? "#6e7681";
           const isDropGroup = dropTarget?.groupId === group.id;
+          /*
+           * Gruplanmamış kova: BAŞLIK YOK.
+           *
+           * Başlık bir grubun kimliği — adı, rengi, yıldızı, katlama oku,
+           * sekme sayısı. Kova bir grup değil; "grubu olmayan sekmeler"
+           * yazan bir başlık koymak onu yine bir gruba çevirirdi. Düz liste
+           * en üstte duruyor, tıpkı bir dosya yöneticisinde köke bırakılmış
+           * dosyalar gibi.
+           *
+           * Katlanamıyor da: katlanmış ve başlıksız bir bölüm ekranda
+           * hiçbir iz bırakmaz, yani açmanın yolu kalmazdı.
+           */
+          const loose = group.ungrouped === true;
 
           return (
             <section
-              className={`group${isActiveGroup ? " active" : ""}${
+              className={`group${loose ? " loose" : ""}${isActiveGroup ? " active" : ""}${
                 isDropGroup ? " droppable" : ""
               }${dragGroupId === group.id ? " dragging" : ""}`}
               key={group.id}
@@ -418,6 +488,7 @@ export function GroupSidebar() {
                 applyDrop();
               }}
             >
+              {!loose && (
               <header
                 className="group-row"
                 // Adlandırma sırasında sürükleme kapalı: metin seçmek isteyen
@@ -501,6 +572,7 @@ export function GroupSidebar() {
                   </>
                 )}
               </header>
+              )}
 
               {colorFor === group.id && (
                 <div className="color-picker">
@@ -541,8 +613,8 @@ export function GroupSidebar() {
                 </div>
               )}
 
-              {!group.collapsed && (
-                <div className="group-tabs">
+              {(loose || !group.collapsed) && (
+                <div className="group-tabs" title={loose ? t("group.looseHint") : undefined}>
                   {group.tabs.map((tab, tabIndex) => {
                     const session = sessions.get(tab.id);
                     const profile = resolveProfile(profiles, tab.profileId, defaultProfileId);

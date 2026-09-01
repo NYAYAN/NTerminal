@@ -39,6 +39,13 @@ pub struct GitInfo {
     pub ahead: u32,
     pub behind: u32,
     pub changes: Vec<GitChange>,
+    /// Calisma agacinin KOKU (mutlak yol).
+    ///
+    /// Arayuze gerekiyor cunku `changes` icindeki yollar koke gore
+    /// (porcelain oyle veriyor) ve "dosyayi ac" tam yol istiyor. Terminalin
+    /// bulundugu dizinle birlestirmek, kabuk alt bir klasordeyse var olmayan
+    /// bir yol uretiyordu.
+    pub root: String,
 }
 
 /// Listede tutulan en fazla degisiklik.
@@ -142,7 +149,36 @@ pub fn read(path: &str) -> Option<GitInfo> {
     if !out.status.success() {
         return None;
     }
-    Some(parse_porcelain(&String::from_utf8_lossy(&out.stdout)))
+    let mut info = parse_porcelain(&String::from_utf8_lossy(&out.stdout));
+    info.root = repo_root(path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string());
+    Some(info)
+}
+
+/// Git komutlarinin KOSACAGI dizin: deponun koku.
+///
+/// ## Olculen hata
+///
+/// `git status --porcelain` yollari her zaman depo KOKUNE gore veriyor —
+/// kabuk hangi alt klasorde olursa olsun. `git diff -- <yol>` ise pathspec'i
+/// BULUNULAN DIZINE gore cozuyor. Kabuk bir alt klasordeyken ikisi
+/// tutmuyordu: `git -C alt/klasor diff -- src/App.tsx` hicbir seyle
+/// eslesmiyor, cikti bos donuyor ve panel "Gosterilecek fark yok" yaziyordu.
+/// Ayni sebeple `checkout --` de yanlis dosyayi ariyordu, yani "geri al"
+/// sessizce hicbir sey yapmiyordu.
+///
+/// Cozum yollari degil DIZINI degistirmek: komutlar kokten kosunca yollar
+/// zaten dogru. `:/` sihirli pathspec'i de olurdu ama `--no-index` (takipsiz
+/// dosya farki) pathspec degil GERCEK yol istiyor, yani iki dal iki ayri
+/// kural olurdu.
+///
+/// Depo bulunamazsa verilen yola dusuyoruz: cagiran zaten `read()` ile depo
+/// oldugunu dogrulamis oluyor, burasi yalnizca kotu bir durumda cokmesin.
+fn work_dir(path: &str) -> String {
+    repo_root(path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string())
 }
 
 /// Depodaki YEREL dallar, en son islenene gore sirali.
@@ -192,7 +228,9 @@ pub fn branches(path: &str) -> Vec<String> {
 /// `--no-index` ile bos bir kaynaga karsi karsilastiriyoruz; sonuc "her satir
 /// eklendi" farki oluyor, yani kullanicinin gormek istedigi sey.
 pub fn diff(path: &str, file: &str, untracked: bool) -> Option<String> {
-    let mut args: Vec<&str> = vec!["-C", path, "--no-optional-locks", "diff", "--no-color", "--no-ext-diff"];
+    // Kokten kosuyor: `file` koke gore geliyor (bkz. `work_dir`).
+    let dir = work_dir(path);
+    let mut args: Vec<&str> = vec!["-C", &dir, "--no-optional-locks", "diff", "--no-color", "--no-ext-diff"];
     if untracked {
         // NUL aygiti platforma gore degisiyor; git ikisini de taniyor ama
         // Windows'ta `/dev/null` yok.
@@ -287,8 +325,9 @@ mod git_tests;
 /// Bu yuzden karar arayuzde acikca soruluyor (bkz. `GitChanges`), burasi
 /// yalnizca uyguluyor.
 ///
-/// Yol depo KOKUNE gore geliyor (porcelain oyle veriyor) ve `-C path` ile
-/// birlestiginde dogru dosyaya denk geliyor.
+/// Yol depo KOKUNE gore geliyor (porcelain oyle veriyor), o yuzden komutlar
+/// da KOKTEN kosuyor — kabuk bir alt klasordeyse `-C path` yanlis dosyayi
+/// arardi (gerekcesi `work_dir` icinde).
 pub fn revert(path: &str, file: &str, untracked: bool) -> Result<(), String> {
     if untracked {
         let root = repo_root(path).ok_or_else(|| "depo kokü bulunamadi".to_string())?;
@@ -301,14 +340,17 @@ pub fn revert(path: &str, file: &str, untracked: bool) -> Result<(), String> {
         return std::fs::remove_file(&target).map_err(|e| e.to_string());
     }
 
+    // Kokten kosuyor: `file` koke gore geliyor (bkz. `work_dir`).
+    let dir = work_dir(path);
+
     // Indeksi coz. Dosya indekste degilse git hata veriyor; bu bir sorun
     // degil, yalnizca "cozecek bir sey yoktu" demek.
     let _ = quiet_command("git")
-        .args(["-C", path, "--no-optional-locks", "restore", "--staged", "--", file])
+        .args(["-C", &dir, "--no-optional-locks", "restore", "--staged", "--", file])
         .output();
 
     let out = quiet_command("git")
-        .args(["-C", path, "--no-optional-locks", "checkout", "--", file])
+        .args(["-C", &dir, "--no-optional-locks", "checkout", "--", file])
         .output()
         .map_err(|e| e.to_string())?;
 

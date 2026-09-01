@@ -195,7 +195,9 @@ describe("öneri listesi", () => {
   it("liste yükseklik sınırı ve kaydırma var", () => {
     // Sınır olmadan uzun liste terminali ekrandan atıyor.
     const body = ruleBody(".suggest-list");
-    expect(body).toMatch(/max-height:\s*\d/);
+    // Deger artik satir yuksekliginden turuyor (bkz. "oneri paneli"); burada
+    // sorulan tek sey bir SINIRIN olmasi.
+    expect(body).toMatch(/max-height:\s*(?:\d|calc\()/);
     expect(body).toMatch(/overflow-y:\s*auto/);
   });
 
@@ -286,7 +288,10 @@ describe("iskelet yüksekliği", () => {
 /**
  * Durum çubuğunun daralma davranışı.
  *
- * Ölçülmüş iki hata bu bölümün arkasında duruyor.
+ * Ölçülmüş iki hata bu bölümün arkasında duruyor. İkisi de o zamanki DURUM
+ * ROZETLERİNDE çıktı; rozetler bugün çubukta değil, "⋯" menüsünde (gerekçesi
+ * `StatusBar.tsx`) ve kuralları da onlarla birlikte silindi. Hatalar yine de
+ * burada yazılı: aynı tuzağa çubuğa yeni bir şey eklerken düşülüyor.
  *
  * 1. Pencere daraldığında "Komut önerisi desteklenmiyor" gibi çok sözcüklü bir
  *    rozet ikinci satıra sarıyordu: yüksekliği 15px'ten 30px'e çıkıp 24px'lik
@@ -298,9 +303,8 @@ describe("iskelet yüksekliği", () => {
  *    değerdi — ama `text-overflow: ellipsis` payın büyüklüğüne bakmıyor, bir
  *    pikselin altındaki eksik bile son harfi üç noktaya çeviriyor.
  *
- * Bugünkü kural bu yüzden kesin: çubuktaki hiçbir şey SIKIŞMAZ. Tek istisna
- * yol; o da bir asgarinin altına inmiyor. Sığmayan her şey "⋯" menüsüne
- * gidiyor, yani gizlemek bilgi kaybı değil.
+ * Bugünkü kural bu yüzden kesin: çubuktaki hiçbir şey SIKIŞMAZ. Sığmayan her
+ * şey "⋯" menüsüne gidiyor, yani gizlemek bilgi kaybı değil.
  *
  * Sığdırma kararı CSS'te değil `statusFit.ts` içinde (gerekçesi orada, testi de
  * `statusFit.test.ts`); burada yalnızca o kararın uygulanabilmesi için gereken
@@ -308,23 +312,6 @@ describe("iskelet yüksekliği", () => {
  */
 describe("durum çubuğu daralması", () => {
   const SOURCE = readFileSync(join(process.cwd(), "src/components/StatusBar.tsx"), "utf8");
-
-  it("rozet sarmıyor", () => {
-    expect(
-      ruleBody(".statusbar .pill"),
-      "rozet sarabiliyor — ikinci satır komşusunun üstüne biner",
-    ).toMatch(/white-space:\s*nowrap/);
-  });
-
-  it("rozet kısalmıyor da", () => {
-    // İkinci hata. `flex: none` olmadan rozet, açığın binde biri kendisine
-    // düştüğünde bile son harfini üç noktaya çeviriyor.
-    const body = ruleBody(".statusbar .pill");
-    expect(body, "rozet sıkışabiliyor").toMatch(/flex:\s*none/);
-    expect(body, "rozette text-overflow var — kısalmaya kapı açıyor").not.toMatch(
-      /text-overflow/,
-    );
-  });
 
   it("bilgi öğeleri sıkışmıyor", () => {
     // Yarım kalmış bir sayı ya da kırpılmış bir grup adı, olmayan bilgiden
@@ -336,9 +323,19 @@ describe("durum çubuğu daralması", () => {
     // Sığdırma hesabı ölçülen genişliği GEREKEN genişlik sayıyor. Sıkışabilen
     // tek bir öğe bile bu varsayımı sessizce bozar: hesap "sığıyor" derken
     // gerçekte yarısı kırpılmış bir öğe kalır.
-    for (const selector of [".statusbar .item", ".statusbar .pill", ".statusbar .cwd"]) {
+    for (const selector of [".statusbar .item", ".statusbar .cwd", ".statusbar .status-btn"]) {
       expect(ruleBody(selector), `${selector} sıkışabiliyor`).toMatch(/flex:\s*none/);
     }
+  });
+
+  it('"⋯" düğmesi her zaman çubukta', () => {
+    // Durum okumalarının TEK yolu bu düğme. Bir zamanlar yalnızca bir şey
+    // sığmadığında beliriyordu (`[data-in]`); o hâliyle geniş bir pencerede
+    // pid'e ya da komut takibine ulaşmanın hiçbir yolu kalmazdı.
+    expect(ruleBody(".statusbar .status-more"), "düğme koşullu gizli").not.toMatch(
+      /display:\s*none/,
+    );
+    expect(CSS, "`data-in` kapısı geri gelmiş").not.toContain(".status-more[data-in]");
   });
 
   it("yol segment sınırından kısalıyor", () => {
@@ -364,16 +361,6 @@ describe("durum çubuğu daralması", () => {
     ).toBeGreaterThan(CSS.indexOf(".statusbar .item {"));
   });
 
-  it("⋯ düğmesi yalnızca gerektiğinde görünüyor", () => {
-    expect(ruleBody(".statusbar .status-more"), "⋯ varsayılan gizli olmalı").toMatch(
-      /display:\s*none/,
-    );
-    expect(
-      ruleBody(".statusbar .status-more[data-in]"),
-      "⋯ açılma kuralı yok — hiç görünmez",
-    ).toMatch(/display:\s*flex/);
-  });
-
   it("öncelik numaraları tanımlı aralıkta", () => {
     // Numarayı büyütüp `MAX_DROP_LEVEL`i unutmak sessiz bir hata: o öncelik
     // hiç gizlenmez ve düzen yine taşar.
@@ -390,22 +377,16 @@ describe("durum çubuğu daralması", () => {
       .toBeLessThanOrEqual(max);
   });
 
-  it("sağlıklı rozet uyarı rozetinden önce gidiyor", () => {
-    // Rozetin değeri durumuna bağlı. "Komut takibi tam" kullanıcıdan bir şey
-    // istemiyor; "sınırlı" ve "desteklenmiyor" bir eksiği haber veriyor ve
-    // ipucunda çözümü yazıyor.
-    const ok = Number(/<span className="pill ok" data-drop="(\d)"/.exec(SOURCE)![1]);
-    const warn = Number(/<span\s+className="pill warn"\s+data-drop="(\d)"/.exec(SOURCE)![1]);
-    expect(ok, "sağlıklı rozet uyarıdan sonra gidiyor").toBeLessThan(warn);
-
-    // Öneri rozeti tek öğe, önceliği duruma göre hesaplanıyor.
-    const pred = /data-drop=\{session\.prediction === "unsupported" \? "(\d)" : "(\d)"\}/.exec(
-      SOURCE,
-    );
-    expect(pred, "öneri rozetinin önceliği duruma bağlı değil").not.toBe(null);
-    expect(Number(pred![2]), "sağlıklı öneri uyarıdan sonra gidiyor").toBeLessThan(
-      Number(pred![1]),
-    );
+  it("yol en son gidiyor", () => {
+    // Sıra: profil (sekmenin üstünde de yazıyor) → grup (kenar çubuğunda da
+    // yazıyor) → yol. Yol en son çünkü başka hiçbir yerde yazmıyor; ilk giden
+    // olsaydı çubuk en çok işe yaradığı bilgiyi ilk elden atardı.
+    const drop = (status: string) =>
+      Number(
+        new RegExp(`data-drop="(\\d)"\\s*\\n?\\s*data-status="${status}"`).exec(SOURCE)![1],
+      );
+    expect(drop("profile"), "profil yoldan sonra gidiyor").toBeLessThan(drop("cwd"));
+    expect(drop("group"), "grup yoldan sonra gidiyor").toBeLessThan(drop("cwd"));
   });
 
   it("düğmeler hiçbir düzeyde kaybolmuyor", () => {
@@ -579,15 +560,20 @@ describe("ayarlar izgara hizası", () => {
  * İpucu metninin tek biçimi.
  *
  * Önceden yalnızca `.field .hintline` biçimlenmişti; bölüm düzeyindeki
- * ipuçları (`.section > .hintline`) hiçbir kural bulamayıp 13px ve tam
- * parlaklıkta kalıyordu — yani ayarın kendisiyle aynı ağırlıkta görünüyorlar,
- * üstelik satır başına daha çok yer kaplıyorlardı. Ölçülen: iki ayrı biçim
- * (`11px / rgb(139,148,158)` ve `13px / rgb(230,237,243)`).
+ * ipuçları (`.section > .hintline`) hiçbir kural bulamayıp gövde ölçüsünde ve
+ * tam parlaklıkta kalıyordu — yani ayarın kendisiyle aynı ağırlıkta
+ * görünüyorlar, üstelik satır başına daha çok yer kaplıyorlardı. Ölçülen: iki
+ * ayrı biçim (`11px / rgb(139,148,158)` ve `13px / rgb(230,237,243)`).
+ *
+ * Ölçü bugün `rem`: arayüzün bütün yazı ölçüleri ayardan gelen tek bir köke
+ * bağlı (`--ui-font-size`). Testin sorduğu şey değişmedi — taban kuralın bir
+ * ölçü VERMESİ; sabit bir piksel değeri artık aranmıyor, çünkü aramak
+ * ölçeklenmeyi geri almak olurdu.
  */
 describe("ipucu metni", () => {
   it("taban kuralda boyut ve renk tanımlı", () => {
     const body = ruleBody(".hintline");
-    expect(body, "ipucu boyutu tanımsız").toMatch(/font-size:\s*11px/);
+    expect(body, "ipucu boyutu tanımsız").toMatch(/font-size:\s*[\d.]+rem/);
     expect(body, "ipucu rengi tanımsız").toContain("var(--text-dim)");
   });
 
@@ -712,5 +698,57 @@ describe("ayar açıklaması sütunu", () => {
     const body = ruleBody(".info-pop");
     expect(body, "katman akışta").toMatch(/position:\s*absolute/);
     expect(body, "sağa hizalı değil: pencereden taşar").toMatch(/right:\s*0/);
+  });
+});
+
+/**
+ * Öneri / geçmiş paneli.
+ *
+ * BİLDİRİLEN HATA: "Komut yazın kısmında yukarı oka bastım sonra pencereyi
+ * resize ettim, GEÇMİŞ kısmının boyutu bozuk geldi."
+ *
+ * İki ayrı kusur aynı ekranda görünüyordu:
+ *
+ * 1. Panel `position: fixed` ve yeri ÖLÇÜMLE bulunuyor; ölçüm yalnızca çizime
+ *    bağlıydı. Pencere yeniden boyutlandığında bileşenin abone olduğu hiçbir
+ *    depo dilimi değişmiyor, dolayısıyla yeniden çizim de yok — panel eski
+ *    genişliği ve eski üst kenarıyla ekranın ortasında kalıyordu.
+ *
+ * 2. Listenin sınırı sabit bir piksel değeriydi (112px), satır ise 24px:
+ *    112 / 24 = 4.67, yani alt kenardan yarım satır sarkıyordu. Arayüz yazı
+ *    ölçüsü ayardan değişince sapma her değerde başka bir kesire dönüşüyor —
+ *    düzeltilecek tek bir sayı yok, sabitin kendisi yanlış.
+ */
+describe("öneri paneli", () => {
+  const SOURCE = readFileSync(join(process.cwd(), "src/components/SuggestionBar.tsx"), "utf8");
+
+  it("liste sınırı satır yüksekliğinin TAM KATI", () => {
+    // Sabit bir piksel değeri her yazı ölçüsünde başka bir kesir bırakır.
+    const body = ruleBody(".suggest-list");
+    expect(body, "sınır satır yüksekliğinden türemiyor").toMatch(
+      /max-height:\s*calc\(\s*\d+\s*\*\s*var\(--suggest-row-h\)\s*\)/,
+    );
+    expect(body, "sabit piksel sınırı geri gelmiş").not.toMatch(/max-height:\s*\d+px/);
+  });
+
+  it("satır ölçüleri sınırla AYNI değişkenlerden geliyor", () => {
+    // İki taraf ayrı yazılırsa biri değişip öteki unutulduğunda yarım satır
+    // sarkması sessizce geri gelir.
+    const row = ruleBody(".suggest-row");
+    expect(row, "satır yüksekliği değişkenden gelmiyor").toMatch(
+      /line-height:\s*var\(--suggest-row-line\)/,
+    );
+    expect(row).toMatch(/font-size:\s*var\(--suggest-row-font\)/);
+    expect(row).toMatch(/padding:\s*var\(--suggest-row-pad\)/);
+  });
+
+  it("düzen değişince yeniden yerleşiyor", () => {
+    // `resize` tek başına yetmiyor: kenar çubuğunu sürüklemek pencereyi
+    // büyütmüyor ama panelin dayanağını yerinden oynatıyor.
+    expect(SOURCE, "gözlemci yok — panel eski yerinde kalır").toContain("new ResizeObserver");
+    expect(SOURCE, "dayanaklar gözlenmiyor").toContain('".command-input", ".terminal-area"');
+    expect(SOURCE, "pencere yeniden boyutlanması dinlenmiyor").toContain(
+      'window.addEventListener("resize"',
+    );
   });
 });

@@ -338,3 +338,69 @@ fn geri_alma_klasoru_silmiyor() {
     assert!(root.join("klasor/icerik.txt").exists());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ------------------------------------------- alt klasorde calisan kabuk
+
+/*
+ * BILDIRILEN HATA: "Degisiklikler kismina gittigimde 'Gosterilecek fark yok'
+ * diyor, oysaki var."
+ *
+ * Kok neden iki git kuralinin ayrisi: `status --porcelain` yollari her zaman
+ * depo KOKUNE gore veriyor, `diff -- <yol>` ise pathspec'i BULUNULAN DIZINE
+ * gore cozuyor. Kabuk bir alt klasordeyken ikisi tutmuyor ve cikti bos
+ * doniyordu. Ayni sebeple `revert` de sessizce hicbir sey yapmiyordu -
+ * yikici bir islemin sessizce calismamasi daha kotu, cunku kullanici
+ * degisikligin geri alindigini saniyor.
+ *
+ * Testler ALT KLASORDEN cagiriyor; kokten cagiran testler zaten yukarida ve
+ * ikisi birlikte kuraldaki farki tutuyor.
+ */
+
+#[test]
+fn alt_klasorden_fark_okunabiliyor() {
+    let root = temp_repo("diff-subdir");
+    std::fs::create_dir_all(root.join("src/derin")).unwrap();
+    yaz(&root, "src/derin/a.txt", "ilk\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+    yaz(&root, "src/derin/a.txt", "degisti\n");
+
+    // Kabuk alt klasorde; yol ise porcelain'in verdigi gibi koke gore.
+    let alt = root.join("src").to_string_lossy().to_string();
+    let text = diff(&alt, "src/derin/a.txt", false).expect("fark alinamadi");
+
+    assert!(text.contains("degisti"), "alt klasorden fark bos dondu:\n{text}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn alt_klasorden_geri_alma_calisiyor() {
+    let root = temp_repo("revert-subdir");
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    yaz(&root, "src/a.txt", "ilk\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+    yaz(&root, "src/a.txt", "bozuldu\n");
+
+    let alt = root.join("src").to_string_lossy().to_string();
+    revert(&alt, "src/a.txt", false).unwrap();
+
+    assert_eq!(oku(&root, "src/a.txt"), "ilk\n", "alt klasorden geri alma calismadi");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn durum_deponun_kokunu_bildiriyor() {
+    // Arayuz "dosyayi ac" icin tam yol kuruyor; kokU bilmezse kabugun
+    // bulundugu dizinle birlestirip var olmayan bir yol uretiyor.
+    let root = temp_repo("root-report");
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    yaz(&root, "src/a.txt", "ilk\n");
+
+    let alt = root.join("src").to_string_lossy().to_string();
+    let info = read(&alt).expect("depo okunamadi");
+
+    let bildirilen = std::fs::canonicalize(&info.root).unwrap();
+    assert_eq!(bildirilen, std::fs::canonicalize(&root).unwrap());
+    let _ = std::fs::remove_dir_all(&root);
+}

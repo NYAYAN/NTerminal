@@ -39,6 +39,7 @@ function group(tabs: TabState[]): Group {
     icon: null,
     collapsed: false,
     favorite: false,
+    ungrouped: false,
     defaultProfileId: null,
     defaultCwd: null,
     env: {},
@@ -164,6 +165,14 @@ describe("grup gorunumu", () => {
   it("suzgec acikken yalnizca favoriler gorunur", () => {
     const list = [g("a"), g("b", { favorite: true }), g("c", { favorite: true })];
     expect(visibleGroups(list, true).map((x) => x.id)).toEqual(["b", "c"]);
+  });
+
+  it("gruplanmamis kova suzgecten muaf", () => {
+    // Kova favori isaretlenemiyor: basligi, dolayisiyla yildizi yok. Suzgec
+    // onu da eleseydi kullanici gruba ait olmayan sekmelerini bir daha
+    // bulamazdi - hicbir yerden geri getirilemeyen bir kayip.
+    const list = [g("kova", { ungrouped: true }), g("a"), g("b", { favorite: true })];
+    expect(visibleGroups(list, true).map((x) => x.id)).toEqual(["kova", "b"]);
   });
 
   it("etkin grup da favori degilse listede yok", () => {

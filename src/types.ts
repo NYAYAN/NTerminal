@@ -55,6 +55,23 @@ export interface Appearance {
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
+  /**
+   * Arayüz yazı tipi. Boş dize = sistemin kendi arayüz ailesi.
+   *
+   * Terminalinkinden AYRI ve bu bilinçli: terminal eş aralıklı olmak zorunda
+   * (sütun hizası ondan geliyor), arayüz değil. Tek ayara bağlamak, arayüzü
+   * okunaklı bir metin yazı tipine geçirmek isteyen kişiye terminalini
+   * bozdururdu.
+   */
+  uiFontFamily: string;
+  /**
+   * Arayüz yazı tipi ölçüsü (px).
+   *
+   * Arayüzün bütün ölçüleri buna göre (`--ui-font-size`, `styles/global.css`
+   * içinde `rem`). Terminal etkilenmiyor: onun ölçüsü `fontSize` ve kaç sütun
+   * sığdığını o belirliyor.
+   */
+  uiFontSize: number;
   theme: string;
   cursorStyle: "block" | "bar" | "underline";
   cursorBlink: boolean;
@@ -192,6 +209,22 @@ export interface Group {
   color: string | null;
   icon: string | null;
   collapsed: boolean;
+  /**
+   * GRUPLANMAMIŞ sekmelerin kovası.
+   *
+   * Sekmeler veri modelinde her zaman bir grubun içinde duruyor ve bu
+   * değişmedi — değiştirmek "sekme nerede yaşıyor" sorusunu her yerde ikiye
+   * bölerdi (geçmiş kaydı, favori süzgeci, bölme kipi, aktarım). Bunun yerine
+   * TEK bir grup "gruplanmamış" olarak işaretleniyor ve kenar çubuğunda
+   * başlıksız, düz bir liste olarak çiziliyor.
+   *
+   * Kullanıcı açısından sonuç istenen şey: bir sekme açmak için grup seçmek
+   * ya da grup oluşturmak gerekmiyor. Uygulama açısından ise hiçbir yer
+   * "grubu olmayan sekme" durumunu ayrıca ele almak zorunda değil.
+   *
+   * En fazla bir tane var; talep üzerine kuruluyor (bkz. `addLooseTab`).
+   */
+  ungrouped: boolean;
   /** Favori grup — kenar çubuğunda süzgeç açıkken yalnızca bunlar listelenir. */
   favorite: boolean;
   defaultProfileId: string | null;
@@ -285,6 +318,14 @@ export interface GitInfo {
   ahead: number;
   behind: number;
   changes: GitChange[];
+  /**
+   * Çalışma ağacının kökü (mutlak yol).
+   *
+   * `changes` içindeki yollar KÖKE göre; "dosyayı aç" tam yol istiyor. Kabuğun
+   * bulunduğu dizinle birleştirmek, kabuk bir alt klasördeyse var olmayan bir
+   * yol üretiyordu.
+   */
+  root: string;
 }
 
 // ------------------------------------------------------------------ geçmiş

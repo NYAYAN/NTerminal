@@ -97,3 +97,15 @@ export function tabTooltip(tab: TabState, profile: Profile | undefined): string 
   lines.push(t(hasCustomTitle(tab) ? "tab.renamedHint" : "tab.nameHint"));
   return lines.join("\n");
 }
+
+/**
+ * Grubun ekranda görünen adı.
+ *
+ * Gruplanmamış kovanın kayıtlı bir adı YOK (`name: ""`) ve olmamalı: adı
+ * çeviriden geliyor. Kayıtlı olsaydı dil değiştiğinde menülerde ve durum
+ * çubuğunda eski dilde takılı kalırdı — kullanıcının koymadığı bir ad için
+ * bu bir hata olurdu.
+ */
+export function groupLabel(group: { name: string; ungrouped?: boolean }): string {
+  return group.ungrouped ? t("group.ungrouped") : group.name;
+}

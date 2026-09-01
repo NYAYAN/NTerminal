@@ -111,6 +111,38 @@ export function rankSuggestions(
 }
 
 /**
+ * BOŞ satırda yukarı ok: son çalıştırılan komutlar.
+ *
+ * `rankSuggestions`ten ayrı çünkü sorusu farklı. Orada soru "yazdığımın
+ * devamı ne olabilir"; burada "en son ne yapmıştım". Ön ek yok, dolayısıyla
+ * `MIN_PREFIX` kuralı da yok — bu liste tam olarak kabuğun yukarı okunun
+ * karşılığı.
+ *
+ * DİZİNE göre sıralama da YOK ve bu bilinçli. Ön ekli öneride aynı dizinde
+ * çalıştırılmış komutları öne almak doğru (`cd t` başka projede anlamsız),
+ * ama "son komutlarım" listesini yeniden sıralamak kullanıcının beklediği
+ * sırayı bozar: kabuğun yukarı oku her zaman zaman sırasıyla gider.
+ *
+ * Yinelenenler ilk (en yeni) görüldükleri yerde tutuluyor: aynı komutu üst
+ * üste beş kez çalıştırmış olmak listeyi tek bir satırla doldurmamalı.
+ */
+export function recentCommands(
+  history: readonly SuggestEntry[],
+  limit = MAX_SUGGESTIONS,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of history) {
+    const command = entry.command.trim();
+    if (!command || seen.has(command)) continue;
+    seen.add(command);
+    out.push(command);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
  * Öneriyi kabul etmek için kabuğa gönderilecek tuş dizisi.
  *
  * İki yol var ve aradaki fark önemli:

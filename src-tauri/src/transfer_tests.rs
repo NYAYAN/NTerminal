@@ -136,6 +136,7 @@ fn group(id: &str, name: &str) -> Group {
         icon: None,
         collapsed: false,
         favorite: false,
+        ungrouped: false,
         default_profile_id: None,
         default_cwd: None,
         env: BTreeMap::new(),

@@ -66,6 +66,7 @@ function group(id: string, tabs: TabState[], defaultProfileId: string | null = n
     icon: null,
     collapsed: false,
     favorite: false,
+    ungrouped: false,
     defaultProfileId,
     defaultCwd: null,
     env: {},

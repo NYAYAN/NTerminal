@@ -162,6 +162,9 @@ mod tests {
 /// Kullanici EYLEMIYLE acilan pencereler (dosya yoneticisi, tarayici) bu
 /// yardimciyi kullanmiyor: orada pencere zaten istenen sey.
 pub fn quiet_command(program: &str) -> std::process::Command {
+    // `mut` yalnizca Windows dalinda gerekiyor (`creation_flags`); digerlerinde
+    // olu kalan uyariyi orada susturuyoruz, Windows'ta gercek uyari korunsun.
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     {

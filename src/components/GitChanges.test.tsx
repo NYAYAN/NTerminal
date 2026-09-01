@@ -48,6 +48,7 @@ function group(): Group {
     icon: null,
     collapsed: false,
     favorite: false,
+    ungrouped: false,
     defaultProfileId: null,
     defaultCwd: null,
     env: {},
@@ -56,13 +57,13 @@ function group(): Group {
   };
 }
 
-function seed(changes: { status: string; path: string }[]) {
+function seed(changes: { status: string; path: string }[], root = CWD) {
   useStore.setState({
     ready: true,
     groups: [group()],
     activeGroupId: "g1",
     gitInfo: {
-      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, changes },
+      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, changes, root },
     },
   });
 }
@@ -171,6 +172,38 @@ describe("satır eylemleri", () => {
     expect(titles).toEqual(["Dosya yolunu kopyala", "Değişiklikleri geri al", "Dosyayı aç"]);
   });
 
+  it("eylemler HER ZAMAN görünüyor", () => {
+    // İSTEK: "hover olmadan gözüksün." Gizli bir eylem, bir kez keşfedilene
+    // kadar yok demek. Ağırlığı düşük (CSS `opacity`), ama DOM'da koşulsuz.
+    seed([{ status: " M", path: "src/app.ts" }]);
+    const { container } = render(<GitChanges />);
+    const actions = container.querySelector(".git-actions")!;
+    expect(actions, "eylemler çizilmiyor").not.toBe(null);
+    // `display: none` ile gizlenen bir blok jsdom'da da gizli sayılıyor.
+    expect(getComputedStyle(actions).display).not.toBe("none");
+  });
+
+  it("sayaç dosya adının YANINDA, eylemlerden önce", async () => {
+    // İSTEK: "+15 -1 dosya isminin yanına gelsin, eylemler onun yerine."
+    seed([{ status: " M", path: "src/app.ts" }]);
+    // Sayaç ancak fark gelince çiziliyor.
+    vi.spyOn(api, "gitDiff").mockResolvedValue(
+      ["@@ -1,1 +1,2 @@", " bir", "+iki"].join("\n"),
+    );
+    vi.spyOn(api, "readTextFile").mockResolvedValue(null);
+    const { container } = render(<GitChanges />);
+    await act(async () => {});
+    const row = container.querySelector(".git-row")!;
+    const actions = container.querySelector(".git-actions")!;
+    // Sayaç satırın (katlama düğmesinin) İÇİNDE: adın yanında demek bu.
+    expect(row.querySelector(".git-stat"), "sayaç satırın dışına çıkmış").not.toBe(null);
+    // Eylemler satırdan SONRA: sağ uç onların.
+    expect(
+      row.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "eylemler satırdan önce geliyor",
+    ).toBeTruthy();
+  });
+
   it("eylemler katlama düğmesinin İÇİNDE değil", () => {
     // İç içe düğme geçersiz işaretleme; tıklamalar da karışıyor (eyleme
     // basmak satırı katlıyordu).
@@ -239,5 +272,274 @@ describe("satır eylemleri", () => {
     await act(async () => {});
 
     expect(gitRevert).toHaveBeenCalledWith(CWD, "yeni.ts", true);
+  });
+});
+
+/**
+ * Katlama.
+ *
+ * ÖNCEKİ HÂLİ akordeondu: satırlar kapalı geliyor, biri açılınca öteki
+ * kapanıyordu. "Neler değişmiş" sorusunun yanıtı ise listenin TAMAMI — her
+ * dosyayı tek tek açmak aynı soruyu dosya sayısı kadar sormak demekti.
+ *
+ * Testlerin asıl konusu iki şey: varsayılanın AÇIK olması ve kapatmanın
+ * yalnızca kendi satırını etkilemesi (akordeonun geri gelmemesi).
+ */
+describe("katlama", () => {
+  beforeEach(() => {
+    // Fark isteği kuyruktan geçiyor ve gerçek IPC burada yok; boş fark
+    // yeterli, sorulan şey satırın açık olup olmadığı.
+    vi.spyOn(api, "gitDiff").mockResolvedValue("");
+  });
+
+  it("satırlar AÇIK geliyor", () => {
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: " M", path: "b.ts" },
+    ]);
+    const { container } = render(<GitChanges />);
+    expect(container.querySelectorAll(".git-item.open")).toHaveLength(2);
+  });
+
+  it("tıklamak yalnızca o satırı kapatıyor", () => {
+    // Akordeonun geri gelmemesi: ikinciyi kapatmak birinciyi açık bırakmalı.
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: " M", path: "b.ts" },
+    ]);
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-row")[1]);
+
+    const items = [...container.querySelectorAll(".git-item")];
+    expect(items[0].className, "ilk satır da kapandı").toContain("open");
+    expect(items[1].className, "ikinci satır kapanmadı").not.toContain("open");
+  });
+
+  it("kapatılan satır yeniden açılabiliyor", () => {
+    seed([{ status: " M", path: "a.ts" }]);
+    const { container } = render(<GitChanges />);
+    const row = container.querySelector(".git-row")!;
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(container.querySelector(".git-item")!.className).toContain("open");
+  });
+});
+
+/**
+ * Tam yol deponun KÖKÜNDEN kuruluyor, kabuğun dizininden değil.
+ *
+ * BİLDİRİLEN HATA: "Değişiklikler kısmına gittiğimde 'Gösterilecek fark yok'
+ * diyor, oysaki var." Kök neden iki git kuralının ayrışması — `status
+ * --porcelain` yolları her zaman depo KÖKÜNE göre veriyor, `diff -- <yol>` ise
+ * bulunulan dizine göre çözüyor. Kabuk bir alt klasördeyken ikisi tutmuyordu.
+ *
+ * Rust tarafı artık komutları kökten koşuyor (`git.rs` `work_dir`, testi
+ * `git_tests.rs`); burada bağlanan şey arayüzün payı: "dosyayı aç" da aynı
+ * ayrışmadan etkileniyordu ve var olmayan bir yol üretiyordu.
+ */
+describe("tam yol", () => {
+  it("depo kökünden kuruluyor", () => {
+    const KOK = "C:/depo";
+    // Kabuk iki klasör aşağıda; porcelain yolu yine köke göre veriyor.
+    seed([{ status: " M", path: "src/app.ts" }], KOK);
+    const openFile = vi.fn();
+    useStore.setState({ openFile });
+
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-actions button")[2]);
+
+    expect(openFile).toHaveBeenCalledWith("C:/depo/src/app.ts");
+  });
+
+  it("kök bildirilmemişse kabuğun dizinine düşüyor", () => {
+    // Eski bir sürümden gelen ya da okunamamış bir kök arayüzü kilitlemesin.
+    seed([{ status: " M", path: "src/app.ts" }], "");
+    const openFile = vi.fn();
+    useStore.setState({ openFile });
+
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-actions button")[2]);
+
+    expect(openFile).toHaveBeenCalledWith(`${CWD}/src/app.ts`);
+  });
+});
+
+/**
+ * Bağlam açıcıları.
+ *
+ * İSTEK: "Değişiklik olmayan satırları göster için yukarıda ve aşağıda 50
+ * satırlık kod açma butonları olsun, bastıkça açılsın."
+ *
+ * Boşluğun nerede olduğu `lib/diff.ts` içinde hesaplanıyor ve orada test
+ * ediliyor; burada bağlanan şey arayüzün payı — düğmelerin ne zaman çizildiği
+ * ve basınca GERÇEKTEN dosyadan satır açıp açmadığı.
+ */
+describe("bağlam açıcıları", () => {
+  const DIFF = [
+    "diff --git a/a.ts b/a.ts",
+    "--- a/a.ts",
+    "+++ b/a.ts",
+    "@@ -60,1 +60,2 @@ export function bir()",
+    " satir60",
+    "+yeni",
+  ].join("\n");
+
+  /** 200 satırlık bir dosya: `satir1` … `satir200`. */
+  const DOSYA = Array.from({ length: 200 }, (_, i) => `satir${i + 1}`).join("\n");
+
+  async function ciz() {
+    seed([{ status: " M", path: "a.ts" }]);
+    vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
+    vi.spyOn(api, "readTextFile").mockResolvedValue({
+      text: DOSYA,
+      truncated: false,
+      binary: false,
+      size: DOSYA.length,
+    });
+    const view = render(<GitChanges />);
+    await act(async () => {});
+    return view;
+  }
+
+  it("gizli satır sayısını yazıyor", async () => {
+    const { container } = await ciz();
+    // İlk hunk 60'ta başlıyor: 1..59 gizli.
+    expect(container.querySelector(".diff-gap-count")!.textContent).toBe("59 değişmemiş satır");
+  });
+
+  it("kapsayan işlevin adı boşluk satırında duruyor", async () => {
+    // Hunk başlığının tek özgün parçası bu; başlığın kendisi artık çizilmiyor.
+    const { container } = await ciz();
+    expect(container.querySelector(".diff-gap-context")!.textContent).toBe(
+      "export function bir()",
+    );
+  });
+
+  /** Baştaki boşluk (1..59) — dosyanın sonundaki ayrı bir boşluk. */
+  const bas = (c: HTMLElement) => c.querySelectorAll<HTMLElement>(".diff-gap")[0];
+  /** Açılan bağlam satırları; `meta` başlıkları saymıyor. */
+  const acilan = (c: HTMLElement) =>
+    [...c.querySelectorAll(".diff-line.same")].filter((el) => el.textContent?.includes("satir"));
+
+  it("iki yön de açılabiliyor", async () => {
+    const { container } = await ciz();
+    const titles = [...bas(container).querySelectorAll(".diff-gap-actions button")].map((b) =>
+      b.getAttribute("title"),
+    );
+    expect(titles).toEqual(["Yukarıdan 50 satır aç", "Aşağıdan 50 satır aç"]);
+  });
+
+  it("yukarı ok satırları açıcının ÜSTÜNDE açıyor", async () => {
+    const { container } = await ciz();
+    const gap = bas(container);
+    fireEvent.click(gap.querySelectorAll(".diff-gap-actions button")[0]);
+
+    const ustte = acilan(container).filter(
+      (el) => el.compareDocumentPosition(bas(container)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(ustte, "satırlar açıcının üstünde çizilmedi").toHaveLength(50);
+    // Üstten açma dosyanın başından geliyor: 1..50.
+    expect(ustte[0].textContent).toContain("satir1");
+    expect(bas(container).querySelector(".diff-gap-count")!.textContent).toBe(
+      "9 değişmemiş satır",
+    );
+  });
+
+  it("aşağı ok satırları açıcının ALTINDA açıyor", async () => {
+    const { container } = await ciz();
+    fireEvent.click(bas(container).querySelectorAll(".diff-gap-actions button")[1]);
+
+    const altta = acilan(container).filter(
+      (el) => el.compareDocumentPosition(bas(container)) & Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    // Alttan açılan aralık hunk'a en YAKIN 50 satır: 10..59.
+    expect(altta[0].textContent).toContain("satir10");
+    expect(altta[49].textContent).toContain("satir59");
+  });
+
+  it("kalan az olduğunda tek düğme kalıyor", async () => {
+    // İki yön de aynı sonucu verirken iki düğme göstermek seçim varmış gibi
+    // yapardı.
+    const { container } = await ciz();
+    fireEvent.click(bas(container).querySelectorAll(".diff-gap-actions button")[0]);
+    // Tek düğme kalıyor ve simgesi iki yana açılan ok: yön diye bir şey yok.
+    const kalan = bas(container).querySelectorAll(".diff-gap-actions button");
+    expect(kalan).toHaveLength(1);
+    expect(kalan[0].getAttribute("title")).toBe("Kalan satırları aç");
+  });
+
+  it("tümü açılınca o boşluğun açıcısı kayboluyor", async () => {
+    const { container } = await ciz();
+    fireEvent.click(bas(container).querySelectorAll(".diff-gap-actions button")[0]);
+    fireEvent.click(bas(container).querySelectorAll(".diff-gap-actions button")[0]);
+
+    // Geriye yalnızca dosyanın SONUNDAKİ boşluk kalıyor.
+    const acik = [...container.querySelectorAll(".diff-gap-count")].map((el) => el.textContent);
+    expect(acik, "açacak bir şey yokken açıcı duruyor").toEqual(["139 değişmemiş satır"]);
+  });
+
+  it("dosyanın SONUNDAKİ satırlar da açılabiliyor", async () => {
+    // Son hunk 61'de bitiyor, dosya 200 satır: 62..200 gizli.
+    const { container } = await ciz();
+    const counts = [...container.querySelectorAll(".diff-gap-count")].map((el) => el.textContent);
+    expect(counts).toEqual(["59 değişmemiş satır", "139 değişmemiş satır"]);
+  });
+
+  it("dosya okunamazsa düğme KAPALI, ama duruyor", async () => {
+    // Hiç düğme çizmemek "burada açacak bir şey yok" diye okunuyordu; oysa
+    // var — okunamayan bir dosya var. İkisi ayrı şey ve ipucu hangisi
+    // olduğunu söylüyor.
+    seed([{ status: " M", path: "a.ts" }]);
+    vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
+    vi.spyOn(api, "readTextFile").mockResolvedValue(null);
+    const { container } = render(<GitChanges />);
+    await act(async () => {});
+
+    const btn = container.querySelector<HTMLButtonElement>(".diff-gap-actions button")!;
+    expect(btn, "düğme hiç çizilmemiş").not.toBe(null);
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute("title")).toContain("dosya okunamadı");
+    // Boşluğun kendisi yine yazıyor: kopukluk gerçek, yalnızca açılamıyor.
+    // Dosya okunamadığı için dosya SONUNDAKİ boşluk hiç üretilmiyor.
+    const sayaclar = [...container.querySelectorAll(".diff-gap-count")].map((el) => el.textContent);
+    expect(sayaclar).toEqual(["59 değişmemiş satır"]);
+  });
+
+  it("dosya okuması GECİKSE bile açıcı çalışıyor", async () => {
+    /*
+     * BİLDİRİLEN HATA: "'Bu satırlar açılamıyor — dosya okunamadı' yazıyor ama
+     * dosya var."
+     *
+     * Sebep bir YARIŞTI ve yalnızca gerçek IPC gecikmesinde görünüyordu.
+     * Fark ile dosya tek bir etkide arka arkaya isteniyordu ve etkinin
+     * bağımlılıkları arasında `lines` vardı: `setLines` bir yeniden çizim
+     * tetikliyor, React o çizimde etkinin TEMİZLİĞİNİ koşuyor, temizlik de
+     * `cancelled = true` diyordu. Dosya okuması henüz dönmemişse sonucu
+     * atılıyor ve `fileLines` sonsuza kadar boş kalıyordu.
+     *
+     * Sahte IPC anında çözüldüğü için eski testler bunu YAKALAMIYORDU: dosya,
+     * React yeniden çizmeye fırsat bulamadan geliyordu. Bu test okumayı bir
+     * sonraki döngüye atarak gerçek sırayı kuruyor.
+     */
+    seed([{ status: " M", path: "a.ts" }]);
+    vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
+    vi.spyOn(api, "readTextFile").mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ text: DOSYA, truncated: false, binary: false, size: 1 }), 0),
+        ),
+    );
+
+    const { container } = render(<GitChanges />);
+    // ÖNCE yalnızca farkın gelmesine ve React'in yeniden çizmesine izin ver:
+    // hatanın doğduğu an tam olarak burası.
+    await act(async () => {});
+    // SONRA dosya okuması dönsün.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+
+    const btn = container.querySelector<HTMLButtonElement>(".diff-gap-actions button")!;
+    expect(btn.disabled, "dosya geldiği hâlde düğme kapalı kaldı").toBe(false);
   });
 });

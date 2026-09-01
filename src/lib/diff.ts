@@ -34,6 +34,23 @@ export interface DiffLine {
 /** `@@ -a,b +c,d @@` başlığından sayaçların başlangıcı. */
 const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
+/**
+ * Hunk başlığının YENİ dosyadaki başlangıç satırı; başlık değilse `null`.
+ *
+ * `parseDiff` de aynı düzeni okuyor ama sonucu satır sayaçlarına gömüyor;
+ * boşlukları bulmak için başlangıç numarasının kendisi gerekiyor.
+ */
+export function hunkNewStart(text: string): number | null {
+  const m = HUNK.exec(text);
+  return m ? Number(m[2]) : null;
+}
+
+/** `@@ -a,b +c,d @@ <bağlam>` — başlıktan sonraki serbest metin. */
+export function hunkContext(text: string): string {
+  const at = text.indexOf("@@", 2);
+  return at === -1 ? "" : text.slice(at + 2).trim();
+}
+
 /** Farkı satırlara ayırır ve her satırı sınıflandırır. */
 export function parseDiff(text: string): DiffLine[] {
   const out: DiffLine[] = [];
@@ -128,4 +145,185 @@ export function diffStat(lines: readonly DiffLine[]): { added: number; removed: 
     else if (line.kind === "del") removed += 1;
   }
   return { added, removed };
+}
+
+// ------------------------------------------------------- bağlam açıcıları
+
+/**
+ * Başlık satırı YALNIZCA dosya adını mı tekrarlıyor?
+ *
+ * `git diff` her farkın başına dört beş satırlık bir künye koyuyor. Bir
+ * terminalde bunlar gerekli — hangi dosyaya baktığını başka nereden
+ * bileceksin? Panelde ise dosya adı satırın BAŞLIĞINDA zaten yazıyor, üstelik
+ * bu künye dört satırla dar bir panelde görünen farkın üçte birini yiyor.
+ *
+ * Ayrım "meta mı değil mi" değil, "başka yerde yazıyor mu": aşağıdakiler
+ * KALIYOR, çünkü tek kaynakları bu satırlar —
+ *
+ *   `Binary files … differ`   ikili dosyada farkın TAMAMI bu; atılırsa fark
+ *                             bomboş görünür
+ *   `rename from` / `to`      satır başlığı yalnızca YENİ adı gösteriyor,
+ *                             eski ad yalnızca burada
+ *   `similarity index`        yeniden adlandırmanın ne kadar benzediği
+ *   `old mode` / `new mode`   izin değişikliği tek başına bir fark olabiliyor
+ *                             (chmod +x) ve başka hiçbir yerde görünmüyor
+ */
+export function isRedundantHeader(text: string): boolean {
+  return (
+    text.startsWith("diff --git") ||
+    text.startsWith("index ") ||
+    text.startsWith("--- ") ||
+    text.startsWith("+++ ") ||
+    text.startsWith("new file mode") ||
+    text.startsWith("deleted file mode")
+  );
+}
+
+/**
+ * Fark görünümünde çizilen tek bir öğe.
+ *
+ * `git diff` varsayılan olarak değişen satırların çevresinde üç satır bağlam
+ * veriyor; arası GİZLİ kalıyor. Kullanıcının isteği o araları açabilmekti,
+ * "yukarıda ve aşağıda 50 satırlık kod açma butonları". Bu tip, farkın
+ * satırları ile o boşlukları tek bir listede yan yana taşıyor.
+ */
+export type DiffItem =
+  | { kind: "line"; line: DiffLine }
+  | {
+      kind: "gap";
+      /** İlk gizli satır (YENİ dosya numarası). */
+      from: number;
+      /** Son gizli satır. `to < from` ise gizli satır yok. */
+      to: number;
+      /** Yerini aldığı hunk başlığının bağlam metni; dosya sonundaki boşlukta yok. */
+      context: string;
+    };
+
+/**
+ * Farkı, aradaki gizli aralıklarla birlikte çizilecek öğelere çevirir.
+ *
+ * ## Hunk başlığı neden kayboluyor
+ *
+ * `@@ -10,7 +10,8 @@` satırı iki şey söylüyor: burada bir kopukluk var ve
+ * kopukluğun yeri. İlkini boşluk satırı zaten söylüyor (üstelik KAÇ satır
+ * olduğunu da), ikincisi ise soldaki numara sütununda yazıyor. İkisini üst
+ * üste çizmek aynı bilgiyi iki kez göstermek olurdu; başlığın tek özgün
+ * parçası olan bağlam metni (`export function App()`) boşluk satırının sağına
+ * taşındı.
+ *
+ * ## `total` neden ayrı geliyor
+ *
+ * Fark, dosyanın KAÇ satır olduğunu söylemiyor — son hunk'ın nerede bittiğini
+ * söylüyor. Dosyanın sonunda gizli satır kalıp kalmadığı ancak dosyanın
+ * kendisi okunduğunda biliniyor; okunmadıysa (`null`) sondaki boşluk hiç
+ * çizilmiyor. Var olmayabilecek bir şey için düğme göstermek, basınca hiçbir
+ * şey açmayan bir düğme demek.
+ */
+export function diffItems(
+  lines: readonly DiffLine[],
+  total: number | null = null,
+): DiffItem[] {
+  const out: DiffItem[] = [];
+  let lastNew = 0;
+  let seenHunk = false;
+
+  for (const line of lines) {
+    if (line.kind === "hunk") {
+      const start = hunkNewStart(line.text);
+      if (start === null) {
+        // Ayrıştırılamayan başlık olduğu gibi çiziliyor: uydurma bir boşluk
+        // göstermektense ham satırı göstermek dürüst.
+        out.push({ kind: "line", line });
+        continue;
+      }
+      out.push({
+        kind: "gap",
+        from: lastNew + 1,
+        to: start - 1,
+        context: hunkContext(line.text),
+      });
+      seenHunk = true;
+      continue;
+    }
+    // Dosya adını tekrarlayan künye satırları çizilmiyor (bkz.
+    // `isRedundantHeader`); bilgi taşıyanlar duruyor.
+    if (line.kind === "meta" && isRedundantHeader(line.text)) continue;
+    if (line.newLine !== null) lastNew = line.newLine;
+    out.push({ kind: "line", line });
+  }
+
+  if (seenHunk && total !== null && total > lastNew) {
+    out.push({ kind: "gap", from: lastNew + 1, to: total, context: "" });
+  }
+
+  return out;
+}
+
+/** Bir boşluğun açılmış ve hâlâ gizli parçaları. */
+export interface GapSplit {
+  /** Açıcı satırın ÜSTÜNDE çizilecek satırlar. */
+  top: { from: number; to: number } | null;
+  /** Hâlâ gizli olanlar; `null` ise boşluk tümüyle açılmış. */
+  hidden: { from: number; to: number } | null;
+  /** Açıcı satırın ALTINDA çizilecek satırlar. */
+  bottom: { from: number; to: number } | null;
+}
+
+/**
+ * Boşluğu, açılmış miktarlara göre üçe böler.
+ *
+ * `top` açıcı satırın üstünde kaç satır açıldığı, `bottom` altında kaç satır.
+ * Adlar EKRANDAKİ yöne göre: yukarı oka basan kullanıcı satırların düğmenin
+ * üstünde belirmesini bekliyor. (Bir ara "önceki hunk'tan aşağı" gibi
+ * kaynağa göre adlandırılmıştı ve okla ters düşüyordu.)
+ *
+ * İkisi ortada buluşunca boşluk kapanıyor ve açıcı satır kayboluyor — açacak
+ * bir şey kalmadığında düğme de kalmamalı.
+ *
+ * Saf ve ayrı: kenar durumları (tek satırlık boşluk, iki taraftan taşan
+ * açılma) çizim sırasında denemesi zor, burada kolay.
+ */
+export function splitGap(
+  gap: { from: number; to: number },
+  top: number,
+  bottom: number,
+): GapSplit {
+  const count = gap.to - gap.from + 1;
+  if (count <= 0) return { top: null, hidden: null, bottom: null };
+
+  // İki taraf toplamı boşluğu aşarsa aradaki gizli parça yok; alttaki açılma
+  // kırpılıyor ki aynı satır iki kez çizilmesin.
+  const topCount = Math.min(Math.max(0, top), count);
+  const bottomCount = Math.min(Math.max(0, bottom), count - topCount);
+  const hiddenCount = count - topCount - bottomCount;
+
+  return {
+    top: topCount > 0 ? { from: gap.from, to: gap.from + topCount - 1 } : null,
+    hidden:
+      hiddenCount > 0 ? { from: gap.from + topCount, to: gap.to - bottomCount } : null,
+    bottom: bottomCount > 0 ? { from: gap.to - bottomCount + 1, to: gap.to } : null,
+  };
+}
+
+/**
+ * Dosyanın satırlarından bir aralığı fark satırına çevirir.
+ *
+ * Metin bir BOŞLUKLA başlıyor: birleşik farkta bağlam satırlarının biçimi bu
+ * ve çizim satırı olduğu gibi basıyor. Boşluk olmadan açılan satırlar
+ * değişenlere göre bir karakter sola kayardı.
+ *
+ * Numara YALNIZCA yeni tarafa yazılıyor. Açılan bölge iki tarafta da aynı
+ * ama eski numara ancak hunk başlığındaki kaymayla bulunabilir; görünen
+ * sütun yeni numarayı gösterdiği için o kayma bir işe yaramadan taşınırdı.
+ */
+export function contextLines(
+  fileLines: readonly string[],
+  from: number,
+  to: number,
+): DiffLine[] {
+  const out: DiffLine[] = [];
+  for (let n = Math.max(1, from); n <= Math.min(to, fileLines.length); n++) {
+    out.push({ kind: "same", text: ` ${fileLines[n - 1]}`, oldLine: null, newLine: n });
+  }
+  return out;
 }

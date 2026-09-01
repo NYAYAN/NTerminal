@@ -38,6 +38,22 @@ export interface InputSignals {
   atPrompt: boolean;
   /** İkincil ekran tamponu etkin mi (vim, less, htop). */
   altScreen: boolean;
+  /**
+   * Kabuk süreci bitti mi.
+   *
+   * BİLDİRİLEN HATA: "'Bu sekmedeki kabuk kapandı' diyor ama altta komut
+   * yazın kısmı aktif."
+   *
+   * Sebep şuydu: `atPrompt` kabuğun BİLDİRDİĞİ bir durum ve kabuk ölürken
+   * "artık istemde değilim" diye bir şey bildirmiyor — son bildirdiği değer
+   * neyse o kalıyor. Kutu da o değere bakıp açık duruyordu. Yazılan her şey
+   * olmayan bir sürece gidiyor, yani kutu çalışıyormuş gibi görünüp hiçbir
+   * şey yapmıyordu.
+   *
+   * Ölüm sinyali bu yüzden ayrı ve KABUĞUN BİLDİRİMİNDEN bağımsız: süreç
+   * bittiğinde uygulama bunu doğrudan biliyor (PTY exit olayı).
+   */
+  exited: boolean;
 }
 
 /**
@@ -51,6 +67,9 @@ export interface InputSignals {
  */
 export function resolveInputMode(signals: InputSignals): InputMode {
   if (!signals.enabled) return "raw";
+  // Kabuk öldüyse yazılacak bir yer yok. En başta: aşağıdaki koşulların hepsi
+  // kabuğun BİLDİRDİĞİ duruma bakıyor ve ölü bir kabuk artık bildirmiyor.
+  if (signals.exited) return "raw";
   // Entegrasyon yoksa `atPrompt` hiç gelmiyor; kutu sonsuza kadar kapalı
   // kalırdı. cmd, entegrasyonu kapatılmış profil ve eski kabuklar buraya
   // düşüyor.

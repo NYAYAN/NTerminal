@@ -93,7 +93,20 @@ export function SuggestionBar() {
     secili?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [suggest?.index, suggest?.input]);
 
-  useLayoutEffect(() => {
+  /**
+   * Panelin yerini ölçüp uygular.
+   *
+   * Ayrı bir işlev çünkü İKİ tetikleyicisi var: her çizim (içerik değişti) ve
+   * düzenin değişmesi (pencere yeniden boyutlandı, kenar çubuğu sürüklendi,
+   * yan panel açıldı). İkincisi bileşeni yeniden çizdirmiyor — abone olduğu
+   * hiçbir depo dilimi değişmiyor — dolayısıyla yalnızca çizime bağlı bir
+   * yerleştirme paneli ESKİ koordinatlarında bırakıyordu.
+   *
+   * BİLDİRİLEN HATA tam olarak buydu: "yukarı oka bastım sonra pencereyi
+   * resize ettim, GEÇMİŞ kısmının boyutu bozuk geldi." Panel eski genişliği
+   * ve eski üst kenarıyla ekranın ortasında kalıyordu.
+   */
+  const place = () => {
     const el = ref.current;
     if (!el || !tab) return;
 
@@ -131,7 +144,39 @@ export function SuggestionBar() {
       viewportHeight: window.innerHeight,
       gap: ANCHOR_GAP,
     })}px`;
-  });
+  };
+
+  // En son tanımlanan `place` her zaman elde: gözlemciyi her çizimde kurup
+  // yıkmamak için aşağıdaki etki onu ref üzerinden çağırıyor.
+  const placeRef = useRef(place);
+  placeRef.current = place;
+
+  // 1) İçerik değişince: her çizimden sonra, boyamadan önce.
+  useLayoutEffect(place);
+
+  /*
+   * 2) Düzen değişince.
+   *
+   * `resize` tek başına yetmiyor: kenar çubuğunu sürüklemek ya da yan paneli
+   * açmak pencereyi büyütmüyor ama panelin dayanağını yerinden oynatıyor.
+   * Bu yüzden dayanakların KENDİLERİ gözleniyor.
+   */
+  const open = suggest !== null;
+  useLayoutEffect(() => {
+    if (!open) return;
+    const run = () => placeRef.current();
+    const observer = new ResizeObserver(run);
+    observer.observe(document.body);
+    for (const selector of [".command-input", ".terminal-area"]) {
+      const node = document.querySelector(selector);
+      if (node) observer.observe(node);
+    }
+    window.addEventListener("resize", run);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", run);
+    };
+  }, [open]);
 
   if (!suggest) return null;
 

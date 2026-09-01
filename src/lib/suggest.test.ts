@@ -8,6 +8,7 @@ import {
   cycleIndex,
   effectiveShellPrediction,
   rankSuggestions,
+  recentCommands,
 } from "./suggest";
 
 /**
@@ -270,5 +271,59 @@ describe("kabuğa bildirilen tahmin kipi", () => {
       expect(effectiveShellPrediction("inline", bottom)).toBe("inline");
       expect(effectiveShellPrediction("off", bottom)).toBe("off");
     }
+  });
+});
+
+/**
+ * Boş satırda yukarı ok: son komutlar.
+ *
+ * Warp'ın davranışı istendi — kutuya odaklanıp yukarı oka basınca üstünde
+ * "HISTORY" paneli açılıyor. Önceki hâlimiz Ctrl+R penceresini açıyordu; doğru
+ * işi yapıyordu ama ekranın ortasında bir örtü olarak.
+ *
+ * Bu liste `rankSuggestions`ten AYRI çünkü sorusu farklı: orada "yazdığımın
+ * devamı ne", burada "en son ne yapmıştım". Ön ek kuralı da dizin sıralaması
+ * da geçerli değil.
+ */
+describe("son komutlar", () => {
+  const h = (...komutlar: string[]) => komutlar.map((command) => ({ command, cwd: null }));
+
+  it("en yeniden eskiye, olduğu gibi", () => {
+    expect(recentCommands(h("git status", "ls", "npm test"))).toEqual([
+      "git status",
+      "ls",
+      "npm test",
+    ]);
+  });
+
+  it("yinelenen komut bir kez, en yeni yerinde", () => {
+    // Aynı komutu üst üste beş kez çalıştırmış olmak listeyi doldurmamalı.
+    expect(recentCommands(h("ls", "ls", "git status", "ls"))).toEqual(["ls", "git status"]);
+  });
+
+  it("boş satırlar atlanıyor", () => {
+    expect(recentCommands(h("  ", "ls", ""))).toEqual(["ls"]);
+  });
+
+  it("sınır uygulanıyor", () => {
+    expect(recentCommands(h("a", "b", "c", "d"), 2)).toEqual(["a", "b"]);
+    expect(recentCommands(h("a", "b", "c", "d", "e", "f", "g"))).toHaveLength(MAX_SUGGESTIONS);
+  });
+
+  it("ön ek kuralı BURADA geçerli değil", () => {
+    // `rankSuggestions` en az iki harf istiyor; bu liste hiç harf istemiyor,
+    // çünkü kabuğun yukarı okunun karşılığı.
+    expect(rankSuggestions(h("ls"), "")).toEqual([]);
+    expect(recentCommands(h("ls"))).toEqual(["ls"]);
+  });
+
+  it("dizine göre yeniden sıralamıyor", () => {
+    // Ön ekli öneride aynı dizindekiler öne alınıyor; burada zaman sırası
+    // korunmalı — kabuğun yukarı oku her zaman öyle gider.
+    const gecmis = [
+      { command: "npm test", cwd: "/baska" },
+      { command: "ls", cwd: "/burada" },
+    ];
+    expect(recentCommands(gecmis)).toEqual(["npm test", "ls"]);
   });
 });

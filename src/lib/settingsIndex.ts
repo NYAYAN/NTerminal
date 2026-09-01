@@ -75,6 +75,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "appearance", key: "settings.fontSize" },
   { section: "appearance", key: "settings.lineHeightLabel" },
   { section: "appearance", key: "settings.letterSpacingLabel" },
+  { section: "appearance", key: "settings.uiFontFamily", hint: "settings.uiFontHint" },
+  { section: "appearance", key: "settings.uiFontSize", hint: "settings.uiFontHint" },
   { section: "appearance", key: "settings.cursorStyle" },
   { section: "appearance", key: "settings.cursorBlink" },
   { section: "appearance", key: "settings.scrollbackLines", hint: "settings.scrollbackHint" },

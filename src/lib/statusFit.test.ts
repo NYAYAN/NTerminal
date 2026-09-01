@@ -8,65 +8,66 @@ import { fitDropLevel, type FitPart } from "./statusFit";
  */
 const GAP = 12;
 const MORE = 28;
+const MAX = 3;
 
-/** Türkçe, sağlıklı durum, komut çalışmıyor. */
-const TR_SAGLIKLI: FitPart[] = [
-  { level: 6, width: 42 }, // grup
-  { level: 4, width: 20 }, // profil
-  { level: 7, width: 145 }, // yol (…/Desktop/Works/Other_Projects)
-  { level: 5, width: 104 }, // komut takibi tam
-  { level: 5, width: 112 }, // komut önerisi açık
-  { level: 1, width: 49 }, // pid
-  { level: 2, width: 71 }, // komut sayısı
-  { level: 3, width: 44 }, // sekme sayısı
+/**
+ * Bugünkü çubuk: grup, profil, yol ve iki panel düğmesi.
+ *
+ * Durum ROZETLERİ (komut takibi, geçmişten tamamlama, pid, sayaçlar) artık
+ * çubukta değil, "⋯" menüsünde — gerekçesi `StatusBar.tsx` içinde. Buradaki
+ * genişlikler aynı ölçümün rozet dışı kalan parçaları.
+ */
+const CUBUK: FitPart[] = [
+  { level: 1, width: 20 }, // profil
+  { level: 2, width: 42 }, // grup
+  { level: 3, width: 145 }, // yol (…/Desktop/Works/Other_Projects)
   { level: 0, width: 58 }, // Geçmiş
   { level: 0, width: 79 }, // Favoriler
 ];
 
-/** İngilizce, uyarı durumu, komut çalışıyor — ölçülen en geniş hâl. */
-const EN_UYARI: FitPart[] = [
-  { level: 6, width: 50 },
-  { level: 4, width: 20 },
-  { level: 7, width: 145 },
-  { level: 9, width: 102 }, // Command running
-  { level: 8, width: 155 }, // Limited command tracking
-  { level: 8, width: 206 }, // Command suggestions unsupported
-  { level: 1, width: 49 },
-  { level: 2, width: 92 },
-  { level: 3, width: 40 },
-  { level: 0, width: 48 },
-  { level: 0, width: 72 },
+/**
+ * Uzun uç: kullanıcının koyduğu bir grup adı ve derin bir dizin.
+ *
+ * Bu ikisinin ÖLÇÜLEBİLİR bir üst sınırı yok — sığdırma hesabının sabit bir
+ * eşik yerine ölçüme dayanmasının bugünkü sebebi de bu. Genişlikler yukarıdaki
+ * ölçümün karakter başına değerinden türetildi (grup: 42px / 4 karakter).
+ */
+const CUBUK_UZUN: FitPart[] = [
+  { level: 1, width: 62 }, // "Windows PowerShell"
+  { level: 2, width: 230 }, // "Müşteri Projeleri – Faz 2"
+  { level: 3, width: 300 }, // 46ch'lik üst sınıra dayanmış yol
+  { level: 0, width: 58 },
+  { level: 0, width: 79 },
 ];
 
 const fit = (parts: FitPart[], available: number) =>
-  fitDropLevel({ parts, moreWidth: MORE, gap: GAP, available, maxLevel: 9 });
+  fitDropLevel({ parts, moreWidth: MORE, gap: GAP, available, maxLevel: MAX });
 
 describe("durum çubuğu sığdırma", () => {
   it("yer varken hiçbir şey gizlemiyor", () => {
-    expect(fit(TR_SAGLIKLI, 2000)).toBe(0);
-    expect(fit(EN_UYARI, 2000)).toBe(0);
+    expect(fit(CUBUK, 2000)).toBe(0);
+    expect(fit(CUBUK_UZUN, 2000)).toBe(0);
   });
 
   it("gereğinden fazlasını gizlemiyor", () => {
     // Bir öncelik gitmesi yetiyorsa ikincisine dokunulmuyor: eski sabit
     // eşiklerin sorunu tam da buydu, en kötü hâle göre kuruldukları için
     // sıradan bir pencerede çubuk boş yere boşalıyordu.
-    const tam = 2000;
-    let birinciyeDusen = tam;
-    while (fit(TR_SAGLIKLI, birinciyeDusen) === 0) birinciyeDusen -= 1;
-    expect(fit(TR_SAGLIKLI, birinciyeDusen)).toBe(1);
+    let birinciyeDusen = 2000;
+    while (fit(CUBUK, birinciyeDusen) === 0) birinciyeDusen -= 1;
+    expect(fit(CUBUK, birinciyeDusen)).toBe(1);
   });
 
-  it("iki dil aynı genişlikte farklı karar veriyor", () => {
-    // Bu testin varlık sebebi: tek bir sabit eşiğin neden yetmediği.
-    // İngilizce etiketler daha geniş, dolayısıyla aynı çubukta daha erken
-    // gizlemek gerekiyor.
-    const w = 700;
-    expect(fit(EN_UYARI, w)).toBeGreaterThan(fit(TR_SAGLIKLI, w));
+  it("aynı genişlikte farklı adlar farklı karar veriyor", () => {
+    // Bu testin varlık sebebi: tek bir sabit eşiğin neden yetmediği. Çubuktaki
+    // üç öğenin ikisini KULLANICI adlandırıyor; aynı pencerede biri sığarken
+    // öteki sığmıyor.
+    const w = 460;
+    expect(fit(CUBUK_UZUN, w)).toBeGreaterThan(fit(CUBUK, w));
   });
 
   it("daraldıkça gizlenen artıyor, hiç azalmıyor", () => {
-    for (const parts of [TR_SAGLIKLI, EN_UYARI]) {
+    for (const parts of [CUBUK, CUBUK_UZUN]) {
       let onceki = 0;
       for (let w = 1200; w >= 200; w -= 5) {
         const k = fit(parts, w);
@@ -76,10 +77,26 @@ describe("durum çubuğu sığdırma", () => {
     }
   });
 
+  it("⋯ düğmesi HER düzeyde hesaba giriyor", () => {
+    // Düğme çubuğun kalıcı parçası (durum okumalarının tek yolu o). Koşullu
+    // sayılsaydı çubuk, hiçbir şey gizlenmediği durumda kendini düğmenin
+    // genişliği kadar geniş sanar ve tam sınırda taşardı.
+    const parts: FitPart[] = [
+      { level: 0, width: 100 },
+      { level: 1, width: 50 },
+    ];
+    // Tam olarak iki öğe + üç boşluk kadar yer var; düğme sığmıyor.
+    const available = 150 + GAP * 3;
+    expect(
+      fitDropLevel({ parts, moreWidth: MORE, gap: GAP, available, maxLevel: MAX }),
+      "düğmenin genişliği sayılmamış",
+    ).toBe(1);
+  });
+
   it("en dar uçta düğmeler sığıyor", () => {
     // Kenar çubuğu 480px'e kadar genişleyebiliyor; 760px'lik asgari pencerede
     // çubuğa 280px kalıyor. Düğmeler çubuktaki tek eylem, kırpılmamalılar.
-    for (const parts of [TR_SAGLIKLI, EN_UYARI]) {
+    for (const parts of [CUBUK, CUBUK_UZUN]) {
       const k = fit(parts, 280);
       const kalan = parts.filter((p) => p.level === 0 || p.level > k);
       const genislik =
@@ -91,6 +108,6 @@ describe("durum çubuğu sığdırma", () => {
 
   it("maxLevel aşılmıyor", () => {
     // Sıfır genişlikte bile durmalı: sonsuz döngü olmasın.
-    expect(fit(TR_SAGLIKLI, 0)).toBe(9);
+    expect(fit(CUBUK, 0)).toBe(MAX);
   });
 });

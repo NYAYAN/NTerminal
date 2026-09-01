@@ -104,6 +104,28 @@ export const MESSAGES = {
   "git.openFile": ["Dosyayı aç", "Open the file"],
   "git.revert": ["Değişiklikleri geri al", "Discard changes"],
   "git.pathCopied": ["Yol kopyalandı", "Path copied"],
+  // Bağlam açıcıları: `git diff` değişen satırların çevresinde üç satır
+  // veriyor, arası çizilmiyor.
+  //
+  // "Gizli" DEĞİL "değişmemiş": satırlar saklanmıyor, yalnızca değişmedikleri
+  // için gösterilmiyorlar. "Gizli" bir sır ima ediyor ve okuyanı "neden
+  // gizlenmiş" diye düşündürüyordu; söylenmesi gereken tek şey o satırların
+  // NE olduğu. (Warp da "unmodified lines" diyor.)
+  "git.unmodifiedLines.one": ["{n} değişmemiş satır", "{n} unmodified line"],
+  "git.unmodifiedLines.other": ["{n} değişmemiş satır", "{n} unmodified lines"],
+  // Sayı satırın kendisinde yazıyor; ipuçlarında yön ve adım var — "50" tek
+  // başına neyin 50'si belli değil.
+  "git.expandDown": ["Yukarıdan {n} satır aç", "Show {n} lines from the top"],
+  "git.expandUp": ["Aşağıdan {n} satır aç", "Show {n} lines from the bottom"],
+  "git.expandAll": ["Kalan satırları aç", "Show the remaining lines"],
+  // Düğme KALIYOR ama basılamıyor: hiç düğme çizmemek "burada açacak bir şey
+  // yok" diye okunuyordu, oysa var — okunamayan bir dosya var.
+  // Denenen YOL da yazıyor: bu düğmenin kapalı kalmasının en olası sebebi
+  // yolun yanlış kurulması ve o ancak yolu görünce anlaşılıyor.
+  "git.expandUnavailable": [
+    "Bu satırlar açılamıyor — dosya okunamadı (silinmiş, ikili ya da erişilemez):\n{path}",
+    "These lines cannot be shown — the file could not be read (deleted, binary or unreachable):\n{path}",
+  ],
   "confirm.revertTitle": ["Değişiklikleri geri al", "Discard changes"],
   "confirm.revertMessage": [
     "{path} dosyasındaki değişiklikler geri alınsın mı?",
@@ -280,7 +302,18 @@ export const MESSAGES = {
     "Press {keys} to open a new tab.",
   ],
   "term.newTab": ["Yeni sekme", "New tab"],
-  "term.exited": ["Bu sekmedeki kabuk kapandı.", "The shell in this tab has exited."],
+  // Kabuk kapanınca sekme kendiliğinden yeniden başlıyor; bu kutu artık
+  // yalnızca kabuk AÇILAMADIĞINDA çıkıyor (yeniden başlatıldı ve hemen yine
+  // öldü). Metin bu yüzden "kapandı" değil, tekrarı anlatıyor — yoksa
+  // kullanıcı neden bu kez yeniden başlatılmadığını anlamazdı.
+  "term.exited": [
+    "Kabuk yeniden başlatıldı ama hemen yine kapandı.",
+    "The shell was restarted but closed again right away.",
+  ],
+  "term.exitedHint": [
+    "Profilin kabuk yolunu ve başlangıç klasörünü kontrol edin.",
+    "Check the profile's shell path and starting folder.",
+  ],
   "term.restart": ["Yeniden başlat", "Restart"],
   "term.closeTab": ["Sekmeyi kapat", "Close tab"],
   "term.copy": ["Kopyala", "Copy"],
@@ -361,6 +394,7 @@ export const MESSAGES = {
 
   // ---------------------------------------------------------- sekme menüsü
   "menu.newTab": ["Yeni sekme", "New tab"],
+  "menu.newGroup": ["Yeni grup", "New group"],
   "menu.editProfiles": ["Profilleri düzenle…", "Edit profiles…"],
   "menu.rename": ["Adı değiştir…", "Rename…"],
   "menu.resetName": ["Adı sıfırla", "Reset name"],
@@ -395,6 +429,18 @@ export const MESSAGES = {
     "No favorite groups.\nRight-click a group → Add to favorite groups.",
   ],
   "group.favoriteMark": ["Favori grup", "Favorite group"],
+  // Menüde onay kutusu olarak duruyor; başlıktaki düğmenin ipucu sayıyı da
+  // yazıyor (`group.showAll` / `group.showFavoritesOnly`) ama bir onay
+  // kutusunun etiketi durumu değil KONUYU söylemeli.
+  "group.favoritesOnly": ["Yalnızca favori gruplar", "Favorite groups only"],
+  // Gruplanmamış sekmelerin kovası. Kenar çubuğunda BAŞLIK olarak yazmıyor
+  // (orada başlıksız düz bir liste); bu ad menülerde ve durum çubuğunda,
+  // yani grubun adının beklendiği yerlerde görünüyor.
+  "group.ungrouped": ["Gruplanmamış", "Ungrouped"],
+  "group.looseHint": [
+    "Gruba bağlı olmayan sekmeler",
+    "Tabs that are not in a group",
+  ],
   "group.busy": ["Bu grupta komut çalışıyor", "A command is running in this group"],
   "group.addFavorite": ["Favori gruba ekle", "Add to favorite groups"],
   "group.removeFavorite": ["Favori gruptan çıkar", "Remove from favorite groups"],
@@ -537,52 +583,48 @@ export const MESSAGES = {
   // --------------------------------------------------------------- durum çubuğu
   "status.revealHint": ["({fm}'de açmak için tıklayın)", "(click to open in {fm})"],
   "status.running": ["Komut çalışıyor", "Command running"],
-  // Rozet metni DURUMU söylemeli, özelliğin adını değil. "Entegrasyon" tek
-  // başına hiçbir şey anlatmıyordu: neyin entegre olduğu da, bunun iyi mi kötü
-  // mü olduğu da yazmıyor. İki durum artık karşıt bir çift olarak okunuyor —
-  // "tam" / "sınırlı" — ve rozetin rengi bu okumayı destekliyor.
-  "status.integrationOn": ["Komut takibi tam", "Full command tracking"],
+  // Bu açıklamalar bir zamanlar ROZET ipuçlarıydı; rozetler çubuktan kalkıp
+  // "⋯" menüsüne taşındı (gerekçesi `StatusBar.tsx`) ve metinler menü
+  // satırının ipucu olarak orada duruyor. Değerleri kısa (`status.value*`),
+  // "neden" ise burada — kısa değer tek başına ne yapılacağını söylemiyor.
   "status.integrationOnTitle": [
     "Kabuk entegrasyonu etkin: komut metni ve çıkış kodu kabuktan geliyor",
     "Shell integration active: command text and exit code come from the shell",
   ],
-  "status.integrationOff": ["Komut takibi sınırlı", "Limited command tracking"],
   "status.integrationOffTitle": [
     "Kabuk entegrasyonu yok: komutlar ekran tamponundan okunuyor, çıkış kodu bilinmiyor",
     "No shell integration: commands are read from the screen buffer, exit code unknown",
   ],
-  // Rozetler KABUĞUN kendi önerisini anlatıyor, uygulamanınkini değil. Ayrım
-  // önemliydi: "Komut önerisi desteklenmiyor" yazınca kullanıcı hiç öneri
-  // almadığını sanıyordu, oysa uygulamanın kendi listesi her kabukta çalışıyor
-  // ve o sırada ekranda duruyordu. Rozet artık yalnızca kabuk hakkında konuşuyor.
-  "status.predictionOff": ["Kabuk önerisi kapalı", "Shell suggestions off"],
+  // Bu satır KABUĞUN tamamlamasını anlatıyor, uygulamanınkini değil. Ayrım
+  // önemliydi: "desteklenmiyor" yazınca kullanıcı hiç öneri almadığını
+  // sanıyordu, oysa uygulamanın kendi listesi her kabukta çalışıyor ve o
+  // sırada ekranda duruyordu. Metinler yalnızca kabuk hakkında konuşuyor.
   "status.predictionOffTitle": [
-    "Kabuğun kendi önerisi kapalı. Ayarlar › Davranış › Kabuğun kendi önerisi ile açabilirsiniz.\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışmaya devam ediyor.",
-    "The shell's own suggestion is off. Turn it on in Settings › Behavior › The shell's own suggestion.\n\nThe app's own suggestion list keeps working independently.",
+    "Kabuğun geçmişten tamamlaması kapalı. Ayarlar › Davranış › Kabuğun geçmişten tamamlaması ile açabilirsiniz.\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışmaya devam ediyor.",
+    "The shell's history completion is off. Turn it on in Settings › Behavior › The shell's history completion.\n\nThe app's own suggestion list keeps working independently.",
   ],
-  "status.predictionOn": ["Kabuk önerisi açık", "Shell suggestions on"],
   "status.predictionOnTitle": [
-    "Kabuğun kendi önerisi etkin ({view}): daha önce çalıştırdığınız komutlar yazarken öneriliyor.",
-    "The shell's own suggestion is active ({view}): commands you have run before are suggested as you type.",
+    "Kabuğun geçmişten tamamlaması etkin ({view}): daha önce çalıştırdığınız komutlar yazarken tamamlanıyor.",
+    "The shell's history completion is active ({view}): commands you have run before are completed as you type.",
   ],
-  "status.predictionUnsupported": ["Kabuk önerisi yok", "No shell suggestions"],
   "status.predictionUnsupportedTitle": [
-    "Bu kabuk kendi önerisini çizemiyor: PSReadLine 2.2+ gerekiyor, kurulu sürüm daha eski.\n\nUygulamanın kendi öneri listesi çalışmaya devam ediyor; eksik olan yalnızca kabuğun satır içi soluk metni.\n\nOnu da istiyorsanız PowerShell'de bir kez şunu çalıştırın:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).",
-    "This shell cannot draw its own suggestion: PSReadLine 2.2+ is required and the installed version is older.\n\nThe app's own suggestion list keeps working; only the shell's inline ghost text is missing.\n\nIf you want that too, run this once in PowerShell:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nThen restart the tab (right-click › Restart shell).",
+    "Bu kabuk geçmişten tamamlama çizemiyor: PSReadLine 2.2+ gerekiyor, kurulu sürüm daha eski.\n\nUygulamanın kendi öneri listesi çalışmaya devam ediyor; eksik olan yalnızca kabuğun satır içi soluk metni.\n\nOnu da istiyorsanız PowerShell'de bir kez şunu çalıştırın:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nSonra sekmeyi yeniden başlatın (sağ tık › Kabuğu yeniden başlat).",
+    "This shell cannot draw history completion: PSReadLine 2.2+ is required and the installed version is older.\n\nThe app's own suggestion list keeps working; only the shell's inline ghost text is missing.\n\nIf you want that too, run this once in PowerShell:\nInstall-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck\n\nThen restart the tab (right-click › Restart shell).",
   ],
   // Mac'te bu durum artık BEKLENMİYOR: zsh-autosuggestions uygulamayla birlikte
   // geliyor ve kurulum gerektirmiyor. Buraya düşülüyorsa eklenti dosyası
   // okunamamış demektir — kullanıcının kuracağı bir şey yok, o yüzden metin de
   // kurulum tarifi vermiyor.
   "status.predictionUnsupportedTitleMac": [
-    "Kabuğun satır içi önerisi yüklenemedi. Bu beklenen bir durum değil: eklenti uygulamayla birlikte geliyor, ayrıca kurmanız gereken bir şey yok.\n\nSekmeyi yeniden başlatmayı deneyin (sağ tık › Kabuğu yeniden başlat).\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışıyor.",
-    "The shell's inline suggestion could not be loaded. This is unexpected: the plugin ships with the app, so there is nothing for you to install.\n\nTry restarting the tab (right-click › Restart shell).\n\nThe app's own suggestion list works independently.",
+    "Kabuğun satır içi tamamlaması yüklenemedi. Bu beklenen bir durum değil: eklenti uygulamayla birlikte geliyor, ayrıca kurmanız gereken bir şey yok.\n\nSekmeyi yeniden başlatmayı deneyin (sağ tık › Kabuğu yeniden başlat).\n\nUygulamanın kendi öneri listesi bundan bağımsız çalışıyor.",
+    "The shell's inline completion could not be loaded. This is unexpected: the plugin ships with the app, so there is nothing for you to install.\n\nTry restarting the tab (right-click › Restart shell).\n\nThe app's own suggestion list works independently.",
   ],
-  "status.pidTitle": ["Kabuk süreç kimliği", "Shell process id"],
-  "status.commandsTitle": ["Kayıtlı komut sayısı", "Recorded commands"],
+  // Bu ikisi menüde TEK SATIR olarak okunuyor ("8 komut", "1 sekme"), etiket
+  // + değer olarak değil: "Kayıtlı komut | 8" aynı şeyi iki sütuna bölüyor ve
+  // hiçbir şey kazandırmıyordu. `status.tabs` ayrıca komut paletinde de
+  // kullanılıyor (grup satırının ipucu).
   "status.commands.one": ["{n} komut", "{n} command"],
   "status.commands.other": ["{n} komut", "{n} commands"],
-  "status.tabsTitle": ["Toplam sekme", "Total tabs"],
   "status.tabs.one": ["{n} sekme", "{n} tab"],
   "status.tabs.other": ["{n} sekme", "{n} tabs"],
   "status.portable": ["Taşınabilir", "Portable"],
@@ -591,19 +633,21 @@ export const MESSAGES = {
     "Settings live in a folder next to the exe: {path}",
   ],
   "status.restored": ["Oturum geri yüklendi", "Session restored"],
-  // "⋯" menüsü: çubuğa sığmayanlar buraya taşınıyor. Etiketler çubuktakinden
-  // FARKLI: çubukta yer dar olduğu için değer tek başına yazıyor ("Zsh"),
-  // menüde yer var, o yüzden neyin ne olduğu da yazıyor ("Profil: Zsh").
-  "status.moreTitle": ["Sığmayan durum bilgileri", "Status details that do not fit"],
+  // "⋯" menüsü: durum okumalarının TAMAMI burada. Etiketler iki sütun —
+  // solda ne olduğu, sağda değeri ("Profil | Zsh"). Çubuk yalnızca kimliği
+  // taşıyor (grup, profil, yol); okumalar oraya sığdıkları için değil,
+  // kullanıcı onları sürekli görmek istemediği için menüye indi.
+  "status.moreTitle": ["Durum bilgileri", "Status details"],
   "status.moreHeader": ["Durum", "Status"],
   "status.fieldGroup": ["Grup", "Group"],
   "status.fieldProfile": ["Profil", "Profile"],
   "status.fieldCwd": ["Çalışma dizini", "Working directory"],
   "status.fieldIntegration": ["Komut takibi", "Command tracking"],
-  "status.fieldPrediction": ["Kabuk önerisi", "Shell suggestions"],
+  // "Kabuk önerisi" ne dediği anlaşılmıyordu: neyin önerildiği de, kimin
+  // önerdiği de belirsizdi. Yapılan iş tam olarak şu — kabuk, GEÇMİŞTE
+  // çalıştırdığınız komutlardan satırın kalanını tamamlıyor. Ad da onu diyor.
+  "status.fieldPrediction": ["Geçmişten tamamlama", "History completion"],
   "status.fieldPid": ["Kabuk pid", "Shell pid"],
-  "status.fieldCommands": ["Kayıtlı komut", "Recorded commands"],
-  "status.fieldTabs": ["Sekme", "Tabs"],
   // Menüde etiket ve değer İKİ AYRI SÜTUN ("Komut takibi | Tam"), o yüzden
   // burada yalnızca değer var — rozetteki uzun biçim menüde tekrar olurdu.
   // Cümle içine girmedikleri için büyük harfle başlıyorlar.
@@ -747,7 +791,18 @@ export const MESSAGES = {
 
   "settings.theme": ["Tema", "Theme"],
   "settings.colorTheme": ["Renk teması", "Color theme"],
-  "settings.font": ["Yazı tipi", "Font"],
+  // Başlık "Terminal" diyor çünkü artık iki yazı tipi ayarı var ve ikisi de
+  // aynı bölümde. Ayrımı başlıkta yapmak, iki alanın etiketini kısa
+  // tutabilmenin de tek yolu.
+  "settings.font": ["Terminal yazı tipi", "Terminal font"],
+  "settings.uiFont": ["Arayüz yazı tipi", "Interface font"],
+  "settings.uiFontFamily": ["Arayüz yazı tipi", "Interface font"],
+  "settings.uiFontSystem": ["Sistemin kendi yazı tipi", "The system font"],
+  "settings.uiFontSize": ["Arayüz boyutu ({n} px)", "Interface size ({n} px)"],
+  "settings.uiFontHint": [
+    "Menüler, paneller, sekme adları ve ayarlar bu ölçüye göre büyüyüp küçülür. Terminalin yazı tipi ve boyutu ayrı: onu değiştirmek satıra kaç sütun sığdığını da değiştirdiği için tek bir ayara bağlanmadı.",
+    "Menus, panels, tab names and settings scale with this size. The terminal's font and size are separate: changing those also changes how many columns fit on a line, so the two are not tied to one setting.",
+  ],
   "settings.fontFamily": ["Yazı tipi ailesi", "Font family"],
   "settings.highlightLinks": [
     "Çıktıdaki bağlantıları renkli göster",
@@ -792,7 +847,15 @@ export const MESSAGES = {
   ],
   "input.placeholder": ["Komut yazın", "Type a command"],
   "input.running": ["Komut çalışıyor…", "Command running…"],
-  "input.stop": ["Durdur (Ctrl+C)", "Stop (Ctrl+C)"],
+  "input.stop": ["Durdur", "Stop"],
+  "input.stopTitle": [
+    "Çalışan komutu durdurur (SIGINT). Klavyeden: Ctrl+C'ye arka arkaya iki kez.",
+    "Stops the running command (SIGINT). From the keyboard: press Ctrl+C twice in a row.",
+  ],
+  // İlk basıştan sonraki hâl. Metin EMİR kipinde ve kısa: kullanıcı o an
+  // tuşun üstünde ve okuyacak vakti yok.
+  "input.stopAgain": ["Durdurmak için tekrar basın", "Press again to stop"],
+  "input.stopAgainShort": ["Tekrar basın", "Press again"],
   "runLinks.label": ["Sunucu", "Server"],
   "block.copyCommand": ["Komutu kopyala", "Copy command"],
   "block.copyCommandShort": ["Komut", "Command"],
@@ -809,8 +872,8 @@ export const MESSAGES = {
     "Suggest from the app's own history (in every shell)",
   ],
   "settings.appSuggestionsHint": [
-    "Yazdıkça istemin altında bir liste açılır: yukarı/aşağı okla seçilir, sağ okla kabul edilir, Esc ile kapanır. Liste açıkken ok tuşları listede gezinir; boş satırda liste kapalı olduğu için oklar kabuğun kendi geçmişine gider. Kabuğun yerleşik önerisinden bağımsız çalışır ve cmd ile bash'te de vardır.",
-    "As you type, a list opens below the prompt: select with up/down, accept with the right arrow, dismiss with Esc. While the list is open the arrow keys move within it; on an empty line the list is closed so the arrows reach the shell's own history. It works independently of the shell's built-in prediction and is available in cmd and bash too.",
+    "Yazdıkça istemin altında bir liste açılır: yukarı/aşağı okla seçilir, sağ okla kabul edilir, Esc ile kapanır. Liste açıkken ok tuşları listede gezinir; boş satırda liste kapalı olduğu için oklar kabuğun kendi geçmişine gider. Kabuğun geçmişten tamamlamasından bağımsız çalışır ve cmd ile bash'te de vardır.",
+    "As you type, a list opens below the prompt: select with up/down, accept with the right arrow, dismiss with Esc. While the list is open the arrow keys move within it; on an empty line the list is closed so the arrows reach the shell's own history. It works independently of the shell's history completion and is available in cmd and bash too.",
   ],
   "settings.fontBundled": ["Uygulamayla gelen", "Bundled with the app"],
   "settings.fontInstalled": ["Sisteminizde kurulu", "Installed on your system"],
@@ -857,7 +920,10 @@ export const MESSAGES = {
     "The list view cannot work while the command line is pinned to the bottom: PSReadLine draws the list below the cursor and, with no room there, pushes the screen up. Inline ghost text is used instead; the app draws the list in its own panel.",
   ],
   "settings.prediction": ["Komut önerisi", "Command suggestions"],
-  "settings.predictionShell": ["Kabuğun kendi önerisi", "The shell's own suggestion"],
+  "settings.predictionShell": [
+    "Kabuğun geçmişten tamamlaması",
+    "The shell's history completion",
+  ],
   "settings.predictionList": [
     "İstemin altında liste (yukarı/aşağı ok ile seç)",
     "List below the prompt (select with up/down)",
@@ -868,12 +934,12 @@ export const MESSAGES = {
   ],
   "settings.predictionOff": ["Kapalı (kabuğun kendi ayarı)", "Off (leave it to the shell)"],
   "settings.predictionHint": [
-    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor: PowerShell 7.2+ (PSReadLine 2.2+) gerekiyor. Windows PowerShell 5.1, cmd ve bash bunu desteklemiyor — orada uygulamanın kendi öneri listesi devrede kalır, ayrıca Ctrl+R geçmiş aramasını kullanabilirsiniz.",
-    "Suggests commands you have run before as you type. The shell draws the suggestion, so PowerShell 7.2+ (PSReadLine 2.2+) is required. Windows PowerShell 5.1, cmd and bash do not support it — the app's own suggestion list stays available there, and you can also use the Ctrl+R history search.",
+    "Daha önce çalıştırdığınız komutlardan satırın kalanını yazarken tamamlar. Tamamlamayı kabuk çiziyor: PowerShell 7.2+ (PSReadLine 2.2+) gerekiyor. Windows PowerShell 5.1, cmd ve bash bunu desteklemiyor — orada uygulamanın kendi öneri listesi devrede kalır, ayrıca Ctrl+R geçmiş aramasını kullanabilirsiniz.",
+    "Completes the rest of the line from commands you have run before. The shell draws the completion, so PowerShell 7.2+ (PSReadLine 2.2+) is required. Windows PowerShell 5.1, cmd and bash do not support it — the app's own suggestion list stays available there, and you can also use the Ctrl+R history search.",
   ],
   "settings.predictionHintMac": [
-    "Daha önce çalıştırdığınız komutları yazarken önerir. Öneriyi kabuk çiziyor. zsh için gereken eklenti (zsh-autosuggestions) uygulamayla birlikte geliyor, kurmanız gereken bir şey yok; kendi kurulumunuz varsa o kullanılır. pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
-    "Suggests commands you have run before as you type. The shell draws the suggestion. The plugin zsh needs (zsh-autosuggestions) ships with the app, so there is nothing to install; if you have your own copy, that one is used. pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
+    "Daha önce çalıştırdığınız komutlardan satırın kalanını yazarken tamamlar. Tamamlamayı kabuk çiziyor. zsh için gereken eklenti (zsh-autosuggestions) uygulamayla birlikte geliyor, kurmanız gereken bir şey yok; kendi kurulumunuz varsa o kullanılır. pwsh'de PSReadLine 2.2+ gerekiyor. bash bunu desteklemiyor — orada Ctrl+R geçmiş aramasını kullanın.",
+    "Completes the rest of the line from commands you have run before. The shell draws the completion. The plugin zsh needs (zsh-autosuggestions) ships with the app, so there is nothing to install; if you have your own copy, that one is used. pwsh needs PSReadLine 2.2+. bash does not support it — use the Ctrl+R history search there.",
   ],
   // Menü çubuğu / bildirim alanı simgesi.
   //

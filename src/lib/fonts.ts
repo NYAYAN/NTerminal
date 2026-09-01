@@ -153,3 +153,59 @@ export function canvasMeasurer(): ((spec: string) => number) | null {
     return ctx.measureText("mmmmmmmmmmlliWWW@#0Oo").width;
   };
 }
+
+// --------------------------------------------------------- arayüz yazı tipi
+
+/**
+ * Arayüzde seçilebilecek yazı tipi adayları.
+ *
+ * Terminalinkinden AYRI bir liste ve olması gereken de bu: terminalde eş
+ * aralıklılık zorunlu (sütun hizası ondan geliyor), arayüzde ise oransal
+ * aileler daha okunaklı. Yine de eş aralıklılar da listede — arayüzünü de
+ * terminal gibi görmek isteyen kullanıcı var ve ona "hayır" demek için bir
+ * sebep yok.
+ *
+ * Liste bir ÖNERİ: kurulu olmayan bir aile seçilirse tarayıcı yığındaki
+ * sonrakine düşüyor, en sonda sistemin kendi ailesi duruyor.
+ */
+export const UI_FONT_CANDIDATES: string[] = [
+  // Windows
+  "Segoe UI",
+  "Segoe UI Variable Text",
+  "Calibri",
+  // macOS
+  "SF Pro Text",
+  "Helvetica Neue",
+  "Avenir Next",
+  // Yaygın, açık lisanslı
+  "Inter",
+  "Roboto",
+  "Open Sans",
+  "Noto Sans",
+  "Source Sans 3",
+  "IBM Plex Sans",
+];
+
+/** Arayüz için bir ailenin ayara yazılacak tam yığını. */
+export function uiFontStack(family: string): string {
+  return `"${family}", system-ui, sans-serif`;
+}
+
+/**
+ * Arayüz yazı tipini ve ölçüsünü belgeye uygular.
+ *
+ * İkisi de KÖKTE (`document.documentElement`) satır içi değişken olarak
+ * duruyor: `styles/global.css` içindeki bütün ölçüler `rem`, yani kökün
+ * ölçüsüne göre. Bir sınıf adı ya da gövde kuralı yerine değişken olması
+ * bilinçli — ara değerlere (14.5px) izin veriyor ve tek yerden okunuyor.
+ *
+ * Boş aile "dokunma" demek: CSS'teki `--ui-font` platforma göre zaten doğru
+ * yığını taşıyor, üzerine boş bir değer yazmak onu jenerik `sans-serif`e
+ * düşürürdü.
+ */
+export function applyUiFont(family: string, size: number): void {
+  const root = document.documentElement;
+  if (family.trim()) root.style.setProperty("--ui-font", family);
+  else root.style.removeProperty("--ui-font");
+  root.style.setProperty("--ui-font-size", `${size}px`);
+}

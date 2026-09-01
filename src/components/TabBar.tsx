@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/ipc";
-import { hasCustomTitle, resolveProfile, shellBadge, tabLabel, tabTooltip } from "../lib/labels";
+import {
+  groupLabel,
+  hasCustomTitle,
+  resolveProfile,
+  shellBadge,
+  tabLabel,
+  tabTooltip,
+} from "../lib/labels";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { dropIndex, isLocked } from "../lib/tabs";
@@ -157,7 +164,7 @@ export function TabBar() {
               label: t("menu.moveToGroup"),
               entries: otherGroups.map((g) => ({
                 kind: "item" as const,
-                label: g.name,
+                label: groupLabel(g),
                 run: () => store().moveTabToGroup(tab.id, g.id),
               })),
             },

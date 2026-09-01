@@ -270,24 +270,26 @@ export function TerminalArea() {
     menu.open(event, terminalEntries(id, session));
   };
 
-  if (!activeGroup || activeGroup.tabs.length === 0) {
-    // Kısayolun kendisi çeviriden değil ayarlardan geliyor; kullanıcı yeniden
-    // atadıysa ipucu da onu göstersin.
-    const [hintBefore, hintAfter] = tSplit("term.openHint", "keys");
-    return (
-      <div className="empty-state">
-        <p>{t("term.noTabs")}</p>
-        <p>
-          {hintBefore}
-          <kbd>{prettyCombo(keys.newTab ?? "Ctrl+T")}</kbd>
-          {hintAfter}
-        </p>
-        <button className="primary" onClick={() => useStore.getState().addTab()}>
-          {t("term.newTab")}
-        </button>
-      </div>
-    );
-  }
+  /*
+   * "Hiç sekme yok" kutusu ALANIN İÇİNDE çiziliyor, alanın YERİNE değil.
+   *
+   * ÖLÇÜLEN HATA: ilk grupta `ng serve` çalışırken yeni bir grup açmak, ilk
+   * grubun terminalini boşaltıyordu. Sebep bu daldı: yeni grup bir çizim
+   * boyunca sekmesiz kalıyor (sekmeyi `App` bir etkide ekliyor), o çizimde
+   * burası erken dönüyor ve `.terminal-area` ağaçtan tümüyle çıkıyordu —
+   * yalnızca yeni grubun değil, BAĞLI HER SEKMENİN barındırıcısı yok
+   * ediliyordu. Geri geldiklerinde xterm ikinci `open()` çağrısını yok
+   * sayıyor ve terminal boş bir kapta duruyordu (gerekçesi
+   * `TerminalSession.attach` içinde).
+   *
+   * Erken dönüş bu yüzden kalktı: kutu bir katman, alan hep yerinde. Bağlı
+   * barındırıcılar da yerinde kalıyor — hiçbiri görünür değil (etkin grubun
+   * sekmesi yok), yani kutunun altında bir şey görünmüyor.
+   */
+  const noTabs = !activeGroup || activeGroup.tabs.length === 0;
+  // Kısayolun kendisi çeviriden değil ayarlardan geliyor; kullanıcı yeniden
+  // atadıysa ipucu da onu göstersin.
+  const [hintBefore, hintAfter] = tSplit("term.openHint", "keys");
 
   return (
     <div
@@ -306,7 +308,7 @@ export function TerminalArea() {
       onContextMenu={handleContextMenu}
     >
       {ordered.map((tabId) => {
-        const tab = activeGroup.tabs.find((t) => t.id === tabId);
+        const tab = activeGroup?.tabs.find((t) => t.id === tabId);
         const visible = visibleSet.has(tabId);
         const focused = tabId === activeTabId;
         const last = visible && tabId === lastVisibleId;
@@ -388,6 +390,20 @@ export function TerminalArea() {
         );
       })}
 
+      {noTabs && (
+        <div className="empty-state">
+          <p>{t("term.noTabs")}</p>
+          <p>
+            {hintBefore}
+            <kbd>{prettyCombo(keys.newTab ?? "Ctrl+T")}</kbd>
+            {hintAfter}
+          </p>
+          <button className="primary" onClick={() => useStore.getState().addTab()}>
+            {t("term.newTab")}
+          </button>
+        </div>
+      )}
+
       {findOpen && <TerminalFind />}
 
       {/* "Kabuk kapandı" kutusu: metin ÜSTTE, düğmeler ALTTA.
@@ -397,6 +413,10 @@ export function TerminalArea() {
       {activeTabId && exited[activeTabId] && (
         <div className="term-exited">
           <span className="dim">{t("term.exited")}</span>
+          {/* Ne yapılacağını söyleyen satır: kutu artık yalnızca kabuk
+              AÇILAMADIĞINDA çıkıyor ve o durumda "yeniden başlat" çoğu zaman
+              aynı sonucu verir — asıl çözüm profilde. */}
+          <span className="dim">{t("term.exitedHint")}</span>
           <div className="term-exited-actions">
             <button
               className="primary"

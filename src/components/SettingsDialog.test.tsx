@@ -63,6 +63,7 @@ beforeEach(() => {
         icon: null,
         collapsed: false,
         favorite: false,
+        ungrouped: false,
         defaultProfileId: null,
         defaultCwd: null,
         env: {},
@@ -124,7 +125,8 @@ describe("ayarlar penceresi", () => {
     await settle();
     expect(headings(container)).toEqual([
       "Tema",
-      "Yazı tipi",
+      "Terminal yazı tipi",
+      "Arayüz yazı tipi",
       "İmleç ve kaydırma",
       "Sekmeler",
     ]);

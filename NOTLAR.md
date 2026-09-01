@@ -168,6 +168,159 @@ kendi ortamını veriyor**. Yani bir terminal, kullanıcının derleme çıktıs
 YERİNİ değiştiriyordu ve belirti uygulamada değil kullanıcının projesinde
 çıkıyordu (`ijwhost.dll` bulunamıyor). Kural `lib/devEnv.test.ts` ile bağlı.
 
+### 1.9 Durum çubuğu, arayüz ölçüsü ve terminalin korunması
+
+**Yeni grup açmak ilk grubun terminalini boşaltıyordu.** Bildirilen belirti:
+ilk grupta `ng serve` çalışırken yeni grup açılınca o sekmenin ekranı
+siliniyor. Zincir iki halkalı ve ikisi de ayrı ayrı düzeltildi:
+
+1. Yeni grubun bir çizim boyunca sekmesi yok (sekmeyi `App` bir etkide
+   ekliyor). [`TerminalArea`](src/components/TerminalArea.tsx) o çizimde "hiç
+   sekme yok" kutusunu ALANIN YERİNE döndürüyordu — yani yalnızca yeni grubun
+   değil, bağlı HER sekmenin barındırıcısı ağaçtan çıkıyordu. Kutu artık alanın
+   İÇİNDE bir katman.
+2. React barındırıcıları yeniden kurunca `attach` ikinci kez çağrılıyor ve
+   orada `term.open()` vardı — **xterm ikinci çağrıda hiçbir şey yapmıyor**
+   (`if (this.element?.ownerDocument.defaultView && this._coreBrowserService) return`).
+   Terminalin düğümü kopmuş eski kabın içinde kalıyor, yeni kap boş duruyordu.
+   [`TerminalSession.attach`](src/terminal/TerminalSession.ts) artık düğümü
+   TAŞIYOR.
+
+Testler: `components/emptyGroup.test.tsx` (düğüm kimliği korunuyor mu),
+`terminal/reattach.test.ts` (ikinci kap, yeniden açma değil taşıma).
+
+**Durum çubuğu artık yalnızca kimlik taşıyor.** Grup, profil, klasör görünür;
+okumalar (komut çalışıyor, komut takibi, geçmişten tamamlama, pid, komut ve
+sekme sayısı) "⋯" menüsünde. Eski ayrım YER darlığına göreydi — hepsi çubuktaydı,
+sığmayan menüye düşüyordu; sonuç pencere genişliğine göre değişen bir şeritti.
+Rozetlerin ipuçları da kayboldu sanılmasın diye `MenuEntry`nin `info` girdisine
+`title` eklendi. Sığdırma hesabı duruyor (`lib/statusFit.ts`) ama gerekçesi
+değişti: çubukta kalan üç öğenin ikisini KULLANICI adlandırıyor. "⋯" artık her
+düzeyde hesaba giriyor, çünkü kalıcı.
+
+**"Kabuk önerisi" → "Geçmişten tamamlama".** Eski ad ne dediğini söylemiyordu:
+neyin önerildiği de, kimin önerdiği de belirsizdi. Yapılan iş şu — kabuk,
+geçmişte çalıştırılan komutlardan satırın kalanını tamamlıyor.
+
+**Arayüz yazı tipi ayrı bir ayar** (`Appearance.uiFontFamily`, `uiFontSize`).
+`styles/global.css` içindeki 98 `font-size` değeri `rem`e çevrildi ve kök
+`--ui-font-size`e bağlandı; `em` değil `rem` çünkü `em` iç içe kurallarda
+KATLANIYOR. Terminal etkilenmiyor: xterm ölçüsünü JS seçeneğinden alıyor ve
+kendi ölçüm elemanlarına açıkça yazıyor (`.xterm-rows`, genişlik önbelleği).
+Metin taşıyan iki sabit yükseklik (`.tab`, `.group-row`) asgariye çevrildi.
+
+### 1.10 Gruplanmamış sekmeler, Ctrl+C ve geçmiş paneli
+
+**Sekme artık bir gruba ait olmak zorunda değil.** Bildirilen istek: "Bir
+sekmeyi illa gruba eklemeye gerek olmamalı… her zaman bir grup seçili olduğu
+için sağ tıklayıp sekme ekle dediğimde seçili gruba ekleniyor." MODEL
+DEĞİŞMEDİ — sekmeler yine bir grubun içinde. Değiştirmek "sekme nerede
+yaşıyor" sorusunu geçmiş kaydından favori süzgecine, bölme kipinden aktarıma
+kadar her yerde ikiye bölerdi. Bunun yerine TEK bir grup `ungrouped` olarak
+işaretleniyor ve kenar çubuğunda **başlıksız düz bir liste** olarak, en üstte
+çiziliyor. Kova talep üzerine kuruluyor (`addLooseTab`), son sekmesi kapanınca
+kayboluyor, süzgeçten muaf ve en üstte sabit. Adı çeviriden geliyor
+(`groupLabel`), çünkü kullanıcının koyduğu bir ad değil.
+Testler: `store/looseTab.test.ts`, `lib/tabs.test.ts`.
+
+**"Gösterilecek fark yok" — iki git kuralının ayrışması.** `status --porcelain`
+yolları her zaman depo KÖKÜNE göre veriyor; `diff -- <yol>` ise pathspec'i
+BULUNULAN DİZİNE göre çözüyor. Kabuk bir alt klasördeyken ikisi tutmuyor ve
+çıktı boş dönüyordu. Aynı sebeple `revert` de sessizce hiçbir şey yapmıyordu —
+yıkıcı bir işlemin sessizce çalışmaması daha kötü, kullanıcı geri alındığını
+sanıyor. Komutlar artık KÖKTEN koşuyor ([`git.rs`](src-tauri/src/git.rs)
+`work_dir`) ve `GitInfo.root` arayüze taşınıyor ("dosyayı aç" tam yolu ondan
+kuruyor). Testler: `git_tests.rs` `alt_klasorden_*`, `GitChanges.test.tsx`.
+
+**Ctrl+C ile durdurma — iki basış.** Komut çalışırken kutu kapanıp yerine şerit
+geliyor, odak terminalin DIŞINDA kalıyor ve genel kopyalama dalı tuşu
+yutuyordu; kabuğa SIGINT hiç gitmiyordu. İki basış kullanıcının isteği: aynı
+tuş kopyalama da demek. İlk basış silahlıyor (şerit kırmızıya dönüp "tekrar
+basın" yazıyor, şerit yoksa balon), ikincisi durduruyor; silah 1.5 sn sonra
+kendiliğinden düşüyor. **Terminalin içi hariç** — orada düz Ctrl+C kabuğun
+kendi tuşu ve tek basışta gitmeli. Testler: `store/stopRunning.test.ts`.
+
+**Komut kutusuna yapıştırma.** mac'te Cmd+V burada yakalanıp `session.paste()`e
+gidiyordu; o da `navigator.clipboard.readText()` çağırıyor ve WebKit panoyu
+okumak için kendi "Paste" düğmesini çiziyor. İzin verilse bile metin KUTUYA
+değil kabuğa giderdi. Kutu zaten bir `textarea`: kopyala/yapıştır artık
+yakalanmıyor. Aynı satırın ikizi kaçış kapısındaydı (`e.ctrlKey || e.metaKey`)
+ve mac'te Cmd+C'yi SIGINT'e çeviriyordu — yalnızca gerçek Ctrl'e bağlandı.
+
+**Diff'te bağlam açıcıları** (eski açık iş 2.2). Fark bloklarının arasındaki
+değişmemiş satırlar artık açılabiliyor: "59 değişmemiş satır" yazan bir şerit,
+solunda satır numarası sütunuyla aynı genişlikte bir düğme bloğu, iki ok ve
+elli satırlık adımlar.
+
+Tasarımın iki kararı var. Birincisi satırların NEREDEN geldiği: ilk taslak
+`git diff -U<n>` ile daha geniş bağlam istemeyi öneriyordu ama `-U` her hunk'ın
+İKİ yanını birden açıyor, yani "yukarıyı aç" diye bir şey yok. Onun yerine
+dosyanın kendisi okunuyor (`readTextFile`) — çalışma ağacındaki dosya farkın
+YENİ tarafı, açılan satırlar doğrudan oradan. İkincisi adlandırma: açılma
+miktarları EKRANDAKİ yöne göre tutuluyor (`top` / `bottom`), kaynağa göre değil
+("önceki hunk'tan aşağı") — kaynağa göre adlandırma okla ters düşüyordu.
+
+Metin "gizli" DEMİYOR: satırlar saklanmıyor, yalnızca değişmedikleri için
+gösterilmiyorlar — "gizli" bir sır ima edip okuyanı "neden" diye
+düşündürüyordu. Düzen de iki parçalı (Warp'ın açıcısı gibi): solda düğme
+bloğu, sağda okunacak metin. Önce hepsi tek bir sıraydı ve düğmeler şerit
+zemininde yüzüyordu; nereye basılacağı ancak imleç üzerine gelince belli
+oluyordu.
+
+**Kabuk kapanınca otomatik yeniden başlatma.** "Bu sekmedeki kabuk kapandı"
+kutusu kalktı; kabuk düşünce sekme kendiliğinden yeni bir kabuk açıyor. Asıl iş
+iki koruma:
+
+- **Döngü.** Koşulsuz yeniden başlatma, açılamayan bir kabukta saniyede
+  yüzlerce süreç demek. Kural "arka arkaya HEMEN ölme" (`AUTO_RESTART_GAP_MS`):
+  kabuk bu süreden kısa yaşadıysa ikinci kez denenmiyor ve karar kullanıcıya
+  bırakılıyor — kutu yalnızca o durumda çıkıyor, metni de tekrarı anlatıyor.
+- **Ekran.** Yeniden başlatma xterm örneğini yeniden kuruyor ve yeni örnek boş
+  açılıyor; elle basılan bir düğmede göze alınabilir bir bedeldi, kendiliğinden
+  olunca değil. `restartTab` artık ekranı serileştirip kaydırma tamponuna
+  yazıyor — oturum geri yüklemenin zaten kullandığı yol, dolayısıyla ayıraç da
+  kendiliğinden doğru yerde çiziliyor.
+
+Testler: `store/autoRestart.test.ts` (döngü koruması dâhil; sahte saat testler
+arasında bir saat ileri alınıyor, çünkü kayıt modül düzeyinde yaşıyor).
+
+**Satır düzeni.** Sayaç (`+15 -1`) dosya adının yanına alındı; sağ uç eylemlere
+bırakıldı ve eylemler artık HER ZAMAN görünür (soluk, satır üstündeyken tam).
+Eylemler mutlak konumdan AKIŞA geçti: mutlak konum sayaçla çakışmayı garanti
+ediyordu, akışta çakışma diye bir şey kalmıyor ve yola ayrılan yer kendiliğinden
+doğru hesaplanıyor. Yol da artık esnemiyor yalnızca sıkışıyor (`flex: 0 1 auto`),
+yoksa bütün boşluğu yiyip sayacı sağ uca itiyordu.
+
+**İki yarış ve bir gürültü** aynı özellikte peş peşe çıktı, üçü de burada:
+
+1. *"Dosya okunamadı" diyor ama dosya var.* Fark ile dosya tek bir etkide arka
+   arkaya isteniyordu ve `lines` etkinin BAĞIMLILIĞIYDI: `setLines` bir yeniden
+   çizim tetikliyor → React etkiyi yeniden koşmadan önce eskisinin temizliğini
+   çağırıyor → temizlik `cancelled = true` diyor → yoldaki dosya okuması
+   atılıyordu. Belirti yalnızca GERÇEK IPC gecikmesinde görünüyordu; sahte IPC
+   anında çözüldüğü için testler yakalamıyordu. Bugün "bunu zaten getirdim mi"
+   sorusunu bir ref anahtarı yanıtlıyor, durum bağımlılık değil. Test okumayı
+   bilinçli olarak bir sonraki döngüye atıyor — hatayı ancak öyle üretiyor.
+2. *Panel yeniden boyutlandırmada bozuluyordu* — ayrıntısı §1.10'da.
+3. *Künye satırları* (`diff --git`, `index`, `--- a/`, `+++ b/`) artık
+   çizilmiyor: dosya adı satırın başlığında zaten yazıyor ve bu dört satır dar
+   panelde görünen farkın üçte birini yiyordu. Ayrım "meta mı" değil "başka
+   yerde yazıyor mu": `Binary files`, `rename from/to`, `similarity index` ve
+   `old/new mode` KALIYOR — tek kaynakları o satırlar.
+
+Hunk başlığı (`@@ -10,7 +10,8 @@`) artık çizilmiyor: söylediği iki şeyden biri
+şeridin kendisinde (kaç satır), öteki numara sütununda. Başlığın tek özgün
+parçası olan kapsayan işlev adı şeridin sağına taşındı. Dosya okunamıyorsa
+(silinmiş, ikili) şerit yine yazıyor ama düğmesiz — kopukluk gerçek, yalnızca
+açılamıyor. Testler: `lib/diff.test.ts`, `components/GitChanges.test.tsx`.
+
+**Boş satırda yukarı ok: geçmiş paneli.** Warp'ın davranışı istendi — kutunun
+ÜSTÜNDE "GEÇMİŞ" başlıklı panel. Panel zaten vardı (`SuggestionBar`), eksik
+olan onu boş satırda açan yoldu (`recentCommands` + `openHistorySuggestions`).
+Önceki hâli Ctrl+R penceresini açıyordu; doğru işi yapıyordu ama ekranın
+ortasında bir örtü olarak. Panel açıkken Enter seçileni KUTUYA yazıyor,
+çalıştırmıyor: tek Enter'la geçmişten komut koşturmak `rm -rf` sınıfı bir kaza.
+
 ---
 
 ## 2. Açık işler
@@ -191,22 +344,7 @@ mu?
 Not: bu oturumda gözlenen bazı belirtiler (rozetlerin `?` olması, terminalin
 boşalması) SICAK DEĞİŞTİRME yan etkisiydi, gerçek hata değil — bkz. §3.
 
-### 2.2 Diff'te bağlam açıcıları
-
-İstenen: fark bloklarının arasında "**106 unmodified lines**" gibi bir satır ve
-tıklanınca o satırların açılması.
-
-Gerekenler:
-- `git diff -U<n>` ile daha geniş bağlam istemek — `gitDiff` çağrısına bir
-  `context` parametresi eklenmeli
-  ([`lib/ipc.ts`](src/lib/ipc.ts), [`git.rs`](src-tauri/src/git.rs) `diff`).
-- Hunk başlıkları arasındaki boşluğun kaç satır olduğu zaten hesaplanabiliyor:
-  bir hunk'ın bittiği numara ile sonrakinin başladığı numara arasındaki fark
-  (`lib/diff.ts` artık numaraları veriyor).
-- Açma durumu dosya başına tutulmalı; tümünü açmak büyük dosyada bütün dosyayı
-  belleğe almak demek, bir üst sınır gerekiyor.
-
-### 2.3 Üçüncü skill: arayüz metni / i18n
+### 2.2 Üçüncü skill: arayüz metni / i18n
 
 `.claude/skills/` altında iki skill var: `calistir` (uygulamayı çalıştırma ve
 gözle doğrulama) ve `testler` (doğrulama zinciri). Üçüncüsü yazılmadı:
@@ -215,7 +353,7 @@ cümle stili, `data-setting` ile `settingsIndex` eşleşmesi, kullanılmayan ana
 denetimi. Bu oturumda bu testlere en çok takılan yer burasıydı, yani skill'in
 karşılığı var.
 
-### 2.4 Küçük açık uçlar
+### 2.3 Küçük açık uçlar
 
 - Favori grubu **yeniden adlandırma**: bugün her favorinin alanını tek tek
   düzenlemek gerekiyor. Grup adı serbest metin olduğu için toplu yeniden

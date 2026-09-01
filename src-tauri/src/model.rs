@@ -110,6 +110,16 @@ pub struct Appearance {
     pub font_size: u16,
     pub line_height: f32,
     pub letter_spacing: f32,
+    /// Arayuz yazi tipi. Bos dize = sistemin kendi arayuz ailesi.
+    ///
+    /// Terminalinkinden AYRI: terminal es aralikli olmak zorunda (sutun hizasi
+    /// ondan geliyor), arayuz degil.
+    pub ui_font_family: String,
+    /// Arayuz yazi tipi olcusu (px).
+    ///
+    /// Arayuzun butun olculeri buna gore turuyor (`--ui-font-size`). Terminal
+    /// etkilenmiyor - onunki `font_size` ve kac sutun sigdigini o belirliyor.
+    pub ui_font_size: u16,
     /// Arayuzde tanimli palet anahtari.
     pub theme: String,
     pub cursor_style: String,
@@ -164,6 +174,11 @@ impl Default for Appearance {
             font_size: 14,
             line_height: 1.2,
             letter_spacing: 0.0,
+            // Bos: arayuz sistemin kendi ailesini kullaniyor (CSS'teki
+            // `--ui-font`). 13, bugune kadarki sabit deger - varsayilan
+            // gorunum degismiyor.
+            ui_font_family: String::new(),
+            ui_font_size: 13,
             theme: "nterminal-dark".into(),
             cursor_style: "bar".into(),
             cursor_blink: true,
@@ -475,6 +490,14 @@ pub struct Group {
     /// Favori grup. Kenar cubugunda suzgec acikken yalnizca bunlar listelenir.
     #[serde(default)]
     pub favorite: bool,
+    /// GRUPLANMAMIS sekmelerin kovasi.
+    ///
+    /// Sekmeler modelde her zaman bir grubun icinde; degistirmek "sekme
+    /// nerede yasiyor" sorusunu her yerde ikiye bolerdi. Bunun yerine TEK bir
+    /// grup boyle isaretleniyor ve arayuz onu basliksiz, duz bir liste olarak
+    /// ciziyor. Kullanici acisindan sonuc: sekme acmak icin grup gerekmiyor.
+    #[serde(default)]
+    pub ungrouped: bool,
     /// Bu gruptaki yeni sekmeler icin varsayilan profil.
     #[serde(default)]
     pub default_profile_id: Option<String>,

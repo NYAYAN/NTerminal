@@ -138,19 +138,36 @@ export function FilePalette() {
           {files !== null && rows.length === 0 && (
             <div className="pop-empty">{t("files.empty")}</div>
           )}
-          {rows.map((path, i) => (
-            <button
-              key={path}
-              type="button"
-              className={i === index ? "pop-row on" : "pop-row"}
-              onMouseEnter={() => setIndex(i)}
-              onClick={(e) => sec(path, e.shiftKey)}
-            >
-              {/* Yol BAŞTAN kırpılıyor: uzun yollarda ayırt edici olan dosya
-                  adı, klasör zinciri değil. */}
-              <span className="git-path">{path}</span>
-            </button>
-          ))}
+          {rows.map((path, i) => {
+            const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+            const name = cut === -1 ? path : path.slice(cut + 1);
+            const dir = cut === -1 ? "" : path.slice(0, cut);
+            return (
+              <button
+                key={path}
+                type="button"
+                className={i === index ? "pop-row file-row on" : "pop-row file-row"}
+                onMouseEnter={() => setIndex(i)}
+                onClick={(e) => sec(path, e.shiftKey)}
+              >
+                {/*
+                  Ad SOLDA, klasör SAĞDA.
+
+                  Önceki hâli tek bir yol dizesiydi ve göz her satırda aranan
+                  şeyi bulmak için klasör zincirini geçmek zorundaydı — üstelik
+                  o zincir çoğu satırda AYNI (`src/components/…`), yani ayırt
+                  edici olmayan kısmı önce okunuyordu. Ad öne alınınca satırlar
+                  ilk harften ayrışıyor; klasör kaybolmuyor, ikinci sıraya
+                  geçiyor.
+
+                  Klasör BAŞTAN kırpılıyor: uzun bir zincirde dosyaya en yakın
+                  olan son parça.
+                */}
+                <span className="file-name">{name}</span>
+                {dir && <span className="file-dir">{dir}</span>}
+              </button>
+            );
+          })}
         </div>
 
         <div className="palette-foot">

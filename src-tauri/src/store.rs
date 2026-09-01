@@ -309,6 +309,10 @@ fn default_group(settings: &Settings) -> Group {
         icon: Some("terminal".into()),
         collapsed: false,
         favorite: false,
+        // Ilk grup gercek bir grup: adi ve rengi var. Gruplanmamis kova
+        // yalnizca kullanici isteyince kuruluyor (bkz. arayuzdeki
+        // `addLooseTab`).
+        ungrouped: false,
         default_profile_id: if profile_id.is_empty() { None } else { Some(profile_id) },
         default_cwd: None,
         env: Default::default(),

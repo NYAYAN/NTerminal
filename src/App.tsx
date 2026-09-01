@@ -263,6 +263,54 @@ export function App() {
         });
       }
 
+      /*
+       * Ctrl+C ile ÇALIŞAN KOMUTU DURDURMA — İKİ BASIŞ.
+       *
+       * BİLDİRİLEN HATA: "Komut çalışıyor kısmındayken Ctrl+C ile
+       * durduramıyorum." Doğruydu: komut başlayınca komut kutusu kapanıp
+       * yerine bir şerit geliyor, odak terminalin DIŞINDA kalıyor ve
+       * aşağıdaki `keys.copy` dalı tuşu yutuyordu (mac'te Cmd+C boş bir
+       * kopyalama, Windows'ta hiçbir şey). Kabuğa SIGINT gitmiyordu.
+       *
+       * NEDEN İKİ BASIŞ: aynı tuş kopyalama da demek — Windows'ta her yerde,
+       * mac'te Cmd+C olarak. Tek basışta durdurmak, kopyalamak isteyen
+       * kullanıcının komutunu keserdi. İlk basış silahlıyor ve şerit
+       * "tekrar basın" yazıyor; ikincisi durduruyor.
+       *
+       * TERMİNALİN İÇİ HARİÇ: orada düz Ctrl+C kabuğun kendi tuşu ve tek
+       * basışta gitmeli. Bir terminalde `ng serve`i durdurmak için iki kez
+       * basmak, otuz yıllık bir alışkanlığı bozmak olurdu. Burada dışarıda
+       * bırakılıyor, aşağıya dokunulmadan geçiyor ve xterm'e ulaşıyor.
+       *
+       * mac'te Cmd+C de kabul ediliyor: kopyalanacak bir seçim yokken zaten
+       * hiçbir şey yapmıyordu, dolayısıyla kaybedilen bir davranış yok.
+       */
+      const stopKey =
+        event.key.toLowerCase() === "c" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.ctrlKey || (isMac() && event.metaKey));
+      // Kabuğun kendi tuşu: terminalde, düz Ctrl+C.
+      const shellCtrlC = inTerminal && event.ctrlKey && !event.metaKey;
+      // Kopyalama yalnızca GERÇEKTEN kopyalama kısayolu basıldığında ve
+      // kopyalanacak bir şey varken kazanıyor. Windows'ta Ctrl+C kopyalama
+      // kısayolu DEĞİL (o Ctrl+Shift+C), yani orada bu dal hep durdurmaya
+      // gidiyor.
+      const copyWins = matchCombo(event, keys.copy) && !!session?.hasSelection();
+      const runningTab = store.activeTab();
+      if (
+        stopKey &&
+        !shellCtrlC &&
+        !copyWins &&
+        runningTab &&
+        store.running[runningTab.tab.id]
+      ) {
+        return run(() => {
+          if (store.stopArmed === runningTab.tab.id) store.stopRunning(runningTab.tab.id);
+          else store.armStop(runningTab.tab.id);
+        });
+      }
+
       // Komut önerisi listesi açıkken ok tuşları LISTEDE geziniyor.
       //
       // Bunu yapmak güvenli çünkü liste yalnızca kullanıcı bir şey yazmışken
@@ -322,10 +370,29 @@ export function App() {
       }
       if (matchCombo(event, keys.clearTerminal)) return run(() => session?.clear());
       if (matchCombo(event, keys.findInTerminal)) return run(() => store.setUi({ findOpen: true }));
-      if (matchCombo(event, keys.copy)) {
+      /*
+       * Kopyala / yapıştır KOMUT KUTUSUNDA yakalanmıyor.
+       *
+       * BİLDİRİLEN HATA: "Bir yazıyı kopyalayıp komut yazın kısmına
+       * yapıştırmak istediğimde 'paste' diye bir şey çıkıyor, tıklıyorum bir
+       * şey yapmıyor."
+       *
+       * İki ayrı kusur aynı satırdan geliyordu. Birincisi o düğme: mac'te
+       * Cmd+V burada yakalanıp `session.paste()`e gidiyor, o da
+       * `navigator.clipboard.readText()` çağırıyor ve WebKit panoyu okumak
+       * için kullanıcıdan izin isteyen kendi "Paste" düğmesini çiziyor.
+       * İkincisi daha derin: izin verilse bile metin KUTUYA değil kabuğa
+       * gidiyordu, çünkü `session.paste()` PTY'ye yazıyor.
+       *
+       * Kutu zaten bir `textarea`: tarayıcının kendi yapıştırması tam olarak
+       * doğru şeyi yapıyor — izin sormuyor (kullanıcı jesti panoyu doğrudan
+       * getiriyor), metni imlecin olduğu yere koyuyor. Yapılacak tek şey
+       * yoldan çekilmek.
+       */
+      if (!inCommandInput && matchCombo(event, keys.copy)) {
         if (session) return run(() => void session.copySelection());
       }
-      if (matchCombo(event, keys.paste)) {
+      if (!inCommandInput && matchCombo(event, keys.paste)) {
         if (session) return run(() => void session.paste());
       }
       if (matchCombo(event, keys.zoomIn))

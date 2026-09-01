@@ -41,6 +41,19 @@ kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz. Başlık
 sol köşesindeki panel düğmesi kenar çubuğunu tümden daraltır — terminale bütün
 genişliği bırakmak için. Durum ayarda tutuluyor, yani uygulama onu hatırlıyor.
 
+**Gruplanmamış sekmeler.** Bir sekmenin gruba ait olması zorunlu değil. Kenar
+çubuğunun **boş yerine sağ tık** → *Yeni sekme*; sekme
+listenin en üstünde, başlıksız düz bir bölümde açılıyor — tıpkı bir dosya
+yöneticisinde köke bırakılmış dosyalar gibi. Aynı menüde yeni grup, tümünü
+daraltma ve favori süzgeci de var.
+
+Bölümün başlığı YOK ve bu bilinçli: başlık bir grubun kimliği (ad, renk,
+yıldız, katlama oku, sayı) ve "gruplanmamış" yazan bir başlık koymak onu yine
+bir gruba çevirirdi. Süzgeç açıkken de kayboluyor değil — kova favori
+işaretlenemediği için süzgeç onu elese sekmeler bir daha bulunamazdı. Son
+sekmesi kapanınca bölüm kendiliğinden gidiyor. Bir sekmeyi gruba almak ya da
+gruptan çıkarmak: sürükle-bırak, ya da sağ tık → *Gruba taşı*.
+
 **Kabuk rozeti.** Sekme adının solunda hangi kabuğun çalıştığını söyleyen kısa
 kod duruyor: `PS7`, `PS`, `CMD`, `SH`, `WSL`, `ZSH`. *Ayarlar › Görünüm ›
 Sekmeler* altından kapatılabilir — tek profille çalışırken her satırda aynı şeyi
@@ -125,9 +138,39 @@ seçilip istem satırına yazılabilir, çalıştırılabilir, kopyalanabilir ve
 silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a bas.
 
 **Değişiklikler.** Sağ panelin *Değişiklikler* sekmesi bulunulan dizin bir git
-deposuysa değişen dosyaları listeliyor; satıra tıklamak farkı **yerinde** açıyor,
-listeyi kaybetmeden. Fark yalnızca açılan dosya için isteniyor — yüz dosyalık bir
-değişiklikte önden `git diff` çalıştırmak yüz süreç demekti.
+deposuysa değişen dosyaları listeliyor; farklar **yerinde**, listeyi
+kaybetmeden açılıyor. Satırlar açık geliyor: "neler değişmiş" sorusunun yanıtı
+listenin tamamı, her dosyayı tek tek açmak aynı soruyu dosya sayısı kadar
+sormak demekti. Tıklamak satırı katlıyor. Fark istekleri dörtlü bir kuyruktan
+geçiyor — yüz dosyalık bir değişiklikte yüz `git` sürecini aynı anda doğurmak
+makineyi ölçülebilir biçimde takıyor.
+
+**Değişmemiş satırları açma.** `git diff` yalnızca değişenlerin çevresinde üç
+satır bağlam veriyor; gerisi çizilmiyor. Blokların arasında "**59 değişmemiş
+satır**" yazan bir şerit duruyor ve solunda, satır numarası sütunuyla aynı
+genişlikte bir düğme bloğu: yukarı ok satırları şeridin üstünde, aşağı ok
+altında açıyor, her basış elli satır. Kalan bundan azsa iki yana açılan tek bir
+ok kalıyor, boşluk tükenince şerit kayboluyor.
+
+Satırlar dosyanın kendisinden geliyor — `git diff -U<n>` ile daha geniş bağlam
+istemek her bloğun **iki** yanını birden açardı, oysa istenen yönlü açma.
+Şeridin sağında hunk başlığının tek özgün parçası duruyor: kapsayan işlevin
+adı. ("Gizli" değil "değişmemiş": satırlar saklanmıyor, yalnızca değişmedikleri
+için gösterilmiyorlar.)
+
+Farkın başındaki künye (`diff --git a/… b/…`, `index …`, `--- a/…`, `+++ b/…`)
+çizilmiyor: dosya adı satırın başlığında zaten yazıyor ve o dört satır dar bir
+panelde görünenin üçte birini yiyordu. Ayrım "meta mı" değil **"başka yerde
+yazıyor mu"** — `Binary files … differ`, `rename from/to`, `similarity index`
+ve `old/new mode` duruyor, çünkü tek kaynakları o satırlar (ikili dosyada farkın
+tamamı o bildirim; yeniden adlandırmada eski ad başka hiçbir yerde yok).
+
+**Satırın düzeni.** Değişiklik sayacı (`+15 -1`) dosya adının hemen yanında —
+bir sıfat gibi okunuyor. Önceki hâlinde satırın sağ ucundaydı ve hangi dosyaya
+ait olduğunu bulmak için göz yatay kaymak zorundaydı. Sağ uç eylemlerin: yolu
+kopyala, değişiklikleri geri al, dosyayı aç. Üçü de **her zaman görünür** —
+gizli bir eylem, bir kez keşfedilene kadar yok demek; ağırlıkları düşük
+tutuluyor ve satırın üzerine gelince öne çıkıyorlar.
 
 Durum, satırın başındaki renkli bir **simge**: kalem değişti, artı eklendi, eksi
 silindi, ok yeniden adlandırıldı, kesik çizgili artı takipsiz. Metin ipucunda ve
@@ -135,6 +178,21 @@ ekran okuyucuda duruyor. Önceki hâli yazıydı ("DEĞİŞTİ", "YENİDEN
 ADLANDIRILDI") ve 88px'lik sabit bir sütun tutuyordu; o sütun dosya **yolundan**
 çıkıyordu, yani dar panelde asıl aranan bilgi kırpılırken yerinde her satırda
 tekrarlanan aynı kelime duruyordu.
+
+**Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
+bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı sağ
+paneldeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler
+(`code ` yazıp `Ctrl+P`). Satırda dosya **adı solda**, klasörü sağda ve soluk:
+klasör zinciri çoğu satırda aynı, yani ayırt etmeyen kısmı önce okutmak gözü
+boşuna yoruyordu. Ad öne alınınca satırlar ilk harften ayrışıyor. Liste açılışta
+bir kez okunuyor, süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten
+geçirmemek için.
+
+**Arayüz yazı tipi.** *Ayarlar › Görünüm* altında terminalin yazı tipinden
+**ayrı** bir aile ve boyut var: menüler, paneller, sekme adları ve ayarlar
+pencerelerinin tamamı onunla ölçekleniyor. İkisini tek ayara bağlamak, yazıyı
+büyütmek isteyen kişiyi terminalini daraltmaya zorlardı — terminalin boyutu
+satıra kaç sütun sığdığını da belirliyor.
 
 **Görünüm: sekme ya da bölme.** Sekme çubuğundaki iki düğme (ya da
 `Ctrl+Shift+E`) terminal alanını iki kip arasında değiştirir. **Sekmeler** kipinde
@@ -196,13 +254,46 @@ kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıy
 silinmiyor). Kaynak uygulamanın geçmişi olduğu için sekmeler ve kabuklar arası
 çalışıyor.
 
-*Kabuğun kendi tahmini (PSReadLine).* Satır içi soluk "hayalet metin" ya da
-istemin altında liste. Bunu kabuğa bırakmak bilinçli: öneriyi ekran tamponuna
-yazmak kabuğun satır düzenleyicisiyle (imleç, yeniden çizim, sekme tamamlama)
-yarışmak demek. PSReadLine 2.2+ gerekiyor; sürüm yetmiyorsa durum çubuğunda
-**öneri yok** rozeti çıkar ve üzerine gelindiğinde ne yapılacağını söyler.
+*Kabuğun geçmişten tamamlaması (PSReadLine, zsh-autosuggestions).* Satır içi
+soluk "hayalet metin" ya da istemin altında liste. Bunu kabuğa bırakmak
+bilinçli: tamamlamayı ekran tamponuna yazmak kabuğun satır düzenleyicisiyle
+(imleç, yeniden çizim, sekme tamamlama) yarışmak demek. PSReadLine 2.2+
+gerekiyor; sürüm yetmiyorsa durum çubuğunun **⋯** menüsünde *Geçmişten
+tamamlama · Desteklenmiyor* yazıyor ve satırın üzerine gelmek ne yapılacağını
+söylüyor.
+
+Adı bir kez değişti. Önceki hâli "kabuk önerisi"ydi ve ne dediği
+anlaşılmıyordu: neyin önerildiği de, kimin önerdiği de belirsizdi. Yapılan iş
+tam olarak şu — kabuk, geçmişte çalıştırdığınız komutlardan satırın kalanını
+tamamlıyor.
 
 İkisi birlikte de kullanılabilir; ayrı ayrı kapatılabilir.
+
+**Kabuk kapanınca sekme kendiliğinden yeniden başlar.** `exit` yazdığınızda ya
+da kabuk düştüğünde sekme boş bir kutuya dönüşmüyor: yeni bir kabuk açılıyor ve
+önceki ekran, altında "önceki oturum burada bitti" ayıracıyla yerinde kalıyor.
+Sekmeyi gerçekten kapatmak isterseniz kenar çubuğundan ya da sekme çubuğundan
+kapatırsınız.
+
+Koşulsuz değil: **arka arkaya hemen ölen** bir kabuk yeniden denenmiyor. Profilde
+olmayan bir yürütülebilir ya da silinmiş bir çalışma dizini, koşulsuz bir
+yeniden başlatmada saniyede yüzlerce süreç demek olurdu. O durumda eski kutu
+geri geliyor ve nereye bakılacağını söylüyor.
+
+**Çalışan komutu durdurma.** Komut çalışırken komut satırı kapanıp yerine
+"Komut çalışıyor…" şeridi geliyor; düğmesi tek tıkla durduruyor. Klavyeden
+**Ctrl+C iki kez arka arkaya**: ilk basış şeridi kırmızıya çevirip "tekrar
+basın" diyor, ikincisi kabuğa SIGINT gönderiyor. İki basış, tuşun ikinci
+anlamı yüzünden — Ctrl+C aynı zamanda kopyalama, ve tek basışta durdurmak
+kopyalamak isteyenin işini keserdi. Silah 1,5 saniye sonra kendiliğinden
+düşüyor. Terminalin İÇİNDE kural yok: orada düz Ctrl+C kabuğun kendi tuşu ve
+tek basışta gidiyor.
+
+**Boş satırda ↑: geçmiş paneli.** Komut satırı boşken yukarı ok, kutunun
+hemen üstünde **GEÇMİŞ** panelini açıyor: son komutlar, ne zaman
+çalıştırıldıklarıyla. **↑↓** gezer, **→** kabul eder, **Esc** kapatır. Enter
+seçileni kutuya yazar — çalıştırmaz; tek bir Enter'la geçmişten komut
+koşturmak geri dönüşü olmayan bir kaza demek.
 
 **Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
 Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
@@ -484,7 +575,8 @@ Gruplarda *birleştir*, gelen grupları mevcutların yanına ekler; ad çakış�
 ## Ayarlar penceresi
 
 Dokuz bölüm, dikey gezinme: **Genel** (dil, görünüm kipi), **Görünüm** (tema,
-yazı tipi, imleç), **Terminal** (kopyala/yapıştır, bağlantılar, komut önerisi),
+terminal yazı tipi, **arayüz yazı tipi**, imleç), **Terminal** (kopyala/yapıştır,
+bağlantılar, komut önerisi),
 **Oturum** (devamlılık, sekme kapatma onayı), **Geçmiş**, **Profiller**,
 **Gruplar**, **Kısayollar**, **Hakkında**.
 
@@ -567,6 +659,7 @@ dışa aktarılır.
 | `Ctrl+R` | Geçmişte hızlı arama (favoriler önce) |
 | `Ctrl+Shift+B` | Favori komutlar |
 | `Ctrl+Shift+P` | Komut paleti |
+| `Ctrl+P` | Bu dizinde dosya ara |
 | `Ctrl+Shift+R` | Sekmeyi yeniden adlandır |
 | `Ctrl+Shift+L` | Sekmeyi kilitle / kilidi aç |
 | `Ctrl+Shift+E` | Sekme / bölme görünümü |
@@ -587,6 +680,17 @@ açar ve ikinci tıkta kapatır. Sıraları düzenin sırasını izliyor — en 
 düğme en soldaki paneli açıyor. Tek yönlü hâllerinde ikinci tıklama hiçbir şey
 yapmıyormuş gibi görünüyordu: ağacı kapatmak için panelin kendi `×` düğmesini
 bulmak gerekiyordu, kenar çubuğunu kapatmanın ise hiçbir yolu yoktu.
+
+**Durum çubuğu** yalnızca kimlik taşıyor: hangi grup, hangi profil, hangi
+klasör. Okumalar — komut çalışıyor mu, komut takibi tam mı, geçmişten tamamlama
+açık mı, kabuk pid'i, kayıtlı komut ve sekme sayısı — sağdaki **⋯** düğmesinde.
+Ayrım önceden yer darlığına göreydi: hepsi çubuktaydı, sığmayan menüye
+düşüyordu. Sonuç pencerenin genişliğine göre değişen bir şeritti; her açılışta
+aynı şeyi aynı yerde bulmak mümkün değildi ve çubuğun yarısı hiç değişmeyen üç
+rozetle doluydu ("komut takibi tam" bir kez okunacak bir şey, sürekli değil).
+Bugün ayrım işleve göre: kimlik görünür, okuma bir tık uzakta — ipuçlarıyla
+birlikte, çünkü "sınırlı" tek başına ne yapılacağını söylemiyor. Kimlik alanı
+da sığmazsa aynı menünün altına, ayrı bir bölüme düşüyor.
 
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
 gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan

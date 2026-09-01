@@ -45,6 +45,8 @@ export function CommandInput() {
   // ekranda göreceğiniz komutla aynı görünmeli.
   const appearance = useStore((s) => s.settings.appearance);
   const allRunning = useStore((s) => s.running);
+  const allExited = useStore((s) => s.exited);
+  const stopArmed = useStore((s) => s.stopArmed);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
@@ -74,11 +76,22 @@ export function CommandInput() {
   const stored = tabId ? allSignals[tabId] : undefined;
   const signals = (tabId ? sessions.get(tabId)?.inputSignals() : undefined) ?? stored;
   const running = tabId ? !!allRunning[tabId] : false;
+  /*
+   * Kabuk öldü mü — DEPODAN, oturumun bildirdiği sinyallerden değil.
+   *
+   * Sinyaller kabuğun anlattığı şey; ölü kabuk bir şey anlatmıyor ve son
+   * söylediği ("istemde bekliyorum") olduğu yerde kalıyor. Süreç bittiğinde
+   * uygulama bunu PTY olayından doğrudan biliyor, kaynağı o.
+   */
+  const exited = tabId ? !!allExited[tabId] : false;
+  // Klavyeden gelen ilk Ctrl+C burayı "tekrar basın" hâline geçiriyor.
+  const armed = !!tabId && stopArmed === tabId;
   const mode = resolveInputMode({
     enabled: appInput && !handedOff,
     integration: signals?.integration ?? false,
     atPrompt: signals?.atPrompt ?? false,
     altScreen: signals?.altScreen ?? false,
+    exited,
   });
   const active = mode === "app";
 
@@ -198,23 +211,43 @@ export function CommandInput() {
    * Tam ekran programlarda (vim, less) çizilmiyor: orada ekranı program
    * yönetiyor ve Ctrl+C'nin anlamı programın kendisine ait.
    */
+  /*
+   * Kabuk kapandıysa burada hiçbir şey çizilmiyor.
+   *
+   * "Durdur" şeridi de yok: durdurulacak bir şey kalmadı. Ne yapılacağını
+   * terminalin üstündeki kutu söylüyor (Yeniden başlat / Sekmeyi kapat).
+   */
+  if (exited) return null;
+
   if (!active && running && signals?.integration && !signals.altScreen) {
+    /*
+     * Şerit iki hâlli: sıradan ve SİLAHLI.
+     *
+     * Silahlı hâl klavyeden gelen ilk Ctrl+C'nin karşılığı. Bir basışın
+     * hiçbir şey yapmıyormuş gibi görünmesi, iki basış kuralını kullanıcı
+     * gözünde bir arızaya çeviriyordu; şerit tam da bakılan yer olduğu için
+     * yanıt burada veriliyor.
+     *
+     * Düğme TIKLAMAYLA tek seferde durduruyor. İki basış kuralının sebebi
+     * tuşun ikinci anlamı (kopyalama); düğmenin ikinci bir anlamı yok.
+     */
     return (
-      <div className="command-running">
+      <div className={armed ? "command-running armed" : "command-running"}>
         <span className="running-dot" aria-hidden="true" />
-        <span className="running-text">{t("input.running")}</span>
+        <span className="running-text">
+          {armed ? t("input.stopAgain") : t("input.running")}
+        </span>
         <span className="spacer" />
         <button
           type="button"
           className="running-stop"
-          // Ctrl+C'nin baytı TEK YERDEN geliyor (`passThroughSequence`):
-          // burada elle yazmak, iki tarafın ayrışması hâlinde düğmenin
-          // çalışmayan bir bayt göndermesine yol açardı.
-          onClick={() =>
-            sessions.get(tabId!)?.sendKeys(passThroughSequence({ key: "c", ctrl: true }) ?? "")
-          }
+          title={t("input.stopTitle")}
+          // Durdurma TEK YERDEN geçiyor (`stopRunning`): Ctrl+C'nin baytı
+          // burada elle yazılsaydı, iki tarafın ayrışması hâlinde düğme
+          // çalışmayan bir bayt göndermeye başlardı.
+          onClick={() => useStore.getState().stopRunning(tabId!)}
         >
-          {t("input.stop")}
+          {armed ? t("input.stopAgainShort") : t("input.stop")}
         </button>
       </div>
     );
@@ -257,8 +290,17 @@ export function CommandInput() {
       return;
     }
 
-    // Ctrl+C / Ctrl+D / Ctrl+L kabuğun işi; kutu boşken bile geçmeli.
-    const pass = passThroughSequence({ key: e.key, ctrl: e.ctrlKey || e.metaKey });
+    /*
+     * Ctrl+C / Ctrl+D / Ctrl+L kabuğun işi; kutu boşken bile geçmeli.
+     *
+     * YALNIZCA GERÇEK Ctrl. Önceki hâli `e.ctrlKey || e.metaKey` idi ve
+     * mac'te Cmd+C'yi SIGINT'e çeviriyordu — kutudaki metni seçip kopyalamak
+     * imkânsızdı, üstelik yazılan satır da siliniyordu. mac'te de kesme
+     * (Ctrl+C), dosya sonu (Ctrl+D) ve temizleme (Ctrl+L) Ctrl tuşuyla;
+     * Cmd o platformda kopyala/yapıştır/kes demek ve kutu bir `textarea`
+     * olduğu için tarayıcının kendi davranışı zaten doğru.
+     */
+    const pass = passThroughSequence({ key: e.key, ctrl: e.ctrlKey });
     if (pass) {
       e.preventDefault();
       send(pass);
@@ -291,19 +333,24 @@ export function CommandInput() {
 
     if (e.key === "ArrowUp" && !value) {
       /*
-       * Boş kutuda yukarı ok: geçmiş.
+       * Boş kutuda yukarı ok: GEÇMİŞ PANELİ.
        *
        * Bu kipte kabuğun kendi geçmiş gezinmesi ERİŞİLEMEZ — kabuğun satırı
        * boş, yukarı ok ona gitse geçmişi ızgarada gezdirirdi, kutuda değil.
        * Terminalde en köklü alışkanlıklardan biri bu; karşılığını vermeden
        * bırakmak "geçmişim gitti" demek olurdu.
        *
-       * Öneri listesi bu boşluğu dolduramıyor: en az iki harf istiyor, boş
-       * kutuda hiç açılmıyor. Uygulamanın geçmiş arama penceresi (Ctrl+R ile
-       * açılan) tam olarak bu işi yapıyor ve seçileni kutuya yazıyor.
+       * Önceki hâli Ctrl+R penceresini açıyordu; doğru işi yapıyordu ama
+       * ekranın ortasında bir ÖRTÜ olarak. İstenen Warp'taki gibi: panel
+       * kutunun hemen ÜSTÜNDE açılıyor, ok tuşlarıyla geziliyor, Esc
+       * kapatıyor. Panelin kendisi zaten var (`SuggestionBar`, başlığı
+       * "GEÇMİŞ"); eksik olan onu boş satırda açan yoldu.
+       *
+       * Geçmiş boşsa hiçbir şey açılmıyor — boş bir panel tuşu bozuk
+       * gösterirdi.
        */
       e.preventDefault();
-      store.setUi({ searchOpen: true });
+      store.openHistorySuggestions();
       return;
     }
 
@@ -320,6 +367,19 @@ export function CommandInput() {
 
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      /*
+       * Liste açık ve kutu BOŞSA Enter seçili komutu kutuya yazıyor.
+       *
+       * Boş satırı kabuğa göndermek burada hiçbir işe yaramıyor (yalnızca yeni
+       * bir istem çizdiriyor) ve kullanıcı listede bir şey seçmişken tam
+       * olarak onu bekliyor. ÇALIŞTIRMIYOR: tek bir Enter'la geçmişten bir
+       * komut koşturmak `rm -rf` sınıfı bir kaza demek; komut kutuya geliyor,
+       * ikinci Enter çalıştırıyor.
+       */
+      if (suggest && !value) {
+        store.acceptSuggestion();
+        return;
+      }
       const text = value;
       // Boş satırda Enter da kabuğa gitmeli: kullanıcı istemi tazelemek
       // isteyebilir, kabuk da yeni bir istem çiziyor.

@@ -44,6 +44,7 @@ function group(tabs: TabState[]): Group {
     icon: null,
     collapsed: false,
     favorite: false,
+    ungrouped: false,
     defaultProfileId: null,
     defaultCwd: null,
     env: {},
@@ -276,5 +277,105 @@ describe("komut satırı kutusu", () => {
     act(() => useStore.getState().acceptSuggestion());
     expect(field(container)!.value).toBe("npm run build");
     expect(sendKeys, "öneri kabuğa gitmemeli").not.toHaveBeenCalled();
+  });
+
+  /*
+   * Boş satırda yukarı ok: GEÇMİŞ PANELİ.
+   *
+   * İstenen Warp'ın davranışı: kutuya odaklanıp yukarı oka basınca üstünde
+   * "HISTORY" başlıklı bir panel açılıyor. Önceki hâli Ctrl+R penceresini
+   * açıyordu — doğru işi yapıyordu ama ekranın ortasında bir ÖRTÜ olarak, göz
+   * yazdığı yerden kopuyordu.
+   */
+  it("boş kutuda yukarı ok geçmiş panelini açıyor", () => {
+    useStore.setState({
+      suggestHistory: [
+        { command: "npm test", cwd: null },
+        { command: "git status", cwd: null },
+      ],
+    });
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "ArrowUp" });
+
+    const suggest = useStore.getState().ui.suggest;
+    expect(suggest, "panel açılmadı").not.toBe(null);
+    expect(suggest!.items).toEqual(["npm test", "git status"]);
+    expect(useStore.getState().ui.searchOpen, "örtü açılmış").toBe(false);
+  });
+
+  it("geçmiş boşsa hiçbir şey açılmıyor", () => {
+    // Boş bir panel tuşu bozuk gösterirdi.
+    useStore.setState({ suggestHistory: [] });
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "ArrowUp" });
+    expect(useStore.getState().ui.suggest).toBe(null);
+  });
+
+  it("panel açıkken Enter seçileni KUTUYA yazıyor, çalıştırmıyor", () => {
+    // Tek Enter'la geçmişten komut koşturmak `rm -rf` sınıfı bir kaza demek.
+    useStore.setState({ suggestHistory: [{ command: "git push --force", cwd: null }] });
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.keyDown(el, { key: "ArrowUp" });
+    act(() => {
+      fireEvent.keyDown(el, { key: "Enter" });
+    });
+
+    expect(field(container)!.value).toBe("git push --force");
+    expect(sendKeys, "komut kabuğa gitmiş").not.toHaveBeenCalled();
+  });
+
+  /*
+   * mac'te Cmd tuşu Ctrl DEĞİL.
+   *
+   * ÖLÇÜLEN HATA: kutuya yapıştırmak isteyen kullanıcıya WebKit'in pano izni
+   * düğmesi ("Paste") çıkıyor, tıklayınca hiçbir şey olmuyordu. Aynı satırın
+   * ikizi burada: kaçış kapısı `e.ctrlKey || e.metaKey` diyordu ve mac'te
+   * Cmd+C SIGINT'e dönüşüyordu — kutudaki metni kopyalamak imkânsız,
+   * üstelik yazılan satır da siliniyordu.
+   */
+  it("Cmd+C kabuğa SIGINT göndermiyor", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "echo selam" } });
+    fireEvent.keyDown(el, { key: "c", metaKey: true });
+
+    expect(sendKeys, "Cmd+C kabuğa gitmiş").not.toHaveBeenCalled();
+    expect(el.value, "yazılan satır silinmiş").toBe("echo selam");
+  });
+
+  it("Ctrl+C hâlâ kabuğa gidiyor", () => {
+    // Kontrol grubu: kaçış kapısı kapanmadı, yalnızca doğru tuşa bağlandı.
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "c", ctrlKey: true });
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+  });
+
+  it("silahlı durumda şerit tekrar basmayı söylüyor", () => {
+    // Bir basışın hiçbir şey yapmıyormuş gibi görünmesi, iki basış kuralını
+    // kullanıcı gözünde arızaya çevirirdi.
+    seed({ atPrompt: false });
+    useStore.setState({ running: { [TAB]: true }, stopArmed: TAB });
+
+    const { container } = render(<CommandInput />);
+    expect(container.querySelector(".command-running.armed"), "silahlı hâl çizilmedi")
+      .not.toBe(null);
+    expect(container.textContent).toContain("Durdurmak için tekrar basın");
+
+    useStore.setState({ running: {}, stopArmed: null });
+  });
+
+  it("kabuk kapandıysa kutu da şerit de YOK", () => {
+    // BİLDİRİLEN HATA: "'Bu sekmedeki kabuk kapandı' diyor ama altta komut
+    // yazın kısmı aktif." Yazılan her şey olmayan bir sürece gidiyordu.
+    // Ne yapılacağını terminalin üstündeki kutu söylüyor.
+    seed();
+    useStore.setState({ exited: { [TAB]: true } });
+
+    const { container } = render(<CommandInput />);
+    expect(field(container), "ölü kabukta kutu açık").toBe(null);
+    expect(container.querySelector(".command-running"), "durdurulacak bir şey yok").toBe(null);
+
+    useStore.setState({ exited: {} });
   });
 });

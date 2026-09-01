@@ -5,20 +5,20 @@
  *
  * İlk sürüm bunu CSS'e bırakıyordu: `@container` ile ölçülmüş genişlik
  * eşikleri. Ölçüm o eşiklerin çalışamayacağını gösterdi — çubuğun içeriği
- * duruma göre 200px'den fazla değişiyor:
+ * duruma göre 200px'den fazla değişiyordu (o zamanki rozetler: "Command
+ * suggestions unsupported" 206px, Türkçe karşılığı 171px, sağlıklı hâli
+ * 112px). Tek bir eşik iki ucu birden doğru yapamıyor: en kötü hâle göre
+ * kurulursa çubuk sıradan bir pencerede boş yere boşalıyor, ortalamaya göre
+ * kurulursa en kötü hâlde taşıp sağdaki düğmeleri kırpıyor.
  *
- *   tr / sağlıklı, komut çalışmıyor   →  en dar hâl
- *   en / uyarı,    komut çalışıyor    →  +200px (ölçülen: 1084'e karşı ~880)
+ * Rozetler o zamandan beri "⋯" menüsüne taşındı ama gerekçe DURUYOR ve
+ * taşıyanı değişti: çubukta kalan üç öğenin ikisini KULLANICI adlandırıyor
+ * (grup adı, profil adı), üçüncüsü de bulunulan dizin. Ölçülemeyecek kadar
+ * değişken bir üçlü; sabit bir eşik yine iki ucu birden doğru yapamaz.
  *
- * Sebebi metin: "Command suggestions unsupported" 206px, Türkçe karşılığı
- * 171px, sağlıklı hâli ("Komut önerisi açık") 112px. Tek bir eşik ikisini
- * birden doğru yapamıyor — en kötü hâle göre kurulursa çubuk sıradan bir
- * pencerede boş yere boşalıyor, ortalamaya göre kurulursa en kötü hâlde taşıp
- * sağdaki düğmeleri kırpıyor.
- *
- * Bu yüzden karar ölçüme dayanıyor. Buradaki işlev saf: genişlikleri alıyor,
- * hangi önceliğe kadar gizleneceğini söylüyor. DOM'a dokunmadığı için testi de
- * gerçek bir tarayıcı gerektirmiyor.
+ * Buradaki işlev saf: genişlikleri alıyor, hangi önceliğe kadar gizleneceğini
+ * söylüyor. DOM'a dokunmadığı için testi de gerçek bir tarayıcı
+ * gerektirmiyor.
  */
 
 export interface FitPart {
@@ -36,7 +36,15 @@ export interface FitPart {
 
 export interface FitInput {
   parts: FitPart[];
-  /** "⋯" düğmesinin genişliği. Yalnızca bir şey gizlendiğinde yer kaplıyor. */
+  /**
+   * "⋯" düğmesinin genişliği. HER DÜZEYDE hesaba giriyor.
+   *
+   * Bir zamanlar yalnızca bir şey gizlendiğinde yer kaplıyordu: düğme
+   * sığmayanların kapısıydı, sığmayan yoksa çizilmiyordu. Bugün durum
+   * okumalarının TAMAMI menüde (gerekçesi `StatusBar.tsx`), yani düğme
+   * çubuğun kalıcı bir parçası — koşullu saymak çubuğu düğmenin genişliği
+   * kadar geniş sanmak olurdu.
+   */
   moreWidth: number;
   /** Öğeler arası boşluk (`gap`). */
   gap: number;
@@ -56,8 +64,11 @@ export interface FitInput {
 function widthAt(input: FitInput, dropThrough: number): number {
   const visible = input.parts.filter((p) => p.level === 0 || p.level > dropThrough);
   const sum = visible.reduce((total, p) => total + p.width, 0);
-  const count = visible.length + 1 + (dropThrough > 0 ? 1 : 0);
-  return sum + (dropThrough > 0 ? input.moreWidth : 0) + input.gap * Math.max(0, count - 1);
+  // Görünen öğeler + "⋯" düğmesi + esnek boşluk. Boşluğun genişliği sıfır ama
+  // ARADA duruyor, yani bir `gap` üretiyor; unutulduğunda hesap her seferinde
+  // bir boşluk kadar iyimser çıkıyor.
+  const count = visible.length + 2;
+  return sum + input.moreWidth + input.gap * Math.max(0, count - 1);
 }
 
 /**

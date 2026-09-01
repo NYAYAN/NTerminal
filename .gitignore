@@ -10,3 +10,6 @@ src-tauri/gen/schemas/
 *.log
 .env
 .DS_Store
+
+# `terminal/__probe.test.ts` her kosuda uretiyor; depoya girmemeli.
+probe-out.json

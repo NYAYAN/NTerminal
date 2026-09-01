@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { diffStat, parseDiff } from "./diff";
+import {
+  contextLines,
+  diffItems,
+  diffStat,
+  hunkContext,
+  hunkNewStart,
+  isRedundantHeader,
+  parseDiff,
+  splitGap,
+} from "./diff";
 
 const ORNEK = [
   "diff --git a/src/a.ts b/src/a.ts",
@@ -154,5 +163,234 @@ describe("satır numaraları", () => {
     const lines = parseDiff(son);
     expect(lines[3].newLine).toBe(null);
     expect(lines[4].newLine, "not sayaca karışmış").toBe(2);
+  });
+});
+
+/**
+ * Bağlam açıcıları.
+ *
+ * İSTEK: "Değişiklik olmayan satırları göster için yukarıda ve aşağıda 50
+ * satırlık kod açma butonları olsun, bastıkça açılsın."
+ *
+ * `git diff` değişen satırların çevresinde üç satır bağlam veriyor; arası
+ * gizli. Fark metni o satırları TAŞIMIYOR, yani açma işi iki parçadan
+ * oluşuyor: boşluğun NEREDE olduğunu farktan çıkarmak (burası) ve satırları
+ * dosyadan getirmek. İlk parçanın hatası sessiz olurdu — yanlış numaralanmış
+ * bir boşluk, açıldığında ilgisiz kod gösterirdi.
+ */
+const IKI_HUNK = [
+  "diff --git a/src/a.ts b/src/a.ts",
+  "--- a/src/a.ts",
+  "+++ b/src/a.ts",
+  "@@ -10,3 +10,4 @@ export function bir()",
+  " bir",
+  "+iki",
+  " uc",
+  "@@ -120,2 +121,2 @@ export function iki()",
+  "-eski",
+  "+yeni",
+].join("\n");
+
+describe("hunk başlığı", () => {
+  it("yeni taraftaki başlangıç numarası okunuyor", () => {
+    expect(hunkNewStart("@@ -10,3 +21,4 @@")).toBe(21);
+    expect(hunkNewStart("@@ -10 +21 @@")).toBe(21);
+    expect(hunkNewStart(" const x = 1;")).toBe(null);
+  });
+
+  it("başlıktan sonraki bağlam metni ayrılıyor", () => {
+    // Başlığın tek özgün parçası bu: kapsayan işlevin adı. Numaralar zaten
+    // soldaki sütunda yazıyor.
+    expect(hunkContext("@@ -10,3 +10,4 @@ export function bir()")).toBe("export function bir()");
+    expect(hunkContext("@@ -10,3 +10,4 @@")).toBe("");
+  });
+});
+
+describe("boşlukların bulunması", () => {
+  it("hunk başlığının yerine boşluk geçiyor", () => {
+    const items = diffItems(parseDiff(IKI_HUNK));
+    // Ham `@@` satırı artık çizilmiyor: söylediği iki şeyden biri boşluk
+    // satırında, öteki numara sütununda.
+    expect(items.some((i) => i.kind === "line" && i.line.kind === "hunk")).toBe(false);
+  });
+
+  it("dosyanın başındaki gizli satırlar", () => {
+    const items = diffItems(parseDiff(IKI_HUNK));
+    const ilk = items.find((i) => i.kind === "gap");
+    expect(ilk).toEqual({
+      kind: "gap",
+      from: 1,
+      to: 9,
+      context: "export function bir()",
+    });
+  });
+
+  it("iki hunk ARASINDAKİ gizli satırlar", () => {
+    // İlk hunk 10'da başlayıp 13'te bitiyor (bir, iki, uc → 10,11,12);
+    // ikincisi 121'de başlıyor.
+    const items = diffItems(parseDiff(IKI_HUNK));
+    const araliklar = items.filter((i) => i.kind === "gap");
+    expect(araliklar[1]).toEqual({
+      kind: "gap",
+      from: 13,
+      to: 120,
+      context: "export function iki()",
+    });
+  });
+
+  it("dosyanın SONU ancak satır sayısı biliniyorsa boşluk üretiyor", () => {
+    // Fark, dosyanın kaç satır olduğunu söylemiyor. Bilinmiyorken düğme
+    // göstermek, basınca hiçbir şey açmayan bir düğme demek.
+    const yok = diffItems(parseDiff(IKI_HUNK));
+    expect(yok.filter((i) => i.kind === "gap")).toHaveLength(2);
+
+    const var_ = diffItems(parseDiff(IKI_HUNK), 200);
+    const son = var_.filter((i) => i.kind === "gap").at(-1);
+    expect(son).toEqual({ kind: "gap", from: 122, to: 200, context: "" });
+  });
+
+  it("dosya son hunk'ta bitiyorsa sonda boşluk YOK", () => {
+    const items = diffItems(parseDiff(IKI_HUNK), 121);
+    expect(items.filter((i) => i.kind === "gap")).toHaveLength(2);
+  });
+
+  it("ayrıştırılamayan başlık ham satır olarak kalıyor", () => {
+    // Uydurma bir boşluk göstermektense ham satırı göstermek dürüst.
+    const items = diffItems(parseDiff("@@ bozuk @@\n satir"));
+    expect(items[0]).toEqual({ kind: "line", line: expect.objectContaining({ kind: "hunk" }) });
+  });
+});
+
+describe("boşluğun bölünmesi", () => {
+  const bosluk = { from: 10, to: 109 }; // 100 satır
+
+  it("hiç açılmamışken hepsi gizli", () => {
+    expect(splitGap(bosluk, 0, 0)).toEqual({
+      top: null,
+      hidden: { from: 10, to: 109 },
+      bottom: null,
+    });
+  });
+
+  it("üstten açmak satırları açıcının ÜSTÜNE koyuyor", () => {
+    expect(splitGap(bosluk, 50, 0)).toEqual({
+      top: { from: 10, to: 59 },
+      hidden: { from: 60, to: 109 },
+      bottom: null,
+    });
+  });
+
+  it("iki yandan açmak ortadan daraltıyor", () => {
+    expect(splitGap(bosluk, 50, 30)).toEqual({
+      top: { from: 10, to: 59 },
+      hidden: { from: 60, to: 79 },
+      bottom: { from: 80, to: 109 },
+    });
+  });
+
+  it("iki taraf buluşunca gizli parça kalmıyor", () => {
+    // Açacak bir şey kalmadığında açıcı satır da kaybolmalı.
+    expect(splitGap(bosluk, 50, 50).hidden).toBe(null);
+  });
+
+  it("taşan açılma AYNI satırı iki kez göstermiyor", () => {
+    // 80 + 80 > 100. Alttaki açılma kırpılıyor.
+    const s = splitGap(bosluk, 80, 80);
+    expect(s.top).toEqual({ from: 10, to: 89 });
+    expect(s.bottom).toEqual({ from: 90, to: 109 });
+    expect(s.hidden).toBe(null);
+  });
+
+  it("boş boşlukta hiçbir şey yok", () => {
+    expect(splitGap({ from: 5, to: 4 }, 10, 10)).toEqual({
+      top: null,
+      hidden: null,
+      bottom: null,
+    });
+  });
+});
+
+describe("açılan satırların fark satırına çevrilmesi", () => {
+  const dosya = ["bir", "iki", "uc", "dort"];
+
+  it("metin BOŞLUKLA başlıyor", () => {
+    // Birleşik farkta bağlam satırlarının biçimi bu; boşluksuz yazılan satır
+    // değişenlere göre bir karakter sola kayardı.
+    expect(contextLines(dosya, 2, 3).map((l) => l.text)).toEqual([" iki", " uc"]);
+  });
+
+  it("numara yeni tarafa yazılıyor", () => {
+    expect(contextLines(dosya, 2, 3).map((l) => l.newLine)).toEqual([2, 3]);
+    expect(contextLines(dosya, 2, 3).every((l) => l.kind === "same")).toBe(true);
+  });
+
+  it("dosyanın dışına taşan aralık kırpılıyor", () => {
+    // Kırpılmış (512 KB sınırı) bir dosyada boşluk gerçekte olandan uzun
+    // olabiliyor; olmayan satır uydurulmamalı.
+    expect(contextLines(dosya, 3, 99)).toHaveLength(2);
+    expect(contextLines(dosya, 0, 2)).toHaveLength(2);
+  });
+});
+
+/**
+ * Künye satırları.
+ *
+ * İSTEK: farkın başındaki `diff --git a/… b/…`, `index …`, `--- a/…`,
+ * `+++ b/…` bloğunun görünmemesi. Haklı: dosya adı satırın BAŞLIĞINDA zaten
+ * yazıyor ve bu dört satır dar bir panelde görünen farkın üçte birini yiyor.
+ *
+ * Ama "meta olan gitsin" DEĞİL: bazı künye satırları tek bilgi kaynağı.
+ * Testlerin asıl konusu bu ayrım — yanlış tarafa düşen bir satır sessizce
+ * bilgi kaybı demek.
+ */
+describe("künye satırları", () => {
+  it("dosya adını tekrarlayanlar gizleniyor", () => {
+    for (const satir of [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "index 1234567..89abcde 100644",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "--- /dev/null",
+      "new file mode 100644",
+      "deleted file mode 100644",
+    ]) {
+      expect(isRedundantHeader(satir), satir).toBe(true);
+    }
+  });
+
+  it("tek kaynağı künye olanlar KALIYOR", () => {
+    for (const satir of [
+      // İkili dosyada farkın tamamı bu; atılırsa fark bomboş görünür.
+      "Binary files a/logo.png and b/logo.png differ",
+      // Satır başlığı yalnızca YENİ adı gösteriyor.
+      "rename from src/eski.ts",
+      "rename to src/yeni.ts",
+      "similarity index 96%",
+      // chmod +x tek başına bir fark olabiliyor.
+      "old mode 100644",
+      "new mode 100755",
+    ]) {
+      expect(isRedundantHeader(satir), satir).toBe(false);
+    }
+  });
+
+  it("çizim listesinde künye yok, içerik duruyor", () => {
+    const items = diffItems(parseDiff(IKI_HUNK));
+    const metinler = items
+      .filter((i) => i.kind === "line")
+      .map((i) => (i.kind === "line" ? i.line.text : ""));
+    expect(metinler.some((t) => t.startsWith("diff --git"))).toBe(false);
+    expect(metinler.some((t) => t.startsWith("+++"))).toBe(false);
+    expect(metinler).toContain("+iki");
+  });
+
+  it("ikili dosyada bildirim çiziliyor", () => {
+    // Tek satırı o; gizlenseydi panel "fark yok" der gibi görünürdü.
+    const items = diffItems(parseDiff("diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ"));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({
+      kind: "line",
+      line: expect.objectContaining({ text: "Binary files a/x.png and b/x.png differ" }),
+    });
   });
 });

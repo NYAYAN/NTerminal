@@ -4,7 +4,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
 import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
-import { BUNDLED_FONTS, fontStack, installedMonoFonts } from "../lib/fonts";
+import {
+  BUNDLED_FONTS,
+  UI_FONT_CANDIDATES,
+  fontStack,
+  installedMonoFonts,
+  uiFontStack,
+} from "../lib/fonts";
 import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { isMac } from "../lib/platform";
@@ -111,7 +117,15 @@ const REPO_URL = "https://github.com/NYAYAN/NTerminal";
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
-  const groups = useStore((s) => s.groups);
+  /*
+   * GRUPLANMAMIŞ kova bu listede YOK.
+   *
+   * Buradaki her alan bir grubun kimliğini düzenliyor: ad, renk, varsayılan
+   * profil, klasör, ortam değişkenleri. Kova bir grup değil — adı bile
+   * çeviriden geliyor. Listede görünseydi kullanıcı ona ad vermeyi denerdi
+   * ve o ad hiçbir yerde görünmezdi.
+   */
+  const groups = useStore((s) => s.groups).filter((g) => !g.ungrouped);
   const paths = useStore((s) => s.paths);
   const appVersion = useStore((s) => s.appVersion);
   const editingGroupId = useStore((s) => s.ui.editingGroupId);
@@ -527,15 +541,15 @@ export function SettingsDialog() {
                   <label>{t("settings.fontFamily")}</label>
                   {/*
                     Açılır menü, serbest metin DEĞİL.
-                    
+
                     Önceki hâli bir `datalist`ti: kutu boş görünüyor, öneriler
                     ancak yazmaya başlayınca çıkıyordu. Yani seçmek için ne
                     yazacağını bilmen gerekiyordu — seçici olmanın bütün amacını
                     kaçırıyordu.
-                    
+
                     Her seçenek KENDİ yazı tipiyle çiziliyor: adına bakarak bir
                     yazı tipini seçmek zor, görünüşüne bakarak kolay.
-                    
+
                     "Özel" seçeneği duruyor: listede olmayan bir aile ya da
                     elle yazılmış bir yığın kullanmak isteyen kaybolmasın.
                   */}
@@ -629,6 +643,55 @@ export function SettingsDialog() {
                     }
                   />
                   {undoAppearance("letterSpacing")}
+                </div>
+              </div>
+
+              {/*
+                Arayüz yazı tipi TERMİNALİNKİNDEN AYRI bir bölümde.
+
+                Aynı bölüme koymak "boyut" alanının hangisine ait olduğunu
+                belirsiz bırakıyordu; ölçülen soru da tam buydu — Görünüm'den
+                seçilen yazı tipinin yalnızca terminali etkilediği fark
+                edilmiyordu.
+
+                Aile listesi bir SEÇİCİ değil öneri (`datalist`): arayüz yazı
+                tipleri oransal ve sistemde ne olduğunu ölçmek gerekmiyor —
+                kurulu olmayan bir ad yazılırsa yığın sistemin kendi ailesine
+                düşüyor, yani yanlış bir seçim bozuk bir arayüz üretmiyor.
+              */}
+              <div className="section">
+                <h3>{t("settings.uiFont")}</h3>
+                <div className="field" data-setting="settings.uiFontFamily">
+                  <label>{t("settings.uiFontFamily")}</label>
+                  <input
+                    list="ui-font-list"
+                    value={settings.appearance.uiFontFamily}
+                    placeholder={t("settings.uiFontSystem")}
+                    onChange={(e) => void store().patchAppearance({ uiFontFamily: e.target.value })}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                  <datalist id="ui-font-list">
+                    {UI_FONT_CANDIDATES.map((family) => (
+                      <option key={family} value={uiFontStack(family)}>
+                        {family}
+                      </option>
+                    ))}
+                  </datalist>
+                  {undoAppearance("uiFontFamily")}
+                </div>
+                <div className="field" data-setting="settings.uiFontSize">
+                  <label>{t("settings.uiFontSize", { n: settings.appearance.uiFontSize })}</label>
+                  <input
+                    type="range"
+                    min={11}
+                    max={20}
+                    value={settings.appearance.uiFontSize}
+                    onChange={(e) =>
+                      void store().patchAppearance({ uiFontSize: Number(e.target.value) })
+                    }
+                  />
+                  <SettingHint>{t("settings.uiFontHint")}</SettingHint>
+                  {undoAppearance("uiFontSize")}
                 </div>
               </div>
 
@@ -1336,14 +1399,14 @@ export function SettingsDialog() {
 
               {/*
                 Geliştirici bilgileri kendi bölümünde.
-                
+
                 Önceki hâli "Hakkında"nın açıklama metninin altındaki tek bir
                 soluk satırdı ("Geliştirici · Nurullah YAYAN") — sürümün ve
                 teknoloji cümlesinin arasında kaybolan bir dipnot. Uygulamayı
                 kimin yazdığı, kaynağın nerede olduğu ve hangi lisansla
                 dağıtıldığı birbirine bağlı üç bilgi; birlikte ve etiketli
                 duruyorlar.
-                
+
                 Kaynak bağlantısı TIKLANABİLİR değil, yanında bir düğme var:
                 uygulama bir tarayıcı değil ve dış bağlantıyı açmak kullanıcının
                 kararı olmalı — kazara tıklamayla tarayıcı açılmıyor.

@@ -17,6 +17,18 @@
   --radius-lg: 9px;
   --ui-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono-font: "Cascadia Mono", Consolas, "Courier New", monospace;
+  /*
+   * Arayüz yazı tipi ÖLÇÜSÜ.
+   *
+   * Terminalinkinden ayrı ve bu bilinçli: terminalin ölçüsü çıktının kaç sütun
+   * sığdığını belirliyor, arayüzünki yalnızca okunabilirlik. İkisini tek
+   * ayara bağlamak, yazıyı büyütmek isteyen kişiyi terminalini daraltmaya
+   * zorlardı.
+   *
+   * Değeri `document.documentElement` üzerinde satır içi olarak ayardan
+   * yazılıyor; buradaki 13px ilk boyama ve ayarsız (test) ortamlar için.
+   */
+  --ui-font-size: 13px;
 
   /* Yüzey üstü katmanlar: temadan bağımsız çalışsın diye metin renginden
      türetiliyor. Açık temada koyu, koyu temada açık bir örtü veriyor. */
@@ -57,9 +69,23 @@ body,
   overflow: hidden;
 }
 
+/*
+ * Arayüzün TÜM yazı ölçüleri buradan türüyor.
+ *
+ * Kuralların hepsi `rem`; `rem` kökün (yani bu kuralın) ölçüsüne göre ve
+ * KATLANMIYOR — `em` olsaydı iç içe her kural bir öncekiyle çarpılır, tek bir
+ * ayarın etkisi derinliğe göre değişirdi.
+ *
+ * Terminal bundan ETKİLENMİYOR: xterm kendi ölçüsünü JS seçeneğinden alıyor ve
+ * `.xterm` altında px veren tek bir kural yok.
+ */
+html {
+  font-size: var(--ui-font-size);
+}
+
 body {
   font-family: var(--ui-font);
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text);
   background: var(--surface);
   -webkit-font-smoothing: antialiased;
@@ -354,7 +380,7 @@ html[data-platform="macos"] .titlebar {
  * derinlige kadar yapabilir, agacin derinligi ise onceden bilinmiyor. */
 .file-tree {
   padding: 4px 4px 8px;
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 /* Kok satiri: hangi dizinin agaci oldugunu soyluyor. Yapisik durmasi bilincli -
@@ -365,7 +391,7 @@ html[data-platform="macos"] .titlebar {
   gap: 6px;
   padding: 3px 8px 6px;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -387,7 +413,7 @@ html[data-platform="macos"] .titlebar {
   background: transparent;
   color: var(--text);
   font-family: var(--ui-font);
-  font-size: 12px;
+  font-size: 0.9231rem;
   text-align: left;
   cursor: pointer;
   min-width: 0;
@@ -427,7 +453,7 @@ html[data-platform="macos"] .titlebar {
 .tree-info {
   padding: 2px 8px;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
   opacity: 0.7;
 }
 
@@ -482,13 +508,13 @@ html[data-platform="macos"] .titlebar {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono-font);
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 .viewer-size {
   flex: none;
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 0.7692rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -504,7 +530,7 @@ html[data-platform="macos"] .titlebar {
   display: table;
   min-width: 100%;
   font-family: var(--mono-font);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   line-height: 1.55;
 }
 
@@ -540,7 +566,7 @@ html[data-platform="macos"] .titlebar {
   padding: 8px 10px;
   border-top: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 /* Baslik cubugundaki arama alani.
@@ -573,7 +599,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--sunken);
   color: var(--text-dim);
   font-family: var(--ui-font);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   line-height: 22px;
   cursor: pointer;
 }
@@ -619,7 +645,7 @@ html[data-platform="macos"] .titlebar {
 .titlebar .version {
   color: var(--text-dim);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 /* ----------------------------------------------------------- kenar çubuğu */
@@ -644,7 +670,7 @@ html[data-platform="macos"] .titlebar {
   justify-content: space-between;
   padding: 9px 8px 5px 12px;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.7px;
@@ -709,6 +735,29 @@ html[data-platform="macos"] .titlebar {
   color: color-mix(in srgb, var(--text) 45%, var(--text-dim));
 }
 
+/* GRUPLANMAMIS sekmeler: basliksiz duz liste, en ustte.
+ *
+ * Bir grup gibi GORUNMEMELI - kova bir grup degil, grubu olmayan sekmelerin
+ * durdugu yer. Grup kutusunun kimligini tasiyan ne varsa kalkiyor: renk
+ * serit, zemin, kenarlik. Kalan tek sey sekme satirlarinin kendisi.
+ *
+ * Altinda ince bir ayirici: gruplarin baslamasi belli olsun, ama bir baslik
+ * kadar gurultu etmeden. */
+.group.loose {
+  background: none;
+  border: none;
+  box-shadow: none;
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.group.loose .group-tabs {
+  background: none;
+  border-radius: 0;
+}
+
 /* Sekme listesi bir tik daha soluk: baslik satiri one cikmali. */
 .group.active .group-tabs {
   background: color-mix(in srgb, var(--group-color) 4%, transparent);
@@ -720,7 +769,9 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 5px;
-  height: 30px;
+  /* Sabit degil ASGARI: bkz. `.tab` — arayuz yazi olcusu ayardan
+     buyuyebiliyor ve sabit yukseklik grup adini kirpardi. */
+  min-height: 30px;
   padding: 0 5px 0 11px;
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -810,7 +861,7 @@ html[data-platform="macos"] .titlebar {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 0.9615rem;
 }
 
 .group.active .group-name {
@@ -821,7 +872,7 @@ html[data-platform="macos"] .titlebar {
   min-width: 18px;
   text-align: center;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   font-variant-numeric: tabular-nums;
   background: var(--hover-strong);
   border-radius: 999px;
@@ -967,7 +1018,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: 4px;
   background: transparent;
   color: color-mix(in srgb, var(--text-dim) 72%, transparent);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   cursor: pointer;
 }
 
@@ -980,7 +1031,7 @@ html[data-platform="macos"] .titlebar {
   flex: none;
   width: 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: 0.9231rem;
   line-height: 1;
 }
 
@@ -992,7 +1043,7 @@ html[data-platform="macos"] .titlebar {
   width: 100%;
   margin-left: 0;
   min-height: 26px;
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   color: var(--text-dim);
   border: 1px dashed color-mix(in srgb, var(--text) 18%, transparent);
   justify-content: center;
@@ -1009,7 +1060,7 @@ html[data-platform="macos"] .titlebar {
   width: 30px;
   text-align: center;
   font-family: var(--mono-font);
-  font-size: 9px;
+  font-size: 0.6923rem;
   font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--text-dim);
@@ -1037,14 +1088,14 @@ html[data-platform="macos"] .titlebar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 0.9615rem;
 }
 
 .tab-row-sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 0.7692rem;
   color: var(--text-dim);
   font-family: var(--mono-font);
   opacity: 0.85;
@@ -1054,7 +1105,7 @@ html[data-platform="macos"] .titlebar {
   visibility: hidden;
   flex: none;
   padding: 1px 4px;
-  font-size: 10px;
+  font-size: 0.7692rem;
   color: var(--text-dim);
   border-radius: 4px;
 }
@@ -1081,7 +1132,7 @@ html[data-platform="macos"] .titlebar {
   flex: 1;
   min-width: 0;
   padding: 2px 5px;
-  font-size: 12.5px;
+  font-size: 0.9615rem;
 }
 
 /* ----------------------------------------------------------- komut onerisi */
@@ -1119,6 +1170,25 @@ html[data-platform="macos"] .titlebar {
   background: var(--surface-alt);
   overflow: hidden;
   min-width: 0;
+
+  /* Bir oneri satirinin olculeri TEK YERDE.
+   *
+   * OLCULEN HATA: liste `max-height: 112px` ile sinirliydi, satir ise 24px
+   * (1.5 satir araligi + 3px ust/alt dolgu). 112 / 24 = 4.67 - yani listenin
+   * alt kenarindan yarim bir satir sarkiyordu. Arayuz yazi olcusu ayardan
+   * degistiginde (`--ui-font-size`) sapma her degerde baska bir kesire
+   * donusuyor, yani duzeltilecek tek bir sayi da yok.
+   *
+   * Cozum sabiti kaldirmak: satir yuksekligi burada bir kez tanimlaniyor,
+   * hem satirin kendisi hem listenin siniri ondan turuyor. Sinir artik satir
+   * yuksekliginin TAM KATI ve her yazi olcusunde oyle kaliyor.
+   * Iliski `styles/layout.test.ts` icinde testle bagli. */
+  --suggest-row-font: 0.9231rem;
+  --suggest-row-line: 1.5;
+  --suggest-row-pad: 4px;
+  --suggest-row-h: calc(
+    var(--suggest-row-font) * var(--suggest-row-line) + var(--suggest-row-pad) * 2
+  );
 }
 
 /* Baslik seridi: panelin ne oldugunu bir bakista soyluyor.
@@ -1132,7 +1202,7 @@ html[data-platform="macos"] .titlebar {
   gap: 8px;
   padding: 3px 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 .suggest-title {
@@ -1150,9 +1220,10 @@ html[data-platform="macos"] .titlebar {
 .suggest-list {
   display: flex;
   flex-direction: column-reverse;
-  /* Bes satir + kaydirma. Sekiz satirda cubuk 191px oluyordu, yani 627px'lik
-     terminalin ucte biri; oneri listesi calisma alanini bu kadar yememeli. */
-  max-height: 112px;
+  /* Bes satir, ne eksik ne fazla. Sekiz satirda cubuk 191px oluyordu, yani
+     627px'lik terminalin ucte biri; oneri listesi calisma alanini bu kadar
+     yememeli. Sinir satir yuksekliginin TAM KATI: yarim satir sarkmiyor. */
+  max-height: calc(5 * var(--suggest-row-h));
   overflow-y: auto;
 }
 
@@ -1161,14 +1232,21 @@ html[data-platform="macos"] .titlebar {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 3px 10px 3px 7px;
+  padding: var(--suggest-row-pad) 10px var(--suggest-row-pad) 7px;
   border: none;
   border-left: 3px solid transparent;
   background: transparent;
   text-align: left;
   font-family: var(--mono-font);
-  font-size: 12px;
-  line-height: 1.5;
+  /* Olculer `.suggest-bar` icinde: listenin siniri da ayni degerlerden
+     turuyor, yoksa sinir satir yuksekliginin kati olmaktan cikiyor.
+     `min-height` SART: satir bir `<button>` ve temel kural ona 26px'lik bir
+     taban veriyor. O taban devredeyken satir 26px, hesap 24px diyordu ve
+     listenin ust kenarindan yarim satir sarkiyordu - aranan hatanin ta
+     kendisi. Buradaki bildirim tabani ezip yuksekligi hesaba baglıyor. */
+  min-height: var(--suggest-row-h);
+  font-size: var(--suggest-row-font);
+  line-height: var(--suggest-row-line);
   white-space: pre;
   overflow: hidden;
   cursor: pointer;
@@ -1199,7 +1277,7 @@ html[data-platform="macos"] .titlebar {
   flex: none;
   color: var(--text-dim);
   opacity: 0.65;
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 .suggest-row.on .suggest-mark {
@@ -1248,7 +1326,7 @@ html[data-platform="macos"] .titlebar {
   color: var(--text-dim);
   opacity: 0.7;
   font-family: var(--ui-font);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 .suggest-foot {
@@ -1257,7 +1335,7 @@ html[data-platform="macos"] .titlebar {
   gap: 5px;
   padding: 4px 10px 5px;
   border-top: 1px solid var(--border);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 /* Ipucundaki tus rozeti.
@@ -1285,7 +1363,7 @@ html[data-platform="macos"] .titlebar {
 .keycap-word {
   padding: 0 5px;
   font-family: var(--ui-font);
-  font-size: 9.5px;
+  font-size: 0.7308rem;
   letter-spacing: 0.02em;
 }
 
@@ -1482,7 +1560,10 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 30px;
+  /* Sabit degil ASGARI: arayuz yazi olcusu ayardan buyuyebiliyor
+     (`--ui-font-size`) ve sabit yukseklik metni kirpardi. Varsayilan olcude
+     satir zaten 30px'e sigiyor, yani gorunum degismiyor. */
+  min-height: 30px;
   padding: 0 5px 0 8px;
   min-width: 118px;
   max-width: 230px;
@@ -1493,7 +1574,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   cursor: pointer;
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: 0.9615rem;
 }
 
 .tab:hover {
@@ -1537,7 +1618,7 @@ html[data-platform="macos"] .titlebar {
 .tab-badge {
   flex: none;
   font-family: var(--mono-font);
-  font-size: 9px;
+  font-size: 0.6923rem;
   font-weight: 700;
   letter-spacing: 0.3px;
   padding: 2px 4px;
@@ -1595,7 +1676,7 @@ html[data-platform="macos"] .titlebar {
   visibility: hidden;
   flex: none;
   padding: 2px 4px;
-  font-size: 9px;
+  font-size: 0.6923rem;
   color: var(--text-dim);
   border-radius: 4px;
 }
@@ -1620,7 +1701,7 @@ html[data-platform="macos"] .titlebar {
 .tab-row-lock {
   flex: none;
   padding: 2px 3px;
-  font-size: 9px;
+  font-size: 0.6923rem;
   line-height: 1;
   color: var(--text-dim);
   opacity: 0.9;
@@ -1632,7 +1713,7 @@ html[data-platform="macos"] .titlebar {
   flex: 1;
   min-width: 0;
   padding: 2px 5px;
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 /* ------------------------------------------------------------- terminaller */
@@ -1774,7 +1855,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--sunken);
   color: var(--text-dim);
   font-family: var(--ui-font);
-  font-size: 10px;
+  font-size: 0.7692rem;
   /* Bir terminal satiri ~17px ve rozet 17px olursa satiri tumden dolduruyor;
      ustunde ayirici cizgi varken "yapisik" gorunuyor. 14px, kalan bosluk
      ustte ve altta esit paylasilacak kadar yer birakiyor. */
@@ -1852,7 +1933,7 @@ html[data-platform="macos"] .titlebar {
   align-items: center;
   gap: 5px;
   font-family: var(--ui-font);
-  font-size: 10px;
+  font-size: 0.7692rem;
   color: var(--text-dim);
   opacity: 0.75;
 }
@@ -1893,7 +1974,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--surface-alt);
   color: var(--text-dim);
   font-family: var(--ui-font);
-  font-size: 10px;
+  font-size: 0.7692rem;
   line-height: 17px;
   cursor: pointer;
 }
@@ -1950,7 +2031,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--sunken);
   color: color-mix(in srgb, var(--ok) 75%, var(--text-dim));
   font-family: var(--ui-font);
-  font-size: 10px;
+  font-size: 0.7692rem;
   line-height: 12px;
   white-space: nowrap;
 }
@@ -2006,18 +2087,28 @@ html[data-platform="macos"] .titlebar {
   padding: 4px;
 }
 
+/* Dosya satirinin ust yarisi: katlama dugmesi + eylemler.
+ *
+ * Ikisi ayri ogeler cunku satirin KENDISI bir dugme ve ic ice dugme gecersiz
+ * isaretleme. Ayni SIRADA durmalari cakismayi tumden ortadan kaldiriyor. */
+.git-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .git-row {
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 100%;
+  flex: 1;
   padding: 4px 8px;
   border: none;
   border-radius: 5px;
   background: transparent;
   color: var(--text);
   font-family: var(--mono-font);
-  font-size: 12px;
+  font-size: 0.9231rem;
   text-align: left;
   cursor: pointer;
   min-width: 0;
@@ -2047,14 +2138,20 @@ html[data-platform="macos"] .titlebar {
   color: var(--text-dim);
 }
 
-/* Eklenen/silinen sayaci: sabit genislik ve tabular rakam, yoksa satirlar
-   arasinda sayilar oynuyor ve goz onlari karsilastiramiyor. */
+/* Sayac dosya adinin HEMEN yaninda.
+ *
+ * Onceki hali satirin sag ucundaydi (yol `flex: 1` ile butun bosluğu yiyordu)
+ * ve hangi dosyaya ait oldugunu bulmak icin goz yatay kaymak zorundaydi.
+ * Simdi adin yaninda bir sifat gibi okunuyor: "app.module.ts +15 -1".
+ *
+ * Sabit genislik ve tabular rakam: yoksa satirlar arasinda sayilar oynuyor ve
+ * goz onlari karsilastiramiyor. */
 .git-stat {
   flex: none;
   display: inline-flex;
   gap: 6px;
   font-family: var(--mono-font);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2072,10 +2169,12 @@ html[data-platform="macos"] .titlebar {
  * sarildiginda hangi karakterin eklendigi kaybolyor ve `+`/`-` isareti
  * satirin yalnizca ilk parcasinin basinda kaliyor. */
 .git-diff {
+  /* Satir numarasi sutununun genisligi; acici serit de bunu kullaniyor. */
+  --diff-no-w: 44px;
   padding: 2px 0 6px;
   overflow-x: auto;
   font-family: var(--mono-font);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   line-height: 1.5;
 }
 
@@ -2096,7 +2195,9 @@ html[data-platform="macos"] .titlebar {
  * olurdu ve metin dogrudan kullanilamazdi. */
 .diff-no {
   flex: none;
-  width: 44px;
+  /* Genislik acici seridin dugme bloguyla PAYLASILIYOR (`.diff-gap-actions`):
+     ikisi ayni izgaraya oturmali, yoksa acici serit koda gore kayik duruyor. */
+  width: var(--diff-no-w);
   padding-right: 8px;
   text-align: right;
   color: var(--text-dim);
@@ -2128,6 +2229,85 @@ html[data-platform="macos"] .titlebar {
   color: var(--accent);
   opacity: 0.85;
 }
+
+/* Baglam acicisi: fark bloklari arasindaki DEGISMEMIS satirlar.
+ *
+ * `git diff` degisen satirlarin cevresinde uc satir veriyor, arasini
+ * cizmiyor. Bu serit kac satirin disarida kaldigini soyluyor ve acmayi teklif
+ * ediyor; hunk basliginin (`@@ -10,7 +10,8 @@`) yerini aldi - baslikta ozgun
+ * olan tek sey kapsayan islevin adiydi, o da saga tasindi.
+ *
+ * DUZEN IKI PARCALI (Warp'in acicisi gibi): solda dugme blogu, sagda okunacak
+ * metin. Ayrim gorunur olmali - biri basilacak bir sey, oteki okunacak. Once
+ * hepsi tek bir siraydi ve dugmeler serit zemininde yuzuyordu; nereye
+ * basilacagi ancak imlec uzerine gelince belli oluyordu. */
+.diff-gap {
+  display: flex;
+  align-items: stretch;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--text-dim);
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Dugme blogu: kendi zemini ve sag kenarligi var.
+ *
+ * Genislik satir numarasi sutunuyla AYNI (`--diff-no-w`): acici, altindaki ve
+ * ustundeki kod satirlariyla ayni izgaraya oturuyor, yani metin sutunu boyunca
+ * tek bir dikey cizgi kirilmiyor. */
+.diff-gap-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 2px;
+  width: var(--diff-no-w);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+/* Dugmeler kucuk ve sik: serit farkin akisini bolen bir cubuga donusmemeli. */
+.diff-gap-actions button {
+  min-height: 0;
+  padding: 1px 3px;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+
+.diff-gap-actions button:hover:not(:disabled) {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+
+/* Kapali dugme: dosya okunamadi. Gorunur kaliyor cunku "acacak bir sey yok"
+   ile "acamiyorum" ayri seyler; hangisi oldugunu ipucu soyluyor. */
+.diff-gap-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.diff-gap-count {
+  flex: none;
+  padding: 2px 8px;
+  font-family: var(--ui-font);
+  font-size: 0.7692rem;
+}
+
+/* Kapsayan islevin adi: yer kalirsa gorunuyor, kalmazsa once BU kisaliyor.
+   Sayidan once kirpilmasi bilincli - "106 satir gizli" karari veren bilgi,
+   islev adi yalnizca baglam. */
+.diff-gap-context {
+  align-self: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+
 
 /* Basliklar (dosya adlari, index satirlari) farkin kendisi degil; soluk. */
 .diff-line.meta {
@@ -2191,28 +2371,42 @@ html[data-platform="macos"] .titlebar {
  * `.git-item`in icinde ama `.git-row` DUGMESININ disinda: satirin kendisi
  * katlama dugmesi ve ic ice dugme hem gecersiz isaretleme hem karisik
  * tiklama demek. */
+/* Satir eylemleri: yolu kopyala, geri al, dosyayi ac.
+ *
+ * AKISTA ve HER ZAMAN gorunur. Iki karar da olculmus birer hatanin karsiligi:
+ *
+ * - Mutlak konumluyken satirin sag ucundaki sayacin (`+15 -1`) ustune
+ *   biniyorlardi. Akista durunca cakisma diye bir sey kalmiyor ve yola
+ *   ayrilan yer kendiliginden dogru hesaplaniyor.
+ * - Yalnizca imlec satirdayken beliriyorlardi; gizli bir eylem, bir kez
+ *   kesfedilene kadar yok demek. */
 .git-actions {
-  position: absolute;
-  right: 6px;
-  top: 2px;
-  display: none;
-  gap: 3px;
+  display: flex;
+  flex: none;
+  gap: 1px;
+  padding-right: 4px;
 }
 
 /* Dugmeler bir tik BUYUK: 12px simge ve dar dolgu ile ucu de ayni gri lekeye
-   donusuyordu, hangisinin ne oldugu ancak ipucuyla anlasiliyordu. */
+   donusuyordu, hangisinin ne oldugu ancak ipucuyla anlasiliyordu.
+   `min-height: 0`: temel dugme kurali 26px'lik bir taban veriyor ve o taban
+   dosya satirini kod satirlarindan yuksek yapiyordu. */
 .git-actions .icon-btn {
-  padding: 3px 5px;
+  min-height: 0;
+  padding: 3px 4px;
+}
+
+/* Ucu birden her satirda tam parlakliktayken liste bir arac cubugu tarlasina
+   donusuyor ve asil bilgi olan yol geri plana dusuyor. Soluk duruyorlar,
+   satirin ustundeyken one cikiyorlar. */
+.git-actions {
+  opacity: 0.45;
+  transition: opacity 90ms ease;
 }
 
 .git-item:hover .git-actions,
 .git-item:focus-within .git-actions {
-  display: flex;
-}
-
-/* Satirin arka planiyla karismasin: eylemler yolun uzerine binebiliyor. */
-.git-actions .icon-btn {
-  background: var(--surface-alt);
+  opacity: 1;
 }
 
 .git-actions .icon-btn.danger:hover {
@@ -2223,7 +2417,11 @@ html[data-platform="macos"] .titlebar {
    adi, klasor zinciri degil. `direction: rtl` yon degistirmenin en ucuz yolu;
    `unicode-bidi: plaintext` metnin okunma yonunu bozmuyor. */
 .git-path {
-  flex: 1;
+  /* Esnemiyor, yalnizca SIKISIYOR (`0 1 auto`): sayac boylece dosya adinin
+     hemen yaninda kaliyor. `flex: 1` iken yol butun bosluğu yiyor ve sayac
+     satirin ta sagina itiliyordu - hangi dosyaya ait oldugunu bulmak icin goz
+     yatay kaymak zorundaydi. */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2268,7 +2466,7 @@ html[data-platform="macos"] .titlebar {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
-  font-size: 12.5px;
+  font-size: 0.9615rem;
 }
 
 .pop-search:focus {
@@ -2292,7 +2490,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: 5px;
   background: transparent;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 0.9615rem;
   text-align: left;
   cursor: pointer;
   min-width: 0;
@@ -2333,7 +2531,7 @@ html[data-platform="macos"] .titlebar {
   padding: 0 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 12%, transparent);
-  font-size: 9.5px;
+  font-size: 0.7308rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   opacity: 0.8;
@@ -2342,7 +2540,7 @@ html[data-platform="macos"] .titlebar {
 .pop-empty {
   padding: 10px 12px;
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 /* Tiklanabilir yol rozeti: gorunusu `span` haliyle ayni kalmali, yalnizca
@@ -2352,7 +2550,7 @@ html[data-platform="macos"] .titlebar {
   cursor: pointer;
   font: inherit;
   font-family: var(--ui-font);
-  font-size: 10px;
+  font-size: 0.7692rem;
 }
 
 .block-cwd.as-button:hover {
@@ -2407,7 +2605,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--sunken);
   color: var(--text-dim);
   font-family: var(--ui-font);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   line-height: 17px;
   white-space: nowrap;
   overflow: hidden;
@@ -2505,7 +2703,7 @@ html[data-platform="macos"] .titlebar {
 .run-links-label {
   flex: none;
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 0.7692rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2518,7 +2716,7 @@ html[data-platform="macos"] .titlebar {
   background: transparent;
   color: var(--accent);
   font-family: var(--mono-font);
-  font-size: 11px;
+  font-size: 0.8462rem;
   line-height: 16px;
   cursor: pointer;
 }
@@ -2564,7 +2762,7 @@ html[data-platform="macos"] .titlebar {
   padding-top: 2px;
   color: var(--accent);
   font-family: var(--mono-font);
-  font-size: 11px;
+  font-size: 0.8462rem;
   opacity: 0.75;
 }
 
@@ -2675,7 +2873,7 @@ html[data-platform="macos"] .titlebar {
 
 .running-text {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 .command-running .spacer {
@@ -2692,9 +2890,33 @@ html[data-platform="macos"] .titlebar {
   background: transparent;
   color: var(--err);
   font-family: var(--ui-font);
-  font-size: 11px;
+  font-size: 0.8462rem;
   line-height: 19px;
   cursor: pointer;
+}
+
+/* Silahli hal: ilk Ctrl+C'den sonra.
+ *
+ * Serit KIRMIZILASIYOR ve dugme dolguya geciyor. Iki kanal birden bilincli:
+ * yalnizca metin degisseydi ("Durdur" -> "Tekrar basin") goz onu bir saniyelik
+ * pencerede yakalayamazdi; renk degisimi cevre gorusle bile fark ediliyor. */
+.command-running.armed {
+  background: color-mix(in srgb, var(--err) 10%, var(--term-bg));
+  border-top-color: color-mix(in srgb, var(--err) 55%, transparent);
+}
+
+.command-running.armed .running-dot {
+  background: var(--err);
+}
+
+.command-running.armed .running-text {
+  color: var(--err);
+}
+
+.command-running.armed .running-stop {
+  background: color-mix(in srgb, var(--err) 22%, transparent);
+  border-color: var(--err);
+  color: var(--err);
 }
 
 .running-stop:hover {
@@ -2793,7 +3015,7 @@ html[data-platform="macos"] .titlebar {
   padding: 3px 4px 3px 8px;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 0.8462rem;
   color: var(--text-dim);
   user-select: none;
 }
@@ -2805,7 +3027,7 @@ html[data-platform="macos"] .titlebar {
 .pane-badge {
   flex: none;
   font-family: var(--mono-font);
-  font-size: 9px;
+  font-size: 0.6923rem;
   letter-spacing: 0.04em;
   opacity: 0.75;
 }
@@ -2836,7 +3058,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: 4px;
   background: transparent;
   color: var(--text-dim);
-  font-size: 9px;
+  font-size: 0.6923rem;
 }
 
 /* Kilit gostergesi bir dugme DEGIL; sekme cubugundakiyle ayni gerekce. */
@@ -2961,7 +3183,7 @@ html[data-platform="macos"] .titlebar {
   padding: 0 10px;
   color: var(--text-dim);
   font-family: var(--mono-font);
-  font-size: 11px;
+  font-size: 0.8462rem;
   opacity: 0.75;
   /* Katman metnin ustunde duruyor; secimi ve tiklamayi yutmamali. */
   pointer-events: none;
@@ -3030,8 +3252,20 @@ html[data-platform="macos"] .titlebar {
   justify-content: center;
 }
 
+/* "Hic sekme yok" kutusu.
+ *
+ * Izgara alani DEGIL, terminal alaninin ICINDE bir katman ve bu bilincli:
+ * alanin YERINE gecen bir kutu, bagli butun terminal barindiricilarini
+ * agactan cikariyordu (olculen hata ve zinciri `TerminalArea` icinde).
+ *
+ * Zemin OPAK olmak zorunda: altinda o barindiricilar duruyor. `visibility`
+ * ile gizli olsalar da terminalin kendi zemini oradaki rengi belirliyordu,
+ * saydam bir kutu ustunde kutunun metni yuzuyor gibi duruyordu. */
 .empty-state {
-  grid-area: terminal;
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: var(--term-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3046,7 +3280,7 @@ html[data-platform="macos"] .titlebar {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 /* ------------------------------------------------------------ durum çubuğu */
@@ -3061,7 +3295,7 @@ html[data-platform="macos"] .titlebar {
   background: var(--surface-alt);
   border-top: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
   overflow: hidden;
   flex: none;
 }
@@ -3099,46 +3333,17 @@ html[data-platform="macos"] .titlebar {
   min-width: 0;
 }
 
-.statusbar .pill {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 7px;
-  line-height: 15px;
-  /* Rozet ne SARAR ne KISALIR: ya tam okunur, ya "⋯" menusune gider.
-   *
-   * Iki olculen hata bu iki bildirimin arkasinda duruyor.
-   *
-   * 1. `nowrap` yokken cok sozcuklu bir rozet ("Komut onerisi desteklenmiyor")
-   *    dar cubukta ikinci satira sariyor, yuksekligi 15px yerine 30px oluyor,
-   *    24px'lik cubuktan tasip sol komsusunun UZERINE biniyordu.
-   *
-   * 2. `flex: none` yerine kisalmaya izin verildiginde rozet, yer sikintisi
-   *    OLMADIGI halde kisaliyordu. Sebep incelikli: acigi once yol kapatsin
-   *    diye yola cok buyuk bir sikisma katsayisi verilmisti, rozete kalan pay
-   *    0.02px gibi bir degerdi - ama `text-overflow: ellipsis` payin
-   *    buyuklugune bakmiyor, bir pikselin altindaki eksik bile son harfi
-   *    ucnoktaya cevirmeye yetiyor. Ekranda "desteklenmiy..." goruluyordu.
-   */
-  white-space: nowrap;
-  flex: none;
-}
-
-/* "⋯" — sigmayanlarin kapisi.
+/* "⋯" — durum okumalarinin kapisi.
  *
- * Yalnizca bir sey gizlendiginde beliriyor; esigi ilk `data-drop` esigiyle
- * AYNI, yani dugme ile ilk kaybolan oge tam olarak birlikte hareket ediyor.
- * Genis pencerede cubukta fazladan bir dugme durmuyor. */
+ * HER ZAMAN gorunuyor. Bir zamanlar yalnizca bir sey sigmadiginda beliriyordu
+ * (o gun icindekiler "sigmayanlar"di); bugun okumalarin tamami bilincli olarak
+ * menude, yani dugme cubugun kalici bir parcasi. Kosullu olsaydi genis bir
+ * pencerede pid'e ya da komut sayisina ulasmanin hicbir yolu kalmazdi. */
 .statusbar .status-more {
-  /* Varsayilan gizli: yalnizca bir sey gizlendiginde JS `data-in` ekliyor.
-     Genis pencerede cubukta fazladan bir dugme durmuyor. */
-  display: none;
-  font-size: 13px;
+  display: flex;
+  font-size: 1rem;
   line-height: 13px;
   padding: 1px 7px 3px;
-}
-
-.statusbar .status-more[data-in] {
-  display: flex;
 }
 
 /* Gizleme.
@@ -3168,7 +3373,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: 999px;
   background: transparent;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
   line-height: 15px;
   cursor: pointer;
   white-space: nowrap;
@@ -3185,16 +3390,6 @@ html[data-platform="macos"] .titlebar {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);
-}
-
-.statusbar .pill.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
-}
-
-.statusbar .pill.warn {
-  color: var(--err);
-  border-color: color-mix(in srgb, var(--err) 40%, transparent);
 }
 
 /* --------------------------------------------------------------- yan panel */
@@ -3241,7 +3436,7 @@ html[data-platform="macos"] .titlebar {
   border-bottom: 2px solid transparent;
   color: var(--text-dim);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 0.9231rem;
   margin-bottom: -1px;
 }
 
@@ -3252,7 +3447,7 @@ html[data-platform="macos"] .titlebar {
 }
 
 .pill-count {
-  font-size: 10px;
+  font-size: 0.7692rem;
   font-variant-numeric: tabular-nums;
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--text);
@@ -3298,7 +3493,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 0.8462rem;
   color: var(--text-dim);
 }
 
@@ -3322,7 +3517,7 @@ html[data-platform="macos"] .titlebar {
   border: none;
   border-radius: 0;
   padding: 4px 9px;
-  font-size: 11px;
+  font-size: 0.8462rem;
   color: var(--text-dim);
 }
 
@@ -3359,7 +3554,7 @@ html[data-platform="macos"] .titlebar {
   grid-area: star;
   align-self: start;
   padding: 1px 3px;
-  font-size: 13px;
+  font-size: 1rem;
   line-height: 1.2;
   color: color-mix(in srgb, var(--text-dim) 70%, transparent);
   border-radius: 4px;
@@ -3377,7 +3572,7 @@ html[data-platform="macos"] .titlebar {
 .hitem .cmd {
   grid-area: cmd;
   font-family: var(--mono-font);
-  font-size: 12px;
+  font-size: 0.9231rem;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3387,7 +3582,7 @@ html[data-platform="macos"] .titlebar {
 
 .hitem .badge {
   grid-area: badge;
-  font-size: 10px;
+  font-size: 0.7692rem;
   font-variant-numeric: tabular-nums;
   border-radius: 999px;
   padding: 0 6px;
@@ -3416,7 +3611,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   gap: 8px;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   margin-top: 2px;
   overflow: hidden;
 }
@@ -3449,7 +3644,7 @@ html[data-platform="macos"] .titlebar {
   text-align: left;
   padding: 8px 8px 3px;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -3523,7 +3718,7 @@ html[data-platform="macos"] .titlebar {
 .fav-star {
   flex: none;
   color: #e3b341;
-  font-size: 12px;
+  font-size: 0.9231rem;
   padding-top: 1px;
 }
 
@@ -3533,7 +3728,7 @@ html[data-platform="macos"] .titlebar {
 }
 
 .fav-title {
-  font-size: 12.5px;
+  font-size: 0.9615rem;
   font-weight: 500;
   color: var(--text);
   overflow: hidden;
@@ -3542,7 +3737,7 @@ html[data-platform="macos"] .titlebar {
 }
 
 .fav-cmd {
-  font-size: 11px;
+  font-size: 0.8462rem;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3554,7 +3749,7 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   gap: 8px;
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 0.8077rem;
   color: var(--text-dim);
   overflow: hidden;
 }
@@ -3592,7 +3787,7 @@ html[data-platform="macos"] .titlebar {
 
 .hint {
   color: var(--text-dim);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   padding: 18px 12px;
   text-align: center;
   line-height: 1.7;
@@ -3626,7 +3821,7 @@ html[data-platform="macos"] .titlebar {
   width: 100%;
   padding: 5px 8px;
   border-radius: 5px;
-  font-size: 12.5px;
+  font-size: 0.9615rem;
   text-align: left;
 }
 
@@ -3667,7 +3862,7 @@ html[data-platform="macos"] .titlebar {
   flex: none;
   width: 12px;
   text-align: center;
-  font-size: 10px;
+  font-size: 0.7692rem;
   color: var(--text-dim);
 }
 
@@ -3688,7 +3883,7 @@ html[data-platform="macos"] .titlebar {
   flex: none;
   color: var(--text-dim);
   font-family: var(--mono-font);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 .ctx-sep {
@@ -3699,7 +3894,7 @@ html[data-platform="macos"] .titlebar {
 
 .ctx-header {
   padding: 6px 8px 3px;
-  font-size: 10px;
+  font-size: 0.7692rem;
   font-weight: 600;
   letter-spacing: 0.7px;
   text-transform: uppercase;
@@ -3756,13 +3951,13 @@ html[data-platform="macos"] .titlebar {
 
 .confirm-message {
   margin: 0;
-  font-size: 13px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .confirm-detail {
   margin: 9px 0 0;
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   line-height: 1.5;
 }
 
@@ -3776,7 +3971,7 @@ html[data-platform="macos"] .titlebar {
 
 .modal-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 1.0769rem;
   flex: 1;
 }
 
@@ -3855,7 +4050,7 @@ html[data-platform="macos"] .titlebar {
   flex: 1;
   min-width: 0;
   padding: 3px 7px;
-  font-size: 12px;
+  font-size: 0.9231rem;
 }
 
 .settings-results {
@@ -3867,7 +4062,7 @@ html[data-platform="macos"] .titlebar {
 
 .settings-results-count {
   padding: 2px 4px 4px;
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 /* Sonuc satiri: ustte ayarin adi, altta hangi bolumde oldugu. Bolum adi
@@ -3893,7 +4088,7 @@ html[data-platform="macos"] .titlebar {
 
 .settings-result-label {
   color: var(--text);
-  font-size: 12px;
+  font-size: 0.9231rem;
   line-height: 1.35;
   /* Uzun etiketler kirilabilir: kutunun genisligi 172px. */
   white-space: normal;
@@ -3901,7 +4096,7 @@ html[data-platform="macos"] .titlebar {
 
 .settings-result-section {
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 /* Aramadan gidilen satirin kisa vurgusu: bolume goturmek yetmiyor, hangi
@@ -4065,7 +4260,7 @@ html[data-platform="macos"] .titlebar {
  * Olculen kazanc (Terminal bolumu): 552px -> 489px, yalnizca bu kuraldan. */
 .hintline {
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
   line-height: 1.45;
 }
 
@@ -4139,7 +4334,7 @@ html[data-platform="macos"] .titlebar {
 
 .section > h3 {
   margin: 0 0 4px;
-  font-size: 11px;
+  font-size: 0.8462rem;
   text-transform: uppercase;
   letter-spacing: 0.7px;
   color: var(--text-dim);
@@ -4346,7 +4541,7 @@ html[data-platform="macos"] .titlebar {
   /* Ipucu satirlarindan bir tik parlak: burasi kullanicinin ISTEDIGI metin,
      goz ucuyla gecilecek bir dipnot degil. */
   color: var(--text);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
   line-height: 1.5;
   text-align: left;
   white-space: normal;
@@ -4440,7 +4635,7 @@ html[data-platform="macos"] .titlebar {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   padding: 11px 14px;
-  font-size: 14px;
+  font-size: 1.0769rem;
   background: transparent;
 }
 
@@ -4455,6 +4650,44 @@ html[data-platform="macos"] .titlebar {
   padding: 4px;
 }
 
+/* Dosya paleti satiri: dosya ADI solda, KLASORU sagda.
+ *
+ * Onceki hali tek bir yol dizesiydi (`src/components/TabBar.tsx`) ve her
+ * satirda aranan sey en sonda duruyordu. Klasor zinciri cogu satirda AYNI,
+ * yani ayirt etmeyen kisim once okunuyordu. Ad one alininca satirlar ilk
+ * harften ayrisiyor.
+ *
+ * Yer darsa once KLASOR kisaliyor (`flex-shrink: 3`): ad kirpildiginda satir
+ * ise yaramaz hale gelir, klasor kirpildiginda yalnizca baglam azalir. */
+.file-row .file-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row .file-dir {
+  /* Sag kenara itiliyor: iki bilgi arasindaki bosluk sabit degil, satirin
+     kalani. Ayni klasordeki dosyalar boylece ayni sutunda hizalaniyor. */
+  margin-left: auto;
+  flex: 0 3 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  /* Klasor BASTAN kirpiliyor: uzun bir zincirde dosyaya en yakin olan son
+     parca. `direction: rtl` yon degistirmenin en ucuz yolu; yollar goreli,
+     yani basta bir egik cizgi yok — durum cubugundaki mutlak yolda goze
+     batan bidi sorunu burada dogmuyor. */
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+
 /* Dosya paletinin alt ipucusu: Enter'in ne yaptigi yazili.
    Gerekli cunku davranis tahmin edilebilir degil - dosyayi ACMIYOR, yolunu
    komut satirina EKLIYOR. */
@@ -4463,7 +4696,7 @@ html[data-platform="macos"] .titlebar {
   align-items: center;
   padding: 5px 12px 6px;
   border-top: 1px solid var(--border);
-  font-size: 10.5px;
+  font-size: 0.8077rem;
 }
 
 .palette-row {
@@ -4489,21 +4722,21 @@ html[data-platform="macos"] .titlebar {
 .palette-row .kbd {
   color: var(--text-dim);
   font-family: var(--mono-font);
-  font-size: 11px;
+  font-size: 0.8462rem;
   flex: none;
 }
 
 .palette-row .star {
   flex: none;
   color: #e3b341;
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 .palette-foot {
   border-top: 1px solid var(--border);
   padding: 6px 12px;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
   display: flex;
   gap: 14px;
 }
@@ -4546,7 +4779,7 @@ html[data-platform="macos"] .titlebar {
   gap: 8px;
   padding: 5px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  font-size: 11.5px;
+  font-size: 0.8846rem;
 }
 
 .notes .note:last-child {
@@ -4558,7 +4791,7 @@ html[data-platform="macos"] .titlebar {
   border-radius: 999px;
   padding: 0 6px;
   line-height: 15px;
-  font-size: 10px;
+  font-size: 0.7692rem;
 }
 
 .notes .note .tag.fixed {
@@ -4585,13 +4818,13 @@ html[data-platform="macos"] .titlebar {
 }
 
 .summary-grid .cell .n {
-  font-size: 18px;
+  font-size: 1.3846rem;
   font-variant-numeric: tabular-nums;
 }
 
 .summary-grid .cell .k {
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 /* --------------------------------------------------------- terminalde arama */
@@ -4620,7 +4853,7 @@ html[data-platform="macos"] .titlebar {
   text-align: center;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: 0.8462rem;
 }
 
 /* ----------------------------------------------------- surukle-birak / favori */

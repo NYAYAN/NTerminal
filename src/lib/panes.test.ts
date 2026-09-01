@@ -32,6 +32,7 @@ function group(tabs: TabState[], activeTabId: string | null = null): Group {
     icon: null,
     collapsed: false,
     favorite: false,
+    ungrouped: false,
     defaultProfileId: null,
     defaultCwd: null,
     env: {},

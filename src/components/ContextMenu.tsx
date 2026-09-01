@@ -16,7 +16,7 @@ export type MenuEntry =
    * tıklayınca menü kapanıyor), `disabled` ise "şu an kullanılamıyor" diyor.
    * İkisi de doğru değil, o yüzden ayrı bir tür.
    */
-  | { kind: "info"; label: string; value?: string }
+  | { kind: "info"; label: string; value?: string; title?: string }
   /**
    * Alt menü.
    *
@@ -153,8 +153,16 @@ function MenuPanel({
           if (entry.kind === "separator") return <div className="ctx-sep" key={index} />;
 
           if (entry.kind === "info") {
+            /*
+             * `title`: kısa değerin ARKASINDAKİ açıklama.
+             *
+             * Durum okumaları çubuktan buraya taşınınca ipuçlarını taşıyacak
+             * bir yer kalmamıştı — oysa asıl işi gören onlar: "Sınırlı" tek
+             * başına ne yapılacağını söylemiyor, ipucu ise sebebi ve çözümü
+             * yazıyor (bkz. `status.integrationOffTitle`).
+             */
             return (
-              <div className="ctx-item ctx-info" key={index}>
+              <div className="ctx-item ctx-info" key={index} title={entry.title}>
                 <span className="ctx-mark" />
                 <span className="ctx-label">{entry.label}</span>
                 {entry.value && <span className="ctx-hint">{entry.value}</span>}

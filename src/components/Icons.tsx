@@ -244,6 +244,21 @@ export function ArrowIcon({ dir, ...props }: IconProps & { dir: "up" | "down" | 
 }
 
 /**
+ * Aç — oklar birbirinden UZAKLAŞIYOR.
+ *
+ * Fark görünümündeki bağlam açıcısında, kalan gizli satırların tek basışta
+ * açılacağı durumda kullanılıyor. Tek yönlü bir ok orada yanlış söz verirdi:
+ * açılan satırların yarısı yukarı, yarısı aşağı değil — hepsi açılıyor.
+ */
+export function UnfoldIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4.5 6 L8 2.5 L11.5 6 M4.5 10 L8 13.5 L11.5 10" />
+    </Svg>
+  );
+}
+
+/**
  * Git durum simgeleri.
  *
  * Metin etiketinin ("DEĞİŞTİ", "EKLENDİ") yerini aldılar. Etiket sabit 88px'lik

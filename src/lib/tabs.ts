@@ -96,12 +96,20 @@ export function nextCollapsedAll(groups: { collapsed: boolean }[]): boolean {
  * duruyor, yani calisilan yere erisim kapanmiyor. Yalnizca kenar cubugundaki
  * satiri gitmis oluyor.
  */
-export function visibleGroups<T extends { favorite?: boolean }>(
+export function visibleGroups<T extends { favorite?: boolean; ungrouped?: boolean }>(
   groups: T[],
   onlyFavorites: boolean,
 ): T[] {
   if (!onlyFavorites) return groups;
-  return groups.filter((g) => g.favorite === true);
+  /*
+   * Gruplanmamış kova süzgeçten MUAF.
+   *
+   * Süzgeç "hangi gruplarla çalışıyorum" sorusunun cevabı; kova ise bir grup
+   * değil, grubu olmayan sekmelerin durduğu yer. Favori işaretlenemediği için
+   * (başlığı, dolayısıyla yıldızı yok) süzgeç açıkken kalıcı olarak
+   * kaybolurdu — kullanıcı sekmelerini bir daha bulamazdı.
+   */
+  return groups.filter((g) => g.favorite === true || g.ungrouped === true);
 }
 
 // ------------------------------------------------------------ profil bagi
