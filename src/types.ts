@@ -335,6 +335,20 @@ export interface GitChange {
   path: string;
 }
 
+/**
+ * nvm ile kurulu Node sürümleri — komut satırının üstündeki Node rozeti için.
+ *
+ * `manager` komutu belirliyor: nvm-windows'ta `nvm use` makine genelinde
+ * geçerli; nvm.sh'te ise kabuğa özel, kalıcı olan `alias default`.
+ */
+export interface NodeEnv {
+  manager: "nvm-windows" | "nvm";
+  /** Kullanılan sürüm, `v` ön eki YOK (`"24.18.0"`); seçili sürüm yoksa null. */
+  current: string | null;
+  /** Kurulu sürümler, yeni olan başta. */
+  installed: string[];
+}
+
 /** Dal seçicideki tek satır. */
 export interface GitBranch {
   /** Dal adı; uzak dalda `origin/` ön eki YOK. */

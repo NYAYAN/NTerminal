@@ -23,6 +23,7 @@ import type {
   ImportResult,
   NewFavorite,
   NewHistoryEntry,
+  NodeEnv,
   PathsInfo,
   Profile,
   ReleaseInfo,
@@ -105,6 +106,8 @@ export const api = {
   gitRevert: (path: string, file: string, untracked: boolean) =>
     invoke<void>("git_revert", { path, file, untracked }),
   gitFingerprint: (path: string) => invoke<string | null>("git_fingerprint", { path }),
+  /** nvm ile kurulu Node sürümleri; nvm yoksa `null`. Süreç başlatmıyor. */
+  nodeEnv: () => invoke<NodeEnv | null>("node_env"),
   gitDiff: (path: string, file: string, untracked: boolean) =>
     invoke<string | null>("git_diff", { path, file, untracked }),
   /**

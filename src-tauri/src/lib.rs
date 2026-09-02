@@ -5,6 +5,7 @@ mod files;
 mod git;
 mod history;
 mod model;
+mod nodever;
 mod osinfo;
 mod paths;
 mod platform;
@@ -634,6 +635,14 @@ fn git_branches(path: String) -> CmdResult<Vec<git::GitBranch>> {
     Ok(git::branches(&path))
 }
 
+/// nvm ile kurulu Node surumleri ve kullanilan surum; nvm yoksa `None`.
+///
+/// Surec baslatmiyor, birkac klasor okuyor — her komut sonunda cagrilabilir.
+#[tauri::command]
+fn node_env() -> CmdResult<Option<nodever::NodeEnv>> {
+    Ok(nodever::read())
+}
+
 /// Bir dizinin ALT DIZINLERI - dizin secici icin.
 ///
 /// Yalnizca klasorler donuyor: secici bir dizine gecmek icin var, dosya
@@ -791,6 +800,7 @@ pub fn run() {
             git_diff,
             git_revert,
             git_fingerprint,
+            node_env,
             tray_labels,
         ])
         .on_window_event(|window, event| {

@@ -46,6 +46,7 @@ import type {
   ViewMode,
   Workspace,
   GitInfo,
+  NodeEnv,
 } from "../types";
 
 /**
@@ -172,6 +173,8 @@ export interface UiState {
    * çiziliyor, hangi depo için açıldığını buradan öğreniyor.
    */
   branchPicker: { cwd: string; current: string } | null;
+  /** Node sürüm seçici açık mı. Listesi `nodeEnv`den geliyor. */
+  nodePicker: boolean;
   /**
    * Görüntüleyicide açık dosyanın yolu; ağaç görünümündeyken null.
    *
@@ -265,6 +268,13 @@ interface Store {
    * çalıştırmak demekti.
    */
   gitInfo: Record<string, GitInfo | null>;
+  /**
+   * nvm ile kurulu Node sürümleri; nvm yoksa ya da henüz bakılmadıysa null.
+   *
+   * Dizine bağlı DEĞİL: nvm-windows'ta seçim makine geneli, nvm.sh'te
+   * varsayılan okunuyor. O yüzden `gitInfo` gibi dizin başına değil tek kayıt.
+   */
+  nodeEnv: NodeEnv | null;
   /**
    * Uygulama komut satırı açıkken kabul edilen önerinin gideceği yer.
    *
@@ -387,6 +397,7 @@ interface Store {
   loadSuggestHistory: () => Promise<void>;
   refreshGit: (cwd: string | null) => Promise<void>;
   pollGit: (cwd: string | null) => Promise<void>;
+  refreshNode: () => Promise<void>;
   noteCommand: (command: string, cwd: string | null) => void;
   /**
    * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
@@ -602,6 +613,7 @@ export const useStore = create<Store>((set, get) => ({
   runLinks: {},
   scrollAtBottom: {},
   gitInfo: {},
+  nodeEnv: null,
   appInputSink: null,
   ui: {
     historyOpen: false,
@@ -614,6 +626,7 @@ export const useStore = create<Store>((set, get) => ({
     searchOpen: false,
     dirPicker: null,
     branchPicker: null,
+    nodePicker: false,
     viewerPath: null,
     findOpen: false,
     renamingTabId: null,
@@ -1326,6 +1339,8 @@ export const useStore = create<Store>((set, get) => ({
         // Komut dosya değiştirmiş olabilir; rozet komutun SONRAKİ hâlini
         // göstermeli. En sık örnek: `git add` sonrası sayacın düşmesi.
         void get().refreshGit(sessions.get(tab.id)?.cwd ?? null);
+        // `nvm use` de bir komut: bittiğinde rozet yeni sürümü göstermeli.
+        void get().refreshNode();
       },
       /*
        * Kabuk kapandı: SEKME KENDİ KENDİNE yeniden başlıyor.
@@ -1726,6 +1741,19 @@ export const useStore = create<Store>((set, get) => ({
     }
     if (gitFingerprints.get(cwd) === imza) return;
     await get().refreshGit(cwd);
+  },
+
+  /**
+   * Node rozetini tazeler.
+   *
+   * Ucuz (birkaç klasör okuması, süreç yok), o yüzden git'teki imza
+   * denetimine gerek kalmadan her komut sonunda ve pencereye dönüşte
+   * çağrılıyor. En sık durum: kullanıcı seçiciden `nvm use` gönderdi,
+   * komut bitti, rozet yeni sürümü göstermeli.
+   */
+  async refreshNode() {
+    const env = await api.nodeEnv().catch(() => null);
+    set({ nodeEnv: env });
   },
 
   async loadSuggestHistory() {

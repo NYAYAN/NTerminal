@@ -13,6 +13,7 @@ import { CommandInput } from "./components/CommandInput";
 import { BranchPicker } from "./components/BranchPicker";
 import { ContextBar } from "./components/ContextBar";
 import { DirPicker } from "./components/DirPicker";
+import { NodePicker } from "./components/NodePicker";
 import { RunningLinks } from "./components/RunningLinks";
 import { StatusBar } from "./components/StatusBar";
 import { SuggestionBar } from "./components/SuggestionBar";
@@ -34,6 +35,7 @@ export function App() {
   const activeGroupId = useStore((s) => s.activeGroupId);
   const settings = useStore((s) => s.settings);
   const ui = useStore((s) => s.ui);
+  const nodeEnv = useStore((s) => s.nodeEnv);
   const setUi = useStore((s) => s.setUi);
   const sidebarCollapsed = settings.appearance.sidebarCollapsed;
   // Dosya ağacı düğmesi iki durumlu: panel AÇIK ve kip "files" ise düğme
@@ -595,6 +597,9 @@ export function App() {
           current={ui.branchPicker.current}
           onClose={() => useStore.getState().setUi({ branchPicker: null })}
         />
+      )}
+      {ui.nodePicker && nodeEnv && (
+        <NodePicker env={nodeEnv} onClose={() => useStore.getState().setUi({ nodePicker: false })} />
       )}
       {ui.settingsOpen && <SettingsDialog />}
       {ui.transferOpen && <TransferDialog />}

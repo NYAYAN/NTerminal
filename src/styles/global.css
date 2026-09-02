@@ -2677,6 +2677,14 @@ html[data-platform="macos"] .titlebar {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* Node rozeti: dizinle ayni notr govde, altigen simge ayirt ediyor.
+   Yesil dala, mavi degisikliklere ait; ucuncu bir renk seridi bayrak
+   diregine cevirirdi. Surum numarasi tablo rakamlariyla ki 24.9.0 ile
+   24.18.0 arasinda gecerken rozet ziplamasin. */
+.ctx-chip.node {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Ayrik HEAD: gecilecek bir dal listesi yok. */
 .ctx-chip:disabled {
   cursor: default;
