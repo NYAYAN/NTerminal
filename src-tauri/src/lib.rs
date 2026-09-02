@@ -630,7 +630,7 @@ fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
 }
 
 #[tauri::command]
-fn git_branches(path: String) -> CmdResult<Vec<String>> {
+fn git_branches(path: String) -> CmdResult<Vec<git::GitBranch>> {
     Ok(git::branches(&path))
 }
 

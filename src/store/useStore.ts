@@ -21,11 +21,10 @@ import { applyUiFont } from "../lib/fonts";
 import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
-import { cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
+import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
 import {
   canSuggest,
   cycleIndex,
-  MAX_SUGGESTIONS,
   rankSuggestions,
   recentCommands,
   type SuggestEntry,
@@ -202,7 +201,13 @@ export interface UiState {
    * yalnızca kullanıcı bir şey yazdığında ve eşleşme varken açılıyor. Boş
    * satırda liste kapalı, ok tuşları kabuğun kendi geçmişine gidiyor.
    */
-  suggest: { items: string[]; index: number; input: string } | null;
+  /**
+   * Öneri paneli. `kind` başlığı seçiyor: geçmişten gelen komutlar "GEÇMİŞ",
+   * `cd` için diskten gelen klasörler "KLASÖRLER". Aynı başlık altında ikisini
+   * göstermek yanıltıyordu: kullanıcı klasör listesine bakıp "geçmişim
+   * neden bunlar" diye soruyordu.
+   */
+  suggest: { items: string[]; index: number; input: string; kind: "history" | "dirs" } | null;
 }
 
 interface Store {
@@ -1808,7 +1813,9 @@ export const useStore = create<Store>((set, get) => ({
       const children = exact ? dirNames(descend(query, exact).dir, rerun) : null;
       const inner = exact && children ? cdSuggestions(descend(query, exact), children, quoteForShell) : [];
       const siblings = cdSuggestions(query, names, quoteForShell);
-      const dirs = [...inner, ...siblings].slice(0, MAX_SUGGESTIONS);
+      // Sınır geçmişinki (beş) değil: dizin listesinde her satır olası bir
+      // hedef, kullanıcı hepsini ok tuşlarıyla gezebilmeli. Kutu kaydırıyor.
+      const dirs = [...inner, ...siblings].slice(0, MAX_CD_SUGGESTIONS);
       if (dirs.length === 0) {
         if (ui.suggest) set({ ui: { ...ui, suggest: null } });
         return;
@@ -1817,7 +1824,7 @@ export const useStore = create<Store>((set, get) => ({
         ui.suggest && ui.suggest.input === state.prefix
           ? Math.min(ui.suggest.index, dirs.length - 1)
           : 0;
-      set({ ui: { ...ui, suggest: { items: dirs, index, input: state.prefix } } });
+      set({ ui: { ...ui, suggest: { items: dirs, index, input: state.prefix, kind: "dirs" } } });
       return;
     }
 
@@ -1833,7 +1840,7 @@ export const useStore = create<Store>((set, get) => ({
       ui.suggest && ui.suggest.input === state.prefix
         ? Math.min(ui.suggest.index, items.length - 1)
         : 0;
-    set({ ui: { ...ui, suggest: { items, index: keepIndex, input: state.prefix } } });
+    set({ ui: { ...ui, suggest: { items, index: keepIndex, input: state.prefix, kind: "history" } } });
   },
 
   moveSuggestion(direction) {
@@ -1951,7 +1958,7 @@ export const useStore = create<Store>((set, get) => ({
     if (items.length === 0) return false;
     // `input: ""` sonradan okunuyor: kabul etme yolu bununla "kullanıcı
     // hiçbir şey yazmamıştı" ayrımını yapıyor.
-    set({ ui: { ...get().ui, suggest: { items, index: 0, input: "" } } });
+    set({ ui: { ...get().ui, suggest: { items, index: 0, input: "", kind: "history" } } });
     return true;
   },
 

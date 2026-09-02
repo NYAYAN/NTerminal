@@ -335,6 +335,14 @@ export interface GitChange {
   path: string;
 }
 
+/** Dal seçicideki tek satır. */
+export interface GitBranch {
+  /** Dal adı; uzak dalda `origin/` ön eki YOK. */
+  name: string;
+  /** Yalnızca uzakta var olan dal için uzağın adı (`origin`); yerel dalda yok. */
+  remote: string | null;
+}
+
 export interface GitInfo {
   /** Dal adı; ayrık HEAD'de `"HEAD"`. */
   branch: string;

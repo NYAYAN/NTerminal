@@ -174,9 +174,27 @@ uzaktan hata ayıklama portuyla aç ve Chrome DevTools Protocol'den sür:
 
 ```powershell
 $env:NTERMINAL_DATA_DIR = "$env:TEMP\nterminal-dev-data"
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
+$env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\nterminal-dev-data\webview2"
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9333"
 Start-Process "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri\target\debug\nterminal.exe" -WorkingDirectory "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri"
 ```
+
+İki tuzak, ikisi de ölçüldü:
+
+- **`WEBVIEW2_USER_DATA_FOLDER` şart.** Kurulu uygulama açıkken geliştirme
+  örneği aynı WebView2 veri klasörünü (`%LOCALAPPDATA%\<kimlik>\EBWebView`)
+  paylaşıyor ve WebView2 var olan tarayıcı sürecine bağlanıyor; ek argümanlar
+  o zaman hiç okunmuyor — pencere açılıyor, port dinlemiyor, hata yok.
+  `NTERMINAL_DATA_DIR` bunu ayırmıyor, o yalnızca uygulamanın kendi verisi.
+- **9222 dolu olabilir.** Bu makinede Lenovo Vantage 9222'de dinliyor
+  (`netstat -ano | Select-String :9222`); `/json` cevap veriyor ama sayfa
+  "Vantage Bileşeni". Başka port seç ve sürücüye `CDP_PORT` ile söyle:
+  `$env:CDP_PORT = "9333"` (bash: `export CDP_PORT=9333`).
+
+Sürücünün `eval` komutu sayfada JS koşturup sonucu JSON yazıyor; uzun bir
+ölçüm betiğini dosyaya koyup `eval @yol` ile ver. Not: Bash aracı komut
+metnindeki çift ters bölüyü teke indiriyor — Windows yolu içeren dosya
+düzenlemelerini Bash heredoc'uyla değil Edit/Write ile yap.
 
 Sürücü bu klasörde, `cdp.mjs` (Node 24, yerleşik `WebSocket`; ek paket yok):
 

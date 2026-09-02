@@ -181,16 +181,36 @@ fn work_dir(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-/// Depodaki YEREL dallar, en son islenene gore sirali.
+/// Dal secicideki tek satir.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranch {
+    /// Dal adi; uzak dalda `origin/` on eki YOK, yerel adiyla ayni.
+    pub name: String,
+    /// Yalnizca uzakta var olan dal icin uzak adi (`origin`); yerel dalda yok.
+    pub remote: Option<String>,
+}
+
+/// Secicideki dallar, en son commit alan basta.
 ///
 /// Sira `committerdate` ile: alfabetik siralama uzun dal listelerinde ise
 /// yaramiyor - aradigin dal genelde son dokundugun dal. Alfabetik listede o
 /// dal ortada bir yerde kaliyor.
 ///
-/// Uzak dallar YOK. Listeye eklemek onlari `git checkout` ile secilebilir
-/// gosterirdi; o da yerel bir izleme dali OLUSTURUYOR, yani "gecis yaptim"
-/// sandigin yerde yeni bir dal yaratmis oluyorsun. Ayri bir is.
-pub fn branches(path: &str) -> Vec<String> {
+/// ## Uzak dallar da listede
+///
+/// Ilk tasarimda yoktu: uzak bir dali `git checkout` ile secmek yerel bir
+/// izleme dali OLUSTURUYOR ve "gecis yaptim" sandigin yerde yeni bir dal
+/// yaratmis oluyorsun. Ama eksiklik daha kotu cikti: `git fetch` sonrasi
+/// gelen dal listede gorunmuyor ve kullanici bunu "yenilenmiyor" diye okuyor.
+/// Simdi uzak dal listede, yaninda uzagin adi etiket olarak duruyor ve
+/// gonderilen komut `git checkout --track origin/ad` - ne oldugu ekranda
+/// yaziyor.
+///
+/// Ayni adla yerel dal varsa uzak kopyasi listelenmiyor: ikisi ayni seye
+/// gidiyor ve iki satir "hangisi?" sorusunu dogurur. `origin/HEAD` gibi
+/// simgesel basvurular da yok - dal degil, isaretci.
+pub fn branches(path: &str) -> Vec<GitBranch> {
     let Ok(out) = quiet_command("git")
         .args([
             "-C",
@@ -198,8 +218,9 @@ pub fn branches(path: &str) -> Vec<String> {
             "--no-optional-locks",
             "for-each-ref",
             "--sort=-committerdate",
-            "--format=%(refname:short)",
+            "--format=%(refname)%09%(symref)",
             "refs/heads/",
+            "refs/remotes/",
         ])
         .output()
     else {
@@ -208,11 +229,50 @@ pub fn branches(path: &str) -> Vec<String> {
     if !out.status.success() {
         return Vec::new();
     }
-    String::from_utf8_lossy(&out.stdout)
+    parse_refs(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// `for-each-ref --format=%(refname)%09%(symref)` ciktisini dal listesine cevirir.
+///
+/// Saf: sira korunuyor, yerel dalla ayni adli uzak dal dusuyor, simgesel
+/// basvurular (`refs/remotes/origin/HEAD`) atlaniyor.
+pub fn parse_refs(text: &str) -> Vec<GitBranch> {
+    const HEADS: &str = "refs/heads/";
+    const REMOTES: &str = "refs/remotes/";
+
+    let rows: Vec<&str> = text
         .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(String::from)
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| {
+            let (r, sym) = l.split_once('\t').unwrap_or((l, ""));
+            // Simgesel basvuru (`origin/HEAD -> origin/main`): dal degil.
+            sym.trim().is_empty().then(|| r.trim())
+        })
+        .collect();
+
+    let locals: std::collections::HashSet<&str> = rows
+        .iter()
+        .filter_map(|r| r.strip_prefix(HEADS))
+        .collect();
+
+    rows.iter()
+        .filter_map(|r| {
+            if let Some(name) = r.strip_prefix(HEADS) {
+                return Some(GitBranch {
+                    name: name.to_string(),
+                    remote: None,
+                });
+            }
+            let (remote, name) = r.strip_prefix(REMOTES)?.split_once('/')?;
+            if locals.contains(name) {
+                return None;
+            }
+            Some(GitBranch {
+                name: name.to_string(),
+                remote: Some(remote.to_string()),
+            })
+        })
         .collect()
 }
 

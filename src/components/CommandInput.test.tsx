@@ -4,6 +4,7 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
+import { promptedTabs } from "../lib/promptSeen";
 import { sessions, useStore } from "../store/useStore";
 import type { Group, TabState } from "../types";
 import { CommandInput } from "./CommandInput";
@@ -98,6 +99,8 @@ const field = (c: HTMLElement) => c.querySelector<HTMLTextAreaElement>(".command
 
 beforeEach(() => {
   setLanguage("tr");
+  // Her test yeni bir kabukla başlıyor: "ilk istem görüldü" kaydı sıfır.
+  promptedTabs.clear();
   sendKeys.mockClear();
   focus.mockClear();
   setAppInput.mockClear();
@@ -160,6 +163,60 @@ describe("komut satırı kutusu", () => {
     // Çalışan komut tuşları o an isteyebilir (parola, y/n). Kutu burada
     // açık kalsaydı kullanıcı ona cevap veremezdi.
     seed({ atPrompt: false });
+    useStore.setState({ running: { [TAB]: true } });
+    const { container } = render(<CommandInput />);
+    expect(field(container)).toBe(null);
+    useStore.setState({ running: {} });
+  });
+
+  /*
+   * Kabuk ilk istemine gelmeden: kutunun YERİNDE yükleniyor şeridi.
+   *
+   * BİLDİRİLEN İSTEK: "yeni bir sekme oluşturunca komut yazma yeri sonradan
+   * geliyor; bence hep olsun, o kısımda ufak bir yükleniyor gösterelim."
+   */
+  it("kabuk başlarken yükleniyor şeridi var, kutu yok, tuşlar terminale", () => {
+    seed({ atPrompt: false });
+    const { container } = render(<CommandInput />);
+    expect(field(container), "istem gelmeden kutu açılmamalı").toBe(null);
+    expect(container.querySelector(".command-running.starting")).not.toBe(null);
+    // Şerit PASİF: kabuk açılışta bir şey sorarsa cevap verilebilmeli.
+    expect(setAppInput).not.toHaveBeenCalledWith(true);
+  });
+
+  it("ilk istemden sonra şerit bir daha çıkmıyor: komutlar arasında sessiz", () => {
+    // A → B arası (istem çizilirken) sinyal kısa süre düşüyor; orada
+    // "başlatılıyor" yazmak yanlış olurdu.
+    const { container, rerender } = render(<CommandInput />);
+    expect(field(container)).not.toBe(null);
+    act(() => seed({ atPrompt: false }));
+    rerender(<CommandInput />);
+    expect(container.querySelector(".command-running.starting")).toBe(null);
+    expect(field(container)).toBe(null);
+  });
+
+  it("şerit ile kutu aynı satır yüksekliğini paylaşıyor", () => {
+    // BİLDİRİLEN: "yükleniyor bittiğinde ufak bir yükseklik değişmesi oluyor."
+    // ÖLÇÜLEN: kutu 33px, şerit 29px. Tek ölçü: yuvarlanmış satır yüksekliği
+    // kutunun metnine line-height, şeride --cmd-row-h olarak gidiyor.
+    const fontSize = useStore.getState().settings.appearance.fontSize;
+    const beklenen = `${Math.round(fontSize * 1.55)}px`;
+
+    const kutu = render(<CommandInput />);
+    expect(field(kutu.container)!.style.lineHeight).toBe(beklenen);
+    kutu.unmount();
+
+    // İlk çizim sekmeyi "istem görüldü" diye kaydetti; şerit için yeni kabuk.
+    promptedTabs.clear();
+    seed({ atPrompt: false });
+    const serit = render(<CommandInput />);
+    const strip = serit.container.querySelector<HTMLElement>(".command-running.starting")!;
+    expect(strip.getAttribute("style")).toContain(`--cmd-row-h: ${beklenen}`);
+  });
+
+  it("kabuk entegrasyonu yoksa yükleniyor şeridi de yok", () => {
+    // Orada istem sinyali hiç gelmeyecek; sonsuz "başlatılıyor" yalan olurdu.
+    seed({ atPrompt: false, integration: false });
     const { container } = render(<CommandInput />);
     expect(container.innerHTML).toBe("");
   });
@@ -386,15 +443,40 @@ describe("komut satırı kutusu", () => {
     expect(el.value).toBe("echo selam");
   });
 
-  it("Tab satırı kabuğa devredip kutuyu kapatıyor", () => {
-    // Sekme tamamlaması kabuğun işi ve kutudaki metni göremiyor. Devir
-    // olmadan Tab hiçbir şey yapmazdı.
+  /*
+   * Tab kutuyu TERK ETMİYOR.
+   *
+   * BİLDİRİLEN HATA: "cd Desktop yazdım ve Tab'a bastım, komut yazma yeri
+   * kayboldu, odak üstteki terminale geçti ve komutları oraya yazmaya
+   * başladım." Eski hâl bunu bilerek yapıyordu (satırı kabuğa devrediyordu);
+   * kullanıcı için kutunun bir tuşla yok olması arızaydı.
+   */
+  it("Tab satırı kabuğa devretmiyor, kutu açık kalıyor", () => {
     const { container } = render(<CommandInput />);
     const el = field(container)!;
-    fireEvent.change(el, { target: { value: "cd src" } });
+    fireEvent.change(el, { target: { value: "cd Desktop" } });
+    const olay = fireEvent.keyDown(el, { key: "Tab" });
+    expect(sendKeys, "hiçbir şey kabuğa gitmemeli").not.toHaveBeenCalled();
+    expect(field(container), "kutu yerinde").not.toBe(null);
+    expect(field(container)!.value, "yazılan duruyor").toBe("cd Desktop");
+    // Tarayıcının Tab'ı odağı sonraki öğeye (terminale) taşırdı; engellenmeli.
+    expect(olay, "varsayılan engellenmeli").toBe(false);
+  });
+
+  it("Tab liste açıkken seçili öneriyi kutuya yazıyor", () => {
+    // Kabuğun tamamlamasıyla aynı yürüyüş: `cd Desk` → Tab → `cd Desktop`.
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "cd Desk" } });
+    act(() => {
+      const ui = useStore.getState().ui;
+      useStore.setState({
+        ui: { ...ui, suggest: { items: ["cd Desktop"], index: 0, input: "cd Desk", kind: "dirs" } },
+      });
+    });
     fireEvent.keyDown(el, { key: "Tab" });
-    expect(sendKeys).toHaveBeenCalledWith("cd src\t");
-    expect(field(container), "devirden sonra kutu kapanmalı").toBe(null);
+    expect(field(container)!.value).toBe("cd Desktop");
+    expect(sendKeys).not.toHaveBeenCalled();
   });
 
   it("kabul edilen öneri kutuya yazılıyor, kabuğa değil", () => {
@@ -404,7 +486,7 @@ describe("komut satırı kutusu", () => {
     act(() => {
       const ui = useStore.getState().ui;
       useStore.setState({
-        ui: { ...ui, suggest: { items: ["npm run build"], index: 0, input: "npm" } },
+        ui: { ...ui, suggest: { items: ["npm run build"], index: 0, input: "npm", kind: "history" } },
       });
     });
     act(() => useStore.getState().acceptSuggestion());

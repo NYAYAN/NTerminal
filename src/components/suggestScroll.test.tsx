@@ -61,7 +61,7 @@ function seed(index: number) {
     groups: [group()],
     activeGroupId: "g1",
     suggestHistory: [],
-    ui: { ...state.ui, suggest: { items: ITEMS, index, input: "cd " } },
+    ui: { ...state.ui, suggest: { items: ITEMS, index, input: "cd ", kind: "dirs" } },
   });
 }
 

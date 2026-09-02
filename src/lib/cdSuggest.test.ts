@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cdQuery, cdSuggestions, descend, exactDir } from "./cdSuggest";
+import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "./cdSuggest";
 
 /**
  * `cd` yazarken dizin önerisi.
@@ -126,6 +126,34 @@ describe("cd önerileri", () => {
     const q = cdQuery("cd ", CWD)!;
     const cok = Array.from({ length: 20 }, (_, i) => `k${i}`);
     expect(cdSuggestions(q, cok, alıntı, 3)).toHaveLength(3);
+  });
+
+  it("varsayılan sınır geçmişinki (beş) değil: klasörün tamamı geliyor", () => {
+    // BİLDİRİLEN HATA: "cd Desktop\Work\ dediğimde 5 öneri geliyor, oysa o
+    // klasörün altında ne varsa ok tuşlarıyla seçebilmem gerek; NYAYAN
+    // gelmiyor." On iki klasörün alfabetik ilk beşi gösteriliyordu.
+    const q = cdQuery("cd Desktop\\Work\\", CWD)!;
+    const klasorler = [
+      "Aday Görüşme",
+      "Docs",
+      "Examples",
+      "Github",
+      "NYAYAN",
+      "Old-Portal",
+      "Other",
+      "Publish",
+      "SAP Connectors",
+      "apache-jmeter",
+      "metronic",
+      "x",
+    ];
+    const out = cdSuggestions(q, klasorler, alıntı);
+    expect(out).toHaveLength(12);
+    expect(out).toContain("cd Desktop\\Work\\NYAYAN");
+
+    // Uç durum: binlerce girdili klasör satır satır çizilmiyor.
+    const cok = Array.from({ length: 1000 }, (_, i) => `k${i}`);
+    expect(cdSuggestions(q, cok, alıntı)).toHaveLength(MAX_CD_SUGGESTIONS);
   });
 
   /*

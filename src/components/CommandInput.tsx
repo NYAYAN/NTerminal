@@ -4,6 +4,7 @@ import { tokenizeCommand } from "../lib/cmdline";
 import { passThroughSequence, resolveInputMode, SIGINT } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
+import { promptedTabs } from "../lib/promptSeen";
 import { sessions, useStore } from "../store/useStore";
 
 /**
@@ -27,13 +28,25 @@ import { sessions, useStore } from "../store/useStore";
  * terminale gidiyor — o programlar tuşları BİR BİR, o an istiyor. Kararı
  * `lib/inputMode.ts` veriyor; bu bileşen yalnızca sonucunu uyguluyor.
  *
- * ## Kaçış kapısı: Tab
+ * ## Tab kutuyu TERK ETMİYOR
  *
- * Sekme tamamlamayı kabuk yapıyor ve kutudaki metni göremiyor. Tab'a
- * basıldığında metin olduğu gibi kabuğa gönderiliyor ve kutu o istem boyunca
- * kapanıyor: satır artık terminalde, tamamlama, geçmiş, her şey kabuğun kendi
- * düzenleyicisinde çalışıyor. Kendi tamamlayıcımızı yazmadan önce bu, işi
- * kaybetmeden devretmenin en dürüst yolu.
+ * Eski hâli bir "kaçış kapısı"ydı: Tab metni kabuğa gönderiyor ve kutu o istem
+ * boyunca kapanıyordu, tamamlama kabuğun kendi düzenleyicisinde sürsün diye.
+ * BİLDİRİLEN HATA: "cd Desktop yazdım ve Tab'a bastım, komut yazma yeri
+ * kayboldu, odak üstteki terminale geçti ve komutları oraya yazmaya
+ * başladım." Kullanıcı için kutunun kaybolması bir özellik değil arıza —
+ * yazdığı yer bir tuşla yer değiştiriyor ve geri gelmiyor.
+ *
+ * Şimdi Tab kutunun İÇİNDE bir tuş: öneri listesi açıksa seçili satırı kabul
+ * ediyor (sağ okla aynı). `cd` için bu kabuğun tamamlamasıyla aynı yürüyüş —
+ * `cd Desk` → Tab → `cd Desktop` → liste Desktop'ın içini gösteriyor → Tab
+ * bir kat daha iniyor. Liste kapalıysa Tab hiçbir şey yapmıyor ama tarayıcının
+ * varsayılanı da engelleniyor: o varsayılan odağı bir sonraki öğeye, yani
+ * terminale taşırdı — aynı hatanın başka bir yoldan dönüşü.
+ *
+ * Kabuğun kendi tamamlaması bu kipte erişilemez; `cd` dışındaki komutlar için
+ * bu bir eksik ve kutunun tamamlayıcısı büyüdükçe kapanacak. Kutuyu bir tuşla
+ * yok etmekten daha küçük bir eksik.
  */
 export function CommandInput() {
   const t = useT();
@@ -45,6 +58,19 @@ export function CommandInput() {
   // Kutu terminalle AYNI yazı tipinde: yazdığınız komut, bir satır sonra
   // ekranda göreceğiniz komutla aynı görünmeli.
   const appearance = useStore((s) => s.settings.appearance);
+  /**
+   * Kutunun satır yüksekliği, TAM PİKSEL — ve kutunun yerini alan şeritlerin
+   * içerik yüksekliği.
+   *
+   * BİLDİRİLEN: "yükleniyor bittiğinde ufak bir yükseklik değişmesi oluyor."
+   * ÖLÇÜLEN: kutu 33px, şerit 29px. Şeridin metni kendi yazı tipinin doğal
+   * satırını alıyordu (16px), kutunun metin alanı 20px'ti. Dolgu ve kenarlık
+   * zaten aynıydı; tek ölçüyü ikisine de buradan veriyoruz. Yuvarlama şart:
+   * 13px × 1.55 = 20.15px kesirli kalır ve iki öğe hiçbir zaman aynı tam
+   * piksele oturmazdı.
+   */
+  const rowH = Math.round(appearance.fontSize * 1.55);
+  const rowStyle = { "--cmd-row-h": `${rowH}px` } as React.CSSProperties;
   const allRunning = useStore((s) => s.running);
   const allExited = useStore((s) => s.exited);
   const stopArmed = useStore((s) => s.stopArmed);
@@ -56,14 +82,6 @@ export function CommandInput() {
   const tabId = tab?.id ?? null;
 
   const [value, setValue] = useState("");
-  /**
-   * Tab ile kabuğa devredildi mi?
-   *
-   * Ayrı bir bayrak şart: devrettikten sonra kabuk HÂLÂ istemde bekliyor, yani
-   * sinyaller değişmiyor ve kip kendiliğinden "app"e geri dönerdi — kutu
-   * yeniden açılıp aynı satırı ikinci kez toplamaya başlardı.
-   */
-  const [handedOff, setHandedOff] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const highlightRef = useRef<HTMLPreElement | null>(null);
 
@@ -90,7 +108,7 @@ export function CommandInput() {
   // Klavyeden gelen ilk Ctrl+C burayı "tekrar basın" hâline geçiriyor.
   const armed = !!tabId && stopArmed === tabId;
   const mode = resolveInputMode({
-    enabled: appInput && !handedOff,
+    enabled: appInput,
     integration: signals?.integration ?? false,
     atPrompt: signals?.atPrompt ?? false,
     altScreen: signals?.altScreen ?? false,
@@ -98,16 +116,38 @@ export function CommandInput() {
   });
   const active = mode === "app";
 
+  useEffect(() => {
+    if (!tabId) return;
+    if (active) promptedTabs.add(tabId);
+    if (exited) promptedTabs.delete(tabId);
+  }, [active, exited, tabId]);
+
+  /*
+   * Kabuk henüz ilk istemine gelmedi: kutunun YERİNDE bir yükleniyor şeridi.
+   *
+   * BİLDİRİLEN İSTEK: "yeni bir sekme oluşturunca komut yazma yeri sonradan
+   * geliyor; bence hep olsun, o kısımda ufak bir yükleniyor gösterelim."
+   * PowerShell profilini yüklerken bir iki saniye geçiyor ve o sürede alt
+   * kenar boştu — kutu sonra beliriyor, düzen zıplıyordu.
+   *
+   * Şerit PASİF: kip ham kalıyor, tuşlar terminale gidiyor. Kabuk açılışta bir
+   * şey sorarsa (parola, onay) cevap verilebilmeli. Entegrasyonu olmayan
+   * profil şeridi görmüyor: orada istem sinyali hiç gelmeyecek, sonsuz bir
+   * "başlatılıyor" yalan olurdu. Entegrasyon bayrağı süreç açılır açılmaz
+   * belli (`SpawnResult.integration`), o yüzden ayrım ilk kareden yapılabiliyor.
+   */
+  const starting =
+    !!tabId &&
+    appInput &&
+    !exited &&
+    !running &&
+    !promptedTabs.has(tabId) &&
+    (signals === undefined || (signals.integration && !signals.altScreen && !signals.atPrompt));
+
   // Sekme değişince kutu boşalmalı: yazılan metin O sekmenin kabuğuna ait.
   useEffect(() => {
     setValue("");
-    setHandedOff(false);
   }, [tabId]);
-
-  // Yeni istem geldiğinde devir bitiyor: kutu bir sonraki komut için açılıyor.
-  useEffect(() => {
-    if (!signals?.atPrompt) setHandedOff(false);
-  }, [signals?.atPrompt]);
 
   /**
    * Veri yolunu tek kapıya indir ve odağı doğru yere ver.
@@ -235,7 +275,7 @@ export function CommandInput() {
      * tuşun ikinci anlamı (kopyalama); düğmenin ikinci bir anlamı yok.
      */
     return (
-      <div className={armed ? "command-running armed" : "command-running"}>
+      <div className={armed ? "command-running armed" : "command-running"} style={rowStyle}>
         <span className="running-dot" aria-hidden="true" />
         <span className="running-text">
           {armed ? t("input.stopAgain") : t("input.running")}
@@ -256,6 +296,15 @@ export function CommandInput() {
     );
   }
 
+  if (starting) {
+    return (
+      <div className="command-running starting" style={rowStyle}>
+        <span className="running-dot" aria-hidden="true" />
+        <span className="running-text">{t("input.starting")}</span>
+      </div>
+    );
+  }
+
   if (!active || !tabId) return null;
 
   /*
@@ -270,6 +319,7 @@ export function CommandInput() {
   const typography = {
     fontFamily: appearance.fontFamily,
     fontSize: `${appearance.fontSize}px`,
+    lineHeight: `${rowH}px`,
   };
 
   const send = (data: string) => sessions.get(tabId)?.sendKeys(data);
@@ -374,12 +424,13 @@ export function CommandInput() {
     }
 
     if (e.key === "Tab") {
-      // Tamamlamayı kabuğa devret (bkz. bileşen başlığı).
+      /*
+       * Tab kutuda kalıyor (bkz. bileşen başlığı). `preventDefault` liste
+       * kapalıyken de ŞART: tarayıcının Tab'ı odağı bir sonraki öğeye taşır,
+       * o da terminal — kutu "kaybolmuş" olur.
+       */
       e.preventDefault();
-      store.closeSuggestions();
-      send(value + "\t");
-      setValue("");
-      setHandedOff(true);
+      if (suggest && suggest.items.length > 0 && !e.shiftKey) store.acceptSuggestion();
       return;
     }
 

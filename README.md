@@ -824,8 +824,11 @@ yutuyor. Derleme geçiyor, test geçiyor, hata çıkmıyor — yalnızca özelli
 
 **Öneri terminalin üstüne binmiyor, onu küçültüyor.** Öneri listesi ızgarada
 ayrı bir satır. Terminalin üstüne bindirmek istem satırını — yani tam olarak
-yazdığınız yeri — kapatırdı. Liste en fazla beş öneri gösteriyor: sekizde çubuk
-191px oluyordu, 627px'lik bir terminalin üçte biri.
+yazdığınız yeri — kapatırdı. Geçmiş önerisi en fazla beş satır: sekizde çubuk
+191px oluyordu, 627px'lik bir terminalin üçte biri. `cd` yazarken gelen klasör
+listesi bu sınıra bağlı değil — orada her satır eşit derecede olası bir hedef
+ve hepsi ok tuşlarıyla gezilebilmeli; kutu beş satır yüksekliğinde kalıyor,
+fazlası kaydırılıyor.
 
 **Öneri listesi ters sırada.** En yeni komut en altta, istem satırına en yakın.
 Kabuk alışkanlığıyla "yukarı ok = daha eski" tutarlı kalsın diye; sıralamayı

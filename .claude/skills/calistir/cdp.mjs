@@ -6,12 +6,16 @@
 //   value               kutunun degeri ve secim araligi
 //   shot <ad>           ekran goruntusu -> %TEMP%\nt-cdp\<ad>.png
 //   newgroup            Ctrl+Shift+N (yeni grup)
-import { writeFileSync, mkdirSync } from "node:fs";
+//   eval <ifade>        sayfada JS calistir, sonucu JSON yaz (@dosya: ifadeyi dosyadan oku)
+// Port: CDP_PORT ortam degiskeni (varsayilan 9222; 9222 baska bir uygulamada
+// olabilir - Lenovo Vantage orada dinliyor, o zaman uygulamayi baska portla ac).
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const [cmd, ...args] = process.argv.slice(2);
-const targets = await (await fetch("http://localhost:9222/json")).json();
-const page = targets.find((t) => t.type === "page");
+const PORT = process.env.CDP_PORT ?? "9222";
+const targets = await (await fetch(`http://localhost:${PORT}/json`)).json();
+const page = targets.find((t) => t.type === "page" && !/Vantage/.test(t.title ?? ""));
 if (!page) throw new Error("sayfa hedefi yok");
 
 const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -103,6 +107,9 @@ switch (cmd) {
     await key("N", 2 | 8, "KeyN");
     await sleep(3500);
     console.log(JSON.stringify(await readBox()));
+    break;
+  case "eval":
+    console.log(JSON.stringify(await evaluate(args[0]?.startsWith("@") ? readFileSync(args[0].slice(1), "utf8") : args.join(" "))));
     break;
   default:
     throw new Error("bilinmeyen komut: " + cmd);

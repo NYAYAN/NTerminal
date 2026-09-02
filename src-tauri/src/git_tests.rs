@@ -404,3 +404,65 @@ fn durum_deponun_kokunu_bildiriyor() {
     assert_eq!(bildirilen, std::fs::canonicalize(&root).unwrap());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ---- Dal listesi (`for-each-ref` ciktisi) ----
+
+fn yerel(name: &str) -> GitBranch {
+    GitBranch {
+        name: name.into(),
+        remote: None,
+    }
+}
+
+fn uzak(remote: &str, name: &str) -> GitBranch {
+    GitBranch {
+        name: name.into(),
+        remote: Some(remote.into()),
+    }
+}
+
+#[test]
+fn fetch_ile_gelen_uzak_dal_listede() {
+    // Bildirilen hata: `git fetch` sonrasi yeni dal seciciye gelmiyordu -
+    // liste yalnizca `refs/heads/` okuyordu.
+    let text = "refs/remotes/origin/yeni-ozellik\t\nrefs/heads/main\t\n";
+    assert_eq!(
+        parse_refs(text),
+        vec![uzak("origin", "yeni-ozellik"), yerel("main")]
+    );
+}
+
+#[test]
+fn yerel_dali_olan_uzak_dal_tekrar_gorunmuyor() {
+    // `main` ile `origin/main` ayni yere gidiyor; iki satir "hangisi?" sorar.
+    let text = "refs/heads/main\t\nrefs/remotes/origin/main\t\nrefs/remotes/origin/dev\t\n";
+    assert_eq!(parse_refs(text), vec![yerel("main"), uzak("origin", "dev")]);
+}
+
+#[test]
+fn yerel_dal_uzaktan_sonra_gelse_de_uzak_kopya_dusuyor() {
+    // Sira committerdate ile: uzak kopya once gelebilir. Tekillestirme siraya
+    // bagli olmamali.
+    let text = "refs/remotes/origin/main\t\nrefs/heads/main\t\n";
+    assert_eq!(parse_refs(text), vec![yerel("main")]);
+}
+
+#[test]
+fn origin_head_isaretcisi_dal_degil() {
+    let text = "refs/remotes/origin/HEAD\trefs/remotes/origin/main\nrefs/remotes/origin/main\t\n";
+    assert_eq!(parse_refs(text), vec![uzak("origin", "main")]);
+}
+
+#[test]
+fn egik_cizgili_dal_adi_uzakta_bolunmuyor() {
+    // `feature/x`in uzak adi `origin`, dal adi `feature/x`; ilk `/`den sonrasi
+    // bir butun.
+    let text = "refs/remotes/origin/feature/x\t\n";
+    assert_eq!(parse_refs(text), vec![uzak("origin", "feature/x")]);
+}
+
+#[test]
+fn windows_satir_sonu_ve_bos_satir_zarar_vermiyor() {
+    let text = "refs/heads/main\t\r\n\r\nrefs/heads/dev\t\r\n";
+    assert_eq!(parse_refs(text), vec![yerel("main"), yerel("dev")]);
+}

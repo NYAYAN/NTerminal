@@ -183,7 +183,9 @@ export function SuggestionBar() {
   return (
     <div className="suggest-bar" ref={ref}>
       <div className="suggest-head">
-        <span className="suggest-title">{t("suggest.title")}</span>
+        <span className="suggest-title">
+          {t(suggest.kind === "dirs" ? "suggest.titleDirs" : "suggest.title")}
+        </span>
         <span className="spacer" />
         <span className="kbd">
           {suggest.index + 1}/{suggest.items.length}

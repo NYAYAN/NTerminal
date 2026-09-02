@@ -23,7 +23,9 @@ const cmd = (row: Element | null) => row?.querySelector(".suggest-cmd")?.textCon
 
 function setSuggest(items: string[], index = 0, input = "np") {
   const ui = useStore.getState().ui;
-  useStore.setState({ ui: { ...ui, suggest: items.length ? { items, index, input } : null } });
+  useStore.setState({
+    ui: { ...ui, suggest: items.length ? { items, index, input, kind: "history" } : null },
+  });
 }
 
 beforeEach(() => {

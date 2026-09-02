@@ -1,5 +1,4 @@
 import { filterDirs, joinDir, separatorOf } from "./dirs";
-import { MAX_SUGGESTIONS } from "./suggest";
 
 /**
  * `cd` yazarken bulunulan dizinin klasörlerini önermek.
@@ -19,6 +18,23 @@ import { MAX_SUGGESTIONS } from "./suggest";
  * parça süzgeç. Dosya sistemine hiç dokunmadan test edilebiliyor; depodaki
  * `dirs.ts` de aynı sebeple ayrı duruyor ve yol matematiğini oradan alıyoruz.
  */
+
+/**
+ * `cd` önerisinde listelenecek en fazla klasör.
+ *
+ * Geçmiş önerisinin sınırı (`MAX_SUGGESTIONS`, beş) burada YANLIŞ cevap.
+ * BİLDİRİLEN HATA: "cd Desktop\Work\ dediğimde 5 öneri geliyor, oysa o
+ * klasörün altında ne varsa ok tuşlarıyla seçebilmem gerek; NYAYAN gelmiyor."
+ * Klasörde on iki alt klasör vardı, alfabetik ilk beşi gösteriliyordu ve
+ * aranan altıncıdaydı. Geçmişte beşin ötesi zaten gürültü; dizin listesinde
+ * ise her satır eşit derecede olası bir hedef.
+ *
+ * Yükseklik değişmiyor: liste beş satırlık kutuda kaydırılıyor ve seçim
+ * görünür tutuluyor (`suggestScroll.test.tsx`). Sınır yalnızca uç durum için:
+ * `node_modules` gibi binlerce girdili bir klasörü satır satır çizmek boşuna,
+ * orada bir iki harf yazmak listeyi zaten daraltıyor.
+ */
+export const MAX_CD_SUGGESTIONS = 200;
 
 export interface CdQuery {
   /** Listelenecek dizinin tam yolu. */
@@ -76,7 +92,7 @@ export function cdSuggestions(
   query: CdQuery,
   names: readonly string[],
   quote: (path: string) => string,
-  limit = MAX_SUGGESTIONS,
+  limit = MAX_CD_SUGGESTIONS,
 ): string[] {
   const sep = separatorOf(query.dir);
   /*
@@ -100,7 +116,20 @@ export function cdSuggestions(
    * Kabul akışında da aynı: `cd Desk` → kabul → `cd Desktop`, panel yine
    * `cd Desktop` diyor. Bir öneri yeni bir şey söylemiyorsa öneri değil.
    */
-  const eslesen = filterDirs(names, query.leaf).filter((n) => n.toLowerCase() !== leaf);
+  /*
+   * Nokta ile başlayan klasörler ancak nokta YAZILINCA listede.
+   *
+   * ÖLÇÜLEN: ev dizininde `cd ` yazınca 72 satır geliyordu ve ilk beşi
+   * `.cargo`, `.cache`, `.antigravity`, `.android`, `.agents` — nokta
+   * alfabetik olarak harflerden önce geliyor, yani aranan klasör hep gizli
+   * araç klasörlerinin altında kalıyordu. Kabukların kuralı da bu: bash `.`
+   * yazılmadan nokta girdilerini tamamlamaz. Nokta yazan kişi tam olarak onları
+   * arıyor, o zaman hepsi geliyor.
+   */
+  const gizliIstendi = leaf.startsWith(".");
+  const eslesen = filterDirs(names, query.leaf).filter(
+    (n) => n.toLowerCase() !== leaf && (gizliIstendi || !n.startsWith(".")),
+  );
   const onEk = eslesen.filter((n) => n.toLowerCase().startsWith(leaf));
   const iceren = eslesen.filter((n) => !n.toLowerCase().startsWith(leaf));
 
