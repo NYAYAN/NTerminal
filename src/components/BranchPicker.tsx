@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { filterDirs } from "../lib/dirs";
+import { checkoutCommand, filterBranches } from "../lib/branches";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
 import { anchorAbove } from "../lib/popover";
+import type { GitBranch } from "../types";
 import { BranchIcon } from "./Icons";
 
 /**
@@ -20,6 +21,13 @@ import { BranchIcon } from "./Icons";
  *
  * Komut kabuktan geçiyor, uygulamanın içinden değil: geçmişte kaydı kalıyor,
  * çıktısı ekranda görünüyor ve hata olursa kullanıcı sebebini okuyor.
+ *
+ * ## Uzak dallar
+ *
+ * `git fetch` ile gelen dallar da listede; yanlarında uzağın adı etiket
+ * olarak duruyor. Seçilince `git checkout --track origin/ad` gidiyor: yerel
+ * bir izleme dalı oluşuyor ve bunu komutun kendisi söylüyor. Liste her
+ * açılışta yeniden okunuyor, önbellek yok — fetch sonrası tıklamak yetiyor.
  */
 export function BranchPicker({
   cwd,
@@ -31,7 +39,7 @@ export function BranchPicker({
   onClose: () => void;
 }) {
   const t = useT();
-  const [names, setNames] = useState<string[] | null>(null);
+  const [list, setList] = useState<GitBranch[] | null>(null);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -45,26 +53,26 @@ export function BranchPicker({
     let cancelled = false;
     void api
       .gitBranches(cwd)
-      .then((list) => !cancelled && setNames(list))
-      .catch(() => !cancelled && setNames([]));
+      .then((l) => !cancelled && setList(l))
+      .catch(() => !cancelled && setList([]));
     return () => {
       cancelled = true;
     };
   }, [cwd]);
 
-  useEffect(() => anchorAbove(boxRef.current, ".ctx-chip.branch"), [names]);
+  useEffect(() => anchorAbove(boxRef.current, ".ctx-chip.branch"), [list]);
 
-  const rows = useMemo(() => filterDirs(names ?? [], query), [names, query]);
+  const rows = useMemo(() => filterBranches(list ?? [], query), [list, query]);
 
   useEffect(() => {
     setIndex(0);
   }, [query]);
 
-  const gecis = (branch: string) => {
+  const gecis = (branch: GitBranch) => {
     // Zaten o daldaysak komut göndermenin anlamı yok; kabuk "already on"
     // yazıp geçiyor ve geçmişe boş bir kayıt giriyor.
-    if (branch !== current) {
-      useStore.getState().insertCommand(`git checkout ${branch}`, true);
+    if (branch.remote || branch.name !== current) {
+      useStore.getState().insertCommand(checkoutCommand(branch), true);
     }
     onClose();
   };
@@ -101,25 +109,31 @@ export function BranchPicker({
         />
 
         <div className="pop-list">
-          {names === null && <div className="pop-empty">{t("common.loading")}</div>}
-          {names !== null && rows.length === 0 && (
+          {list === null && <div className="pop-empty">{t("common.loading")}</div>}
+          {list !== null && rows.length === 0 && (
             <div className="pop-empty">{t("git.noBranch")}</div>
           )}
-          {rows.map((name, i) => (
+          {rows.map((b, i) => (
             <button
-              key={name}
+              key={b.remote ? `${b.remote}/${b.name}` : b.name}
               type="button"
               className={i === index ? "pop-row on" : "pop-row"}
+              title={b.remote ? t("git.remoteHint") : undefined}
               onMouseEnter={() => setIndex(i)}
-              onClick={() => gecis(name)}
+              onClick={() => gecis(b)}
             >
               <span className="pop-mark" aria-hidden="true">
                 <BranchIcon size={12} />
               </span>
-              {name}
+              {b.name}
               {/* Bulunduğun dal işaretli: listede onu ararken "hangisindeyim"
                   sorusunu rozete geri dönüp sormak gerekmesin. */}
-              {name === current && <span className="pop-tag">{t("git.currentBranch")}</span>}
+              {!b.remote && b.name === current && (
+                <span className="pop-tag">{t("git.currentBranch")}</span>
+              )}
+              {/* Uzak dal: etiket uzağın adı. Bu satırı seçmek yerel dal
+                  oluşturuyor; farkı görünür kılmak gerekiyor. */}
+              {b.remote && <span className="pop-tag remote">{b.remote}</span>}
             </button>
           ))}
         </div>

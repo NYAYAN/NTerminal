@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { passThroughSequence, resolveInputMode, type InputSignals } from "./inputMode";
+import {
+  passThroughSequence,
+  resolveCtrlC,
+  resolveInputMode,
+  SIGINT,
+  type CtrlCSignals,
+  type InputSignals,
+  type PassThroughKey,
+} from "./inputMode";
 
 const ACIK: InputSignals = {
   enabled: true,
@@ -60,20 +68,93 @@ describe("girdi kipi", () => {
   });
 });
 
+/** Yalnız Ctrl basılı bir tuş olayı; testler değiştiricileri üstüne yazıyor. */
+function ctrl(key: string, mods: Partial<PassThroughKey> = {}): PassThroughKey {
+  return { key, ctrlKey: true, shiftKey: false, altKey: false, metaKey: false, ...mods };
+}
+
 describe("kabuğa geçen tuşlar", () => {
   it("Ctrl+C kutu boşken bile kabuğa gidiyor", () => {
     // Yoksa çalışan bir şeyi durdurmanın yolu kalmıyor.
-    expect(passThroughSequence({ key: "c", ctrl: true })).toBe("\x03");
-    expect(passThroughSequence({ key: "C", ctrl: true })).toBe("\x03");
+    expect(passThroughSequence(ctrl("c"))).toBe(SIGINT);
+    expect(passThroughSequence(ctrl("C"))).toBe(SIGINT);
+    // Sabit üç yerden okunuyor (kutu, Durdur düğmesi, satırı boşaltma
+    // denetimi); değeri ETX olmaya devam etmeli.
+    expect(SIGINT).toBe("\x03");
   });
 
   it("Ctrl+D ve Ctrl+L kabuğun işi", () => {
-    expect(passThroughSequence({ key: "d", ctrl: true })).toBe("\x04");
-    expect(passThroughSequence({ key: "l", ctrl: true })).toBe("\x0c");
+    expect(passThroughSequence(ctrl("d"))).toBe("\x04");
+    expect(passThroughSequence(ctrl("l"))).toBe("\x0c");
   });
 
   it("Ctrl'süz tuşlar kutuda kalıyor", () => {
-    expect(passThroughSequence({ key: "c", ctrl: false })).toBe(null);
-    expect(passThroughSequence({ key: "a", ctrl: true })).toBe(null);
+    expect(passThroughSequence(ctrl("c", { ctrlKey: false }))).toBe(null);
+    expect(passThroughSequence(ctrl("a"))).toBe(null);
+  });
+
+  /*
+   * Denetim karakterleri YALNIZ Ctrl ile; her eksik değiştirici bir kez hata
+   * oldu (öyküsü `PassThroughKey` üzerinde):
+   *  - Shift: Ctrl+Shift+C Windows'ta kopyalama kısayolu, SIGINT'e dönüşüyordu.
+   *  - Alt: AltGr tarayıcıya ctrl+alt olarak geliyor; Türkçe Q'da AltGr+C
+   *    satırı siliyor, Ctrl+Alt+D EOF gönderip kabuğu kapatabiliyordu.
+   *  - Meta: Ctrl+Win+C'nin kabukta bir anlamı yok.
+   */
+  it("Shift, Alt ya da Win eşlik ediyorsa kabuğa GİTMİYOR", () => {
+    for (const key of ["C", "D", "L"]) {
+      expect(passThroughSequence(ctrl(key, { shiftKey: true })), `shift+${key}`).toBe(null);
+      expect(passThroughSequence(ctrl(key, { altKey: true })), `alt+${key}`).toBe(null);
+      expect(passThroughSequence(ctrl(key, { metaKey: true })), `meta+${key}`).toBe(null);
+    }
+  });
+});
+
+/*
+ * Ctrl+C'nin iki anlamı: kopyala mı, kes mi.
+ *
+ * BİLDİRİLEN HATA: kutuda metni seçip Ctrl+C'ye basmak satırı siliyor ve
+ * kopyalamıyordu — karar yalnızca ızgaradaki seçime bakıyordu. İlk düzeltme
+ * kuralı kutuya ikinci kez yazdı; inceleme aynı gün üç kopya saydı. Kural
+ * artık burada, tek yerde; oturum ve kutu girdileri toplayıp buraya soruyor.
+ */
+describe("Ctrl+C kararı", () => {
+  const WINDOWS: CtrlCSignals = {
+    mac: false,
+    copiesSelection: true,
+    boxSelection: false,
+    gridSelection: false,
+  };
+
+  it("kutudaki seçim kopyalanıyor", () => {
+    expect(resolveCtrlC({ ...WINDOWS, boxSelection: true })).toBe("copy-box");
+  });
+
+  it("kutu boş, ızgarada seçim varsa ızgara kopyalanıyor", () => {
+    expect(resolveCtrlC({ ...WINDOWS, gridSelection: true })).toBe("copy-grid");
+  });
+
+  it("kutudaki seçim ızgaradakinden önce: odak kutuda, yazılan yer orası", () => {
+    expect(resolveCtrlC({ ...WINDOWS, boxSelection: true, gridSelection: true })).toBe("copy-box");
+  });
+
+  it("hiçbir yerde seçim yoksa kabuğa", () => {
+    expect(resolveCtrlC(WINDOWS)).toBe("sigint");
+  });
+
+  it("ayar kapalıysa seçim olsa da kabuğa — iki yüzeyde birden", () => {
+    // Kullanıcı "Ctrl+C her zaman kessin" demiş; ayarı yalnızca ızgarada
+    // saymak onu yarım yalan yapardı (ilk düzeltmenin gözden kaçırdığı yer).
+    const kapali = { ...WINDOWS, copiesSelection: false };
+    expect(resolveCtrlC({ ...kapali, boxSelection: true })).toBe("sigint");
+    expect(resolveCtrlC({ ...kapali, gridSelection: true })).toBe("sigint");
+  });
+
+  it("mac'te Ctrl+C her koşulda kabuğun tuşu", () => {
+    // Kopyalama orada Cmd+C; Ctrl+C ile çakışma yok. Bu dal unutulsaydı tuş
+    // yutulur, SIGINT kabuğa hiç ulaşmazdı (bkz. keysMac.test.ts).
+    expect(resolveCtrlC({ ...WINDOWS, mac: true, boxSelection: true, gridSelection: true })).toBe(
+      "sigint",
+    );
   });
 });

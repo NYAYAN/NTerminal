@@ -225,6 +225,16 @@ yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğ
 olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
 zaman komutu durdurur**.
 
+Aynı kural **komut kutusunda** da geçerli ve karar tek yerden çıkıyor
+(`resolveCtrlC`): kutuda seçili metin varsa `Ctrl+C` onu kopyalar ve seçimi
+kaldırır, satır yerinde durur; seçim yoksa kabuğa gider ve yazılan satırı
+bırakır. Odak kutudayken terminalde seçim varsa kopyalanan odur. Kopyalama
+kısayolu (`Ctrl+Shift+C`) kutunun seçimini de kopyalar — tarayıcının o tuşa
+kendi karşılığı olmadığı için kutu bunu kendisi yapıyor. "Ctrl+C seçim varken
+kopyalasın" ayarı kapalıysa `Ctrl+C` iki yüzeyde de her zaman kabuğa gider.
+`Ctrl+Shift`, `Ctrl+Alt` (Windows'ta AltGr) ve `Ctrl+Win` ile basılan C/D/L
+kabuğun denetim karakteri sayılmaz.
+
 **Bağlantılar.** Terminaldeki URL'ler **vurgu renginde** görünür, üzerine
 gelindiğinde imleç değişir ve tıklanınca işletim sisteminin varsayılan
 tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open` çağırmak;
@@ -253,6 +263,14 @@ kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıy
 öneri yazılanla tam olarak başlıyorsa yalnızca kalanı ekliyor (hiçbir şey
 silinmiyor). Kaynak uygulamanın geçmişi olduğu için sekmeler ve kabuklar arası
 çalışıyor.
+
+`cd` bunun istisnası: cevabı geçmişte değil, diskte. `cd ` yazınca bulunulan
+dizinin klasörleri gelir, yazdıkça süzülür (içeren eşleşme; başlayanlar önce).
+Yazılan ad bir klasörle **tam eşleşiyorsa** — elle ya da listeden kabul edip —
+o klasörün içi gelir, ayırıcı yazmak gerekmez: `cd NYAYAN` yazan kişi
+NYAYAN'ın alt klasörlerini görür, aynı adla başlayan kardeşler onların
+ardından. Yazılanla birebir aynı satır listede yok — yeni bir şey söylemeyen
+öneri öneri değil.
 
 *Kabuğun geçmişten tamamlaması (PSReadLine, zsh-autosuggestions).* Satır içi
 soluk "hayalet metin" ya da istemin altında liste. Bunu kabuğa bırakmak
@@ -715,7 +733,8 @@ da sığmazsa aynı menünün altına, ayrı bir bölüme düşüyor.
 
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
 gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan
-komutu durdurur.
+komutu durdurur. Komut kutusunda da aynı: seçili metin kopyalanır ve seçim
+kalkar, seçim yoksa satır bırakılır ve kesme kabuğa gider.
 
 Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
 açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.
@@ -805,8 +824,11 @@ yutuyor. Derleme geçiyor, test geçiyor, hata çıkmıyor — yalnızca özelli
 
 **Öneri terminalin üstüne binmiyor, onu küçültüyor.** Öneri listesi ızgarada
 ayrı bir satır. Terminalin üstüne bindirmek istem satırını — yani tam olarak
-yazdığınız yeri — kapatırdı. Liste en fazla beş öneri gösteriyor: sekizde çubuk
-191px oluyordu, 627px'lik bir terminalin üçte biri.
+yazdığınız yeri — kapatırdı. Geçmiş önerisi en fazla beş satır: sekizde çubuk
+191px oluyordu, 627px'lik bir terminalin üçte biri. `cd` yazarken gelen klasör
+listesi bu sınıra bağlı değil — orada her satır eşit derecede olası bir hedef
+ve hepsi ok tuşlarıyla gezilebilmeli; kutu beş satır yüksekliğinde kalıyor,
+fazlası kaydırılıyor.
 
 **Öneri listesi ters sırada.** En yeni komut en altta, istem satırına en yakın.
 Kabuk alışkanlığıyla "yukarı ok = daha eski" tutarlı kalsın diye; sıralamayı

@@ -215,6 +215,15 @@ export function BranchIcon(props: IconProps) {
   );
 }
 
+/** Komut satırındaki Node rozetinin altıgeni (Node.js logosunun biçimi). */
+export function NodeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 1.6 L13.6 4.8 V11.2 L8 14.4 L2.4 11.2 V4.8 Z" />
+    </Svg>
+  );
+}
+
 /** Komut satırındaki dizin rozetinin klasörü. */
 export function FolderIcon(props: IconProps) {
   return (

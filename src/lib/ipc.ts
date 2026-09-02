@@ -7,6 +7,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   DirEntry,
   FileText,
+  GitBranch,
   GitInfo,
   Bootstrap,
   BundleInfo,
@@ -22,6 +23,7 @@ import type {
   ImportResult,
   NewFavorite,
   NewHistoryEntry,
+  NodeEnv,
   PathsInfo,
   Profile,
   ReleaseInfo,
@@ -96,7 +98,7 @@ export const api = {
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
-  gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
+  gitBranches: (path: string) => invoke<GitBranch[]>("git_branches", { path }),
   /**
    * Bir dosyadaki değişiklikleri geri alır. YIKICI: takip edilen dosya HEAD'e
    * dönüyor, takipsiz dosya siliniyor. Onay çağıran tarafta soruluyor.
@@ -104,6 +106,8 @@ export const api = {
   gitRevert: (path: string, file: string, untracked: boolean) =>
     invoke<void>("git_revert", { path, file, untracked }),
   gitFingerprint: (path: string) => invoke<string | null>("git_fingerprint", { path }),
+  /** nvm ile kurulu Node sürümleri; nvm yoksa `null`. Süreç başlatmıyor. */
+  nodeEnv: () => invoke<NodeEnv | null>("node_env"),
   gitDiff: (path: string, file: string, untracked: boolean) =>
     invoke<string | null>("git_diff", { path, file, untracked }),
   /**

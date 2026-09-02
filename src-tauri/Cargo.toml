@@ -1,6 +1,6 @@
 [package]
 name = "nterminal"
-version = "0.2.0"
+version = "0.2.1"
 description = "N-Terminal - gruplanabilir sekmeli terminal"
 authors = ["Nurullah YAYAN"]
 edition = "2021"

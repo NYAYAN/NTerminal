@@ -104,6 +104,8 @@ describe("büyük harf düzeni", () => {
   const PARCA = new Set<string>([
     // Rozetin İÇİNDE duran etiket, cümle başı değil: "main [burada]".
     "git.currentBranch",
+    // Aynı biçim, Node sürüm listesinde: "24.18.0 [kullanılan]".
+    "node.current",
     "suggest.hintNav",
     "suggest.hintAccept",
     "suggest.hintDismiss",

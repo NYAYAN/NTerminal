@@ -2191,7 +2191,17 @@ html[data-platform="macos"] .titlebar {
   overflow-x: auto;
   font-family: var(--mono-font);
   font-size: 0.8846rem;
+  /* Satir yuksekligi TAM PIKSEL.
+   *
+   * BILDIRILEN HATA: "dosya adina tiklayip katlayinca metinler ufak bir oynama
+   * yapiyor." OLCULEN: 13px kok fontta 0.8846rem = 11.5px, `line-height: 1.5`
+   * ile satir 17.25px. Acik farkin toplam yuksekligi kesirli kaliyor ve
+   * altindaki dosya satirlari y=2632.25 gibi konumlara dusuyordu; katlaninca
+   * tam piksele donuyor. Metin bir kez .25 kaymali, bir kez tam pikselde
+   * cizilince goz bunu "oynama" olarak goruyor. `round()` satiri font boyutu
+   * ne olursa olsun tam piksele oturtuyor; ilk satir eski motorlar icin. */
   line-height: 1.5;
+  line-height: round(1.5em, 1px);
 }
 
 .diff-line {
@@ -2553,6 +2563,14 @@ html[data-platform="macos"] .titlebar {
   opacity: 0.8;
 }
 
+/* Uzak dal etiketi ("origin"): buyuk harf yok, uzagin adi oldugu gibi
+   okunmali; renk de farkli ki "burada" ile karismasin. */
+.pop-tag.remote {
+  text-transform: none;
+  letter-spacing: 0;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .pop-empty {
   padding: 10px 12px;
   color: var(--text-dim);
@@ -2657,6 +2675,14 @@ html[data-platform="macos"] .titlebar {
 
 .ctx-chip.changes:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Node rozeti: dizinle ayni notr govde, altigen simge ayirt ediyor.
+   Yesil dala, mavi degisikliklere ait; ucuncu bir renk seridi bayrak
+   diregine cevirirdi. Surum numarasi tablo rakamlariyla ki 24.9.0 ile
+   24.18.0 arasinda gecerken rozet ziplamasin. */
+.ctx-chip.node {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Ayrik HEAD: gecilecek bir dal listesi yok. */
@@ -2801,6 +2827,10 @@ html[data-platform="macos"] .titlebar {
   margin: 0;
   padding: 0;
   border: none;
+  /* Bileşen bunu TAM PIKSEL olarak eziyor (`Math.round(fontSize * 1.55)`):
+     13px yazida 1.55 = 20.15px ve kesirli satir, kutunun yerini alan seritle
+     yukseklik esitlemeyi imkansiz kiliyordu. Buradaki deger yalnizca
+     stil gelmeden onceki kare icin. */
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2853,6 +2883,19 @@ html[data-platform="macos"] .titlebar {
   display: flex;
   align-items: center;
   gap: 9px;
+  /* Icerik yuksekligi KUTUNUN satir yuksekligi (`--cmd-row-h`, bileşen
+     yaziyor). OLCULEN: kutu 33px, serit 29px - seridin metni 12px'lik yazi
+     tipinin dogal satiriyla 16px'ti, kutunun metin alani 20px. Serit kutuya
+     donusunce alt kenar 4px oynuyordu; "yukleniyor bitince yukseklik
+     degisiyor" diye bildirildi. Dolgu ve kenarlik ikisinde ayni, geriye
+     yalnizca icerik kaliyordu.
+
+     `content-box` SART: kuresel kural border-box ve o kutuda `min-height`
+     dolguyu da sayiyor - 20px'lik alt sinir 29px'lik dogal yukseligin
+     altinda kalip hic islemiyordu (ilk deneme oyle dustu). Icerik kutusunda
+     olculunce dolgu ve kenarlik kutudakiyle ayni sekilde ustune biniyor. */
+  box-sizing: content-box;
+  min-height: var(--cmd-row-h, 20px);
   padding: 6px 14px 7px 8px;
   border-top: 1px solid var(--border);
   background: var(--term-bg);
@@ -2900,6 +2943,13 @@ html[data-platform="macos"] .titlebar {
    ekranda dururken tehlike bildiriyor; oysa komutu durdurmak siradan bir is. */
 .running-stop {
   flex: none;
+  /* Dugme KUTUNUN satir yuksekliginde. Temel dugme kurali 26px taban veriyor
+     ve serit komut calisirken 39px'e cikiyordu (kutu 33): her Enter'da alt
+     kenar 6px ziplıyordu. Yukseklik border-box, cizgi yuksekligi iki
+     kenarligi dusuyor ki yazi ortada kalsin. */
+  min-height: 0;
+  height: var(--cmd-row-h, 20px);
+  line-height: calc(var(--cmd-row-h, 20px) - 2px);
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
   border-radius: 999px;
@@ -2907,7 +2957,6 @@ html[data-platform="macos"] .titlebar {
   color: var(--err);
   font-family: var(--ui-font);
   font-size: 0.8462rem;
-  line-height: 19px;
   cursor: pointer;
 }
 
@@ -2923,6 +2972,13 @@ html[data-platform="macos"] .titlebar {
 
 .command-running.armed .running-dot {
   background: var(--err);
+}
+
+/* Baslangic seridi: kabuk ilk istemine gelmeden kutunun yerinde duruyor.
+   Nokta soluk, mavi degil - mavi "komut calisiyor" demek ve iki durum ayni
+   renkte olunca "hangi komut calisiyor?" sorusu dogardi. */
+.command-running.starting .running-dot {
+  background: var(--text-dim);
 }
 
 .command-running.armed .running-text {
@@ -3534,6 +3590,10 @@ html[data-platform="macos"] .titlebar {
 .panel-list {
   flex: 1;
   overflow-y: auto;
+  /* Cubugun yeri HER ZAMAN ayrilmis: cubuk ancak icerik tasinca beliriyor ve
+     belirince iceriği 9px sola itiyordu. Bir farki acmak listeyi tasirmaya
+     yetiyor; yani katlama her seferinde satirlari yatay kaydiriyordu. */
+  scrollbar-gutter: stable;
   padding: 5px;
   min-height: 0;
 }

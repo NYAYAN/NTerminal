@@ -153,6 +153,20 @@ export const MESSAGES = {
   "git.searchBranch": ["Dal ara…", "Search branches…"],
   "git.noBranch": ["Dal bulunamadı", "No branches found"],
   "git.currentBranch": ["burada", "current"],
+  "git.remoteHint": [
+    "Uzak dal; seçilince aynı adla yerel izleme dalı oluşur",
+    "Remote branch; picking it creates a local tracking branch of the same name",
+  ],
+  "node.version": ["Node sürümü ({manager})", "Node version ({manager})"],
+  "node.pick": ["Kurulu sürümler arasında geç", "Switch between installed versions"],
+  "node.noneInUse": ["Sürüm seçilmedi", "No version selected"],
+  "node.search": ["Sürüm ara…", "Search versions…"],
+  "node.noVersion": ["Kurulu Node sürümü bulunamadı", "No installed Node versions found"],
+  "node.current": ["kullanılan", "in use"],
+  "node.defaultHint": [
+    "Seçim bu kabukta geçerli olur ve yeni kabukların varsayılanı olur (nvm alias default)",
+    "Applies to this shell and becomes the default for new shells (nvm alias default)",
+  ],
   "common.cancel": ["Vazgeç", "Cancel"],
   "confirm.ok": ["Tamam", "OK"],
   "confirm.closeTabTitle": ["Sekmeyi kapat", "Close tab"],
@@ -847,6 +861,7 @@ export const MESSAGES = {
   ],
   "input.placeholder": ["Komut yazın", "Type a command"],
   "input.running": ["Komut çalışıyor…", "Command running…"],
+  "input.starting": ["Kabuk başlatılıyor…", "Starting shell…"],
   "input.stop": ["Durdur", "Stop"],
   "input.stopTitle": [
     "Çalışan komutu durdurur (SIGINT). Klavyeden: Ctrl+C'ye arka arkaya iki kez.",
@@ -864,6 +879,7 @@ export const MESSAGES = {
   "block.rerun": ["Komutu satıra koy", "Put the command on the line"],
   "block.rerunShort": ["Yeniden", "Reuse"],
   "suggest.title": ["GEÇMİŞ", "HISTORY"],
+  "suggest.titleDirs": ["KLASÖRLER", "FOLDERS"],
   "suggest.hintNav": ["gez", "navigate"],
   "suggest.hintAccept": ["kabul et", "accept"],
   "suggest.hintDismiss": ["kapat", "dismiss"],
@@ -904,8 +920,8 @@ export const MESSAGES = {
     "Let the app draw the command line (outside the terminal)",
   ],
   "settings.appInputHint": [
-    "Yazdıklarınız pencerenin dibindeki kutuda toplanır ve kabuğa Enter’da gider; kaydırma satırı oynatmaz. Yalnızca kabuk istemde beklerken geçerli: komut çalışırken, vim gibi tam ekran programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan terminale gider. Sekme tamamlaması kabuğun işi olduğu için Tab, satırı kabuğa devreder ve o istem boyunca klasik terminale döner.",
-    "What you type collects in a box at the bottom of the window and reaches the shell on Enter, so scrolling never moves it. It applies only while the shell is at a prompt: while a command runs, in full-screen programs such as vim, and in profiles without shell integration, keys go straight to the terminal. Tab completion belongs to the shell, so Tab hands the line over and returns to the classic terminal for that prompt.",
+    "Yazdıklarınız pencerenin dibindeki kutuda toplanır ve kabuğa Enter’da gider; kaydırma satırı oynatmaz. Yalnızca kabuk istemde beklerken geçerli: komut çalışırken, vim gibi tam ekran programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan terminale gider. Tab kutuda kalır: öneri listesi açıkken seçili satırı kabul eder (cd için klasörler arasında kat kat iner), kapalıyken bir şey yapmaz.",
+    "What you type collects in a box at the bottom of the window and reaches the shell on Enter, so scrolling never moves it. It applies only while the shell is at a prompt: while a command runs, in full-screen programs such as vim, and in profiles without shell integration, keys go straight to the terminal. Tab stays in the box: with the suggestion list open it accepts the selected row (for cd it walks down folder by folder); with the list closed it does nothing.",
   ],
   "settings.promptAtBottom": [
     "Komut satırı her zaman pencerenin dibinde dursun",

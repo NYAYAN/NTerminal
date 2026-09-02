@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { sessions, useStore } from "../store/useStore";
-import { BranchIcon, FolderIcon } from "./Icons";
+import { BranchIcon, FolderIcon, NodeIcon } from "./Icons";
 
 /**
  * Komut satırının başlığı: dizin, dal ve değişiklik sayısı — HER ZAMAN görünür.
@@ -39,6 +39,7 @@ export function ContextBar() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const allGit = useStore((s) => s.gitInfo);
+  const node = useStore((s) => s.nodeEnv);
   const setUi = useStore((s) => s.setUi);
 
   const group = groups.find((g) => g.id === activeGroupId);
@@ -80,6 +81,22 @@ export function ContextBar() {
       window.clearInterval(timer);
     };
   }, [cwd]);
+
+  /*
+   * Node rozeti: ilk çizimde ve pencereye dönüşte.
+   *
+   * Yoklama yok — nvm seçimi dizinle değişmiyor ve dışarıdan (başka bir
+   * terminalde `nvm use`) değişmesi pencereye dönüşte yakalanıyor. Kendi
+   * komut satırından yapılan geçişi komut sonu tazeliyor (bkz. depo
+   * `onCommandEnd`).
+   */
+  useEffect(() => {
+    const store = useStore.getState();
+    void store.refreshNode();
+    const onFocus = () => void store.refreshNode();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   // Dizin bilinmiyorsa (kabuk henüz bildirmedi, entegrasyon yok) şerit hiç
   // çizilmiyor ve `auto` ızgara satırı sıfıra iniyor.
@@ -130,6 +147,22 @@ ${t("dirs.open")}`}
             </button>
           )}
         </>
+      )}
+
+      {/* Node rozeti: nvm kuruluysa. Kurulu sürüm hiç yoksa çizilmiyor —
+          geçilecek bir şey yok. Seçili sürüm yoksa (bağ kırık) rozet bunu
+          yazıyor; tıklayıp bir sürüm seçmek durumu düzeltiyor. */}
+      {node && node.installed.length > 0 && (
+        <button
+          type="button"
+          className="ctx-chip node"
+          title={`${t("node.version", { manager: node.manager })}
+${t("node.pick")}`}
+          onClick={() => setUi({ nodePicker: true })}
+        >
+          <NodeIcon size={11} />
+          {node.current ? `v${node.current}` : t("node.noneInUse")}
+        </button>
       )}
     </div>
   );
