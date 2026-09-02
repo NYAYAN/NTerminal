@@ -28,17 +28,24 @@ fn surum_olmayan_klasorler_listeye_girmiyor() {
 
 #[test]
 fn bag_hedefinden_surum() {
-    assert_eq!(
-        version_of_dir(Path::new(r"C:\Users\ben\AppData\Local\nvm\v24.18.0")),
-        Some("24.18.0".to_string())
-    );
+    // Ters bolu yalnizca Windows'ta ayirac: Unix'te `C:\...\v24.18.0` tek
+    // parca olur ve `C` ile baslar. nvm-windows bagi da yalnizca Windows'ta
+    // okunuyor; bu yuzden Windows yollari yalnizca orada denetleniyor.
+    #[cfg(windows)]
+    {
+        assert_eq!(
+            version_of_dir(Path::new(r"C:\Users\ben\AppData\Local\nvm\v24.18.0")),
+            Some("24.18.0".to_string())
+        );
+        assert_eq!(version_of_dir(Path::new(r"C:\nvm4w\nodejs")), None);
+    }
     // Sondaki ayirac yutuluyor.
     assert_eq!(
         version_of_dir(Path::new("/home/ben/.nvm/versions/node/v22.11.0/")),
         Some("22.11.0".to_string())
     );
     // Surum klasoru degil.
-    assert_eq!(version_of_dir(Path::new(r"C:\nvm4w\nodejs")), None);
+    assert_eq!(version_of_dir(Path::new("/home/ben/.nvm/versions/node/current")), None);
 }
 
 #[test]

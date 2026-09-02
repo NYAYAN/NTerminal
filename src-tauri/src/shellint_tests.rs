@@ -44,6 +44,8 @@ fn posix_betikleri_lf_satir_sonu_kullaniyor() {
     // CRLF ile bash `__nterm_osc\r` diye bir komut ariyor ve her istemde hata
     // basiyor. Betik "yuklendi" gorunur, entegrasyon calismaz.
     let mut checked = 0;
+    // `mut` yalnizca Unix dalinda kullaniliyor; Windows derlemesi uyarmasin.
+    #[cfg_attr(windows, allow(unused_mut))]
     let mut posix: Vec<std::path::PathBuf> = vec![installed.dir.join("nterminal.sh")];
     #[cfg(unix)]
     {
@@ -74,7 +76,7 @@ fn posix_betikleri_lf_satir_sonu_kullaniyor() {
 /// eksiklik oldugunu anlamaz.
 #[test]
 #[cfg(windows)]
-fn windowsta_psreadline_moduLu_yaziliyor() {
+fn windowsta_psreadline_modulu_yaziliyor() {
     let paths = temp_paths("psreadline");
     let installed = install(&paths).unwrap();
 
