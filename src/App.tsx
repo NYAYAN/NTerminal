@@ -48,13 +48,30 @@ export function App() {
   // Kapanış durumu ayrıca ref'te: kapatma dinleyicisi bir kez kuruluyor ve
   // durumu ÇAĞRI ANINDA okuması gerekiyor, closure'dan değil.
   const closingRef = useRef(false);
-  const bootstrapped = useRef(false);
 
+  /*
+   * Açılış verisi DEPONUN durumuna bağlı, bir ref'e değil.
+   *
+   * ÖLÇÜLEN HATA: geliştirme kipinde `useStore.ts` düzenlenince uygulama
+   * "N-Terminal yükleniyor…" ekranında sonsuza kadar kaldı. Zincir şöyleydi:
+   * Vite depo modülünü sıcak değiştiriyor ve depo `ready: false` ile SIFIRDAN
+   * kuruluyor; `App` ise yerinde kalıyor (Fast Refresh bileşen durumunu ve
+   * ref'leri koruyor). Eski hâlde bir `bootstrapped` ref'i "bir kez koştum"
+   * diyordu — yeni depo için hiç koşmamıştı. `bootstrap()` bir daha
+   * çağrılmıyor, `ready` hiç `true` olmuyor, ekranda yükleme yazısı.
+   *
+   * Aynı belirti yanlış yere yazılabilirdi ("ikinci örnek kilit tutuyor",
+   * "`app_bootstrap` dönmüyor"); Rust tarafı yalnızca iki kilit alıp klonluyor,
+   * takılacak bir şeyi yok. Kaynak buradaki koruma.
+   *
+   * Koruma artık `ready`: açılış bitmediyse koş, bittiyse koşma. Çift çağrı
+   * yine yok — `ready` bir kez `true` oluyor ve `bootstrap()` başarısızlığı da
+   * `ready: true` + `bootError` yazıyor (bkz. depo), yani hata döngüsü de yok.
+   */
   useEffect(() => {
-    if (bootstrapped.current) return;
-    bootstrapped.current = true;
+    if (ready) return;
     void bootstrap();
-  }, [bootstrap]);
+  }, [ready, bootstrap]);
 
   // Menü çubuğu / bildirim alanı simgesinin menüsü de arayüz dilini izlesin.
   //
@@ -226,8 +243,10 @@ export function App() {
        *
        * Dinleyici capture fazında olduğu için burada ele alınan tuş kutuya hiç
        * ulaşmıyor (`run` içinde `stopPropagation`); kutunun kendi tuşları
-       * (Enter, Tab, oklar, Ctrl+C) burada bir eşleşme bulmadığı için
-       * dokunulmadan geçiyor.
+       * (Enter, Tab, oklar, kopyala/yapıştır kısayolları) burada bir eşleşme
+       * bulmadığı için dokunulmadan geçiyor. Ctrl+C'nin BİR istisnası var:
+       * aşağıdaki iki basışlı durdurma dalı yalnızca komut ÇALIŞIRKEN
+       * tetikleniyor ve o sırada kutu zaten çizilmiyor (yerinde şerit var).
        */
       const inCommandInput = !!target?.closest(".command-input");
       if (!inTerminal && !inCommandInput && target?.closest("input, textarea, select")) {
@@ -243,7 +262,7 @@ export function App() {
       // Ctrl+C terminalde iki isi de yapmak zorunda: secim varsa kopyalar,
       // yoksa kabuga SIGINT olarak gecer. Karar SENKRON veriliyor
       // (hasSelection senkron) cunku preventDefault'u burada vermek sart -
-      // asenkron bekleseydik tus xterm'e ulasip  gonderilirdi.
+      // asenkron bekleseydik tus xterm'e ulasip `\x03` gonderilirdi.
       if (
         inTerminal &&
         event.ctrlKey &&
@@ -388,6 +407,14 @@ export function App() {
        * doğru şeyi yapıyor — izin sormuyor (kullanıcı jesti panoyu doğrudan
        * getiriyor), metni imlecin olduğu yere koyuyor. Yapılacak tek şey
        * yoldan çekilmek.
+       *
+       * KOPYALAMA için bu gerekçe yalnızca YARI doğru ve bir kez yanılttı:
+       * Ctrl+V/Cmd+V gibi Ctrl+Shift+V de tarayıcının yerel yapıştırması
+       * (düz metin olarak), ama Ctrl+Shift+C'nin — Windows'taki kopyalama
+       * kısayolumuz — tarayıcıda hiçbir karşılığı yok. Yoldan çekilince tuş
+       * kutuda ölüyordu. Bu yüzden kopyalamayı KUTU kendisi yapıyor
+       * (`CommandInput.onKeyDown`, `keys.copy` dalı); burada yine geçiliyor
+       * ki oraya ulaşsın.
        */
       if (!inCommandInput && matchCombo(event, keys.copy)) {
         if (session) return run(() => void session.copySelection());

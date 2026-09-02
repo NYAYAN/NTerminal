@@ -267,17 +267,22 @@ describe("varsayılan kısayollar", () => {
  * hiçbir test bunu yapmıyor ve yalnızca bu iddia için o altyapıyı kurmak
  * orantısız. Bunun yerine kaçınmak istediğimiz DEĞİŞİKLİK bağlanıyor.
  *
- * Korunan senaryo: `App.tsx` koşulu kendi içinde yeniden yazarsa (ayarı ve
- * seçimi doğrudan okuyarak), mac dalı unutulur. O zaman Ctrl+C `preventDefault`
- * ile yutulur ama kopyalama da yapılmaz — SIGINT kabuğa hiç ulaşmaz ve çalışan
- * komut durdurulamaz. Sessiz ve teşhisi zor.
+ * Korunan senaryo: bir çağıran koşulu kendi içinde yeniden yazarsa (ayarı,
+ * seçimi ya da platformu doğrudan okuyarak), mac dalı unutulur. O zaman
+ * Ctrl+C `preventDefault` ile yutulur ama kopyalama da yapılmaz — SIGINT
+ * kabuğa hiç ulaşmaz ve çalışan komut durdurulamaz. Sessiz ve teşhisi zor.
+ *
+ * ÖLÇÜLEN: tam bu oldu. Komut kutusu kendi Ctrl+C koşulunu yazdı (`!isMac()`
+ * dahil) ve bu test onu görmedi — yalnızca `App.tsx`i okuyordu. Kural bu
+ * yüzden saf bir işleve taşındı (`resolveCtrlC`, `lib/inputMode.ts`); artık
+ * ÜÇ çağıran da (App, oturum, kutu) buraya bağlı.
  */
 describe("Ctrl+C kararı", () => {
-  const app = readFileSync(join(process.cwd(), "src/App.tsx"), "utf8");
-  const session = readFileSync(
-    join(process.cwd(), "src/terminal/TerminalSession.ts"),
-    "utf8",
-  );
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const app = read("src/App.tsx");
+  const box = read("src/components/CommandInput.tsx");
+  const session = read("src/terminal/TerminalSession.ts");
+  const lib = read("src/lib/inputMode.ts");
 
   it("App.tsx kararı oturuma soruyor", () => {
     expect(app, "App.tsx senkron karar için oturumu çağırmıyor").toContain(
@@ -285,19 +290,38 @@ describe("Ctrl+C kararı", () => {
     );
   });
 
-  it("App.tsx koşulu kendi içinde yeniden yazmıyor", () => {
-    expect(app, "ayar App.tsx'te doğrudan okunuyor — kural ikiye bölünmüş").not.toContain(
-      "ctrlCCopiesSelection",
+  it("komut kutusu kararı oturuma soruyor", () => {
+    expect(box, "kutu Ctrl+C kararı için oturumu çağırmıyor").toContain("ctrlCAction(");
+  });
+
+  it("çağıranlar koşulu kendi içinde yeniden yazmıyor", () => {
+    for (const [name, text] of [
+      ["App.tsx", app],
+      ["CommandInput.tsx", box],
+    ] as const) {
+      expect(text, `${name}: ayar doğrudan okunuyor — kural bölünmüş`).not.toContain(
+        "ctrlCCopiesSelection",
+      );
+    }
+    // Platform yalnızca KUTU için bağlanıyor: `App.tsx` `isMac()`i başka
+    // kararlar için de meşru kullanıyor (Cmd+C'nin durdurma anlamı, sekme
+    // değiştiricisi). Kutunun ise Ctrl+C dışında platforma bakacağı bir şey
+    // yok — orada `isMac()` görünmesi kuralın ikinci kez yazıldığı demek.
+    expect(box, "CommandInput.tsx: platform kararı yerelde yazılmış").not.toContain("isMac()");
+  });
+
+  it("oturum kuralı saf işleve devrediyor", () => {
+    const at = session.indexOf("ctrlCAction(boxSelection: boolean)");
+    expect(at, "ctrlCAction tanımı bulunamadı").toBeGreaterThan(-1);
+    expect(session.slice(at, at + 400), "oturum resolveCtrlC çağırmıyor").toContain(
+      "resolveCtrlC(",
     );
   });
 
-  it("oturum mac'te kopyalamayı devre dışı bırakıyor", () => {
-    // Tanımı arıyoruz, çağrıyı değil: `wantsCtrlCCopy()` ilk olarak
-    // `copyForCtrlC` içinde geçiyor.
-    const at = session.indexOf("wantsCtrlCCopy(): boolean {");
-    expect(at, "wantsCtrlCCopy tanımı bulunamadı").toBeGreaterThan(-1);
-    const body = session.slice(at, at + 300);
-    expect(body, "mac dalı yok").toContain("isMac()");
-    expect(body, "mac'te false dönmüyor").toMatch(/isMac\(\)\)?\s*return false/);
+  it("kural mac'te kopyalamayı devre dışı bırakıyor", () => {
+    const at = lib.indexOf("export function resolveCtrlC(");
+    expect(at, "resolveCtrlC tanımı bulunamadı").toBeGreaterThan(-1);
+    const body = lib.slice(at, at + 300);
+    expect(body, "mac dalı yok").toMatch(/signals\.mac\)\s*return "sigint"/);
   });
 });

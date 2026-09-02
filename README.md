@@ -225,6 +225,16 @@ yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğ
 olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
 zaman komutu durdurur**.
 
+Aynı kural **komut kutusunda** da geçerli ve karar tek yerden çıkıyor
+(`resolveCtrlC`): kutuda seçili metin varsa `Ctrl+C` onu kopyalar ve seçimi
+kaldırır, satır yerinde durur; seçim yoksa kabuğa gider ve yazılan satırı
+bırakır. Odak kutudayken terminalde seçim varsa kopyalanan odur. Kopyalama
+kısayolu (`Ctrl+Shift+C`) kutunun seçimini de kopyalar — tarayıcının o tuşa
+kendi karşılığı olmadığı için kutu bunu kendisi yapıyor. "Ctrl+C seçim varken
+kopyalasın" ayarı kapalıysa `Ctrl+C` iki yüzeyde de her zaman kabuğa gider.
+`Ctrl+Shift`, `Ctrl+Alt` (Windows'ta AltGr) ve `Ctrl+Win` ile basılan C/D/L
+kabuğun denetim karakteri sayılmaz.
+
 **Bağlantılar.** Terminaldeki URL'ler **vurgu renginde** görünür, üzerine
 gelindiğinde imleç değişir ve tıklanınca işletim sisteminin varsayılan
 tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open` çağırmak;
@@ -715,7 +725,8 @@ da sığmazsa aynı menünün altına, ayrı bir bölüme düşüyor.
 
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
 gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan
-komutu durdurur.
+komutu durdurur. Komut kutusunda da aynı: seçili metin kopyalanır ve seçim
+kalkar, seçim yoksa satır bırakılır ve kesme kabuğa gider.
 
 Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
 açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.

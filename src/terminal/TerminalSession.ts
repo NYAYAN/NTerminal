@@ -13,6 +13,7 @@ import { hasVisibleContent, type BlockView } from "../lib/blocks";
 import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
+import { resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
@@ -1619,7 +1620,7 @@ export class TerminalSession {
       `
 ${dim}[${
         code === null ? t("term.sessionEnded") : t("term.sessionEndedCode", { code })
-      }][0m
+      }]\x1b[0m
 `,
     );
     this.callbacks.onExit?.(code);
@@ -1637,6 +1638,24 @@ ${dim}[${
         // İstem HENÜZ bitmedi. Kutuyu burada açmak erken olurdu: kabuk hâlâ
         // istemi yazıyor ve o sırada gönderilen metin istemin ortasına düşer.
         this.setAtPrompt(false);
+        /*
+         * Hâlâ "çalışıyor" görünen bir komut varsa BURADA kapanıyor.
+         *
+         * Kapanışı normalde 133;D bildiriyor, ama o işaret her yolda gelmiyor
+         * (kaçan parça, yedek zamanlayıcının açtığı kayıt, beklenmedik
+         * sonlanan program). Kaçtığında `running` açık kalıyor, ardından
+         * gelen 133;B ise `atPrompt`ı yeniden açıyor — yani "istemde bekliyor"
+         * ve "komut çalışıyor" AYNI ANDA doğru oluyordu. O durumda komut
+         * kutusu çiziliyor ama `App.tsx`in durdurma dalı Ctrl+C'yi kutuya
+         * ulaşmadan yutuyordu: ne kopyalama ne SIGINT, ne de "tekrar basın"
+         * şeridi (o yalnızca kutu kapalıyken çiziliyor).
+         *
+         * Yeni bir istem çiziliyorsa önceki komut bitmiştir; bu kadarı kesin.
+         * Çıkış kodu bilinmiyor (`null`). İkisi de boşta çağrılmaya dayanıklı,
+         * yani normal yolda (D geldi) burası hiçbir şey yapmıyor.
+         */
+        this.closeBlock(null);
+        this.endCommand(null);
         /*
          * Sunucu adresleri BURADA temizleniyor — en güvenilir yer bu.
          *
@@ -1931,23 +1950,32 @@ ${dim}[${
   }
 
   /**
-   * Ctrl+C bu an KOPYALAMALI mı?
+   * Ctrl+C bu an ne yapmalı — kutudaki seçim de hesaba katılarak.
    *
    * Senkron olması şart: karar `preventDefault` verilmeden önce alınmak
    * zorunda. Yanlış tarafa düşerse iki sessiz hatadan biri oluyor — ya seçim
    * kopyalanmıyor, ya da (daha kötüsü) tuş yutulup SIGINT kabuğa hiç
    * ulaşmıyor ve çalışan komut durdurulamıyor.
    *
-   * Kural TEK YERDE: `App.tsx` de bunu çağırıyor. İki yerde ayrı yazılsaydı
-   * biri güncellenip diğeri unutulduğunda tam olarak o SIGINT kaybı olurdu.
-   *
-   * macOS'ta her zaman `false`: kopyalama orada Cmd+C, dolayısıyla Ctrl+C ile
-   * bir çakışma yok ve Ctrl+C tamamen kabuğun tuşu.
+   * Kuralın kendisi `lib/inputMode.ts` içinde, `resolveCtrlC`: saf ve testli.
+   * Burası yalnızca girdileri topluyor — platform, ayar ve ızgaradaki seçim
+   * oturumun bildiği şeyler; kutudaki seçimi ise yalnızca kutu biliyor ve
+   * parametre olarak veriyor. `App.tsx` ve `CommandInput` ikisi de buradan
+   * geçiyor; kuralı iki yerde ayrı yazmak, biri güncellenip diğeri
+   * unutulduğunda tam olarak o SIGINT kaybı demek.
    */
+  ctrlCAction(boxSelection: boolean): CtrlCAction {
+    return resolveCtrlC({
+      mac: isMac(),
+      copiesSelection: this.settings.behavior.ctrlCCopiesSelection,
+      boxSelection,
+      gridSelection: this.term.hasSelection(),
+    });
+  }
+
+  /** Ctrl+C ızgaradaki seçimi kopyalamalı mı? (`App.tsx`, kutu kapalıyken.) */
   wantsCtrlCCopy(): boolean {
-    if (isMac()) return false;
-    if (!this.settings.behavior.ctrlCCopiesSelection) return false;
-    return this.term.hasSelection();
+    return this.ctrlCAction(false) === "copy-grid";
   }
 
   /** Geçmişten seçilen komutu istem satırına yazar; çalıştırmak kullanıcıya kalır. */

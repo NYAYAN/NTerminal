@@ -32,6 +32,44 @@ Running `target\debug\nterminal.exe`
 
 İlk derleme birkaç dakika sürebilir; `target/` sıcaksa 10 saniyenin altında.
 
+## Kurulu uygulama açıkken: AYRI veri klasörü
+
+Önce bak: `Get-Process nterminal` iki satır veriyorsa (biri
+`C:\Program Files\N-Terminal\`, biri `target\debug\`) kullanıcının kendi
+uygulaması çalışıyor demek. Geliştirme örneği o durumda **aynı**
+`%APPDATA%\NTerminal` klasörünü paylaşıyor ve iki şey oluyor:
+
+- İkisi de `workspace.json`'a yazıyor (120 saniyede bir periyodik kayıt);
+  geliştirme örneğinde açtığın grup/sekme kullanıcının düzenine karışıyor.
+- Kullanıcının penceresini yanlışlıkla öne getirmek kolay: ikisinin de adı
+  `nterminal`.
+
+Ayrı bir tuzak, örnek sayısından bağımsız: geliştirme örneği "N-Terminal
+yükleniyor…" ekranında takılırsa sebep Rust değil — `useStore.ts`
+düzenlendiğinde depo sıcak yenilemeyle sıfırlanıyor ve eskiden `App` bir
+ref'e bakıp açılışı bir daha koşturmuyordu (düzeltmesi `App.tsx`teki açılış
+etkisinde). Hâlâ görürsen pencereyi yenile (Ctrl+R değil — o sekmeleri
+düşürür; uygulamayı kapatıp `npm start`ı yeniden koştur).
+
+Çözüm `NTERMINAL_DATA_DIR`: `paths.rs` bu değişkeni her şeyin önünde okuyor.
+Kullanıcının ayarlarını (profiller, davranış) kopyala ki aynı koşullarda
+denesin, çalışma alanını kopyalama:
+
+```powershell
+$iso = "$env:TEMP\nterminal-dev-data"
+New-Item -ItemType Directory -Force $iso | Out-Null
+Copy-Item "$env:APPDATA\NTerminal\settings.json" $iso -Force
+$env:NTERMINAL_DATA_DIR = $iso
+Start-Process cmd.exe -ArgumentList "/c npx vite > `"$env:TEMP\nt-vite.log`" 2>&1" -WindowStyle Hidden -WorkingDirectory "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal"
+Start-Sleep -Seconds 4
+Start-Process "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri\target\debug\nterminal.exe" -WorkingDirectory "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri"
+```
+
+Bu yol `tauri dev`i atlıyor: Vite'ı kendin başlatıyorsun, hazır exe'yi ortam
+değişkeniyle açıyorsun. Rust değiştirmediysen yeterli; HMR yine çalışıyor.
+Ekran görüntüsü alırken süreci yola göre seç (`$_.Path -like "*target\debug*"`),
+yoksa kullanıcının penceresini öne getirirsin. İşin bitince geçici klasörü sil.
+
 ## Değişikliği uygulamaya yansıtmak
 
 - **Arayüz (`src/**/*.tsx`, `*.ts`, `*.css`)**: Vite anında yeniden yüklüyor.
@@ -124,6 +162,41 @@ python -c "import json,os;print(json.dumps(json.load(open(os.path.expandvars(r'%
   ver, yoksa ikinci çağrı `src-tauri\src-tauri` gibi bir yere gider ve
   `win-env.ps1` bulunamaz — o zaman yanlış toolset seçilip yukarıdaki
   `LNK1104` hatası geri gelir.
+
+## Ön plan yokken: uygulamayı CDP ile sür
+
+Kullanıcı uzak masaüstündeyse (RDP) ve pencere küçültülmüş ya da arkadaysa
+`GetForegroundWindow` sıfır döner, `SendKeys` "Erişim engellendi" verir,
+`CopyFromScreen` kilit ekranını ya da bayat kareyi yakalar. `LogonUI`
+var/yok diye bakmak da yanıltıyor — başka bir oturumun kilidi olabilir
+(`SessionId` karşılaştır). Bu durumda tuş göndermeyi bırak; WebView2'yi
+uzaktan hata ayıklama portuyla aç ve Chrome DevTools Protocol'den sür:
+
+```powershell
+$env:NTERMINAL_DATA_DIR = "$env:TEMP\nterminal-dev-data"
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
+Start-Process "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri\target\debug\nterminal.exe" -WorkingDirectory "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri"
+```
+
+Sürücü bu klasörde, `cdp.mjs` (Node 24, yerleşik `WebSocket`; ek paket yok):
+
+```bash
+node .claude/skills/calistir/cdp.mjs type "cd Desktop\Work"   # kutuya odaklan, metni gir
+node .claude/skills/calistir/cdp.mjs selectall
+node .claude/skills/calistir/cdp.mjs key c 2                   # Ctrl+C (Alt=1 Ctrl=2 Meta=4 Shift=8)
+node .claude/skills/calistir/cdp.mjs value                     # {value, selStart, selEnd, focused}
+node .claude/skills/calistir/cdp.mjs shot adim-1               # %TEMP%\nt-cdp\adim-1.png
+node .claude/skills/calistir/cdp.mjs newgroup                  # Ctrl+Shift+N
+```
+
+Panoyu `Get-Clipboard -Raw` ile adımlar arasında oku; önce yedekle
+(`Get-Clipboard`), bitince geri koy. Ekran görüntüsü `Page.captureScreenshot`
+ile geliyor — pencere görünmese de doğru kare.
+
+İki uyarı: geliştirme derlemesinde GERÇEK Ctrl+Shift+C WebView2'nin DevTools
+kısayolu ve sayfaya hiç ulaşmıyor (üretimde DevTools kapalı); CDP'den
+gönderilen ulaşıyor. `Input.insertText` gerçek `input` olayı üretir, React'ın
+`onChange`i çalışır — `el.value = …` yazmak çalışmaz.
 
 ## Kapatma
 

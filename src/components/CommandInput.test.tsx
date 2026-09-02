@@ -56,8 +56,17 @@ function group(tabs: TabState[]): Group {
 const sendKeys = vi.fn();
 const focus = vi.fn();
 const setAppInput = vi.fn();
-/** Seçim varken Ctrl+C kopyalamalı; kararı oturum veriyor. */
-const wantsCtrlCCopy = vi.fn(() => false);
+/**
+ * Ctrl+C kararı — oturum veriyor (`resolveCtrlC` üzerinden). Kutu yalnızca
+ * kendi seçimini bildiriyor ve sonucu uyguluyor; kuralın kendisi
+ * `lib/inputMode.test.ts` içinde test ediliyor. Varsayılan: kabuğa.
+ */
+const ctrlCAction = vi.fn<(boxSelection: boolean) => "copy-box" | "copy-grid" | "sigint">(
+  () => "sigint",
+);
+const copyForCtrlC = vi.fn(async () => "copied" as "copied" | "failed" | "passthrough");
+/** Pano: jsdom'da yok; kutu kendi seçimini buraya yazıyor. */
+const writeText = vi.fn(async () => {});
 /**
  * Kip sinyalleri OTURUMDAN okunuyor; depodaki kopya yalnızca yeniden çizimi
  * tetikliyor. Sahte oturum da bunu vermek zorunda.
@@ -92,12 +101,16 @@ beforeEach(() => {
   sendKeys.mockClear();
   focus.mockClear();
   setAppInput.mockClear();
-  wantsCtrlCCopy.mockReturnValue(false);
+  ctrlCAction.mockReset().mockReturnValue("sigint");
+  copyForCtrlC.mockClear();
+  writeText.mockClear();
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
   sessions.set(TAB, {
     sendKeys,
     focus,
     setAppInput,
-    wantsCtrlCCopy,
+    ctrlCAction,
+    copyForCtrlC,
     inputSignals,
   } as never);
   seed();
@@ -129,7 +142,7 @@ describe("komut satırı kutusu", () => {
     expect(stop, "durdurma düğmesi yok").not.toBe(null);
     fireEvent.click(stop!);
     // Ctrl+C'nin baytı tek yerden geliyor; düğme de onu göndermeli.
-    expect(sendKeys).toHaveBeenCalledWith("");
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
 
     useStore.setState({ running: {} });
   });
@@ -244,13 +257,133 @@ describe("komut satırı kutusu", () => {
     expect(sendKeys).toHaveBeenCalledWith("\x03");
   });
 
-  it("seçim varken Ctrl+C kabuğu durdurmuyor", () => {
-    // Yukarıdan metin seçip Ctrl+C'ye basan biri kopyalamak istiyor. Kararı
-    // oturum veriyor; kutu onu bozmamalı.
-    wantsCtrlCCopy.mockReturnValue(true);
+  /*
+   * IZGARADA seçim varken Ctrl+C: kutu kopyalamayı KENDİSİ tetikliyor.
+   *
+   * ÖLÇÜLEN HATA: burada yalnızca `return` vardı ve yorum "kopyalamayı
+   * App.tsx yapıyor" diyordu. Yapmıyordu — oradaki dal odağın terminalde
+   * olmasını istiyor, odak ise kutuda (çıktıdan sürükleyip seçince kutu odağı
+   * geri alıyor). Tuş yutuluyor, hiçbir şey kopyalanmıyor, ızgara seçimi de
+   * durduğu için sonraki her Ctrl+C aynı yere düşüyordu.
+   */
+  it("ızgarada seçim varken Ctrl+C ızgarayı kopyalıyor, kabuğu durdurmuyor", () => {
+    ctrlCAction.mockReturnValue("copy-grid");
     const { container } = render(<CommandInput />);
     fireEvent.keyDown(field(container)!, { key: "c", ctrlKey: true });
+
+    expect(copyForCtrlC, "ızgara kopyalanmadı").toHaveBeenCalledTimes(1);
     expect(sendKeys, "seçim varken SIGINT gitmemeli").not.toHaveBeenCalled();
+    // Kutuda seçim yoktu; karar buna göre isteniyor.
+    expect(ctrlCAction).toHaveBeenCalledWith(false);
+  });
+
+  /*
+   * BİLDİRİLEN HATA: "Komut yazın kısmında `cd Desktop\Work\Github\Survey`
+   * yazıyorum ve bu metni seçip kopyala yapmak için Ctrl+C basıyorum; metin
+   * kayboluyor ve kopyalayamamış oluyorum."
+   *
+   * Seçim KUTUNUN içinde, ızgarada değil. Kutu bir `textarea` ve seçimi
+   * tarayıcının modelinde duruyor; oturum onu göremiyordu, karar "seçim yok"
+   * çıkıyor, tuş SIGINT olarak kabuğa gidiyor ve satır siliniyordu. Artık
+   * kutu kendi seçimini karara veriyor ve sonucu kendisi uyguluyor.
+   */
+  it("kutudaki seçimle Ctrl+C kopyalıyor, satırı silmiyor", () => {
+    ctrlCAction.mockReturnValue("copy-box");
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "cd Desktop\\Work\\Github\\Survey" } });
+    el.setSelectionRange(3, el.value.length);
+
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true });
+
+    expect(ctrlCAction, "kutudaki seçim karara bildirilmeli").toHaveBeenCalledWith(true);
+    expect(writeText).toHaveBeenCalledWith("Desktop\\Work\\Github\\Survey");
+    expect(sendKeys, "seçim varken SIGINT gitmemeli").not.toHaveBeenCalled();
+    expect(el.value, "yazılan satır silinmiş").toBe("cd Desktop\\Work\\Github\\Survey");
+  });
+
+  it("Ctrl+C ile kopyalanınca seçim kalkıyor: ikinci Ctrl+C kabuğa gidiyor", () => {
+    // Seçim dursaydı her Ctrl+C yine kopyalar, tuşun öteki anlamına (satırı
+    // bırak) bir daha ulaşılamazdı. Izgara yolu aynı sebeple seçimi temizliyor.
+    ctrlCAction.mockReturnValue("copy-box");
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "npm test" } });
+    el.setSelectionRange(0, el.value.length);
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true });
+    expect(el.selectionStart, "seçim kalkmalı").toBe(el.selectionEnd);
+
+    // Seçim yok → oturum artık "kabuğa" diyor (kuralı inputMode.test bağlıyor).
+    ctrlCAction.mockReturnValue("sigint");
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true });
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+    expect(el.value).toBe("");
+  });
+
+  it("kutuda seçim YOKKEN Ctrl+C kabuğa gidiyor ve satırı bırakıyor", () => {
+    // Kontrol grubu: kaçış kapısı daraldı, kapanmadı.
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "npm test" } });
+    el.setSelectionRange(el.value.length, el.value.length);
+
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true });
+    expect(ctrlCAction).toHaveBeenCalledWith(false);
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+    expect(el.value).toBe("");
+  });
+
+  /*
+   * Kopyalama KISAYOLU (Windows'ta Ctrl+Shift+C) kutuda çalışmalı.
+   *
+   * İki aşamalı hataydı. Önce kutu shift'i görmüyor, tuş SIGINT'e dönüşüp
+   * satırı siliyordu. Shift süzülünce tuş bu kez ÖLÜ kaldı: `App.tsx` onu
+   * "tarayıcı kopyalasın" diye kutuya bırakıyor, ama tarayıcının
+   * Ctrl+Shift+C'ye bir karşılığı yok. Kutu artık kendisi kopyalıyor.
+   */
+  it("kopyalama kısayolu kutunun seçimini kopyalıyor", () => {
+    const state = useStore.getState();
+    useStore.setState({
+      settings: { ...state.settings, keybindings: { ...state.settings.keybindings, copy: "Ctrl+Shift+C" } },
+    });
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "git status" } });
+    el.setSelectionRange(0, 3);
+    fireEvent.keyDown(el, { key: "C", ctrlKey: true, shiftKey: true });
+
+    expect(writeText).toHaveBeenCalledWith("git");
+    expect(sendKeys, "kopyalama kısayolu kabuğa gitmiş").not.toHaveBeenCalled();
+    expect(el.value, "yazılan satır silinmiş").toBe("git status");
+    // Kısayolla kopyalamada seçim DURUYOR: burada ikinci bir anlam yok.
+    expect(el.selectionEnd - el.selectionStart).toBe(3);
+  });
+
+  it("seçim yokken kopyalama kısayolu bir şey yapmıyor, satırı da silmiyor", () => {
+    const state = useStore.getState();
+    useStore.setState({
+      settings: { ...state.settings, keybindings: { ...state.settings.keybindings, copy: "Ctrl+Shift+C" } },
+    });
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "git status" } });
+    fireEvent.keyDown(el, { key: "C", ctrlKey: true, shiftKey: true });
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(sendKeys).not.toHaveBeenCalled();
+    expect(el.value).toBe("git status");
+  });
+
+  it("Ctrl+Alt+C (AltGr) kabuğa gitmiyor, satırı silmiyor", () => {
+    // Windows'ta AltGr tarayıcıya ctrl+alt olarak geliyor; Türkçe Q'da
+    // sürekli basılan bir tuş. Eskiden Alt görülmüyor ve tuş SIGINT oluyordu.
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "echo selam" } });
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true, altKey: true });
+
+    expect(sendKeys).not.toHaveBeenCalled();
+    expect(el.value).toBe("echo selam");
   });
 
   it("Tab satırı kabuğa devredip kutuyu kapatıyor", () => {

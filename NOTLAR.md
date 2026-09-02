@@ -357,6 +357,91 @@ ayrıştırma), `store/updateCheck.test.ts`, `components/updateBadge.test.tsx`.
 Release yayımlandığında çalışmaya başlıyor; CI şu an paketleri yalnızca koşu
 çıktısı olarak yüklüyor, Release oluşturmuyor.
 
+### 1.12 Komut kutusunda Ctrl+C: karar tek yere indi
+
+**Bildirilen hata:** "Komut yazın kısmında `cd Desktop\Work\Github\Survey`
+yazıyorum, metni seçip kopyalamak için Ctrl+C basıyorum; metin kayboluyor ve
+kopyalayamamış oluyorum." Sebep tekti: Ctrl+C'nin "kopyala mı, kes mi" kararı
+oturumdaydı (`wantsCtrlCCopy` → `term.hasSelection()`) ve yalnızca terminal
+IZGARASINDAKİ seçimi biliyordu. Kutu bir `textarea`, seçimi tarayıcının
+modelinde; oturum onu göremiyor, karar "seçim yok" çıkıyor, tuş `\x03` olarak
+kabuğa gidiyor ve `setValue("")` satırı siliyordu — pano boş, komut yok.
+
+**İlk düzeltme yanlış derinlikteydi.** Kutuya kendi Ctrl+C koşulu yazıldı
+(`!isMac() && ctrlKey && seçim var → return`). Aynı gün koşturulan kod
+incelemesi (8 açı, 7 doğrulayıcı) bunun bedelini saydı: platform kuralı iki
+yerde, `ctrlCCopiesSelection` ayarı yalnızca birinde, tuş yüklemi üç biçimde
+(`toLowerCase()==="c"` / `==="c"||==="C"` / App.tsx'in kendi hâli) — ve
+`keysMac.test.ts`'in "kural tek yerde" koruması yalnızca `App.tsx`i okuduğu için
+kopyayı görmüyordu. Tam da o testin başındaki senaryo: kopyalar ayrışırsa tuş
+ya boşa gider ya da SIGINT kabuğa hiç ulaşmaz.
+
+**Bugünkü hâl.** Kural saf bir işlevde: [`resolveCtrlC`](src/lib/inputMode.ts)
+— `{ mac, copiesSelection, boxSelection, gridSelection }` alıyor,
+`"copy-box" | "copy-grid" | "sigint"` veriyor. Sıra: mac → her zaman kabuğa
+(kopyalama Cmd+C); ayar kapalı → kabuğa (kullanıcı "her zaman kes" demiş; ayarı
+yalnızca ızgarada saymak onu yarım yalan yapardı); kutudaki seçim → kutu;
+ızgaradaki → ızgara; yoksa kabuğa. Oturum girdileri topluyor
+(`ctrlCAction(boxSelection)`; `wantsCtrlCCopy` ona devrediyor), kutu yalnızca
+kendi seçimini bildiriyor. Koruma testi artık `CommandInput.tsx`i de okuyor ve
+orada `ctrlCCopiesSelection` ya da `isMac()` görürse düşüyor.
+
+**Kutu kopyalamayı kendisi yapıyor.** Üç sebep, üçü de ölçüldü:
+
+1. Windows'ta kopyalama kısayolu Ctrl+Shift+C ve `App.tsx` onu "tarayıcı
+   kopyalasın" diye kutuya bırakıyordu — tarayıcının o tuşa bir karşılığı YOK
+   (yapıştırma için doğru: Ctrl+Shift+V düz metin yapıştırıyor; kopyalama için
+   o gerekçe yarı doğruydu). Tuş kutuda ölüyordu.
+2. Odak kutudayken ızgarada seçim varsa (çıktıdan sürükleyip seçince kutu
+   odağı `mouseup`ta geri alıyor) eski kod yalnızca `return` ediyor ve "App.tsx
+   kopyalıyor" diyordu — kopyalamıyordu; oradaki dal odağın TERMİNALDE olmasını
+   istiyor. Hiçbir şey kopyalanmıyor, ızgara seçimi de durduğu için sonraki her
+   Ctrl+C aynı yere düşüyordu. Kutu artık `copyForCtrlC`yi kendisi çağırıyor.
+3. Ctrl+C ile kopyalandıktan sonra kutudaki seçim KALDIRILIYOR; yoksa seçim
+   durduğu sürece her Ctrl+C yine kopyalar ve tuşun öteki anlamına (satırı
+   bırak) ulaşılamaz — ızgara yolu aynı sebeple `clearSelection()` çağırıyor.
+   Kısayolla kopyalamada seçim duruyor: orada ikinci bir anlam yok.
+
+**Denetim karakterleri yalnız Ctrl ile.** `passThroughSequence` olayı olduğu
+gibi alıyor (`KeyboardEvent` adlarıyla) ve Shift, Alt ya da Win eşlik ediyorsa
+geçirmiyor. Her eksik değiştirici bir kez hata oldu: Shift → Ctrl+Shift+C
+SIGINT'e dönüşüyordu; Alt → Windows'ta AltGr tarayıcıya `ctrl+alt` geliyor,
+Türkçe Q'da sürekli basılan tuş, eşlenmemiş AltGr+C satırı siliyordu ve
+Ctrl+Alt+D EOF gönderip kabuğu kapatabiliyordu. `SIGINT` sabiti dışa açıldı;
+"Durdur" düğmesi sahte tuş olayı kurmak yerine onu gönderiyor.
+
+**`133;A` açık komutu kapatıyor.** `running` yalnızca `133;D` ile düşüyordu;
+`D` kaçınca (kaçan parça, yedek zamanlayıcının açtığı kayıt) `running` açık
+kalıyor, ardından gelen `133;B` `atPrompt`ı açıyor ve ikisi aynı anda doğru
+oluyordu: kutu çiziliyor ama `App.tsx`in durdurma dalı Ctrl+C'yi kutuya
+ulaşmadan yutuyor — ne kopyalama ne SIGINT, "tekrar basın" şeridi de yok
+(yalnızca kutu kapalıyken çiziliyor). Yeni istem çiziliyorsa önceki komut
+bitmiştir; `A` artık `closeBlock(null)` + `endCommand(null)` çağırıyor, ikisi
+de boşta zararsız.
+
+**Açılışın ref koruması.** Geliştirme kipinde `useStore.ts` düzenlenince
+uygulama "N-Terminal yükleniyor…" ekranında sonsuza kadar kaldı. Depo sıcak
+yenilemeyle `ready:false` ile sıfırdan kuruluyor, `App` ise yerinde kalıyor ve
+Fast Refresh **ref'leri koruyor** — `bootstrapped` ref'i "bir kez koştum"
+diyor, yeni depo için hiç koşmamıştı. Belirti yanlış yere yazılmak üzereydi
+("ikinci örnek kilit tutuyor"); Rust tarafı yalnızca iki kilit alıp klonluyor,
+takılacak bir şeyi yok. Koruma artık deponun `ready` alanı.
+
+**Kurulu sürüm ile depo ayrışması.** Kullanıcının "yeni grup açınca yazı üst
+kısma gidiyor" bildirimi, kurulu 1 Eylül 23:10 derlemesinde (`bd4ffb0`)
+çıktı; §1.9'daki "sekmesiz grup bütün barındırıcıları söküyordu" düzeltmesi
+(`a678f95`, 2 Eylül 01:30) o derlemede yoktu. Güncel kodda canlı denemede
+tekrarlanmadı. Bir bildirim geldiğinde önce `(Get-Item "C:\Program
+Files\N-Terminal\nterminal.exe").LastWriteTime` ile derleme tarihini `git log`
+ile karşılaştır.
+
+Testler: `lib/inputMode.test.ts` (`resolveCtrlC` altı durum, değiştirici
+matrisi, `SIGINT`), `components/CommandInput.test.tsx` (kutu/ızgara seçimi,
+seçim kalkması, kısayolla kopyalama, AltGr), `lib/keysMac.test.ts` (koruma
+üç dosyada). Canlı doğrulama CDP üzerinden yapıldı (bkz. §3 ve
+`.claude/skills/calistir`): pano gerçekten `cd Desktop\Work` oldu, ikinci
+Ctrl+C terminale `^C` düşürdü, yeni grubun kutusu yazıyı aldı.
+
 ---
 
 ## 2. Açık işler
@@ -419,6 +504,30 @@ bir PowerShell betiği bozuldu, iki kaynak dosyaya **NUL baytı** girdi (git
 dosyayı ikili saydı ve sözlük testinin kaynak taraması sessizce bozuldu).
 Kaçış içeren içerikte `Edit` aracını kullan; yazdıktan sonra
 `python -c "print(open(p,'rb').read().count(b'\x00'))"` ile kontrol et.
+Sonraki oturumda aynı tuzak dört kez daha ısırdı: tırnaklı heredoc (`<<'PY'`)
+bile `\\x03` yazımını ham **ETX baytına** çevirdi ve yoruma denetim karakteri
+girdi; Python `write_text` iki dosyayı **CRLF**'ye döndürdü (`.gitattributes`
+LF diyor). Kaçış gerekiyorsa `chr(92) + "x03"` gibi kur; yazdıktan sonra
+`git ls-files --eol` ve `[x for x in b if x < 32 and x not in (9, 10)]` ile
+bak.
+
+**Fast Refresh ref'leri koruyor, depoyu değil.** `useStore.ts` düzenlenince
+depo sıfırdan kuruluyor ama bileşen ref'leri yaşamaya devam ediyor. "Bir kez
+koştum" diyen bir ref, yeni depo için hiç koşmamış bir işi koşmuş sayar —
+açılış böyle takıldı (§1.12). Tek seferlik işler için koruma ref değil,
+deponun kendi durumu olmalı.
+
+**Uzak masaüstü önde değilse tuş gönderilemez, ekran alınamaz.** RDP penceresi
+küçültülmüş ya da arkadaysa `GetForegroundWindow` sıfır dönüyor, `SendKeys`
+"Erişim engellendi" veriyor, `CopyFromScreen` kilit ekranını ya da bayat kareyi
+yakalıyor; `LogonUI`ye bakmak da yanıltıyor (başka bir oturumun kilidi olabilir,
+`SessionId` karşılaştır). Doğrulamayı buna bağlama: WebView2'yi
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` ile aç ve
+Chrome DevTools Protocol'den sür — `Input.insertText`, `Input.dispatchKeyEvent`,
+`Page.captureScreenshot` ön plan istemiyor. Sürücü:
+`.claude/skills/calistir/cdp.mjs`. Geliştirme derlemesinde gerçek Ctrl+Shift+C
+WebView2'nin DevTools kısayolu; sayfaya hiç ulaşmıyor, CDP'den gönderilen
+ulaşıyor.
 
 **`Platform` gibi ortam değişkenleri kabuklara sızıyor.** Uygulama kendi
 sürecinin ortamını açtığı her kabuğa veriyor. Geliştirme kipinde bu ortam
@@ -447,5 +556,5 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Bu oturumun sonunda: **932 arayüz testi**, **110 Rust testi**, tip denetimi
+Bu oturumun sonunda: **1042 arayüz testi**, **133 Rust testi**, tip denetimi
 temiz.

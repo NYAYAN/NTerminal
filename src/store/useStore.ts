@@ -18,7 +18,7 @@ import {
   setPlatform as applyPlatform,
 } from "../lib/platform";
 import { applyUiFont } from "../lib/fonts";
-import { passThroughSequence } from "../lib/inputMode";
+import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { cdQuery, cdSuggestions } from "../lib/cdSuggest";
@@ -1449,14 +1449,19 @@ export const useStore = create<Store>((set, get) => ({
   /**
    * Çalışan komutu durdurur.
    *
-   * Baytı `passThroughSequence` veriyor ve bu bilinçli: aynı bayt komut
-   * kutusunun kaçış kapısında da geçiyor. İki yerde elle yazılsaydı biri
+   * Bayt `SIGINT` sabitinden geliyor ve bu bilinçli: komut kutusunun kaçış
+   * kapısı da aynı sabiti gönderiyor. İki yerde elle yazılsaydı biri
    * değiştiğinde öteki sessizce çalışmayan bir tuş göndermeye başlardı.
+   *
+   * Eskiden buradan `passThroughSequence` çağrılıyordu — bir DÜĞME için sahte
+   * bir tuş olayı kurup ("c", ctrl, shift yok…) sonucu boşa karşı denetliyordu.
+   * Tuş kuralı her sıkılaştığında (shift, alt, meta) bu çağrı da yeni sahte
+   * alanlar istiyordu; kural bir gün düğmenin uydurduğu olayı geçirmezse
+   * düğme sessizce çalışmayı bırakırdı. Düğmenin klavyeyle işi yok; bayt yeter.
    */
   stopRunning(tabId) {
     get().disarmStop();
-    const data = passThroughSequence({ key: "c", ctrl: true });
-    if (data) sessions.get(tabId)?.sendKeys(data);
+    sessions.get(tabId)?.sendKeys(SIGINT);
   },
 
   armStop(tabId) {

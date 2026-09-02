@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { tokenizeCommand } from "../lib/cmdline";
-import { passThroughSequence, resolveInputMode } from "../lib/inputMode";
+import { passThroughSequence, resolveInputMode, SIGINT } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
+import { matchCombo } from "../lib/keys";
 import { sessions, useStore } from "../store/useStore";
 
 /**
@@ -47,6 +48,8 @@ export function CommandInput() {
   const allRunning = useStore((s) => s.running);
   const allExited = useStore((s) => s.exited);
   const stopArmed = useStore((s) => s.stopArmed);
+  // Kopyalama kısayolu kutuda KUTU tarafından karşılanıyor (bkz. onKeyDown).
+  const keys = useStore((s) => s.settings.keybindings);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
@@ -273,38 +276,93 @@ export function CommandInput() {
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const store = useStore.getState();
+    const box = e.currentTarget;
+    const session = sessions.get(tabId);
+    const boxSelection = box.selectionStart !== box.selectionEnd;
 
-    // Ctrl+C SEÇİM VARKEN kopyalar, kabuğu durdurmaz.
-    //
-    // Kararı oturum veriyor (`wantsCtrlCCopy`): ayar, seçim ve platform aynı
-    // yerde. Burada tekrar yazsaydım iki taraf ayrıştığında tuş yutulur ve
-    // SIGINT kabuğa hiç ulaşmazdı — çalışan komut durdurulamaz olurdu.
-    //
-    // Olayı DURDURMUYORUZ: kopyalamayı App.tsx'teki genel işleyici yapıyor,
-    // olay ona ulaşmalı.
-    if (
-      (e.key === "c" || e.key === "C") &&
-      e.ctrlKey &&
-      sessions.get(tabId)?.wantsCtrlCCopy()
-    ) {
+    /**
+     * Kutudaki seçimi panoya yazar.
+     *
+     * Kutu bunu KENDİSİ yapıyor, tarayıcıya bırakmıyor. İki sebep: Windows'ta
+     * kopyalama kısayolu Ctrl+Shift+C ve tarayıcının o tuşa bir karşılığı yok
+     * — bırakılsa tuş kutuda ölürdü; ikincisi pano yazılamadığında kullanıcı
+     * bunu duymalı, ızgara yolunda da öyle (bkz. `App.tsx`).
+     *
+     * `collapse`: Ctrl+C ile kopyalandıysa seçim kaldırılıyor. Aksi hâlde
+     * seçim durduğu sürece her Ctrl+C yine kopyalar ve tuşun öteki anlamına
+     * (satırı bırak, kabuğa kesme gönder) bir daha ulaşılamaz — ızgara yolu
+     * aynı sebeple `clearSelection()` çağırıyor (`copyForCtrlC`). Kopyalama
+     * kısayoluyla kopyalandığında seçim duruyor: orada ikinci bir anlam yok.
+     */
+    const copyBoxSelection = (collapse: boolean) => {
+      const text = box.value.slice(box.selectionStart, box.selectionEnd);
+      void navigator.clipboard
+        .writeText(text)
+        .catch(() => store.toast(t("common.clipboardFailed"), "err"));
+      if (collapse) box.setSelectionRange(box.selectionEnd, box.selectionEnd);
+    };
+
+    /*
+     * Kopyalama kısayolu (Windows'ta Ctrl+Shift+C, mac'te Cmd+C) seçim varken
+     * kutunun seçimini kopyalıyor. `App.tsx` bu kısayolu kutuya bilerek
+     * bırakıyor (gerekçesi orada). Seçim YOKKEN dokunulmuyor: kullanıcı
+     * kopyalamayı Ctrl+C'ye bağlamış olabilir ve o zaman tuşun kesme anlamı
+     * aşağıda karşılanmalı.
+     */
+    if (boxSelection && matchCombo(e.nativeEvent, keys.copy ?? "")) {
+      e.preventDefault();
+      copyBoxSelection(false);
       return;
     }
 
     /*
-     * Ctrl+C / Ctrl+D / Ctrl+L kabuğun işi; kutu boşken bile geçmeli.
-     *
-     * YALNIZCA GERÇEK Ctrl. Önceki hâli `e.ctrlKey || e.metaKey` idi ve
-     * mac'te Cmd+C'yi SIGINT'e çeviriyordu — kutudaki metni seçip kopyalamak
-     * imkânsızdı, üstelik yazılan satır da siliniyordu. mac'te de kesme
-     * (Ctrl+C), dosya sonu (Ctrl+D) ve temizleme (Ctrl+L) Ctrl tuşuyla;
-     * Cmd o platformda kopyala/yapıştır/kes demek ve kutu bir `textarea`
-     * olduğu için tarayıcının kendi davranışı zaten doğru.
+     * Kabuğun denetim karakterleri: Ctrl+C / Ctrl+D / Ctrl+L, yalnız Ctrl ile.
+     * Hangi tuşların geçtiği ve neden yalnız Ctrl (Shift, Alt/AltGr, Win
+     * dışarıda) `passThroughSequence` üzerinde anlatılıyor.
      */
-    const pass = passThroughSequence({ key: e.key, ctrl: e.ctrlKey });
+    const pass = passThroughSequence(e);
+
+    /*
+     * Ctrl+C'nin İKİ anlamı var: kopyala ya da kes. Karar TEK YERDE —
+     * `resolveCtrlC` (platform, ayar, ızgaradaki seçim, kutudaki seçim);
+     * oturum ilk üçünü biliyor, kutu dördüncüsünü veriyor. Burada kuralı
+     * yeniden yazmak bir kez denendi ve aynı gün üç ayrı kopya sayıldı; iki
+     * kopya ayrıştığında tuş ya boşa gidiyor ya da SIGINT kabuğa hiç
+     * ulaşmıyor. Kararın öyküsü `resolveCtrlC` üzerinde.
+     *
+     * "copy-grid": odak kutuda ama seçim ızgarada (çıktıdan sürükleyip seçince
+     * odak kutuya geri geliyor). Eskiden burada yalnızca `return` vardı ve
+     * "kopyalamayı App.tsx yapıyor" deniyordu — yapmıyordu: oradaki dal
+     * odağın TERMİNALDE olmasını istiyor. Tuş yutuluyor, hiçbir şey
+     * kopyalanmıyor, ızgara seçimi de durduğu için sonraki her Ctrl+C aynı
+     * yere düşüyordu. Kopyalama artık burada ve seçimi de temizliyor.
+     */
+    if (pass === SIGINT) {
+      const action = session?.ctrlCAction(boxSelection) ?? "sigint";
+      if (action === "copy-box") {
+        e.preventDefault();
+        copyBoxSelection(true);
+        return;
+      }
+      if (action === "copy-grid" && session) {
+        e.preventDefault();
+        void session.copyForCtrlC().then((result) => {
+          if (result === "failed") store.toast(t("common.clipboardFailed"), "err");
+        });
+        return;
+      }
+      // "sigint": aşağıda kabuğa gidiyor.
+    }
+
+    /*
+     * Kabuğun tuşu; kutu boşken bile geçmeli, yoksa çalışan bir şeyi
+     * durdurmanın yolu kalmaz. Kesme gittiyse yazılan satır da bırakılıyor:
+     * kabuk kendi satırını nasıl atıyorsa kutu da öyle.
+     */
     if (pass) {
       e.preventDefault();
       send(pass);
-      if (pass === "\x03") setValue("");
+      if (pass === SIGINT) setValue("");
       store.closeSuggestions();
       return;
     }
@@ -357,8 +415,7 @@ export function CommandInput() {
     if (suggest && e.key === "ArrowRight") {
       // Sağ ok yalnızca imleç SONDAYKEN öneriyi kabul ediyor; ortadayken
       // normal imleç hareketi olmalı.
-      const el = e.currentTarget;
-      if (el.selectionStart === value.length && el.selectionEnd === value.length) {
+      if (box.selectionStart === value.length && box.selectionEnd === value.length) {
         e.preventDefault();
         store.acceptSuggestion();
       }
