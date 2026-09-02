@@ -90,7 +90,17 @@ export function cdSuggestions(
    * içeren eşleşme bir kaçış kapısı, varsayılan değil.
    */
   const leaf = query.leaf.trim().toLowerCase();
-  const eslesen = filterDirs(names, query.leaf);
+  /*
+   * Yazılanla BİREBİR aynı ad listede yok.
+   *
+   * BİLDİRİLEN HATA: "cd NYAYAN yazdığımda NYAYAN altındaki dizinler için
+   * tamamlama yok." Canlıda görülen şuydu: panel 1/1 ile açılıyor ve tek
+   * satırı `cd NYAYAN` — kullanıcının zaten yazdığı şey. Kabul edilse de bir
+   * şey değişmiyor; kullanıcı bunu "öneri yok" diye okuyor, haklı olarak.
+   * Kabul akışında da aynı: `cd Desk` → kabul → `cd Desktop`, panel yine
+   * `cd Desktop` diyor. Bir öneri yeni bir şey söylemiyorsa öneri değil.
+   */
+  const eslesen = filterDirs(names, query.leaf).filter((n) => n.toLowerCase() !== leaf);
   const onEk = eslesen.filter((n) => n.toLowerCase().startsWith(leaf));
   const iceren = eslesen.filter((n) => !n.toLowerCase().startsWith(leaf));
 
@@ -103,4 +113,37 @@ export function cdSuggestions(
       const normal = query.base ? yol : yol.replace(/[\\/]/g, sep);
       return `cd ${quote(normal)}`;
     });
+}
+
+/**
+ * Yazılan son parça listedeki bir klasörle TAM eşleşiyor mu? Eşleşenin diskteki
+ * adı dönüyor (kullanıcı `nyayan` yazsa da klasör `NYAYAN`).
+ *
+ * Büyük/küçük harf gözetmiyor: Windows dosya sistemi de gözetmiyor ve
+ * `filterDirs`in kuralı bu. Boş parça hiçbir şeyle eşleşmiyor — `cd ` yazan
+ * kişi henüz bir şey seçmedi.
+ */
+export function exactDir(query: CdQuery, names: readonly string[]): string | null {
+  const leaf = query.leaf.trim().toLowerCase();
+  if (!leaf) return null;
+  return names.find((n) => n.toLowerCase() === leaf) ?? null;
+}
+
+/**
+ * Tam eşleşen klasörün İÇİNE inen sorgu.
+ *
+ * BİLDİRİLEN HATA'nın ikinci yarısı: kullanıcı `cd NYAYAN` yazdığında (ya da
+ * listeden kabul ettiğinde) beklediği şey NYAYAN'ın altındaki klasörler —
+ * kabuğun sekme tamamlamasının yaptığı gibi. Eski hâlde bunun için bir de
+ * ayırıcı yazması gerekiyordu; yazmayan kişi boş bir panelle kalıyordu.
+ *
+ * Dönen sorgu `cd NYAYAN\` yazılmış gibi: dizin bir alt kat, süzgeç boş, taban
+ * `NYAYAN\`. Ayırıcı kullanıcının o ana kadar yazdığı ayırıcı; hiç yazmadıysa
+ * bulunulan dizininki — `src/` yazana `\` ile devam etmek yazdığını sebepsiz
+ * değiştirmek olurdu.
+ */
+export function descend(query: CdQuery, name: string): CdQuery {
+  const yazilan = query.base.match(/[\\/]/)?.[0];
+  const sep = yazilan ?? separatorOf(query.dir);
+  return { dir: joinDir(query.dir, name), leaf: "", base: `${query.base}${name}${sep}` };
 }

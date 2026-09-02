@@ -442,6 +442,39 @@ seçim kalkması, kısayolla kopyalama, AltGr), `lib/keysMac.test.ts` (koruma
 `.claude/skills/calistir`): pano gerçekten `cd Desktop\Work` oldu, ikinci
 Ctrl+C terminale `^C` düşürdü, yeni grubun kutusu yazıyı aldı.
 
+### 1.13 `cd` önerisi tam eşleşen klasöre iniyor
+
+**Bildirilen hata:** "cd NYAYAN yazdığımda NYAYAN altındaki dizinler için
+tamamlama yok; cd yapınca geliyor, bir yol yazdıktan sonra gelmiyor." Canlıda
+(CDP ile) ölçülen: `cd Desktop\Work\NYAYAN` yazıldığında panel **1/1** açılıyor
+ve tek satırı `cd Desktop\Work\NYAYAN` — kullanıcının zaten yazdığı şey. Kabul
+akışında da aynı: `cd Desk` → kabul → `cd Desktop`, panel yine `cd Desktop`
+diyor. Yeni bir şey söylemeyen satır öneri değil; kullanıcı onu haklı olarak
+"öneri yok" diye okuyor. Ayırıcıyla (`cd …\NYAYAN\`) alt klasörler geliyordu
+ama ayırıcıyı yazmayan kişi boş kalıyordu.
+
+**İki kural, ikisi de saf modülde (`lib/cdSuggest.ts`):**
+
+1. Yazılanla birebir aynı ad listeden düşüyor (`cdSuggestions`).
+2. Yazılan son parça listedeki bir klasörle TAM eşleşiyorsa (büyük/küçük
+   harf gözetmeden, `exactDir`) o klasörün İÇİ önce geliyor (`descend`) —
+   kabuğun sekme tamamlaması gibi. Aynı adla başlayan kardeşler onun ardından:
+   `Work` yazana `Work\Docs`… ve `Workspace`. Üretilen komut diskteki adı
+   kullanıyor (`nyayan` yazana `NYAYAN\…`), ayırıcı kullanıcının yazdığı.
+
+**Önbellek tek girdiden çoklu girdiye.** İnme kuralı aynı hesapta iki dizin
+listesi istiyor (üst: eşleşme var mı; alt: çocuklar). Tek girdilik önbellek
+birini her seferinde düşürür ve iki dizin arasında getir-at döngüsü kurulurdu.
+Şimdi küçük bir `Map` (8 dizin) ve "getiriliyor" kümesi; liste gelince hesap
+kullanıcının o anki girdisiyle yeniden koşuyor. Bir komut BİTİNCE önbellek
+boşalıyor (`mkdir` yeni klasör açmış olabilir); tuşlar arasında tazelenmiyor.
+
+Testler: `lib/cdSuggest.test.ts` (aynı ad düşüyor, tam eşleşme ve inme,
+ayırıcı korunuyor, diskteki ad). Depo tarafı testte yok — `activeSession()`
+jsdom'da kurulamıyor; canlı doğrulama CDP ile: `cd Desktop\Work\NYAYAN` beş
+alt klasör, kabul sonrası `cd Desktop` üç alt klasör, küçük harfle `cd
+desktop\work` yine `Work`un içi.
+
 ---
 
 ## 2. Açık işler

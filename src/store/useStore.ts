@@ -21,10 +21,11 @@ import { applyUiFont } from "../lib/fonts";
 import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
-import { cdQuery, cdSuggestions } from "../lib/cdSuggest";
+import { cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
 import {
   canSuggest,
   cycleIndex,
+  MAX_SUGGESTIONS,
   rankSuggestions,
   recentCommands,
   type SuggestEntry,
@@ -433,12 +434,60 @@ function quoteForShell(path: string): string {
  * önbellek, ama arayüzün abone olması gereken bir durum değil — çizimi
  * tetikleyen şey `ui.suggest`.
  *
- * Anahtar dizinin kendisi: başka bir klasöre inildiğinde liste kendiliğinden
- * yenileniyor. Aynı klasörde yeni bir alt klasör açılırsa liste eskiyor;
- * bedeli bir öneri satırı, kazancı her harfte bir dosya sistemi çağrısından
- * kaçınmak.
+ * Anahtar dizinin kendisi; kaç dizin tutulduğu ve ne zaman boşaldığı
+ * aşağıdaki `dirListings` açıklamasında.
  */
-let dirListing: { dir: string; names: string[] } | null = null;
+/*
+ * Birden çok dizin BİRDEN tutuluyor, tek bir tane değil.
+ *
+ * Tek girdilik önbellek "tam eşleşen klasöre in" kuralıyla çalışamıyor: o
+ * kural hem bulunulan dizinin listesini (eşleşme var mı?) hem alt klasörün
+ * listesini (çocuklar neler?) aynı hesapta istiyor. Tek girdi ikisinden birini
+ * her seferinde düşürür ve iki dizin arasında sonsuz bir getir-at döngüsü
+ * kurulurdu. Sınır küçük: öneri için yalnızca son gezilen birkaç dizin lazım.
+ *
+ * Bir komut BİTİNCE önbellek boşalıyor (`onCommandEnd`): `mkdir` yeni klasör
+ * açmış olabilir ve eski liste onu görmezdi. Tuş vuruşları arasında ise
+ * tazelenmiyor — kazanç her harfte bir dosya sistemi çağrısından kaçınmak.
+ */
+const dirListings = new Map<string, string[]>();
+const DIR_LISTING_LIMIT = 8;
+/** Şu an getirilmekte olan dizinler: aynı dizin için ikinci istek açılmasın. */
+const dirListingPending = new Set<string>();
+
+export function forgetDirListings() {
+  dirListings.clear();
+}
+
+/**
+ * Dizin listesini verir; yoksa getirmeyi başlatır ve `null` döner.
+ *
+ * Liste geldiğinde `rerun` çağrılıyor: hesap, kullanıcının O ANKİ girdisiyle
+ * yeniden koşuyor. Okunamayan klasör (izin, silinmiş) boş liste sayılıyor —
+ * tekrar tekrar denemek her tuşta bir hata çağrısı demek olurdu.
+ */
+function dirNames(dir: string, rerun: () => void): string[] | null {
+  const hit = dirListings.get(dir);
+  if (hit) return hit;
+  if (dirListingPending.has(dir)) return null;
+  dirListingPending.add(dir);
+  void api
+    .listDirs(dir)
+    .then(
+      (names) => names,
+      () => [] as string[],
+    )
+    .then((names) => {
+      if (dirListings.size >= DIR_LISTING_LIMIT) {
+        const eldest = dirListings.keys().next().value;
+        if (eldest !== undefined) dirListings.delete(eldest);
+      }
+      dirListings.set(dir, names);
+      dirListingPending.delete(dir);
+      rerun();
+    });
+  return null;
+}
 /**
  * Son öneri girdisi.
  *
@@ -1266,6 +1315,9 @@ export const useStore = create<Store>((set, get) => ({
       },
       onCommandEnd: () => {
         set({ running: { ...get().running, [tab.id]: false } });
+        // Komut klasör açmış/silmiş olabilir (`mkdir`, `rm`): `cd` önerisinin
+        // dizin listeleri bir sonraki tuşta diskten yeniden okunsun.
+        forgetDirListings();
         // Komut dosya değiştirmiş olabilir; rozet komutun SONRAKİ hâlini
         // göstermeli. En sık örnek: `git add` sonrası sayacın düşmesi.
         void get().refreshGit(sessions.get(tab.id)?.cwd ?? null);
@@ -1725,26 +1777,38 @@ export const useStore = create<Store>((set, get) => ({
     const query = cdQuery(state.prefix, cwd);
     if (query) {
       lastSuggestInput = state;
-      if (dirListing?.dir !== query.dir) {
-        void api
-          .listDirs(query.dir)
-          .then((names) => {
-            dirListing = { dir: query.dir, names };
-            // Liste geldi: kullanıcının O ANKİ girdisiyle yeniden hesapla.
-            if (lastSuggestInput) get().updateSuggestions(lastSuggestInput);
-          })
-          .catch(() => {
-            // Okunamayan klasör (izin, silinmiş) boş liste sayılıyor; tekrar
-            // tekrar denemek her tuşta bir hata çağrısı demek olurdu.
-            dirListing = { dir: query.dir, names: [] };
-          });
+      // Liste geldiğinde hesap kullanıcının O ANKİ girdisiyle yeniden koşuyor;
+      // kullanıcı bu arada yazmaya devam etmiş olabilir.
+      const rerun = () => {
+        if (lastSuggestInput) get().updateSuggestions(lastSuggestInput);
+      };
+      const names = dirNames(query.dir, rerun);
+      if (!names) {
         // Liste gelene kadar GEÇMİŞE DÜŞMÜYORUZ: bir an için yanlış cevabı
         // gösterip hemen değiştirmek listeyi zıplatır.
         if (ui.suggest) set({ ui: { ...ui, suggest: null } });
         return;
       }
 
-      const dirs = cdSuggestions(query, dirListing.names, quoteForShell);
+      /*
+       * Yazılan ad bir klasörle TAM eşleşiyorsa onun İÇİ önce geliyor.
+       *
+       * BİLDİRİLEN HATA: "cd NYAYAN yazdığımda NYAYAN altındaki dizinler için
+       * tamamlama yok; cd yapınca geliyor, bir yol yazdıktan sonra gelmiyor."
+       * Canlıda ölçülen: panel 1/1 açılıyor, tek satırı yazılanın kendisi.
+       * Kabuğun sekme tamamlaması burada bir kat aşağı iner; kullanıcı da onu
+       * bekliyor. Çocuklar önce, aynı adla BAŞLAYAN kardeşler sonra
+       * (`Work` yazana `Work\Docs`… ve `Workspace`): ikisi de olası niyet,
+       * ama tam ad yazan kişi çoğu zaman içine girmek istiyor.
+       *
+       * Alt klasörün listesi henüz gelmediyse kardeşlerle yetiniyoruz; liste
+       * gelince `rerun` tamamını yeniden kuruyor.
+       */
+      const exact = exactDir(query, names);
+      const children = exact ? dirNames(descend(query, exact).dir, rerun) : null;
+      const inner = exact && children ? cdSuggestions(descend(query, exact), children, quoteForShell) : [];
+      const siblings = cdSuggestions(query, names, quoteForShell);
+      const dirs = [...inner, ...siblings].slice(0, MAX_SUGGESTIONS);
       if (dirs.length === 0) {
         if (ui.suggest) set({ ui: { ...ui, suggest: null } });
         return;

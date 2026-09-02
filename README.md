@@ -264,6 +264,14 @@ kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıy
 silinmiyor). Kaynak uygulamanın geçmişi olduğu için sekmeler ve kabuklar arası
 çalışıyor.
 
+`cd` bunun istisnası: cevabı geçmişte değil, diskte. `cd ` yazınca bulunulan
+dizinin klasörleri gelir, yazdıkça süzülür (içeren eşleşme; başlayanlar önce).
+Yazılan ad bir klasörle **tam eşleşiyorsa** — elle ya da listeden kabul edip —
+o klasörün içi gelir, ayırıcı yazmak gerekmez: `cd NYAYAN` yazan kişi
+NYAYAN'ın alt klasörlerini görür, aynı adla başlayan kardeşler onların
+ardından. Yazılanla birebir aynı satır listede yok — yeni bir şey söylemeyen
+öneri öneri değil.
+
 *Kabuğun geçmişten tamamlaması (PSReadLine, zsh-autosuggestions).* Satır içi
 soluk "hayalet metin" ya da istemin altında liste. Bunu kabuğa bırakmak
 bilinçli: tamamlamayı ekran tamponuna yazmak kabuğun satır düzenleyicisiyle

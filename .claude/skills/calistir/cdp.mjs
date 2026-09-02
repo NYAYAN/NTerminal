@@ -80,6 +80,22 @@ switch (cmd) {
   case "value":
     console.log(JSON.stringify(await readBox()));
     break;
+  case "suggest":
+    // Oneri paneli: baslik sayaci ve satirlar (yoksa null)
+    console.log(
+      await evaluate(`(() => { const bar = document.querySelector(".suggest-bar"); if (!bar) return "null";
+        const rows = [...bar.querySelectorAll(".suggest-row")].map(r => r.querySelector(".suggest-cmd")?.textContent ?? r.textContent);
+        return JSON.stringify({ count: bar.querySelector(".suggest-head .kbd")?.textContent, rows }); })()`),
+    );
+    break;
+  case "clear":
+    await evaluate(`${BOX}.focus(); ${BOX}.select(); true`);
+    await send("Input.insertText", { text: "" });
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+    await sleep(300);
+    console.log(JSON.stringify(await readBox()));
+    break;
   case "shot":
     console.log(await shot(args[0] ?? "shot"));
     break;

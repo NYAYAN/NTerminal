@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cdQuery, cdSuggestions } from "./cdSuggest";
+import { cdQuery, cdSuggestions, descend, exactDir } from "./cdSuggest";
 
 /**
  * `cd` yazarken dizin önerisi.
@@ -126,5 +126,64 @@ describe("cd önerileri", () => {
     const q = cdQuery("cd ", CWD)!;
     const cok = Array.from({ length: 20 }, (_, i) => `k${i}`);
     expect(cdSuggestions(q, cok, alıntı, 3)).toHaveLength(3);
+  });
+
+  /*
+   * BİLDİRİLEN HATA: "cd NYAYAN yazdığımda NYAYAN altındaki dizinler için
+   * tamamlama yok." Canlıda ölçülen: panel 1/1 açılıyor, tek satırı
+   * `cd NYAYAN` — kullanıcının zaten yazdığı şey. Yeni bir şey söylemeyen
+   * satır öneri değil; kullanıcı onu "öneri yok" diye okuyor.
+   */
+  it("yazılanla birebir aynı ad listede YOK", () => {
+    const q = cdQuery("cd src", CWD)!;
+    // `srcgen` "src" ile başlıyor ve kalıyor; `src`nin kendisi düşüyor.
+    expect(cdSuggestions(q, ["src", "srcgen"], alıntı)).toEqual(["cd srcgen"]);
+  });
+
+  it("tam eşleşme büyük/küçük harf gözetmiyor, diskteki ad dönüyor", () => {
+    // Windows dosya sistemi gözetmiyor; kullanıcı `nyayan` yazsa da klasör
+    // `NYAYAN` ve üretilen komut diskteki adla yazılmalı.
+    const q = cdQuery("cd nyayan", CWD)!;
+    expect(exactDir(q, ["NYAYAN", "NTerminal"])).toBe("NYAYAN");
+    expect(cdSuggestions(q, ["NYAYAN", "NTerminal"], alıntı)).toEqual([]);
+  });
+
+  it("boş parça hiçbir şeyle eşleşmiyor", () => {
+    expect(exactDir(cdQuery("cd ", CWD)!, ["a"])).toBe(null);
+  });
+});
+
+describe("tam eşleşen klasöre inme", () => {
+  /*
+   * BİLDİRİLEN HATA'nın ikinci yarısı: `cd NYAYAN` yazan (ya da listeden
+   * kabul eden) kişi NYAYAN'ın altındaki klasörleri bekliyor — kabuğun sekme
+   * tamamlaması gibi. Eski hâlde bir de ayırıcı yazmak gerekiyordu.
+   */
+  it("inen sorgu `cd NYAYAN\\` yazılmış gibi", () => {
+    const q = cdQuery("cd NYAYAN", CWD)!;
+    expect(descend(q, "NYAYAN")).toEqual({
+      dir: "C:\\Users\\nyayan\\proje\\NYAYAN",
+      leaf: "",
+      base: "NYAYAN\\",
+    });
+  });
+
+  it("inen sorgunun çocukları tam komut oluyor", () => {
+    const q = descend(cdQuery("cd NYAYAN", CWD)!, "NYAYAN");
+    expect(cdSuggestions(q, ["NTerminal", "Publish"], alıntı)).toEqual([
+      "cd NYAYAN\\NTerminal",
+      "cd NYAYAN\\Publish",
+    ]);
+  });
+
+  it("kullanıcının ayırıcısı korunuyor", () => {
+    // `src/` yazana `\` ile devam etmek yazdığını sebepsiz değiştirmek olurdu.
+    const q = cdQuery("cd src/components", CWD)!;
+    expect(descend(q, "components").base).toBe("src/components/");
+  });
+
+  it("diskteki ad kullanılıyor, yazılan değil", () => {
+    const q = cdQuery("cd nyayan", CWD)!;
+    expect(descend(q, "NYAYAN").base).toBe("NYAYAN\\");
   });
 });
