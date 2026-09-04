@@ -78,6 +78,18 @@ export const MESSAGES = {
   "app.sidebarShow": ["Grupları göster", "Show groups"],
   "tree.noDir": ["Dizin bilinmiyor", "Directory unknown"],
   "tree.empty": ["Boş klasör", "Empty folder"],
+  // Dosya sütununun kendi arama kutusu. Ağaç tembel yüklendiği için arama
+  // ağacı süzmüyor, düz bir eşleşme listesi gösteriyor (bkz. `FileSearch`).
+  "tree.searchPlaceholder": ["Dosyalarda ara…", "Search files…"],
+  "tree.noMatch": ["Eşleşen dosya yok", "No matching files"],
+  // Arama kutusu başlıktaki düğmeyle açılıyor; sürekli yer kaplamıyor.
+  "tree.searchOpen": ["Dosyalarda ara", "Search files"],
+  "tree.searchClose": ["Aramayı kapat", "Close search"],
+  // Toplu katlama. "Tümünü genişlet" YOK ve olamaz: ağaç tembel yüklendiği
+  // için "tümü" tüm dizin ağacını diskten yürümek demek. İkinci durum bu
+  // yüzden "geri aç" — daraltmadan önce açık olanları geri getiriyor.
+  "tree.collapseAll": ["Tüm klasörleri daralt", "Collapse all folders"],
+  "tree.reopen": ["Klasörleri geri aç", "Reopen folders"],
   "viewer.back": ["Ağaca dön", "Back to tree"],
   "viewer.failed": ["Dosya okunamadı", "Could not read the file"],
   "viewer.binary": ["İkili dosya — içerik gösterilmiyor", "Binary file — contents not shown"],
@@ -104,6 +116,14 @@ export const MESSAGES = {
   "git.openFile": ["Dosyayı aç", "Open the file"],
   "git.revert": ["Değişiklikleri geri al", "Discard changes"],
   "git.pathCopied": ["Yol kopyalandı", "Path copied"],
+  // Panel başlığındaki toplu katlama düğmesi. Dosyalar açık geldiği için
+  // varsayılan eylem "daralt"; hepsi kapalıyken aynı düğme açıyor.
+  "git.collapseAllFiles": ["Dosyaları daralt", "Collapse files"],
+  "git.expandAllFiles": ["Dosyaları aç", "Expand files"],
+  // Satırlarda yalnızca dosya adı duruyor; bu düğme klasör zincirini de
+  // gösteriyor. Tam yol her durumda satırın ipucunda.
+  "git.showPaths": ["Klasör yollarını göster", "Show folder paths"],
+  "git.hidePaths": ["Klasör yollarını gizle", "Hide folder paths"],
   // Bağlam açıcıları: `git diff` değişen satırların çevresinde üç satır
   // veriyor, arası çizilmiyor.
   //

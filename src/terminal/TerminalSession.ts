@@ -442,14 +442,45 @@ export class TerminalSession {
     // ölçülmemeli, yoksa kopmuş bir düğümün boyutu terminali yeniden
     // boyutlandırmaya çalışır.
     this.resizeObserver?.disconnect();
-    this.resizeObserver = new ResizeObserver(() => {
-      // Kap boyu degisti: `safeFit` satir/sutun ayni kalirsa erken donuyor,
-      // ama dikdortgen yine kaymis olabiliyor - onbellek her durumda dusuyor.
-      this.invalidateGeometry();
-      this.safeFit();
-      this.syncCellHeight();
-    });
+    this.resizeObserver = new ResizeObserver(() => this.onContainerResize());
     this.resizeObserver.observe(container);
+  }
+
+  /**
+   * Kap yeniden boyutlandı: ölçüleri tazele ve blok katmanını yeniden çizdir.
+   *
+   * Ayrı bir yöntem çünkü `ResizeObserver` geri çağrısı jsdom'da test
+   * edilemiyor (`attach`, gözlemci kurulmadan önce xterm'in canvas bağlamına
+   * takılıp düşüyor); bu yöntemi doğrudan çağırmak fitin ETKİSİZ olduğu
+   * durumu — hatanın çıktığı durumu — test edilebilir kılıyor
+   * (`resizeBlocks.test.ts`).
+   */
+  private onContainerResize() {
+    // Kap boyu degisti: `safeFit` satir/sutun ayni kalirsa erken donuyor,
+    // ama dikdortgen yine kaymis olabiliyor - onbellek her durumda dusuyor.
+    this.invalidateGeometry();
+    this.safeFit();
+    this.syncCellHeight();
+    /*
+     * Blok katmanini KOSULSUZ tazele.
+     *
+     * OLCULEN HATA: sag panel acilip kapaninca terminalin son satirlarinda
+     * eski blok basliklari (dizin rozeti, sure rozeti) yanlis satira cizili
+     * kaliyor - ciktinin ustune biniyor. Kaydirinca duzeliyordu.
+     *
+     * KOK NEDEN: katman kendini xterm'in `onRender`ina bagli tazeliyor. Panel
+     * ac-kapa net boyut degisimini sifira indirdiginde `safeFit` satir/sutun
+     * ayni kaldigi icin erken donuyor - `fit` yok, `onRender` yok, katmani
+     * yeniden cizen kimse yok. Ama genislik degisti ve onbellek dustu, yani
+     * katman eski geometriyle ekranda kaliyor. Ekran statikse duzeltecek bir
+     * sonraki cizim de gelmiyor.
+     *
+     * Kap her boyutlandiginda bir kez cizdirmek bu bosluğu kapatiyor:
+     * `notifyBlocks` yalnizca bir yeniden cizim tetikliyor (bkz.
+     * `scheduleBlockSync`), taze geometriyi katman kendi okuyor. `setDisplay`
+     * gorunur olurken zaten ayni isi yapiyor.
+     */
+    this.notifyBlocks();
   }
 
   /**

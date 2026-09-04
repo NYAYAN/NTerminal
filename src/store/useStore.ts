@@ -126,7 +126,15 @@ export type HistoryScope = "tab" | "group" | "all";
  */
 const gitFingerprints = new Map<string, string | null>();
 
-export type SidePanelMode = "history" | "favorites" | "git" | "files";
+/**
+ * Sağ panelin sekmeleri.
+ *
+ * "files" BURADA YOK ve bu bilinçli: dosya ağacı ile görüntüleyici artık
+ * grupların sağındaki KENDİ sütununda (`FilePanel`). Ağacı her iki yerde de
+ * göstermek aynı şeyin iki kopyası, iki kapatma yolu ve "hangisi güncel"
+ * sorusu demekti.
+ */
+export type SidePanelMode = "history" | "favorites" | "git";
 
 /**
  * Onay penceresi isteği.
@@ -176,12 +184,62 @@ export interface UiState {
   /** Node sürüm seçici açık mı. Listesi `nodeEnv`den geliyor. */
   nodePicker: boolean;
   /**
+   * Dosya sütunu açık mı (grupların SAĞINDA, terminalin solunda).
+   *
+   * Sağ panelin bir sekmesi DEĞİL: ağaç sol tarafta, grup listesinin yanında
+   * duruyor — düzenin sırası da başlık çubuğundaki düğmelerin sırası.
+   * Geçici arayüz durumu; kalıcı olan kenar çubuğunun aksine (bkz.
+   * `Appearance.sidebarCollapsed`) her açılışta kapalı başlıyor.
+   */
+  treeOpen: boolean;
+  /**
    * Görüntüleyicide açık dosyanın yolu; ağaç görünümündeyken null.
    *
-   * "Dosyalar" sekmesinin iki durumu var ve ayrım burada: yol varsa içerik,
-   * yoksa ağaç. Beşinci bir sekme çoğu zaman boş dururdu.
+   * Dosya sütununun iki durumu var ve ayrım burada: yol varsa içerik, yoksa
+   * ağaç. Ayrı bir yer çoğu zaman boş dururdu.
    */
   viewerPath: string | null;
+  /**
+   * "Değişiklikler" listesinde KAPALI dosyaların yolları.
+   *
+   * İki karar taşıyor ve ikisi de bilinçli.
+   *
+   * 1. Kapalı olanlar tutuluyor, açık olanlar değil. Liste git yoklamasıyla
+   *    kendiliğinden değişiyor; "açıklar" tutulsaydı yeni beliren bir dosya
+   *    kapalı gelir ve tam da görülmesi gereken şey gizli kalırdı.
+   * 2. Bileşenin yerel durumunda DEĞİL burada. Toplu aç/kapa düğmesi panelin
+   *    BAŞLIĞINDA (`SidePanel`, kapatma çarpısının solunda), liste ise ayrı
+   *    bir bileşende; ikisinin aynı gerçeği görmesi gerekiyor.
+   */
+  gitCollapsed: readonly string[];
+  /**
+   * "Değişiklikler" satırlarında dosya adının solunda klasör zinciri de
+   * gösterilsin mi.
+   *
+   * Varsayılan KAPALI: liste dikey taranıyor ve aranan şey "hangi dosya
+   * değişmiş". Klasör zinciri her satırda tekrarlanan, çoğu zaman aynı olan
+   * bir ön ekti ve dar panelde asıl ayırt edici bilgiyi — adı — kırpıyordu.
+   *
+   * Yol yine erişilebilir: başlıktaki düğme geri getiriyor ve satırın `title`
+   * ipucunda her durumda tam yol duruyor.
+   */
+  gitShowPaths: boolean;
+  /**
+   * Dosya ağacında AÇIK olan klasörlerin mutlak yolları.
+   *
+   * Bileşenlerin yerel durumunda DEĞİL burada, iki sebeple:
+   *
+   * 1. Panel başlığındaki "tümünü daralt" düğmesi ağacın tamamını görmek
+   *    zorunda; her `Level` kendi durumunu tutarken böyle bir düğme
+   *    yazılamıyordu.
+   * 2. BİLDİRİLEN HATA: bir dosya açıp geri dönünce açılmış klasörler
+   *    kapanıyordu. Sebep durumun sökülen bileşenlerde yaşamasıydı; buraya
+   *    taşınınca sütun tümden kapanıp açılsa bile ağaç açık kalıyor.
+   *
+   * Yol MUTLAK: aynı adlı alt klasörler (`src/lib`, `test/lib`) ada göre
+   * tutulduğunda birbirini açıyordu.
+   */
+  treeExpanded: readonly string[];
   findOpen: boolean;
   renamingTabId: string | null;
   editingGroupId: string | null;
@@ -555,16 +613,17 @@ export const useStore = create<Store>((set, get) => ({
       letterSpacing: 0,
       // Boş: arayüz sistemin kendi ailesini kullanıyor (CSS'teki `--ui-font`).
       uiFontFamily: "",
-      uiFontSize: 13,
+      uiFontSize: 14,
       theme: "nterminal-dark",
       cursorStyle: "bar",
       cursorBlink: true,
       scrollback: 10000,
       sidebarWidth: 240,
       panelWidth: 390,
+      filesWidth: 320,
       highlightLinks: true,
       viewMode: "tabs",
-      showShellBadge: true,
+      showShellBadge: false,
       sidebarCollapsed: false,
       collapsedFavoriteFolders: [],
     },
@@ -627,7 +686,11 @@ export const useStore = create<Store>((set, get) => ({
     dirPicker: null,
     branchPicker: null,
     nodePicker: false,
+    treeOpen: false,
     viewerPath: null,
+    gitCollapsed: [],
+    gitShowPaths: false,
+    treeExpanded: [],
     findOpen: false,
     renamingTabId: null,
     editingGroupId: null,
@@ -1919,11 +1982,11 @@ export const useStore = create<Store>((set, get) => ({
   /**
    * Bir dosyayı görüntüleyicide açar.
    *
-   * Sekmeyi de açıyor: kullanıcı paletten ya da ağaçtan bir dosya seçtiğinde
-   * içeriğin nerede göründüğünü aramak zorunda kalmamalı.
+   * Dosya sütununu da açıyor: kullanıcı paletten ya da ağaçtan bir dosya
+   * seçtiğinde içeriğin nerede göründüğünü aramak zorunda kalmamalı.
    */
   openFile(path) {
-    set({ ui: { ...get().ui, historyOpen: true, panelMode: "files", viewerPath: path } });
+    set({ ui: { ...get().ui, treeOpen: true, viewerPath: path } });
   },
 
   /**

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { joinDir } from "../lib/dirs";
-import { fuzzyScore } from "../lib/format";
+import { rankFiles } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { sessions, useStore } from "../store/useStore";
@@ -64,23 +64,18 @@ export function FilePalette() {
   }, [cwd]);
 
   /**
-   * Bulanık süzme ve sıralama.
+   * Bulanık süzme ve sıralama — kuralı `lib/format.ts` taşıyor (`rankFiles`).
+   *
+   * Sıralama BILEŞENDEN ÇIKTI: burada tersti (`b.score - a.score`) ve aranan
+   * dosya listenin en sonunda kalıyordu; üstelik sınır sıralamadan sonra
+   * uygulandığı için büyük depolarda listeye hiç girmiyordu. Saf bir işlev
+   * olarak testle bağlı.
    *
    * Sonuç sayısı SINIRLI (200): yüz binlerce dosyanın hepsini çizmek listeyi
    * kullanılamaz yapıyor ve tarayıcıyı tutukluyor. Aranan dosya ilk yirmide
    * değilse çözüm daha çok satır değil, daha iyi bir sorgu.
    */
-  const rows = useMemo(() => {
-    const list = files ?? [];
-    if (!query.trim()) return list.slice(0, MAX_ROWS);
-    const scored: { path: string; score: number }[] = [];
-    for (const path of list) {
-      const score = fuzzyScore(path, query);
-      if (score !== null) scored.push({ path, score });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, MAX_ROWS).map((s) => s.path);
-  }, [files, query]);
+  const rows = useMemo(() => rankFiles(files ?? [], query, MAX_ROWS), [files, query]);
 
   useEffect(() => {
     setIndex(0);

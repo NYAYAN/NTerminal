@@ -333,10 +333,14 @@ input[type="color"] {
    * Ayni hata `.main` icin bir kez cozulmustu (`min-height: 0`); bu bir ust
    * katman ve orada atlanmisti. */
   grid-template-rows: 34px minmax(0, 1fr);
-  grid-template-columns: auto 1fr;
+  /* Uc sutun: gruplar, dosyalar, geri kalan. Ikisi de `auto` ve kapaliyken
+     hic cizilmiyorlar (React onlari kurmuyor), yani sutun sifira iniyor ve
+     yeri terminal aliyor. Sira duzenin sirasi: baslik cubugundaki iki
+     gorunum dugmesi de bu sirada (bkz. titlebar.test.tsx). */
+  grid-template-columns: auto auto 1fr;
   grid-template-areas:
-    "titlebar titlebar"
-    "sidebar main";
+    "titlebar titlebar titlebar"
+    "sidebar files main";
   height: 100%;
 }
 
@@ -372,6 +376,130 @@ html[data-platform="macos"] .titlebar {
 .titlebar .view-btn {
   flex: none;
   padding: 0 6px;
+}
+
+/* Dosya sutunu - gruplarin SAGINDA, terminalin solunda (izgara alani `files`).
+ *
+ * Genislik SABIT ve bu bilincli bir baslangic: sag panelin tutamagi bir ayara
+ * yaziyor (`Appearance.panelWidth`) ve o ayar hem TS hem Rust tarafinda
+ * tanimli; burada ikinci bir olcu tanimlamak once o zinciri gerektiriyor.
+ * 260px bir dosya adi + birkac kademe girinti icin yetiyor; ihtiyac cikarsa
+ * tutamak sonra eklenir.
+ *
+ * `min-width: 0` sart: icindeki uzun dosya adlari sutunu pencereden tasirir
+ * (ayni hata `.sidebar` icin bir kez odendi). */
+.file-panel {
+  grid-area: files;
+  /* Genislik JS'ten (`Appearance.filesWidth`); burada yalnizca sinirlar.
+     Tutamak kenar cubugununkiyle ayni duzenek - bkz. `FilePanel`. */
+  min-width: 200px;
+  max-width: 900px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-alt);
+  border-right: 1px solid var(--border);
+  /* Tutamak mutlak konumlu; kap konumlandirilmis olmali. */
+  position: relative;
+}
+
+/* Tutamak SAG kenarda: sutun solda oldugu icin genisleyen kenar o.
+   (Sag panelin tutamagi ayni sebeple SOL kenarinda.) */
+.file-panel-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+/* Basligi sag panelin basligiyla AYNI olcude: ikisi de bir panelin tepesi ve
+   farkli yuksekliklerde durmalari pencereyi egri gosteriyordu. */
+.file-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-panel-title {
+  /* `flex: 1` DEGIL: buyutec dugmesi basligin hemen yaninda durmali, yoksa
+     esneyen baslik onu da saga savuruyor. Yeri `.file-panel-spacer` aciyor. */
+  flex: none;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 0.8077rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+/* Baslik ile sutun eylemleri arasindaki esneyen bosluk: baslik ve buyutec
+   solda, katlama ve kapatma sagda. Baslik cubugundaki `.drag` ile ayni is. */
+.file-panel-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Arama sonuclari - DUZ liste (gerekcesi `FileSearch` icinde: agac tembel
+   yuklendigi icin suzulemiyor). */
+.file-results {
+  padding: 4px 4px 8px;
+}
+
+/* Satir iki katli: ustte dosya adi, altinda soluk klasor zinciri. Dar sutunda
+   ayirt edici olan AD; yol onu dogrulayan ikinci bilgi ve ayni satira
+   sikistirilinca ikisi de okunamiyordu. */
+.file-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  min-height: 0;
+  padding: 3px 6px;
+  text-align: left;
+  border-radius: var(--radius);
+  font-size: 0.9231rem;
+}
+
+.file-result:hover {
+  background: var(--hover);
+}
+
+.file-result-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-result-dir {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+}
+
+/* Agaci AYAKTA tutan sarmalayici.
+ *
+ * `display: contents` sarmalayiciyi duzenden cikariyor: `.file-tree` eskisi
+ * gibi `.file-panel`in dogrudan esnek ogesi kaliyor, yani bu kap yuzunden
+ * fazladan bir kutu olusmuyor. Gizlerken `display: none` hem ekrandan
+ * kaldiriyor hem yer kaplamasini bitiriyor - ama React agaci SOKMUYOR,
+ * dolayisiyla acilmis dizinler yerinde kaliyor (gerekcesi `FilePanel`da). */
+.file-tree-keep {
+  display: contents;
+}
+
+.file-tree-keep[data-hidden="true"] {
+  display: none;
 }
 
 /* Dosya agaci.
@@ -909,16 +1037,79 @@ html[data-platform="macos"] .titlebar {
   display: none;
 }
 
+/* Renk secici: SARAN kutu izgarasi + sabit kapatma dugmesi.
+ *
+ * Iki parca olmasi bilincli. Kutular dar kenar cubugunda alt satira sariyor;
+ * "x" onlarla ayni sarma akisindayken en alta dusuyor ve arandigi yerde
+ * bulunmuyordu (bildirilen hata). Kapatma dugmesi artik sarma akisinin
+ * DISINDA, ilk satira hizali. */
 .color-picker {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
-  padding: 4px 8px 6px 26px;
+  /* ALT dolgu ustten belirgin sekilde FAZLA (6px -> 12px).
+   *
+   * Seciciden hemen sonra grubun sekmeleri (`.tab-row`) basliyor. 6px'te renk
+   * kutulari ilk sekmeye yapisik duruyordu: ikisi ayni kumeymis gibi
+   * okunuyor ve secici nerede bitip listenin nerede basladigi belli
+   * olmuyordu. Ustteki pay ise kucuk kalmali - secici zaten grup basliginin
+   * altina ait. */
+  padding: 4px 8px 12px 26px;
 }
 
+.color-swatches {
+  /* Kalan yeri kaplayip kendi icinde sariyor; `min-width: 0` olmadan sarmak
+     yerine cubugu tasiriyor. */
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Kapatma dugmesi ILK SATIRDA, kutularla birlikte asagi kaymiyor.
+ *
+ * OLCULEN HATA: "x" kutularla dikeyde ayni hizada degildi, birkac piksel
+ * asagida duruyordu. Sebep: temel `button` kurali 26px asgari yukseklik
+ * veriyor (bir siradaki dugmeler ayni boyda dursun diye), kutular ise 15px.
+ * `align-self: flex-start` kutunun USTUNU kutularin ustune hizaliyor ama
+ * simge 26px'lik kutunun ORTASINDA cizildigi icin kutularin merkezinden
+ * ~5px asagi kaciyordu.
+ *
+ * Cozum yuksekligi kutu satiriyla esitlemek: `min-height` sifirlaninca ve
+ * yukseklik 15px olunca dugmenin ortasi da kutularin ortasi oluyor. Dikey
+ * dolgu YOK (yatayda var), yani `box-sizing` ne olursa olsun kutu 15px
+ * kaliyor. Tiklama alani kutularla ayni olcude - onlar da 15px. */
+.color-close {
+  flex: none;
+  align-self: flex-start;
+  min-height: 0;
+  height: 15px;
+  padding: 0 4px;
+}
+
+/* Renk kutusu DAIRE.
+ *
+ * OLCULEN HATA: "grup rengi degistir" dendiginde renkler daire degil dikey
+ * oval ("yayik") goruniyordu. Iki sebep ust uste biniyordu ve ikisi birden
+ * cozulmeli - yalnizca biri duzeltilse sekil hala bozuk kaliyor:
+ *
+ *  1. Temel `button` kurali `min-height: 26px` veriyor (bir siradaki
+ *     dugmeler ayni yukseklikte dursun diye). Buradaki `height: 15px` onu
+ *     EZMIYOR, cunku `min-height` daha guclu -> kutu 15x26 oluyor ve
+ *     `border-radius: 50%` bunu dikey ovale ceviriyor.
+ *  2. On bir oge dar cubuga sigmadigi icin `flex-shrink` varsayilani (1)
+ *     devreye giriyor ve genislik 15px'in ALTINA dusuyor -> oval daha da
+ *     inceliyor.
+ *
+ * `min-height: 0` birinciyi, `flex: none` ikinciyi kapatiyor. Ikisi de
+ * `layout.test.ts` ile bagli. */
 .swatch {
+  flex: none;
   width: 15px;
   height: 15px;
+  min-height: 0;
   padding: 0;
   border-radius: 50%;
   border: 1px solid color-mix(in srgb, #000 25%, transparent);
@@ -935,6 +1126,10 @@ html[data-platform="macos"] .titlebar {
 .swatch.custom {
   display: inline-block;
   cursor: pointer;
+  /* Hazir renklerden AYRI durmasi icin nefes payi (kap `gap: 5px` veriyor,
+     bu onun ustune biniyor). Dordu bir kume, bu ayri bir kapi: ayni araliktan
+     dizildiginde besinci bir hazir renk gibi okunuyordu. */
+  margin-left: 7px;
   background: conic-gradient(#ff7b72, #d29922, #3fb950, #39c5cf, #58a6ff, #bc8cff, #ff7b72);
 }
 
@@ -2439,9 +2634,10 @@ html[data-platform="macos"] .titlebar {
   color: var(--err);
 }
 
-/* Yol SONDAN degil BASTAN kirpiliyor: uzun yollarda ayirt edici olan dosya
-   adi, klasor zinciri degil. `direction: rtl` yon degistirmenin en ucuz yolu;
-   `unicode-bidi: plaintext` metnin okunma yonunu bozmuyor. */
+/* Satirda artik yalnizca DOSYA ADI duruyor (klasor zinciri istege bagli, bkz.
+   `.git-dir`). Ad kisa oldugu icin kirpma SONDAN: `direction: rtl` kaldirildi,
+   cunku o uzun yollari BASTAN kirpmak icindi ve bir dosya adinda ters yonde
+   kirpmak ("...eChanges.tsx" yerine "GitChang...") uzantiyi yiyordu. */
 .git-path {
   /* Esnemiyor, yalnizca SIKISIYOR (`0 1 auto`): sayac boylece dosya adinin
      hemen yaninda kaliyor. `flex: 1` iken yol butun bosluğu yiyor ve sayac
@@ -2452,9 +2648,23 @@ html[data-platform="macos"] .titlebar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Klasor zinciri - yalnizca "yollari goster" acikken. Adin SOLUNDA ve soluk:
+   satirin konusu dosya, klasor onu dogrulayan ikinci bilgi.
+   Kirpma BASTAN (`direction: rtl`): uzun bir zincirde ayirt edici olan son
+   klasorler, yani adin hemen yanindakiler. Once bu sikisiyor (`flex-shrink: 2`),
+   ad ondan sonra - yer daralinca feda edilecek olan bu. */
+.git-dir {
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   direction: rtl;
   unicode-bidi: plaintext;
   text-align: left;
+  color: var(--text-dim);
 }
 
 /* Acilir pencereler (dizin secici, dal secici).

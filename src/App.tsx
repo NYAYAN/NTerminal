@@ -3,8 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { CommandPalette } from "./components/CommandPalette";
 import { FilePalette } from "./components/FilePalette";
-import { SearchIcon, SidebarIcon, TreeIcon } from "./components/Icons";
+import { FolderIcon, SearchIcon, SidebarIcon } from "./components/Icons";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { FilePanel } from "./components/FilePanel";
 import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -34,13 +35,41 @@ export function App() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const settings = useStore((s) => s.settings);
-  const ui = useStore((s) => s.ui);
   const nodeEnv = useStore((s) => s.nodeEnv);
   const setUi = useStore((s) => s.setUi);
   const sidebarCollapsed = settings.appearance.sidebarCollapsed;
-  // Dosya ağacı düğmesi iki durumlu: panel AÇIK ve kip "files" ise düğme
-  // basılı görünüyor ve tıklamak paneli kapatıyor.
-  const treeOpen = ui.historyOpen && ui.panelMode === "files";
+
+  /*
+   * `ui` nesnesinin TAMAMINA abone OLMUYORUZ, alan alan abone oluyoruz.
+   *
+   * ÖLÇÜLEN SORUN: `useStore((s) => s.ui)` diyorduk ve `setUi` her çağrıda
+   * yeni bir nesne üretiyor (`{ ...ui, ...patch }`). Sonuç: HANGİ alan
+   * değişirse App ve altındaki bütün ağaç yeniden çiziliyordu — sekme çubuğu,
+   * terminal alanı, blok katmanı dâhil.
+   *
+   * En sıcak yol yazmaktı: `ui.suggest` her tuş vuruşunda güncelleniyor, yani
+   * komut kutusuna yazarken tuş başına bir App çizimi düşüyordu. Oysa App'in
+   * çiziminde `suggest` HİÇ kullanılmıyor.
+   *
+   * Aşağıdaki alanlar App'in gerçekten okuduğu alanlar. Artık `suggest`,
+   * `confirm`, `findOpen`, `panelMode`, `viewerPath`, `gitCollapsed`,
+   * `gitShowPaths`, `renamingTabId`, `editingGroupId` ve `settingsSection`
+   * değişimleri App'i uyandırmıyor; onları okuyan bileşenler kendileri abone.
+   *
+   * Geri çağrılardaki `store.ui.*` okumaları (kısayol işleyicisi) `getState()`
+   * üzerinden ve abonelik kurmuyor — onlar olduğu gibi kalıyor.
+   */
+  const treeOpen = useStore((s) => s.ui.treeOpen);
+  const historyOpen = useStore((s) => s.ui.historyOpen);
+  const paletteOpen = useStore((s) => s.ui.paletteOpen);
+  const filePaletteOpen = useStore((s) => s.ui.filePaletteOpen);
+  const searchOpen = useStore((s) => s.ui.searchOpen);
+  const dirPicker = useStore((s) => s.ui.dirPicker);
+  const branchPicker = useStore((s) => s.ui.branchPicker);
+  const settingsOpen = useStore((s) => s.ui.settingsOpen);
+  const transferOpen = useStore((s) => s.ui.transferOpen);
+  const nodePicker = useStore((s) => s.ui.nodePicker);
+  const toast = useStore((s) => s.ui.toast);
   const appVersion = useStore((s) => s.appVersion);
 
   const t = useT();
@@ -500,21 +529,24 @@ export function App() {
           <SidebarIcon size={13} />
         </button>
 
-        {/* Dosya agaci: bulunulan dizini sag panelde aciyor.
+        {/* Dosya sutunu: bulunulan dizini GRUPLARIN SAGINDA aciyor.
          *
          * Iki durumlu - acikken ayni dugme kapatiyor. Tek yonlu halinde dugme
          * actigi paneli kapatamiyordu; kapatmak icin panelin kendi "x"
          * dugmesini bulmak gerekiyordu. Burada `on` sinifi VAR: acik olmak
-         * varsayilan degil, dolayisiyla vurgu bir bilgi tasiyor. */}
+         * varsayilan degil, dolayisiyla vurgu bir bilgi tasiyor.
+         *
+         * Simge KLASOR: dugme bir agac gorunumu degil, bulunulan dizini
+         * aciyor - kullanicinin aradigi sey "dosyalar" ve onun evrensel
+         * simgesi klasor. Onceki agac simgesi (dallanan cizgiler) bir veri
+         * yapisini anlatiyordu, aranan seyi degil. */}
         <button
           className={treeOpen ? "icon-btn view-btn on" : "icon-btn view-btn"}
           title={t(treeOpen ? "app.filesCloseTitle" : "app.filesTitle")}
           aria-pressed={treeOpen}
-          onClick={() =>
-            setUi(treeOpen ? { historyOpen: false } : { historyOpen: true, panelMode: "files" })
-          }
+          onClick={() => setUi({ treeOpen: !treeOpen })}
         >
-          <TreeIcon size={13} />
+          <FolderIcon size={13} />
         </button>
 
         <div className="brand">
@@ -574,6 +606,11 @@ export function App() {
           iniyor ve terminal o alanı alıyor. */}
       {!sidebarCollapsed && <GroupSidebar />}
 
+      {/* Dosya sütunu grupların SAĞINDA, terminalin solunda — düzenin sırası
+          başlık çubuğundaki düğmelerin sırasıyla aynı. Kapalıyken hiç
+          çizilmiyor, `auto` sütunu sıfıra iniyor. */}
+      {treeOpen && <FilePanel />}
+
       <div className="main">
         <TabBar />
         <TerminalArea />
@@ -581,32 +618,32 @@ export function App() {
         <RunningLinks />
         <CommandInput />
         <SuggestionBar />
-        {ui.historyOpen && <SidePanel />}
+        {historyOpen && <SidePanel />}
         <StatusBar />
       </div>
 
-      {ui.paletteOpen && <CommandPalette />}
-      {ui.filePaletteOpen && <FilePalette />}
-      {ui.searchOpen && <HistoryRecall />}
-      {ui.dirPicker && (
-        <DirPicker cwd={ui.dirPicker} onClose={() => useStore.getState().setUi({ dirPicker: null })} />
+      {paletteOpen && <CommandPalette />}
+      {filePaletteOpen && <FilePalette />}
+      {searchOpen && <HistoryRecall />}
+      {dirPicker && (
+        <DirPicker cwd={dirPicker} onClose={() => useStore.getState().setUi({ dirPicker: null })} />
       )}
-      {ui.branchPicker && (
+      {branchPicker && (
         <BranchPicker
-          cwd={ui.branchPicker.cwd}
-          current={ui.branchPicker.current}
+          cwd={branchPicker.cwd}
+          current={branchPicker.current}
           onClose={() => useStore.getState().setUi({ branchPicker: null })}
         />
       )}
-      {ui.nodePicker && nodeEnv && (
+      {nodePicker && nodeEnv && (
         <NodePicker env={nodeEnv} onClose={() => useStore.getState().setUi({ nodePicker: false })} />
       )}
-      {ui.settingsOpen && <SettingsDialog />}
-      {ui.transferOpen && <TransferDialog />}
+      {settingsOpen && <SettingsDialog />}
+      {transferOpen && <TransferDialog />}
 
       <ConfirmDialog />
 
-      {ui.toast && <div className={`toast ${ui.toast.tone}`}>{ui.toast.text}</div>}
+      {toast && <div className={`toast ${toast.tone}`}>{toast.text}</div>}
 
       {closing && <div className="toast">{t("app.savingState")}</div>}
     </div>

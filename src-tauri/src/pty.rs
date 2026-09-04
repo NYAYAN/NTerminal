@@ -37,6 +37,16 @@ pub const TERMINAL_ENV: [(&str, &str); 2] = [
     ("COLORTERM", "truecolor"),
 ];
 
+/// Actigimiz kabuktan SILINEN miras degiskenleri.
+///
+/// `env_clear` cagirmiyoruz - kullanicinin PATH'i ve arac ortami korunmali -
+/// ama bazi degiskenler miras alindiginda aktif zarar veriyor. Sabit olarak
+/// duruyor ki test ayni listeyle olcum yapabilsin.
+///
+/// `NTERMINAL_INTEGRATION_LOADED`: entegrasyon betiklerinin "zaten yuklendim"
+/// nobetcisi. Gerekcenin tamami `spawn` icinde, silindigi yerde.
+pub const CLEAR_INHERITED_ENV: [&str; 1] = ["NTERMINAL_INTEGRATION_LOADED"];
+
 const COALESCE_WINDOW: Duration = Duration::from_millis(6);
 /// Tek olayda gonderilecek azami bayt.
 const MAX_CHUNK: usize = 128 * 1024;
@@ -198,6 +208,43 @@ impl PtyManager {
         cmd.env("NTERMINAL_SESSION", &spec.id);
         if integration {
             cmd.env("NTERMINAL_INTEGRATION", "1");
+        }
+
+        /*
+         * Kabuk entegrasyonunun "zaten yuklendim" nobetcisi cocuk icin
+         * SILINIYOR.
+         *
+         * OLCULEN HATA: dipteki komut kutusu hic acilmiyor, istem ekranin
+         * USTUNDE duruyor ve `PS C:\...>` metni gorunuyor (blok basligi
+         * kipinde o satir bos olmaliydi). Yani entegrasyon hic yuklenmemis.
+         *
+         * ZINCIR: `nterminal.ps1` bastan sona bir kez kosmak icin kendini
+         * bir ortam degiskeniyle koruyor:
+         *
+         *     if ($env:NTERMINAL_INTEGRATION_LOADED -eq '1') { return }
+         *
+         * `$env:` GERCEK bir surec degiskeni yaziyor, yani o kabugun butun
+         * cocuklari onu miras aliyor. Uygulama entegre bir N-Terminal
+         * sekmesinden baslatildiginda (gelistirirken tipik: bir sekmede
+         * `npm start`) `nterminal.exe`in kendi ortaminda bu degisken '1'
+         * oluyor. Burada `env_clear` cagirmiyoruz - kullanicinin PATH'i ve
+         * arac ortami korunmali - dolayisiyla degisken actigimiz HER
+         * sekmeye de geciyor ve betik ilk satirda geri donuyor: istem
+         * sarmalayici yok, OSC 133 yok, `atPrompt` hic gelmiyor, kutu da
+         * `resolveInputMode` geregi sonsuza kadar kapali kaliyor.
+         *
+         * Nobetcinin isi TEK BIR kabuk icinde cifte yuklemeyi onlemek (profil
+         * iki kez cagrilirsa). Actigimiz her sekme ise YENI ve en ustteki
+         * kabuk; onun icin nobetci bos olmali. Silmek ic ice kabuklari
+         * bozmuyor: kullanici sekmede elle `powershell` yazarsa o surec
+         * degiskeni yine sekmenin kabugundan miras aliyor ve koruma
+         * calismaya devam ediyor - orasi bizim spawn'imiz degil.
+         *
+         * Ucu birden siliniyor cunku ayni nobetci uc betikte de var
+         * (`nterminal.ps1`, `nterminal.sh`, `nterminal.zsh`).
+         */
+        for key in CLEAR_INHERITED_ENV {
+            cmd.env_remove(key);
         }
 
         let mut child = pair

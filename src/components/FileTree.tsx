@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { joinDir } from "../lib/dirs";
 import { baseName } from "../lib/format";
@@ -31,14 +31,49 @@ import type { DirEntry } from "../types";
  * ise yolu komut satırına ekliyor; ikisi de gerçek bir ihtiyaç ve ayrımı tek
  * bir değiştirici tuş taşıyor.
  */
-export function FileTree() {
-  const t = useT();
+/**
+ * Etkin sekmenin çalışma dizini.
+ *
+ * AYRI bir kanca çünkü dosya sütununda iki yer aynı dizini görmek zorunda:
+ * ağaç ve onun üstündeki arama kutusu (`FileSearch`). Doğru kaynak oturumun
+ * kendisi (`sessions`), sekmedeki kopya yalnızca yedek: kabuk `cd` yaptığında
+ * oturum güncel, sekme kaydı bir olay gecikmesi geriden gelebiliyor.
+ */
+export function useActiveCwd(): string | null {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
-  const cwd = tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
+  return tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
+}
+
+export function FileTree() {
+  const t = useT();
+  const cwd = useActiveCwd();
+
+  /*
+   * Açık klasörler DEPODAN ve tek yerden okunuyor.
+   *
+   * Küme burada kurulup aşağı geçiriliyor; her `Level`in kendi aboneliği
+   * olsaydı derin bir ağaçta onlarca abonelik olurdu ve hepsi aynı diziye
+   * bakardı. Kümeye çevirmek de bir kez: satır başına `Array.includes` yerine
+   * sabit zamanlı arama.
+   */
+  const expandedList = useStore((s) => s.ui.treeExpanded);
+  const setUi = useStore((s) => s.setUi);
+  const expanded = useMemo(() => new Set(expandedList), [expandedList]);
+
+  const toggle = useCallback(
+    (full: string) => {
+      const next = new Set(useStore.getState().ui.treeExpanded);
+      if (!next.delete(full)) next.add(full);
+      useStore.getState().setUi({ treeExpanded: [...next] });
+    },
+    // `setUi` depo kimliği; bağımlılık listesi bilinçli olarak boş kalmasın
+    // diye duruyor. Geri çağırma her çizimde yeniden kurulmuyor.
+    [setUi],
+  );
 
   if (!cwd) return <div className="pop-empty">{t("tree.noDir")}</div>;
 
@@ -52,16 +87,32 @@ export function FileTree() {
       </div>
       {/* `key` dizinle: sekme değişip dizin değişince ağaç sıfırdan kurulmalı,
           eski klasörlerin açık kalması yanıltıcı olurdu. */}
-      <Level key={cwd} path={cwd} depth={0} />
+      <Level key={cwd} path={cwd} depth={0} expanded={expanded} onToggle={toggle} />
     </div>
   );
 }
 
-/** Bir klasörün girdileri; açılan alt klasörler kendi `Level`ini kuruyor. */
-function Level({ path, depth }: { path: string; depth: number }) {
+/**
+ * Bir klasörün girdileri; açılan alt klasörler kendi `Level`ini kuruyor.
+ *
+ * Girdiler (`entries`) YEREL kalıyor: bir kez okunan klasörün içeriği o
+ * bileşenle yaşıyor ve yeniden açılınca diske gidilmiyor. Açık olma durumu ise
+ * paylaşılan (bkz. `ui.treeExpanded`) — toplu daraltma düğmesi ve sütunun
+ * kapanıp açılması onu görmek zorunda.
+ */
+function Level({
+  path,
+  depth,
+  expanded,
+  onToggle,
+}: {
+  path: string;
+  depth: number;
+  expanded: ReadonlySet<string>;
+  onToggle: (full: string) => void;
+}) {
   const t = useT();
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
-  const [open, setOpen] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +137,7 @@ function Level({ path, depth }: { path: string; depth: number }) {
     <>
       {entries.map((entry) => {
         const full = joinDir(path, entry.name);
-        const acik = open.has(entry.name);
+        const acik = expanded.has(full);
 
         return (
           <div key={entry.name}>
@@ -104,12 +155,7 @@ function Level({ path, depth }: { path: string; depth: number }) {
                   else useStore.getState().openFile(full);
                   return;
                 }
-                setOpen((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(entry.name)) next.delete(entry.name);
-                  else next.add(entry.name);
-                  return next;
-                });
+                onToggle(full);
               }}
             >
               {/* Klasörde ok, dosyada boş bir yer tutucu: ikisi aynı sütundan
@@ -120,7 +166,9 @@ function Level({ path, depth }: { path: string; depth: number }) {
               <span className="tree-name">{entry.name}</span>
             </button>
 
-            {entry.dir && acik && <Level path={full} depth={depth + 1} />}
+            {entry.dir && acik && (
+              <Level path={full} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
+            )}
           </div>
         );
       })}

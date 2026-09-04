@@ -317,7 +317,7 @@ describe("durum çubuğu panel düğmeleri", () => {
   it("açık panele ikinci tık onu kapatıyor", () => {
     // Yalnızca açan bir düğme, ikinci tıklamada hiçbir şey yapmıyormuş gibi
     // görünür. Aynı kip zaten açıksa kapanmalı.
-    expect(statusbar, "geçiş mantığı yok").toMatch(/historyOpen && ui\.panelMode === mode/);
+    expect(statusbar, "geçiş mantığı yok").toMatch(/historyOpen && panelMode === mode/);
     expect(statusbar, "kapatma dalı yok").toContain("historyOpen: false");
   });
 
@@ -370,11 +370,40 @@ describe("görünüm düğmeleri", () => {
     expect(APP).toMatch(/patchAppearance\(\{ sidebarCollapsed: !sidebarCollapsed \}\)/);
   });
 
-  it("dosya ağacı düğmesi ikinci tıkta kapatıyor", () => {
+  it("dosya sütunu düğmesi ikinci tıkta kapatıyor", () => {
+    // Durum sağ panelin kipinden AYRI: sütun grupların sağında, sağ panelin
+    // bir sekmesi değil. Tek bayrak olduğu için açma ve kapama aynı ifade.
     expect(APP, "geçiş mantığı yok").toMatch(
-      /const treeOpen = ui\.historyOpen && ui\.panelMode === "files"/,
+      /const treeOpen = useStore\(\(s\) => s\.ui\.treeOpen\)/,
     );
-    expect(APP, "kapatma dalı yok").toMatch(/treeOpen \? \{ historyOpen: false \}/);
+    expect(APP, "açma/kapama dalı yok").toMatch(/setUi\(\{ treeOpen: !treeOpen \}\)/);
+  });
+
+  it("dosya sütunu grupların SAĞINDA çiziliyor", () => {
+    // Sıra hem DOM'da hem ızgarada aynı olmalı: gruplar → dosyalar → terminal.
+    // DOM sırası kaydığında ızgara alanları onu gizlice düzeltir ve iki kaynak
+    // birbirinden ayrılır.
+    const sidebar = APP.indexOf("<GroupSidebar />");
+    const files = APP.indexOf("<FilePanel />");
+    const main = APP.indexOf('className="main"');
+    expect(files, "dosya sütunu çizilmiyor").toBeGreaterThan(-1);
+    expect(sidebar, "dosya sütunu grupların solunda").toBeLessThan(files);
+    expect(files, "dosya sütunu terminalin sağında").toBeLessThan(main);
+    expect(CSS, "ızgarada `files` alanı yok").toMatch(/"sidebar files main"/);
+  });
+
+  it("dosya sütunu kapalıyken hiç çizilmiyor", () => {
+    // `display: none` DEĞİL: ızgaranın `auto` sütunu sıfıra inmeli, yoksa
+    // kapalı sütun terminalden yer çalardı (kenar çubuğunda aynı karar).
+    expect(APP, "sütun koşulsuz çiziliyor").toMatch(/\{treeOpen && <FilePanel \/>\}/);
+  });
+
+  it("dosya düğmesinin simgesi klasör", () => {
+    // Kullanıcının aradığı şey "dosyalar"; ağaç simgesi bir veri yapısını
+    // anlatıyordu. Simge değişimi geri alınırsa bu test söyler.
+    const titlebar = APP.slice(APP.indexOf('className="titlebar"'), APP.indexOf("<GroupSidebar"));
+    expect(titlebar, "klasör simgesi yok").toContain("<FolderIcon");
+    expect(titlebar, "ağaç simgesi geri gelmiş").not.toContain("<TreeIcon");
   });
 
   it("iki düğme de basılı durumu bildiriyor", () => {

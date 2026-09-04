@@ -46,7 +46,17 @@ export function StatusBar() {
   const running = useStore((s) => s.running);
   const paths = useStore((s) => s.paths);
   const restored = useStore((s) => s.restoredSession);
-  const ui = useStore((s) => s.ui);
+  /*
+   * `ui`nin tamamina degil iki alana abone oluyoruz.
+   *
+   * Durum cubugu `ui`den yalnizca bunlari okuyor. Tamamina abone olmak, her
+   * `setUi` yeni bir nesne urettigi icin cubugu her arayuz durumu
+   * degisiminde — yazarken her tus vurusunda guncellenen `ui.suggest` dahil —
+   * yeniden cizdiriyordu. Cubuk ayrica sigdirma hesabi kosuyor
+   * (`ResizeObserver` + `statusFit`), yani bos cizim burada iki kat pahali.
+   */
+  const historyOpen = useStore((s) => s.ui.historyOpen);
+  const panelMode = useStore((s) => s.ui.panelMode);
   const setUi = useStore((s) => s.setUi);
   const keybindings = useStore((s) => s.settings.keybindings);
   const update = useStore((s) => s.update);
@@ -153,7 +163,7 @@ export function StatusBar() {
    */
   const togglePanel = (mode: "history" | "favorites") =>
     setUi(
-      ui.historyOpen && ui.panelMode === mode
+      historyOpen && panelMode === mode
         ? { historyOpen: false }
         : { historyOpen: true, panelMode: mode },
     );
@@ -398,17 +408,17 @@ export function StatusBar() {
             aciyor, bir pencere eylemi degil. Durum cubugu zaten "su an ne var"
             seridi; panel anahtarlarinin yeri burasi. */}
         <button
-          className={ui.historyOpen && ui.panelMode === "history" ? "status-btn on" : "status-btn"}
+          className={historyOpen && panelMode === "history" ? "status-btn on" : "status-btn"}
           title={t("app.historyTitle", { keys: key("historyPanel") })}
-          aria-pressed={ui.historyOpen && ui.panelMode === "history"}
+          aria-pressed={historyOpen && panelMode === "history"}
           onClick={() => togglePanel("history")}
         >
           {t("app.history")}
         </button>
         <button
-          className={ui.historyOpen && ui.panelMode === "favorites" ? "status-btn on" : "status-btn"}
+          className={historyOpen && panelMode === "favorites" ? "status-btn on" : "status-btn"}
           title={t("app.favoritesTitle", { keys: key("favorites") })}
-          aria-pressed={ui.historyOpen && ui.panelMode === "favorites"}
+          aria-pressed={historyOpen && panelMode === "favorites"}
           onClick={() => togglePanel("favorites")}
         >
           {"★ "}

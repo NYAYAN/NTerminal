@@ -767,3 +767,83 @@ fn oneri_istegi_eski_psreadline_ile_entegrasyonu_bozmuyor() {
         pty.tail()
     );
 }
+
+/// Miras alinan "zaten yuklendim" nobetcisi entegrasyonu oldurmemeli.
+///
+/// BILDIRILEN HATA: dipteki komut kutusu hic acilmadi, istem ekranin USTUNDE
+/// durdu ve `PS C:\...>` metni gorundu (blok basligi kipinde o satir bos
+/// olmaliydi).
+///
+/// ZINCIR: `nterminal.ps1` kendini bir ortam degiskeniyle koruyor
+/// (`if ($env:NTERMINAL_INTEGRATION_LOADED -eq '1') { return }`) ve `$env:`
+/// GERCEK bir surec degiskeni yaziyor - o kabugun butun cocuklari miras
+/// aliyor. Uygulama entegre bir N-Terminal sekmesinden baslatildiginda
+/// (gelistirirken tipik: bir sekmede `npm start`) degisken uygulamanin
+/// ortamina, oradan da actigi HER sekmeye geciyor. Betik ilk satirda geri
+/// donuyor: istem sarmalayici yok, OSC 133 yok, `atPrompt` hic gelmiyor ve
+/// kutu `resolveInputMode` geregi sonsuza kadar kapali kaliyor.
+///
+/// Test iki yonu birden olcuyor, cunku yalnizca biri kanit degil:
+///   1. Nobetci mirasken entegrasyon GERCEKTEN olmuyor (hatanin mekanizmasi).
+///   2. Silindiginde calisiyor (`PtyManager::spawn`in yaptigi is).
+///
+/// "Isaret gelmedi"yi zaman asimiyla DEGIL, pozitif bir bitis kosuluyla
+/// olcuyoruz: kabuk bir komutu yankilayana kadar bekleyip tamponda OSC olup
+/// olmadigina bakiyoruz. Yavas makinede zaman asimi yanlis gecerdi.
+#[test]
+fn entegrasyon_miras_alinan_nobetciye_takilmiyor() {
+    let Some(powershell) = find_powershell() else {
+        eprintln!("powershell.exe yok, test atlandi");
+        return;
+    };
+    let script = script_path("nterminal.ps1");
+    assert!(script.is_file(), "entegrasyon betigi yok");
+
+    // Uygulamanin sildigi liste ile buradaki olcum ayni kaynaktan.
+    assert!(
+        nterminal_lib::pty::CLEAR_INHERITED_ENV.contains(&"NTERMINAL_INTEGRATION_LOADED"),
+        "nobetci silinenler listesinden dusmus: entegrasyon ic ice kabukta olur"
+    );
+
+    let baslat = |nobetci: Option<&str>| {
+        let mut cmd = CommandBuilder::new(&powershell);
+        cmd.arg("-NoLogo");
+        cmd.arg("-NoExit");
+        cmd.arg("-File");
+        cmd.arg(&script);
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("NTERMINAL", "1");
+        match nobetci {
+            Some(value) => cmd.env("NTERMINAL_INTEGRATION_LOADED", value),
+            // `CommandBuilder` cocuga ayri bir ortam kuruyor; burada degiskeni
+            // hic yazmamak "silinmis" durumun ta kendisi.
+            None => {}
+        }
+        PtyHarness::spawn(cmd)
+    };
+
+    // 1) Nobetci mirasken: kabuk yasiyor ama entegrasyon kurulmuyor.
+    let mut pty = baslat(Some("1"));
+    pty.send_line("Write-Output NOBETCI_MIRAS");
+    assert!(
+        pty.wait_for("NOBETCI_MIRAS", Duration::from_secs(40)),
+        "kabuk komutu yankilamadi, test kosum duzeniyle ilgili. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert!(
+        !pty.buffer.contains("]133;"),
+        "nobetci mirasken OSC 133 geldi: betigin korumasi degismis, bu testin \
+         olctugu mekanizma artik gecerli degil. Son cikti:\n{}",
+        pty.tail()
+    );
+    drop(pty);
+
+    // 2) Nobetci yokken: entegrasyon kuruluyor. `PtyManager::spawn` her sekme
+    //    icin tam olarak bu durumu hazirliyor.
+    let mut temiz = baslat(None);
+    assert!(
+        temiz.wait_for("]133;B", Duration::from_secs(40)),
+        "nobetci silinmisken bile entegrasyon kurulmadi. Son cikti:\n{}",
+        temiz.tail()
+    );
+}

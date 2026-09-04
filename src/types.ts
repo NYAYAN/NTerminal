@@ -79,6 +79,13 @@ export interface Appearance {
   sidebarWidth: number;
   /** Sağ panelin (geçmiş / favoriler) genişliği. */
   panelWidth: number;
+  /**
+   * Dosya sütununun (grupların sağındaki ağaç / görüntüleyici) genişliği.
+   *
+   * Kenar çubuğundan AYRI bir ölçü: o sekme adlarını gösteriyor, burası dosya
+   * İÇERİĞİNİ de gösteriyor ve kod okumak için daha fazla yer istiyor.
+   */
+  filesWidth: number;
   /** Çıktıdaki bağlantıları renkli göster. */
   highlightLinks: boolean;
   /** Terminal alanı: tek sekme mi, grubun tüm sekmeleri döşenmiş mi. */

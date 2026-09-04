@@ -145,19 +145,9 @@ export function SidebarIcon(props: IconProps) {
   );
 }
 
-/** Başlık çubuğundaki dosya ağacı düğmesi. */
-export function TreeIcon(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M2.5 3.5 H7" />
-      <path d="M2.5 3.5 V12.5 H6" />
-      <path d="M2.5 8 H6" />
-      <path d="M8.5 3.5 H13.5" />
-      <path d="M8.5 8 H13.5" />
-      <path d="M8 12.5 H13.5" />
-    </Svg>
-  );
-}
+/* Başlık çubuğundaki dosya düğmesinin simgesi `FolderIcon`; buradaki ağaç
+ * simgesi (dallanan çizgiler) kaldırıldı — bir veri yapısını anlatıyordu,
+ * kullanıcının aradığı şeyi ("dosyalar") değil. */
 
 /** Başlık çubuğundaki arama alanının büyüteci. */
 export function SearchIcon(props: IconProps) {

@@ -8,6 +8,7 @@ import {
   splitGap,
   type DiffLine,
 } from "../lib/diff";
+import { baseName, dirName } from "../lib/format";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { sessions, useStore } from "../store/useStore";
@@ -48,8 +49,15 @@ import type { GitChange } from "../types";
  * geçiyor (`DIFF_LIMIT`), yoksa yüz dosyalık bir değişiklik yüz `git` süreci
  * demek.
  */
-export function GitChanges() {
-  const t = useT();
+/**
+ * Etkin sekmenin git durumu.
+ *
+ * AYRI bir kanca çünkü iki yer aynı gerçeği görmek zorunda: liste burası ve
+ * panel başlığındaki toplu aç/kapa düğmesi (`SidePanel`). Türetmeyi iki kez
+ * yazmak, ikisinin farklı dosya listesine bakabileceği bir yol açardı —
+ * düğme "hepsi kapalı" derken listede açık satır kalması gibi.
+ */
+export function useActiveGit() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const allGit = useStore((s) => s.gitInfo);
@@ -58,7 +66,28 @@ export function GitChanges() {
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
   const cwd = tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
   const git = cwd ? (allGit[cwd] ?? null) : null;
-  const changes = git?.changes ?? [];
+  return { cwd, git, changes: git?.changes ?? [] };
+}
+
+/**
+ * Toplu katlamanın yönü: hepsi kapalıysa düğme AÇAR, yoksa DARALTIR.
+ *
+ * Boş listede "hepsi kapalı" saymıyoruz (`length > 0`): dosya yokken düğme
+ * zaten çizilmiyor, ama kural burada olunca çağıranın ayrıca denetlemesi
+ * gerekmiyor.
+ */
+export function allFilesCollapsed(
+  changes: readonly GitChange[],
+  collapsed: readonly string[],
+): boolean {
+  if (changes.length === 0) return false;
+  const set = new Set(collapsed);
+  return changes.every((change) => set.has(change.path));
+}
+
+export function GitChanges() {
+  const t = useT();
+  const { cwd, git, changes } = useActiveGit();
 
   /*
    * Satırlar AÇIK açılıyor; listede tutulan da KAPATILANLAR.
@@ -75,15 +104,21 @@ export function GitChanges() {
    *    beliren bir dosya kapalı gelir ve tam da görülmesi gereken şey gizli
    *    kalırdı. Bu yönde ise listeye ne girerse açık geliyor, kapalı kalan
    *    yalnızca kullanıcının elle kapattığı.
+   *
+   * Küme DEPODA (`ui.gitCollapsed`), bileşenin yerel durumunda değil: toplu
+   * aç/kapa düğmesi panelin başlığında duruyor ve aynı gerçeği görmeli.
    */
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const collapsed = useStore((s) => s.ui.gitCollapsed);
+  const showPaths = useStore((s) => s.ui.gitShowPaths);
+  const setUi = useStore((s) => s.setUi);
 
-  const toggle = (path: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(path)) next.add(path);
-      return next;
-    });
+  const toggle = (path: string) => {
+    const next = new Set(collapsed);
+    if (!next.delete(path)) next.add(path);
+    setUi({ gitCollapsed: [...next] });
+  };
+
+  const collapsedSet = useMemo(() => new Set(collapsed), [collapsed]);
 
   return (
     <div className="panel-list git-list">
@@ -96,7 +131,8 @@ export function GitChanges() {
           change={change}
           cwd={cwd!}
           root={git?.root || cwd!}
-          open={!collapsed.has(change.path)}
+          open={!collapsedSet.has(change.path)}
+          showPaths={showPaths}
           onToggle={() => toggle(change.path)}
         />
       ))}
@@ -203,6 +239,7 @@ function ChangeRow({
   cwd,
   root,
   open,
+  showPaths,
   onToggle,
 }: {
   change: GitChange;
@@ -211,6 +248,8 @@ function ChangeRow({
   /** Deponun kökü; `change.path` ona göre. */
   root: string;
   open: boolean;
+  /** Dosya adının solunda klasör zinciri de gösterilsin mi. */
+  showPaths: boolean;
   onToggle: () => void;
 }) {
   const t = useT();
@@ -362,6 +401,8 @@ function ChangeRow({
   // kuruluyor. Kabuğun dizinini kullanmak, kabuk bir alt klasördeyse var
   // olmayan bir yol üretiyordu.
   const fullPath = `${root}/${change.path}`;
+  /** Yolun klasör kısmı; kökteki dosyada `null` ve ön ek hiç çizilmiyor. */
+  const dir = dirName(change.path);
 
   /*
    * Geri alma YIKICI, o yüzden her zaman soruyor.
@@ -414,9 +455,17 @@ function ChangeRow({
         <span className={`git-icon ${tone}`} title={text} role="img" aria-label={text}>
           <Icon size={13} />
         </span>
-        {/* Yol BAŞTAN kırpılıyor: uzun yollarda ayırt edici olan dosya adı,
-            klasör zinciri değil. */}
-        <span className="git-path">{change.path}</span>
+        {/* Varsayılan olarak yalnızca DOSYA ADI.
+         *
+         * Liste dikey taranıyor ve aranan şey "hangi dosya değişmiş". Klasör
+         * zinciri her satırda tekrarlanan, çoğu zaman aynı olan bir ön ekti;
+         * dar panelde asıl ayırt edici bilgiyi — adı — kırpıyordu.
+         *
+         * Yol kaybolmuyor: başlıktaki düğme onu geri getiriyor (soluk bir ön
+         * ek olarak, adın solunda) ve satırın `title` ipucunda her durumda
+         * tam yol duruyor. */}
+        {showPaths && dir && <span className="git-dir">{dir}</span>}
+        <span className="git-path">{baseName(change.path)}</span>
         {stat && (
           <span className="git-stat">
             <span className="add">{`+${stat.added}`}</span>

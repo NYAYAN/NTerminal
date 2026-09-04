@@ -4,16 +4,14 @@ import { useT } from "../lib/i18n";
 import type { MsgKey } from "../lib/messages";
 import { useStore, type SidePanelMode } from "../store/useStore";
 import { FavoritesPanel } from "./FavoritesPanel";
-import { FileTree } from "./FileTree";
-import { FileViewer } from "./FileViewer";
-import { GitChanges } from "./GitChanges";
+import { GitChanges, allFilesCollapsed, useActiveGit } from "./GitChanges";
 import { HistoryPanel } from "./HistoryPanel";
+import { CollapseAllIcon, ExpandAllIcon, FolderIcon } from "./Icons";
 
 const MODE_KEYS: Record<SidePanelMode, MsgKey> = {
   history: "app.history",
   favorites: "app.favorites",
   git: "app.changes",
-  files: "app.files",
 };
 
 /**
@@ -29,11 +27,16 @@ const MODE_KEYS: Record<SidePanelMode, MsgKey> = {
 export function SidePanel() {
   const t = useT();
   const mode = useStore((s) => s.ui.panelMode);
-  const viewerPath = useStore((s) => s.ui.viewerPath);
   const favoriteCount = useStore((s) => s.favorites.length);
   const storedWidth = useStore((s) => s.settings.appearance.panelWidth);
   const patchAppearance = useStore((s) => s.patchAppearance);
   const setUi = useStore((s) => s.setUi);
+
+  // Toplu katlama düğmesi için: liste ile AYNI türetme (bkz. `useActiveGit`).
+  const { changes } = useActiveGit();
+  const gitCollapsed = useStore((s) => s.ui.gitCollapsed);
+  const allCollapsed = allFilesCollapsed(changes, gitCollapsed);
+  const showPaths = useStore((s) => s.ui.gitShowPaths);
 
   const [width, setWidth] = useState(storedWidth);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -95,6 +98,44 @@ export function SidePanel() {
             </button>
           ))}
         </div>
+        {/* Toplu aç/kapa — YALNIZCA "Değişiklikler" kipinde ve dosya varken.
+         *
+         * Yeri kapatma çarpısının SOLU: dosyalar açık geldiği için ilk
+         * ihtiyaç "hepsini toplayıp listeye bakmak" ve o eylem panelin
+         * başlığına ait, satırlara değil. Boş listede çizilmiyor —
+         * yapacağı bir iş yokken duran düğme gürültü (favoriler panelinde
+         * de aynı kural).
+         *
+         * Simge yönü durumu söylüyor: hepsi kapalıysa açan simge, yoksa
+         * daraltan. Böylece düğme bir açma/kapama anahtarı gibi okunuyor. */}
+        {mode === "git" && changes.length > 0 && (
+          <>
+            {/* Klasör yollarını göster/gizle.
+             *
+             * Satırlarda varsayılan olarak yalnızca dosya adı duruyor
+             * (gerekçesi `ui.gitShowPaths`); bu düğme klasör zincirini soluk
+             * bir ön ek olarak geri getiriyor. Basılıyken `on` sınıfı var:
+             * açık olmak varsayılan değil, dolayısıyla vurgu bilgi taşıyor. */}
+            <button
+              className={showPaths ? "icon-btn on" : "icon-btn"}
+              title={t(showPaths ? "git.hidePaths" : "git.showPaths")}
+              aria-pressed={showPaths}
+              onClick={() => setUi({ gitShowPaths: !showPaths })}
+            >
+              <FolderIcon size={14} />
+            </button>
+            <button
+              className="icon-btn"
+              title={t(allCollapsed ? "git.expandAllFiles" : "git.collapseAllFiles")}
+              aria-pressed={allCollapsed}
+              onClick={() =>
+                setUi({ gitCollapsed: allCollapsed ? [] : changes.map((c) => c.path) })
+              }
+            >
+              {allCollapsed ? <ExpandAllIcon size={14} /> : <CollapseAllIcon size={14} />}
+            </button>
+          </>
+        )}
         <button className="icon-btn" title={t("panel.close")} onClick={() => setUi({ historyOpen: false })}>
           ×
         </button>
@@ -103,8 +144,6 @@ export function SidePanel() {
       {mode === "history" && <HistoryPanel />}
       {mode === "favorites" && <FavoritesPanel />}
       {mode === "git" && <GitChanges />}
-      {/* "Dosyalar" sekmesinin iki durumu: yol seçilmişse içerik, yoksa ağaç. */}
-      {mode === "files" && (viewerPath ? <FileViewer path={viewerPath} /> : <FileTree />)}
     </aside>
   );
 }

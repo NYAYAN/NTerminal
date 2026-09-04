@@ -128,6 +128,12 @@ pub struct Appearance {
     pub sidebar_width: u16,
     /// Sag panelin (gecmis / favoriler) genisligi.
     pub panel_width: u16,
+    /// Dosya sutununun (gruplarin sagindaki agac / goruntuleyici) genisligi.
+    ///
+    /// Kenar cubugundan AYRI bir olcu: o sekme adlarini gosteriyor, burasi
+    /// dosya ICERIGINI de gosteriyor (goruntuleyici bu sutunda aciliyor) ve
+    /// kod okumak icin belirgin sekilde daha fazla yer istiyor.
+    pub files_width: u16,
     /// Ciktidaki baglantilari renkli goster.
     ///
     /// Kapatilabilir olmasi bilincli: renklendirme her cizimde gorunur
@@ -178,16 +184,20 @@ impl Default for Appearance {
             // `--ui-font`). 13, bugune kadarki sabit deger - varsayilan
             // gorunum degismiyor.
             ui_font_family: String::new(),
-            ui_font_size: 13,
+            ui_font_size: 14,
             theme: "nterminal-dark".into(),
             cursor_style: "bar".into(),
             cursor_blink: true,
             scrollback: 10_000,
             sidebar_width: 240,
             panel_width: 390,
+            files_width: 320,
             highlight_links: true,
             view_mode: "tabs".into(),
-            show_shell_badge: true,
+            // Varsayilan KAPALI: tek profille calisan kullanicida rozet her
+            // satirda ayni seyi tekrar ediyor ve dar kenar cubugunda sekme
+            // adina ayrilan yeri yiyor. Isteyen Ayarlar > Gorunum'dan aciyor.
+            show_shell_badge: false,
             sidebar_collapsed: false,
             collapsed_favorite_folders: Vec::new(),
         }

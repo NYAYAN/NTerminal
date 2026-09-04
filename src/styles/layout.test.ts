@@ -432,6 +432,96 @@ describe("durum çubuğu daralması", () => {
  * Merkezleme yalnızca içerikten geniş olabilen düğmelerde anlamlı; kararın
  * temel kuralda değil bileşende olması gerekiyor.
  */
+/**
+ * Grup rengi kutuları DAİRE kalıyor.
+ *
+ * BİLDİRİLEN HATA: "grup rengini değiştir" dendiğinde renkler daire değil
+ * dikey oval ("yayık") görünüyordu. İki sebep üst üste biniyordu:
+ *
+ *  1. Temel `button` kuralı `min-height: 26px` veriyor ve `.swatch`taki
+ *     `height: 15px` onu ezmiyor (`min-height` daha güçlü) → kutu 15x26.
+ *  2. Sekiz hazır renk + özel + temizle + kapat dar kenar çubuğuna sığmıyor;
+ *     `flex-shrink` varsayılanı 1 olduğu için genişlik 15px'in altına
+ *     düşüyor → oval daha da inceliyor.
+ *
+ * İkisi ayrı ayrı testleniyor: biri geri alınırsa şekil yine bozulur ve tek
+ * bir birleşik test hangisinin döndüğünü söylemez.
+ */
+describe("grup rengi kutuları", () => {
+  it("kare ölçü veriliyor", () => {
+    const body = ruleBody(".swatch");
+    const width = /(?:^|\s|;)width:\s*([^;]+);/.exec(body)?.[1].trim();
+    const height = /(?:^|\s|;)height:\s*([^;]+);/.exec(body)?.[1].trim();
+    expect(width, "genişlik tanımlı değil").toBeTruthy();
+    expect(height, "yükseklik genişlikten farklı — daire olmaz").toBe(width);
+    expect(body, "yuvarlaklık kaybolmuş").toMatch(/border-radius:\s*50%/);
+  });
+
+  it("temel düğmenin min-height'ı ezilmiş", () => {
+    // Bu satır olmadan yükseklik 26px'e çıkıyor ve kutu dikey ovale dönüyor.
+    expect(ruleBody("button"), "temel kural artık min-height vermiyorsa bu test güncellenmeli")
+      .toMatch(/min-height:\s*26px/);
+    expect(ruleBody(".swatch"), "min-height sıfırlanmamış — kutu 15x26 olur").toMatch(
+      /min-height:\s*0/,
+    );
+  });
+
+  it("sıkışmıyor", () => {
+    // `flex: none` olmadan dar çubukta genişlik 15px'in altına düşüyor.
+    expect(ruleBody(".swatch"), "flex: none yok — kutular ezilebilir").toMatch(
+      /flex:\s*none/,
+    );
+  });
+
+  it("satıra sığmayınca sarıyor", () => {
+    // `flex: none` ile sıkışma bittiği için sığmayan öğeler taşıyor; sarmak
+    // kırpılmanın tek alternatifi.
+    expect(ruleBody(".color-swatches"), "sarma yok — kutular çubuğun dışına taşar").toMatch(
+      /flex-wrap:\s*wrap/,
+    );
+  });
+
+  it("özel renk hazır renklerden ayrılıyor", () => {
+    // İstenen: dört hazır renk bir küme, özel renk seçicisi onların hemen
+    // devamında ama ARADA boşlukla. Kap `gap` veriyor; ayrım onun üstüne
+    // binen kenar boşluğundan geliyor.
+    const body = ruleBody(".swatch.custom");
+    const match = /margin-left:\s*(\d+)px/.exec(body);
+    expect(match, "özel renk kutusunun ayrım payı yok").not.toBe(null);
+    expect(Number(match![1]), "pay yok sayılacak kadar küçük").toBeGreaterThan(0);
+  });
+
+  it("seçicinin altında sekmelere pay var", () => {
+    // BİLDİRİLEN HATA: renk kutuları alttaki sekmeye yapışık duruyordu, ikisi
+    // aynı kümeymiş gibi okunuyordu. Seçiciden hemen sonra `.tab-row`
+    // başlıyor; ayrımı alt dolgu taşıyor ve üstteki paydan belirgin şekilde
+    // fazla olmalı.
+    const padding = paddingOf(".color-picker");
+    expect(padding, "seçicinin dolgusu tanımsız").not.toBe(null);
+    const parts = padding!.split(/\s+/).map((v) => Number.parseFloat(v));
+    expect(parts, "dolgu dört değerle yazılmalı").toHaveLength(4);
+    const [top, , bottom] = parts;
+    expect(bottom, "alt pay üstten fazla değil — sekmeye yapışıyor").toBeGreaterThan(top);
+    expect(bottom, "alt pay gözle görülür değil").toBeGreaterThanOrEqual(10);
+  });
+
+  it("kapatma düğmesi sarma akışının DIŞINDA", () => {
+    // BİLDİRİLEN HATA: kutular alt satıra sarınca "×" en alta düşüyor ve
+    // arandığı yerde bulunmuyordu. Düğme artık kutu ızgarasının kardeşi ve
+    // ilk satıra hizalı; sararsa kutular sarıyor, düğme yerinde kalıyor.
+    const picker = ruleBody(".color-picker");
+    expect(picker, "seçici artık sarmıyor olmalı — sarma iç ızgarada").not.toMatch(
+      /flex-wrap:\s*wrap/,
+    );
+    expect(picker, "üstten hizalama yok — düğme dikeyde ortalanır").toMatch(
+      /align-items:\s*flex-start/,
+    );
+    const close = ruleBody(".color-close");
+    expect(close, "flex: none yok — düğme daralabilir").toMatch(/flex:\s*none/);
+    expect(close, "ilk satıra hizalanmıyor").toMatch(/align-self:\s*flex-start/);
+  });
+});
+
 describe("düğme hizalaması", () => {
   it("temel düğme kuralı hizalamayı zorlamıyor", () => {
     const body = ruleBody("button");

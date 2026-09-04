@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { cwdFromFileUri, parseOsc133, parseOsc633, unescapeOsc } from "./osc";
 import { base64ToBytes } from "./ipc";
-import { formatDuration, fuzzyScore, baseName, shortenPath } from "./format";
+import { formatDuration, fuzzyScore, baseName, dirName, shortenPath } from "./format";
 import { matchCombo, parseCombo, prettyCombo } from "./keys";
 import { setPlatform } from "./platform";
 
@@ -162,6 +162,17 @@ describe("biçimlendirme", () => {
     expect(baseName("/Users/ali/proje")).toBe("proje");
     expect(baseName("/Users/ali/proje/")).toBe("proje");
     expect(baseName(null)).toBe("");
+  });
+
+  it("klasör kısmını ayırıcısıyla verir", () => {
+    // "Değişiklikler" satırındaki soluk klasör ön eki buradan geliyor:
+    // dosya adı ayrı bir öge olduğu için ön ekin ayırıcıyla bitmesi gerekiyor,
+    // yoksa ikisi yapışık ("srcapp.ts") çiziliyordu.
+    expect(dirName("src/lib/format.ts")).toBe("src/lib/");
+    expect(dirName("src\\lib\\format.ts")).toBe("src\\lib\\");
+    // Kökteki dosyada klasör YOK: `null` dönüyor ve çağıran boş bir ön ek
+    // çizme kararını ayrıca vermek zorunda kalmıyor.
+    expect(dirName("README.md")).toBe(null);
   });
 
   it("uzun yolu kısaltır", () => {

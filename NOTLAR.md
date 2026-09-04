@@ -481,22 +481,36 @@ desktop\work` yine `Work`un içi.
 
 Sıra önerisi yukarıdan aşağı.
 
-### 2.1 Sekme geçişinde hayalet yazı
+### 2.1 Sekme geçişinde hayalet yazı — ÇÖZÜLDÜ
 
-Sekmeler arasında geçtikten sonra ekranda önceki içeriğin kalıntısı görünüyor
-(metin üst üste biniyor, arayüz öğeleri terminalin içine çiziliyor gibi).
-Deterministik olarak üretilemedi.
+**Belirti.** Sağ panel (Geçmiş / Favoriler / Değişiklikler) açılıp kapanınca
+terminalin son satırlarında eski blok başlıkları — dizin rozeti (`.block-cwd`)
+ve süre rozeti (`.block-badge`) — yanlış satıra çizili kalıp statik çıktının
+(örn. `ls`) üstüne biniyordu.
 
-**Ayırt edici soru:** ekran KAYDIRINCA ya da pencere BOYUTLANDIRINCA düzeliyor
-mu?
-- Düzeliyorsa boyama artığı → çözüm `setDisplay` içinde görünür olan bölmeyi
-  zorla yeniden çizmek (`term.refresh(0, rows - 1)`) ve WebGL katmanının
-  açılıp kapanma sırasına bakmak.
-- Kalıcıysa çizim mantığı → aynı anda iki bölmenin görünür olması ihtimali
-  (`data-visible`) araştırılmalı.
+**Neden xterm değil.** Büyütünce üst üste binen şeyin yuvarlak dizin rozeti ve
+`41 ms` gibi süre rozeti olduğu görüldü: bunlar xterm'in çizdiği metin değil,
+`TerminalBlocks` DOM katmanı. Yani hata xterm boyama artığı değil, uygulamanın
+kendi katmanının ESKİ konumda kalması. Ayırt edici soru da bunu doğruladı:
+kaydırınca (yani bir `onScroll` gelince) düzeliyordu — veri değil, katmanın son
+çizimi eskiydi.
 
-Not: bu oturumda gözlenen bazı belirtiler (rozetlerin `?` olması, terminalin
-boşalması) SICAK DEĞİŞTİRME yan etkisiydi, gerçek hata değil — bkz. §3.
+**Kök neden.** Katman kendini xterm'in `onRender`ına bağlı tazeliyor. Panel
+aç-kapa net boyut değişimini sıfıra indirdiğinde [`safeFit`](src/terminal/TerminalSession.ts)
+satır/sütun aynı kaldığı için erken dönüyor: `fit` yok, `onRender` yok, katmanı
+yeniden çizen kimse yok. Ama genişlik değişti ve geometri önbelleği düştü, yani
+katman eski geometriyle ekranda kalıyor; ekran statikse düzeltecek sonraki çizim
+de gelmiyor. Deterministik değildi çünkü `ResizeObserver`ın olayları
+birleştirmesine ve net boyut değişimine bağlıydı — hızlı aç-kapa ile deterministik
+üretildi.
+
+**Çözüm.** Kap her boyutlandığında blok katmanı KOŞULSUZ tazeleniyor:
+`ResizeObserver` geri çağrısı `onContainerResize`e alındı ve sonunda
+`notifyBlocks()` çağrılıyor (`setDisplay`in görünür olurken zaten yaptığı iş).
+Ucuz ve tekrarlanabilir. Test: `src/terminal/resizeBlocks.test.ts` — `attach`
+jsdom'da xterm canvas bağlamına takıldığı için `ResizeObserver` geri çağrısı
+doğrudan test edilemiyordu; bu yüzden yol `onContainerResize` yöntemine ayrıldı
+ve test fitin ETKİSİZ olduğu (hatanın çıktığı) durumu kuruyor.
 
 ### 2.2 Üçüncü skill: arayüz metni / i18n
 
