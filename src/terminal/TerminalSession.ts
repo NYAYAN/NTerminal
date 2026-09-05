@@ -1,4 +1,4 @@
-import { Terminal, type IDisposable, type IMarker } from "@xterm/xterm";
+import { Terminal, type IBufferLine, type IDisposable, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -171,6 +171,13 @@ export class TerminalSession {
   prediction: PredictionState = "unknown";
   /** Bağlantı renklendirmesi için kaydedilen imleç ve dekorasyonlar. */
   private linkDecorations: IDisposable[] = [];
+  /**
+   * EKRANDA BOYALI olanın imzası; `null` ise boyalı bir şey yok.
+   *
+   * Yalnızca bir önbellek değil, döngü kıran şey — gerekçesi
+   * `refreshLinkHighlight` içinde.
+   */
+  private linkSignature: string | null = null;
   private linkTimer: number | null = null;
   private inputTimer: number | null = null;
 
@@ -1323,9 +1330,19 @@ export class TerminalSession {
     }, LINK_HIGHLIGHT_DELAY);
   }
 
+  /**
+   * Dekorasyonları söker VE imzayı düşürür.
+   *
+   * İkisi ayrılamaz: imza "ekranda şu an ne boyalı" demek. Boyayı silip imzayı
+   * bırakmak, bir sonraki tazelemenin "zaten boyalı" deyip atlaması ve
+   * bağlantıların kalıcı olarak sönük kalması olurdu — tema değişimi ve
+   * `highlightLinks` anahtarı tam olarak bu yoldan geçiyor
+   * (bkz. `applySettings`).
+   */
   private clearLinkDecorations() {
     for (const item of this.linkDecorations) item.dispose();
     this.linkDecorations = [];
+    this.linkSignature = null;
   }
 
   /**
@@ -1339,18 +1356,51 @@ export class TerminalSession {
    * Neden iki aşamalı tarama: hücre hücre okumak pahalı (satır × sütun). Önce
    * `translateToString` ile hızlı bir eleme yapıp yalnızca aday satırlarda
    * hücrelere iniyoruz — tipik çıktıda satırların çoğunda bağlantı yok.
+   *
+   * ## Neden imza: bu yöntem KENDİ KENDİNİ çağırıyordu
+   *
+   * ÖLÇÜLEN BELİRTİ: ekranda tek bir adres duran bir sekme, HİÇ çıktı
+   * gelmezken bile bir çekirdeği doldurmaya yetiyordu (WebContent süreci
+   * %100, dokuz saatte 6,5 dakika CPU). Pencere örtülünce sıfıra iniyordu —
+   * çizime bağlı bir döngünün imzası.
+   *
+   * ZİNCİR: xterm dekorasyon eklenince VE silinince tam yenileme yapıyor
+   * (`RenderService`: `onDecorationRegistered`/`onDecorationRemoved` →
+   * `_fullRefresh`). Bu yöntem ise her seferinde önce hepsini silip yeniden
+   * kuruyordu. Yani: `onRender` → 90 ms → sil+kur → tam yenileme →
+   * `onRender` → … Ekranda bir adres olduğu sürece durmuyor. Ölçüldü:
+   * saniyede ~9 tur. Her turun bedeli yalnızca tarama değil; WebGL'in tam
+   * kare çizimi, dekorasyon DOM'unun yıkılıp kurulması ve WebKit'in bileşik
+   * katman ağacını yeniden kurması.
+   *
+   * Kırılma noktası şu: bir adresin nereye boyanacağı yalnızca SATIRIN METNİ
+   * ve satırın hangi tampon satırı olduğuyla belirli. İkisi de aynıysa
+   * ekranda duran boya zaten doğru; silip yeniden kurmak aynı sonucu üretip
+   * bir tur daha başlatmaktan başka bir şey yapmıyor. İmza eşleşince
+   * dekorasyonlara HİÇ dokunulmuyor, tam yenileme olmuyor ve döngü ikinci
+   * turda sönüyor.
+   *
+   * Kaydırma imzayı bilerek bozmuyor: dekorasyon işaretçiye bağlı ve
+   * işaretçi tampon satırıyla birlikte hareket ediyor, yani görünümün içinde
+   * kayan bir adres kendiliğinden doğru yerde kalıyor. Görünüme YENİ giren ya
+   * da çıkan satır ise imzayı değiştiriyor (mutlak satır numarası imzada).
    */
   private refreshLinkHighlight() {
-    this.clearLinkDecorations();
-    if (!this.settings.appearance.highlightLinks) return;
-
-    const theme = getTheme(this.settings.appearance.theme);
-    // Dekorasyon yalnızca `#RRGGBB` kabul ediyor; tema renkleri bu biçimde.
-    const color = theme.ui.accent;
+    if (!this.settings.appearance.highlightLinks) {
+      this.clearLinkDecorations();
+      return;
+    }
 
     const buffer = this.term.buffer.active;
-    // registerMarker imleç satırına GÖRE çalışıyor; hedef satırı ona çeviriyoruz.
-    const anchorLine = buffer.baseY + buffer.cursorY;
+    /*
+     * Aday satırlar ve imza AYNI taramadan çıkıyor.
+     *
+     * İmzaya giren `translateToString` çıktısı zaten hızlı elemenin okuduğu
+     * metin; ikinci bir okuma yok. Tampon türü de imzada: ikincil ekrana
+     * (vim, less) geçmek görünen her şeyi değiştiriyor.
+     */
+    const adaylar: { absolute: number; line: IBufferLine }[] = [];
+    const parcalar: string[] = [buffer.type];
 
     for (let row = 0; row < this.term.rows; row++) {
       const absolute = buffer.viewportY + row;
@@ -1360,6 +1410,24 @@ export class TerminalSession {
       const quick = line.translateToString(true);
       if (!quick.includes("://") && !quick.toLowerCase().includes("www.")) continue;
 
+      adaylar.push({ absolute, line });
+      parcalar.push(`${absolute}:${quick}`);
+    }
+
+    const imza = parcalar.join("\n");
+    // Ekrandaki boya zaten bu imzanın karşılığı: dokunma. Döngü burada
+    // kırılıyor.
+    if (imza === this.linkSignature) return;
+
+    this.clearLinkDecorations();
+
+    const theme = getTheme(this.settings.appearance.theme);
+    // Dekorasyon yalnızca `#RRGGBB` kabul ediyor; tema renkleri bu biçimde.
+    const color = theme.ui.accent;
+    // registerMarker imleç satırına GÖRE çalışıyor; hedef satırı ona çeviriyoruz.
+    const anchorLine = buffer.baseY + buffer.cursorY;
+
+    for (const { absolute, line } of adaylar) {
       const cells: CellLike[] = [];
       let probe = undefined as ReturnType<typeof line.getCell>;
       for (let x = 0; x < line.length; x++) {
@@ -1387,6 +1455,10 @@ export class TerminalSession {
         if (decoration) this.linkDecorations.push(decoration);
       }
     }
+
+    // İmza EN SONDA yazılıyor: `clearLinkDecorations` onu `null`a çekiyor ve
+    // aradaki her erken çıkış imzasız kalmalı.
+    this.linkSignature = imza;
   }
 
   async dispose(killShell: boolean) {
