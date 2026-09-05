@@ -715,12 +715,32 @@ html[data-platform="macos"] .titlebar {
    * genislik ana eksende esneme carpanindan geliyor, alan kendi basina
    * buyutmuyor. Ucu birlikte gerekiyor.
    *
-   * `min-width` daralan pencerede tumden erimesini engelliyor; 400px ust
-   * siniri da cok genis bir pencerede aramanin baslik cubugunu yutmasini. */
+   * `min-width` daralan pencerede tumden erimesini engelliyor.
+   *
+   * UST SINIR IKI PARCALI ve bu OLCULMUS bir karar. Sabit 400px tek basinaydi
+   * ve pencere kuculurken KUCULMUYORDU: kutu 400px'i ~1050px'e kadar
+   * koruyordu, yani 900px'lik bir pencerede baslik cubugunun %44'u, en kucuk
+   * pencerede (`minWidth: 760`) %49'u arama kutusuydu. Iki yanindaki surukleme
+   * bosluklari da 12px tabanina iniyordu - kutu "ortada" olmaktan cikip
+   * cubugu yutuyordu. Bildirilen belirti buydu: "uygulamayi kucultunce arama
+   * kutusu buyuk kaliyor".
+   *
+   * Yuzde KAPSAYICIYA gore, `vw`ye gore degil: macOS'ta cubugun 78px sol
+   * dolgusu var (trafik isiklari) ve `vw` onu saymazdi.
+   *
+   * 34% neden: 1480px'lik varsayilan pencerede sinir hala 400px, yani
+   * alisilmis gorunum degismiyor; altinda oran ~%30'da sabitleniyor. Olculen
+   * ramp (macOS, cubuk ici = pencere - 86):
+   *
+   *   1480 -> 400    1000 -> 311    820 -> 250
+   *   1200 -> 379     900 -> 277    760 -> 229
+   *
+   * Once 38 denendi ve "bir tik daha kucuk" istendi; 32 ise 1200px'te kutuyu
+   * 356'ya indirip yaygin boyutlardaki gorunumu gereksiz degistiriyor. */
   flex: 1 1 auto;
   width: 100%;
   min-width: 120px;
-  max-width: 400px;
+  max-width: min(400px, 34%);
   padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;

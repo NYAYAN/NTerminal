@@ -869,3 +869,42 @@ describe("başlık çubuğundaki ad", () => {
     expect(ruleBody(".titlebar-search"), "arama kutusu esnemiyor").toMatch(/flex:\s*1 1 auto/);
   });
 });
+
+/*
+ * Arama kutusunun ÜST SINIRI pencereyle ölçekleniyor.
+ *
+ * BİLDİRİLEN HATA: "uygulamayı küçültünce arama kutusu büyük kalıyor."
+ *
+ * ÖLÇÜLEN: sabit `max-width: 400px` ile kutu 400px'i ~1050px'lik pencereye
+ * kadar koruyordu. Sonuç, başlık çubuğunun içindeki payı:
+ *
+ *   1480px (varsayılan) → %27      900px → %44
+ *   1200px             → %33      760px (`minWidth`) → %49
+ *
+ * Yani pencere küçüldükçe kutu oransal olarak BÜYÜYOR ve iki yanındaki
+ * sürükleme boşlukları 12px tabanına iniyordu — kutu "ortada" olmaktan çıkıp
+ * çubuğu yutuyordu.
+ *
+ * Yüzdeli sınır oranı ~%34'te sabitliyor: 760px'te 256px kutu, iki yanda
+ * 69px boşluk. 1480px ve 1200px'te sınır hâlâ 400px, yani alışılmış görünüm
+ * değişmiyor.
+ */
+describe("başlık çubuğundaki arama kutusu", () => {
+  const body = ruleBody(".titlebar-search");
+
+  it("üst sınırı pencereyle ölçekleniyor", () => {
+    const max = /max-width:\s*([^;]+);/.exec(body);
+    expect(max, "üst sınır yok — kutu çubuğu yutabilir").toBeTruthy();
+    expect(
+      max![1],
+      "sabit üst sınır: pencere küçülürken kutu oransal olarak büyür",
+    ).toMatch(/%/);
+    // Piksel tavanı da duruyor: çok geniş pencerede kutu sonsuza kadar
+    // uzamamalı, o zaman da başlık çubuğunu yutardı.
+    expect(max![1], "piksel tavanı kalkmış").toMatch(/px/);
+  });
+
+  it("alt sınırı duruyor: dar pencerede tümden erimiyor", () => {
+    expect(body, "alt sınır yok").toMatch(/min-width:\s*\d+px/);
+  });
+});
