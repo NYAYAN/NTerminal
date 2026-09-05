@@ -386,6 +386,56 @@ altında: Windows'ta `bundle/nsis/*.exe` ve `bundle/msi/*.msi`, macOS'ta
 macOS paketi bir Mac'te üretilmek zorunda: Apple SDK'sı olmadan çapraz derleme
 mümkün değil. Windows kurucusu da aynı şekilde Windows'ta üretiliyor.
 
+### macOS: "hasarlı" uyarısı ve açma yolu
+
+**Paketler imzasız.** İndirilen bir `.dmg`'den kurulan uygulama ilk açılışta
+açılmıyor: macOS uygulamanın **hasarlı olduğunu ve Çöp'e taşınması gerektiğini**
+söyleyen bir diyalog gösteriyor (tam metin macOS sürümüne ve diline göre
+değişiyor).
+
+Uygulama hasarlı değil. Bu, macOS'un imzalanmamış bir pakete verdiği yanıt.
+Açmak için karantina damgasını kaldırmak yeterli:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/N-Terminal.app
+```
+
+Komut bir kez koşuluyor; sonrasında uygulama normal açılıyor. Bir terminali
+kurmak için terminal gerekmesi ironik ama macOS'un bıraktığı tek güvenilir yol
+bu: sıradan "tanınmayan geliştirici" uyarısındaki **Yine de Aç** düğmesi bu
+verdiktte belirmiyor ve macOS 15'ten beri Control+tık → Aç kaçış kapısı da
+kaldırıldı.
+
+**Sebebi.** İkili yalnızca ad-hoc imzalı, paketin kaynakları mühürlü değil ve
+Team ID yok:
+
+```
+$ codesign -dvv /Applications/N-Terminal.app
+Identifier=nterminal-9bd84406411f3fc4
+Signature=adhoc
+TeamIdentifier=not set
+
+$ spctl -a -vvv /Applications/N-Terminal.app
+code has no resources but signature indicates they must be present
+```
+
+`Identifier` `com.nyayan.nterminal` değil, **ikilinin hash'inden türeyen bir
+ad** — yani her derleme macOS için başka bir uygulama. Bunun ikinci bir sonucu
+var ve kendi derlemesini alan herkesi ilgilendiriyor: macOS gizlilik izinlerini
+(Tam Disk Erişimi, Erişilebilirlik, Otomasyon) kod imzası şartına bağlıyor;
+imza ad-hoc olduğu için şart `cdhash`e çivileniyor ve **her yeni derlemede
+verdiğiniz izinler sıfırlanıyor.**
+
+**Gerçek çözüm** Apple Developer Program üyeliği (yıllık ücretli), *Developer
+ID Application* sertifikası ve notarization. O zaman son kullanıcı yalnızca
+"internetten indirildi" onayını görüp devam ediyor, izinler de sabit Team ID
+sayesinde derlemeler arası korunuyor. Şimdilik bilinçli olarak yapılmadı:
+proje tek kişilik ve dağıtım GitHub üzerinden.
+
+Kendinden imzalı bir sertifika (`bundle.macOS.signingIdentity`) izin
+sıfırlanmasını **geliştirme makinesinde** çözer ama son kullanıcı için hiçbir
+şey değiştirmez — o sertifika başka bir Mac'te güvenilmiyor.
+
 ### Neden `npx tauri dev` yerine `npm start`?
 
 `scripts/run.mjs` platforma göre dağıtıyor. macOS ve Linux'ta doğrudan `tauri`
@@ -962,7 +1012,11 @@ görünüyor.
 
 Çıktılar koşunun **Artifacts** bölümünde, 14 gün: Windows için NSIS kurucusu
 ve MSI, macOS için DMG. İkisi de **imzasız** — depoda ne Windows sertifikası
-ne Apple kimliği var, macOS'ta indiren kullanıcı Gatekeeper uyarısı görür.
+ne Apple kimliği var. Windows'ta SmartScreen uyarısı çıkıyor; macOS'ta uyarı
+değil doğrudan "hasarlı, Çöp Kutusuna taşıyın" diyaloğu geliyor ve açmak için
+karantina damgasının elle kaldırılması gerekiyor. Komut ve sebebi
+"Kurulum ve çalıştırma" bölümündeki **macOS: "hasarlı" uyarısı ve açma yolu**
+başlığında.
 
 Linux yok: uygulama orada denenmedi (`src-tauri/src/platform.rs`) ve paket
 türlerinin hiçbiri Linux'ta karşılık bulmuyor.
