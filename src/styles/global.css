@@ -2222,77 +2222,6 @@ html[data-platform="macos"] .titlebar {
   z-index: 5;
 }
 
-/* Git rozeti: dal adi, ileri/geri sayaci ve degisiklik sayisi.
- *
- * Dizin rozetiyle AYNI govde, farkli renk: ikisi de baslikta yan yana duruyor
- * ve ayni bicimde olmalari "bunlar baglam bilgisi" diyor. Renk ayirimi ise
- * hangisinin ne oldugunu soyluyor.
- *
- * Yalnizca bekleyen blokta ciziliyor (bkz. TerminalBlocks): bitmis bir blogun
- * yaninda GUNCEL dal ve sayac gostermek "o komut bu durumda calisti" demek
- * olurdu ve yanlis olurdu. */
-.git-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-  padding: 0 8px 0 6px;
-  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
-  border-radius: 999px;
-  background: var(--sunken);
-  color: color-mix(in srgb, var(--ok) 75%, var(--text-dim));
-  font-family: var(--ui-font);
-  font-size: 0.7692rem;
-  line-height: 12px;
-  white-space: nowrap;
-}
-
-.git-chip svg {
-  flex: none;
-  opacity: 0.85;
-}
-
-.git-num {
-  opacity: 0.8;
-  font-variant-numeric: tabular-nums;
-}
-
-.git-chip.as-button {
-  pointer-events: auto;
-  cursor: pointer;
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.git-chip.as-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-/* Dal rozeti dugme hali: rengi bilgi rozetiyle AYNI kaliyor.
-   Vurgu rengine cevirmek onu "degisiklik sayisi" rozetiyle karistiriyordu;
-   ikisi yan yana duruyor ve farkli isler yapiyor. */
-.git-chip.as-button.branch {
-  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
-  color: color-mix(in srgb, var(--ok) 75%, var(--text-dim));
-}
-
-.git-chip.as-button.branch:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-}
-
-/* Ayrik HEAD: gecilecek bir dal listesi yok. Imlec de bunu soylemeli. */
-.git-chip.as-button:disabled {
-  cursor: default;
-  pointer-events: none;
-}
-
-
-
-
-
-
-
 /* Degisiklik listesi panelin govdesi; kaydirmayi `.panel-list` yapiyor. */
 .git-list {
   padding: 4px;
@@ -2562,21 +2491,33 @@ html[data-platform="macos"] .titlebar {
   width: 16px;
 }
 
-.git-icon.mod {
-  color: var(--accent);
-}
-
-.git-icon.new {
-  color: var(--ok);
-}
-
-/* Takip edilmeyen dosya YEŞİL DEĞİL.
+/* Durum renkleri VS CODE / GITHUB YERLESIGI.
  *
- * Eklenen dosyayla aynı yeşilde duruyordu ve "yeni dosya eklendi" diye
- * okunuyordu — oysa eklenen dosya indekste, takip edilmeyen hiçbir yerde:
- * commit'e girmesi için önce `git add` gerekiyor. Sarı o farkı taşıyor. */
-.git-icon.untracked {
+ * yesil = dosya YENI (eklendi, takip edilmiyor, yeniden adlandirildi)
+ * sari  = dosya DEGISTI
+ * kirmizi = dosya GITTI
+ *
+ * Kullanicinin her gun baktigi kaynak denetimi listesi bu dili konusuyor;
+ * ayni durumu iki yuzeyde iki renkle gostermek her bakista bir cevirme
+ * islemi demek.
+ *
+ * ONCEKI HALI: degistirilen MAVIYDI ve takip edilmeyen SARI. Mavi hicbir
+ * yerlesikte "degisti" anlamina gelmiyor (VS Code'da maviye en yakin kullanim
+ * alt modul), sari ise yerlesikte degisikligin rengi - yani iki renk de
+ * baskasinin isini yapiyordu.
+ *
+ * `git status`un KENDI renkleri bilincli olarak alinmadi: orada sema "ne tur
+ * degisiklik" degil "sahnelendi mi" eksenli (sahnelenen yesil, sahnelenmeyen
+ * her sey kirmizi) ve takip edilmeyeni degistirilenle ayni kirmiziya
+ * indiriyor. Bu listenin sordugu soru o degil. */
+.git-icon.mod {
   color: var(--warn);
+}
+
+.git-icon.new,
+.git-icon.untracked,
+.git-icon.ren {
+  color: var(--ok);
 }
 
 .git-icon.del {
@@ -3087,7 +3028,14 @@ html[data-platform="macos"] .titlebar {
  *
  * Serit KUTUNUN YERINDE duruyor, ayri bir yerde degil: gozun baktigi yer
  * degismiyor ve "bir sey kayboldu" izlenimi olusmuyor. Olculeri de kutuyla
- * ayni, yoksa satir yuksekligi degisip ekran zipliyor. */
+ * ayni, yoksa satir yuksekligi degisip ekran zipliyor.
+ *
+ * UC HALI VAR ve ucu de ayni olcude: `armed` (Ctrl+C bekliyor), `starting`
+ * (kabuk ilk istemine gelmedi) ve `idle` - IÇI BOS. Sonuncusu istem
+ * cizilirken (133;D ile 133;B arasi) yalnizca satirin yuksegini tutuyor;
+ * bosaltilsaydi `input` satiri 0'a iner, terminal buyuyup kuculur, `fit()`
+ * PTY'ye yeni satir sayisi bildirir ve kabuk istemi yeniden cizerdi -
+ * "cd yapinca terminal zipliyor" diye bildirilen sey buydu. */
 .command-running {
   grid-area: input;
   display: flex;

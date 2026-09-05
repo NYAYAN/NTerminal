@@ -1430,7 +1430,23 @@ export class TerminalSession {
       this.term.onBinary((data) => {
         void api.ptyWrite(this.tabId, data).catch(() => {});
       }),
+      /*
+       * Başlık DEĞİŞMEDİYSE bildirilmiyor.
+       *
+       * Kabuklar başlığı çoğu zaman her istemde yeniden yazıyor (oh-my-zsh,
+       * powerlevel10k, starship `precmd`de kuruyor) ve xterm her OSC 0/2 için
+       * bu olayı tetikliyor — metin aynı olsa bile.
+       *
+       * Korumasızken her istem `updateTab`e, o da `set({groups})`e çıkıyordu:
+       * `map` yeni bir dizi ve yeni bir grup nesnesi ürettiği için `groups`un
+       * KİMLİĞİ değişiyor, `App` ve altındaki bütün ağaç yeniden çiziliyor,
+       * `TerminalArea` de her oturum için `setDisplay` koşturuyordu. Ekranda
+       * hiçbir şey değişmediği hâlde.
+       *
+       * Aynı koruma `updateCwd` içinde ZATEN vardı; burada eksikti.
+       */
       this.term.onTitleChange((title) => {
+        if (title === this.title) return;
         this.title = title;
         this.callbacks.onTitle?.(title);
       }),

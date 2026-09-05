@@ -609,7 +609,10 @@ export const useStore = create<Store>((set, get) => ({
       // şart: Cascadia mac'te yok, jenerik monospace terminal için kötü.
       fontFamily: defaultFontStack(),
       fontSize: 14,
-      lineHeight: 1.2,
+      // `model.rs` ile AYNI kalmalı: ayrışırlarsa açılışın ilk karesi bir
+      // satır yüksekliğinde, ikincisi başka birinde çizilir ve terminal
+      // gözle görülür biçimde bir kez zıplar.
+      lineHeight: 1.5,
       letterSpacing: 0,
       // Boş: arayüz sistemin kendi ailesini kullanıyor (CSS'teki `--ui-font`).
       uiFontFamily: "",
@@ -1775,8 +1778,19 @@ export const useStore = create<Store>((set, get) => ({
    */
   async refreshGit(cwd) {
     if (!cwd) return;
-    const info = await api.gitInfo(cwd).catch(() => null);
-    const imza = await api.gitFingerprint(cwd).catch(() => null);
+    /*
+     * İki sorgu PARALEL: birbirine bağlı değiller.
+     *
+     * `gitInfo` dal ve değişiklik listesini okuyor, `gitFingerprint` ise
+     * `HEAD` + `index` damgasını; ikincisi birincinin sonucunu kullanmıyor.
+     * Sırayla beklemek iki gecikmeyi topluyordu ve bu doğrudan görünür bir
+     * şey: `cd` sonrası dal ve `± n` rozetleri `gitInfo[yeni dizin]` yazılana
+     * kadar ekranda olmuyor, yani bekleme ne kadarsa rozetler o kadar yok.
+     */
+    const [info, imza] = await Promise.all([
+      api.gitInfo(cwd).catch(() => null),
+      api.gitFingerprint(cwd).catch(() => null),
+    ]);
     gitFingerprints.set(cwd, imza);
     set({ gitInfo: { ...get().gitInfo, [cwd]: info } });
   },

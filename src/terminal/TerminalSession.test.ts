@@ -148,3 +148,63 @@ describe("oturum başlangıcı", () => {
     void b.dispose(true);
   });
 });
+
+/**
+ * Başlık bildirimi — DEĞİŞİM başına bir kez.
+ *
+ * Kabuklar başlığı çoğu zaman her istemde yeniden yazıyor (oh-my-zsh,
+ * powerlevel10k ve starship `precmd`de kuruyor) ve xterm her OSC 0/2 için
+ * olayı tetikliyor, metin aynı olsa bile.
+ *
+ * Korumasızken her istem `updateTab` → `set({groups})` zincirine çıkıyordu:
+ * `map` yeni bir dizi ve yeni bir grup nesnesi ürettiği için `groups`un KİMLİĞİ
+ * değişiyor ve `App` ile altındaki bütün ağaç yeniden çiziliyordu — ekranda
+ * hiçbir şey değişmediği hâlde. Aynı koruma `updateCwd` içinde zaten vardı.
+ */
+describe("başlık bildirimi", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+  const baslik = (text: string) => `${ESC}]0;${text}${BEL}`;
+
+  async function kurulu(tabId: string) {
+    h.reset();
+    const s = session(tabId);
+    const onTitle = vi.fn<(title: string) => void>();
+    s.setCallbacks({ onTitle });
+    await s.start(null);
+    await flush(s);
+    // Açılış sırasında bir başlık gelmiş olabilir; ölçüm bundan sonrası.
+    onTitle.mockClear();
+    return { s, onTitle };
+  }
+
+  it("aynı başlık ikinci kez bildirilmiyor", async () => {
+    const { s, onTitle } = await kurulu("t5");
+
+    h.emit("t5", baslik("~/projeler"));
+    await flush(s);
+    h.emit("t5", baslik("~/projeler"));
+    await flush(s);
+
+    expect(onTitle, "değişmeyen başlık depoya yazılıyor").toHaveBeenCalledTimes(1);
+    expect(onTitle).toHaveBeenCalledWith("~/projeler");
+    void s.dispose(true);
+  });
+
+  it("başlık gerçekten değişince bildiriliyor", async () => {
+    // Korumanın bedeli olmamalı: sekme adı kabuğu izlemeye devam etsin.
+    const { s, onTitle } = await kurulu("t6");
+
+    h.emit("t6", baslik("~/projeler"));
+    await flush(s);
+    h.emit("t6", baslik("~/projeler/nterminal"));
+    await flush(s);
+
+    expect(onTitle.mock.calls.map((c) => c[0])).toEqual([
+      "~/projeler",
+      "~/projeler/nterminal",
+    ]);
+    expect(s.title).toBe("~/projeler/nterminal");
+    void s.dispose(true);
+  });
+});

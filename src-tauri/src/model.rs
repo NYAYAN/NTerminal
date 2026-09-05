@@ -178,7 +178,11 @@ impl Default for Appearance {
         Self {
             font_family: default_font_family(),
             font_size: 14,
-            line_height: 1.2,
+            // 1.50 - xterm'in kendi varsayilani (1.0) ve onceki deger (1.2)
+            // degil. Satirlar bitisikken uzun ciktida goz satir atliyor;
+            // yaridan fazla bosluk ise ekrandan satir yiyor. Kaydirici
+            // 1.00-2.00 arasi, yani isteyen ikisine de gidebiliyor.
+            line_height: 1.5,
             letter_spacing: 0.0,
             // Bos: arayuz sistemin kendi ailesini kullaniyor (CSS'teki
             // `--ui-font`). 13, bugune kadarki sabit deger - varsayilan

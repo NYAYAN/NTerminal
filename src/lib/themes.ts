@@ -232,10 +232,10 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   /*
    * Ucuncu bir durum rengi: "dikkat", "yesil degil ama kirmizi da degil".
    *
-   * Git'te takip edilmeyen dosya bunu gerektirdi. Once eklenen dosyayla ayni
-   * yesildeydi ve "yeni dosya eklendi" diye okunuyordu - oysa eklenen dosya
-   * indekste, takip edilmeyen hicbir yerde. Iki farkli durum ayni rengi
-   * paylasinca renk bilgi tasimiyor.
+   * Degisiklikler listesinde DEGISTIRILMIS dosyanin rengi (`.git-icon.mod`).
+   * Yesil "yeni", kirmizi "gitti" demek; degisiklik ikisi de degil ve VS Code
+   * ile GitHub bunu sariyla soyluyor. Uc durum uc renk: renk ancak
+   * paylasilmadiginda bilgi tasiyor.
    *
    * NOT: `.statusbar .pill.warn` bu degiskeni KULLANMIYOR, `--err`i
    * kullaniyor. Orasi bilincli kirmizi (kullanicidan bir sey isteyen bir

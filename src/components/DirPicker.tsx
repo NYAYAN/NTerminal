@@ -40,6 +40,15 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
 
   useEffect(() => {
     let cancelled = false;
+    /*
+     * Liste ÖNCE boşaltılıyor — süs değil, yanlış `cd`'nin önü.
+     *
+     * Hiçbir satır seçiciyi kapatmıyor, yani `cwd` bileşen yaşarken
+     * değişebiliyor. Eski adlar ekranda kalsaydı satırların yolu
+     * `joinDir(YENİ cwd, ESKİ ad)` olurdu: o aralıkta tıklanan satır var
+     * olmayan bir dizine `cd` etmeye çalışırdı.
+     */
+    setNames(null);
     void api
       .listDirs(cwd)
       .then((list) => !cancelled && setNames(list))
@@ -63,9 +72,11 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
     return [{ key: "..", label: t("dirs.parent"), path: parent, up: true }, ...alt];
   }, [names, query, cwd, parent, t]);
 
+  // Dizin değişince de başa dön: üst dizine çıkıldığında seçili satır eski
+  // listenin sırasında kalırdı.
   useEffect(() => {
     setIndex(0);
-  }, [query]);
+  }, [query, cwd]);
 
   /*
    * Pencere ROZETİN ÜSTÜNDE açılıyor.
@@ -82,10 +93,49 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
     listRef.current?.querySelector(".pop-row.on")?.scrollIntoView({ block: "nearest" });
   }, [index]);
 
+  /**
+   * Bir satırın karşılığı: kabuğa `cd` ve seçici o dizinde AÇIK KALIR.
+   *
+   * ## Hiçbir satır kapatmıyor
+   *
+   * BİLDİRİLEN İSTEK: "üst klasör dediğimde kapanmamalı", ardından "klasör
+   * seçtikçe de kapanmasın, boşluğa tıklayınca kapanıyor zaten."
+   *
+   * İlk hâli her satırı bir VARIŞ sayıyordu: `cd` gönder, kapat. Oysa dizin
+   * gezinmek adım adım bir iş — iki basamak yukarı çıkıp komşu dalın içine
+   * inmek "rozete tıkla → satır → rozete tıkla → satır" diye tekrarlanıyordu.
+   * Seçici açık kalınca aynı yolculuk tek açılışta bitiyor.
+   *
+   * Kapatmanın iki yolu ZATEN var ve ikisi de kullanıcının kendi kararı:
+   * boşluğa tıklamak (kaplama) ve Escape. Bir eylemin yan etkisi olarak
+   * kapanmak ise karar değil, sürpriz.
+   *
+   * `cd` gezinme için ERTELENMİYOR: çalışma dizini kabuğun süreç durumu
+   * (bkz. bileşen başlığı) ve rozet, istem, dosya sütunu hep ondan
+   * besleniyor. Ertelenmiş bir "gezinme dizini" tutmak ekrandaki o üç yeri
+   * seçicinin iç durumundan ayrı düşürürdü.
+   *
+   * Seçici yeni dizine `ui.dirPicker` üzerinden taşınıyor — `cwd` bu
+   * bileşenin propu, kendi içinde tutulan bir kopya ikinci bir doğru kaynak
+   * olurdu.
+   */
   const goto = (path: string) => {
     // `cd` her kabukta var ve boşluklu yol için tırnak gerekiyor.
     useStore.getState().insertCommand(`cd "${path}"`, true);
-    onClose();
+    useStore.getState().setUi({ dirPicker: path });
+    /*
+     * Arama BOŞALIYOR: sorgu bir ÖNCEKİ listeye aitti.
+     *
+     * Taşınmasaydı yeni dizin eski metinle süzülürdü — çoğu zaman boş bir
+     * liste, üstelik sorgu doluyken üst dizin satırı da çizilmiyor (bkz.
+     * `rows`). Yani "src" yazıp klasöre giren kullanıcı hem boş bir liste
+     * hem de geri dönüş yolu olmayan bir pencere görürdü.
+     */
+    setQuery("");
+    // Odak arama kutusunda kalmalı: tıklama onu satıra almıştı ve satır
+    // birazdan yeni listeyle değişiyor — odak boşta kalırsa ok tuşları ve
+    // Escape çalışmaz.
+    inputRef.current?.focus();
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {

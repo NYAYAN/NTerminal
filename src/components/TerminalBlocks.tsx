@@ -175,10 +175,10 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
             {/* Başlık bloğun İLK satırında — kabuğun istem yazmadığı, boş
                 bıraktığı satır. Blok görünümün üstünden taşmışsa (uzun çıktı)
                 başlık da yukarıda kalır ve görünmez; doğrusu bu, başlık komuta
-                ait ve komut yukarıda. */}
-            {/* Başlık bloğun İLK satırında — kabuğun istem yazmadığı, boş
-                bıraktığı satır. Tarihsel bir kayıt: "bu komut şu dizinde
-                çalıştı". Tıklanmıyor; dizin değiştirmek şimdiki hâlle ilgili
+                ait ve komut yukarıda.
+
+                İçindeki dizin rozeti tarihsel bir kayıt: "bu komut şu dizinde
+                çalıştı". Tıklanmıyor — dizin değiştirmek şimdiki hâlle ilgili
                 ve o iş bağlam şeridinde. */}
             {headers && block.startLine >= view.top && block.cwd && (
               <span className="block-head" style={{ height: view.cellHeight }}>

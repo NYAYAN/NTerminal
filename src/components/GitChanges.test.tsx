@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -104,7 +107,7 @@ describe("durum göstergesi", () => {
     expect(container.querySelector(".git-row")!.getAttribute("title")).toBe("src/app.ts");
   });
 
-  it("her durum kendi rengini ve metnini alıyor", () => {
+  it("her durum kendi tonunu ve metnini alıyor", () => {
     seed([
       { status: " M", path: "a.ts" },
       { status: "A ", path: "b.ts" },
@@ -121,17 +124,54 @@ describe("durum göstergesi", () => {
       ["git-icon mod", "Değişti"],
       ["git-icon new", "Eklendi"],
       ["git-icon del", "Silindi"],
-      ["git-icon mod", "Yeniden adlandırıldı"],
-      // Takip edilmeyen dosya EKLENENLE AYNI RENKTE DEĞİL: ikisi de yeşil
-      // olunca "yeni dosya eklendi" diye okunuyordu, oysa eklenen dosya
-      // indekste, takip edilmeyen hiçbir yerde.
+      ["git-icon ren", "Yeniden adlandırıldı"],
       ["git-icon untracked", "Takip edilmiyor — henüz git add yapılmamış"],
     ]);
   });
 
-  it("eklenen ile takip edilmeyen hem renkte hem simgede ayrışıyor", () => {
-    // Renk ilk ayrım (yeşil / sarı), simge ikincisi: renk körlüğünde ya da
-    // düşük parlaklıkta tek bir kanal yetmiyor.
+  /*
+   * Renk şeması VS CODE / GITHUB YERLEŞİĞİ ve testle bağlı.
+   *
+   * yeşil = dosya YENİ (eklendi, takip edilmiyor, yeniden adlandırıldı)
+   * sarı  = dosya DEĞİŞTİ
+   * kırmızı = dosya GİTTİ
+   *
+   * Önceki hâli değiştirileni MAVİ, takip edilmeyeni SARI yapıyordu. Mavi
+   * hiçbir yerleşikte "değişti" demiyor; sarı ise yerleşikte tam olarak o
+   * demek — iki renk de başkasının işini yapıyordu.
+   */
+  it("tonlar VS Code / GitHub renk şemasına bağlı", () => {
+    const css = readFileSync(join(process.cwd(), "src/styles/global.css"), "utf8");
+    const kural = (secici: string) => {
+      const at = css.indexOf(secici);
+      expect(at, `\`${secici}\` kuralı yok`).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+
+    // Üç "yeni" durumu tek kuralda, tek yeşilde.
+    const yesil = kural(".git-icon.new,");
+    for (const ton of [".git-icon.untracked", ".git-icon.ren"]) {
+      expect(yesil, `${ton} yeşil kuralında değil`).toContain(ton);
+    }
+    expect(yesil, "yeni durumlar yeşil değil").toContain("var(--ok)");
+
+    expect(kural(".git-icon.mod {"), "değiştirilen sarı değil").toContain("var(--warn)");
+    expect(kural(".git-icon.del {"), "silinen kırmızı değil").toContain("var(--err)");
+    // Mavi geri gelmiş olmasın: durum renkleri arasında bir anlamı yok.
+    expect(css.slice(css.indexOf(".git-icon {"), css.indexOf(".git-icon.del")))
+      .not.toContain("var(--accent)");
+  });
+
+  it("eklenen ile takip edilmeyen SİMGEDE ayrışıyor", () => {
+    /*
+     * İkisi artık aynı yeşilde (yerleşik böyle: VS Code'da U ve A aynı renk),
+     * yani ayrımın tamamını simge taşıyor: eklenen dosya içi ARTILI dolu
+     * çember, takip edilmeyen KESİK ÇİZGİLİ boş çember.
+     *
+     * Ayrım gerçek bir şeyi söylüyor ve kaybolmamalı: eklenen dosya indekste,
+     * takip edilmeyen hiçbir yerde — commit'e girmesi için önce `git add`
+     * gerekiyor. Metin de `title`/`aria-label` içinde duruyor.
+     */
     seed([
       { status: "A ", path: "b.ts" },
       { status: "??", path: "e.ts" },
@@ -141,7 +181,9 @@ describe("durum göstergesi", () => {
     expect(icons[0].className).toBe("git-icon new");
     expect(icons[1].className).toBe("git-icon untracked");
     const [added, untracked] = icons.map((el) => el.querySelector("svg")!);
-    expect(added.innerHTML).not.toBe(untracked.innerHTML);
+    expect(added.innerHTML, "simgeler de aynıysa iki durum ayırt edilemez").not.toBe(
+      untracked.innerHTML,
+    );
   });
 
   it("bileşik durumda indeks harfi belirleyici", () => {

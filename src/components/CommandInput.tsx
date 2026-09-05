@@ -305,6 +305,37 @@ export function CommandInput() {
     );
   }
 
+  /*
+   * İstem ÇİZİLİYOR: kutu kapalı ama SATIR YERİNDE KALIYOR.
+   *
+   * ÖLÇÜLEN HATA: `cd` yazıp Enter'a basınca terminal metni bir zıplayıp geri
+   * dönüyordu — "flash".
+   *
+   * KÖK NEDEN bu daldı. Kabuk komutu bitirince `133;D` geliyor (`running`
+   * kapanıyor) ama "istemdeyim" (`133;B`) ancak PS1 tümüyle yazıldıktan sonra.
+   * Arada kutu da şerit de çizilmiyordu, yani `input` ızgara satırı 0'a
+   * iniyordu: terminal ~36px büyüyor → `ResizeObserver` → `fit()` → PTY'ye
+   * YENİ satır sayısı → kabuk istemi yeniden çiziyor. `133;B` gelince satır
+   * geri geliyor ve aynı zincir ters yönde bir kez daha işliyor. Kullanıcının
+   * gördüğü iki ölçülendirme arasındaki sıçramaydı.
+   *
+   * `cd`de en görünür olması rastlantı değil: ekranda onu örtecek çıktı yok ve
+   * dizin değişince istem (git bilgisi okuyan temalarda) daha yavaş çiziliyor,
+   * yani aradaki boşluk bir kareyi aşıyor.
+   *
+   * Şerit BOŞ: "başlatılıyor" yazmak yanlış olurdu (kabuk çoktan açık) ve
+   * yanıp sönen bir nokta komutlar arasında sürekli kırpışırdı. Tek işi
+   * yüksekliği tutmak — ölçüleri `.command-running` ile aynı olduğu için
+   * terminal hiç yeniden ölçülendirilmiyor.
+   *
+   * Koşullar dar: yalnızca kutunun ZATEN açılacağı durumda. Ayar kapalıysa,
+   * entegrasyon yoksa ya da tam ekran bir program (vim, less) çalışıyorsa
+   * satır gerçekten olmamalı — orada terminalin bütün alanı kullanması doğru.
+   */
+  if (!active && appInput && signals?.integration && !signals.altScreen) {
+    return <div className="command-running idle" style={rowStyle} aria-hidden="true" />;
+  }
+
   if (!active || !tabId) return null;
 
   /*

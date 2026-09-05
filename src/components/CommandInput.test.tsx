@@ -193,6 +193,70 @@ describe("komut satırı kutusu", () => {
     rerender(<CommandInput />);
     expect(container.querySelector(".command-running.starting")).toBe(null);
     expect(field(container)).toBe(null);
+    // Sessiz ama BOŞ DEĞİL: satır yerinde duruyor (bir alttaki teste bak).
+    const bos = container.querySelector<HTMLElement>(".command-running.idle");
+    expect(bos, "istem çizilirken satır boşalmamalı").not.toBe(null);
+    expect(bos!.querySelector(".running-dot"), "boş şeritte nokta yanmamalı").toBe(null);
+    expect(bos!.textContent, "boş şeritte yazı olmamalı").toBe("");
+  });
+
+  /*
+   * BİLDİRİLEN HATA: "cd ile bir yola gittiğimde terminalde flash oluyor" —
+   * terminal metni bir zıplayıp geri dönüyor.
+   *
+   * KÖK NEDEN: `133;D` (komut bitti) ile `133;B` (istem hazır) arasında ne
+   * kutu ne şerit çiziliyordu; `input` ızgara satırı 0'a iniyor, terminal
+   * ~bir satır büyüyor, `ResizeObserver` → `fit()` → PTY'ye yeni ölçü →
+   * kabuk istemi yeniden çiziyor. `133;B` gelince aynı zincir ters yönde.
+   *
+   * Test ÖLÇÜYE bakıyor, öğenin varlığına değil: satırın orada olması tek
+   * başına yetmiyor, KUTUYLA AYNI yüksekliği taşıması gerekiyor.
+   */
+  it("istem çizilirken satır kutuyla aynı yüksekliği koruyor", () => {
+    const fontSize = useStore.getState().settings.appearance.fontSize;
+    const beklenen = `${Math.round(fontSize * 1.55)}px`;
+
+    const kutu = render(<CommandInput />);
+    expect(field(kutu.container)!.style.lineHeight).toBe(beklenen);
+    kutu.unmount();
+
+    seed({ atPrompt: false });
+    const bos = render(<CommandInput />);
+    const strip = bos.container.querySelector<HTMLElement>(".command-running.idle")!;
+    expect(strip.getAttribute("style")).toContain(`--cmd-row-h: ${beklenen}`);
+  });
+
+  /*
+   * Satır yalnızca kutunun ZATEN açılacağı durumda tutuluyor.
+   *
+   * Üç durumda kutu hiç açılmayacak ve orada boş bir şerit terminalden kalıcı
+   * olarak yer çalardı — üstelik `vim` gibi tam ekran programlarda alanın
+   * tamamının terminale geçmesi İSTENEN şey.
+   */
+  it("kutunun hiç açılmayacağı durumlarda satır da yok", () => {
+    for (const [ad, signals] of [
+      ["tam ekran program", { atPrompt: false, altScreen: true }],
+      ["entegrasyonsuz kabuk", { atPrompt: false, integration: false }],
+    ] as const) {
+      promptedTabs.clear();
+      seed(signals);
+      const { container, unmount } = render(<CommandInput />);
+      expect(container.querySelector(".command-running.idle"), ad).toBe(null);
+      unmount();
+    }
+
+    // Ayar kapalı: kutu tümden yok, satır da yok.
+    promptedTabs.clear();
+    seed({ atPrompt: false });
+    const state = useStore.getState();
+    useStore.setState({
+      settings: {
+        ...state.settings,
+        behavior: { ...state.settings.behavior, appInput: false },
+      },
+    });
+    const { container } = render(<CommandInput />);
+    expect(container.querySelector(".command-running.idle"), "ayar kapalı").toBe(null);
   });
 
   it("şerit ile kutu aynı satır yüksekliğini paylaşıyor", () => {
