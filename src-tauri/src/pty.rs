@@ -11,7 +11,7 @@ use crate::store::{profile_executable, resolve_profile};
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use parking_lot::Mutex;
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -51,6 +51,10 @@ const COALESCE_WINDOW: Duration = Duration::from_millis(6);
 /// Tek olayda gonderilecek azami bayt.
 const MAX_CHUNK: usize = 128 * 1024;
 const READ_BUF: usize = 32 * 1024;
+/// Cocuk oldukten sonra son ciktinin bosalmasi icin taninan sure. Okuyucu EOF
+/// gormezse (bir torun slave'i tutuyorsa) cikis olayi en fazla bu kadar gecikir;
+/// toplama (reaper) bu sureden bagimsiz, hemen oluyor.
+const EXIT_DRAIN_GRACE: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,6 +114,52 @@ struct Session {
     killer: Box<dyn ChildKiller + Send + Sync>,
     pid: Option<u32>,
     alive: Arc<AtomicBool>,
+    /// `kill()` bunu true yapiyor; reaper is parcasi cikis olayini bastiriyor.
+    killed: Arc<AtomicBool>,
+}
+
+/// Oturum olaylarinin gittigi yer.
+///
+/// Uygulamada Tauri olay yayini (`TauriSink`), testte bir kanal.
+trait EventSink: Clone + Send + 'static {
+    /// PTY ciktisi. `false`: alici gitmis, yayinci durmali.
+    fn data(&self, bytes: &[u8]) -> bool;
+    /// Cocuk bitti. Oturum basina en fazla bir kez, son veriden sonra. Yalnizca
+    /// reaper cagiriyor; veri yayan is parcasi degil.
+    fn exit(&self, code: Option<u32>);
+}
+
+#[derive(Clone)]
+struct TauriSink {
+    app: AppHandle,
+    id: String,
+    data_event: String,
+    exit_event: String,
+}
+
+impl TauriSink {
+    fn new(app: &AppHandle, id: &str) -> Self {
+        Self {
+            app: app.clone(),
+            id: id.to_string(),
+            data_event: format!("pty:data:{id}"),
+            exit_event: format!("pty:exit:{id}"),
+        }
+    }
+}
+
+impl EventSink for TauriSink {
+    fn data(&self, bytes: &[u8]) -> bool {
+        let payload = DataEvent {
+            id: self.id.clone(),
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        };
+        self.app.emit(&self.data_event, payload).is_ok()
+    }
+
+    fn exit(&self, code: Option<u32>) {
+        let _ = self.app.emit(&self.exit_event, ExitEvent { id: self.id.clone(), code });
+    }
 }
 
 #[derive(Default)]
@@ -166,16 +216,6 @@ impl PtyManager {
             .filter(|c| !c.trim().is_empty() && std::path::Path::new(c).is_dir())
             .or_else(|| profile.cwd.clone().filter(|c| std::path::Path::new(c).is_dir()))
             .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()));
-
-        let pty_system = native_pty_system();
-        let pair = pty_system
-            .openpty(PtySize {
-                rows: spec.rows.max(2),
-                cols: spec.cols.max(10),
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .context("ConPTY acilamadi")?;
 
         let mut cmd = CommandBuilder::new(&exe);
         cmd.args(&args);
@@ -247,29 +287,61 @@ impl PtyManager {
             cmd.env_remove(key);
         }
 
-        let mut child = pair
+        let size = PtySize {
+            rows: spec.rows.max(2),
+            cols: spec.cols.max(10),
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pid = self.launch(&spec.id, cmd, size, TauriSink::new(app, &spec.id))?;
+
+        Ok(SpawnResult {
+            id: spec.id,
+            pid,
+            shell: exe,
+            args,
+            cwd,
+            integration,
+        })
+    }
+
+    /// PTY'yi acar, kabugu baslatir ve uc is parcasi kurar: okuyucu, yayinci
+    /// (`sink.data`) ve reaper (`sink.exit`). Oturumu haritaya yazar, pid doner.
+    ///
+    /// Olaylar dogrudan Tauri'ye degil `sink`e gidiyor ki oturum yasami gercek
+    /// bir kabukla, Tauri olmadan sinanabilsin (bkz. pty_tests.rs `oturum`).
+    fn launch<S: EventSink>(
+        &self,
+        id: &str,
+        cmd: CommandBuilder,
+        size: PtySize,
+        sink: S,
+    ) -> Result<Option<u32>> {
+        let exe = cmd
+            .get_argv()
+            .first()
+            .map(|a| a.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let pty_system = native_pty_system();
+        let pair = pty_system.openpty(size).context("ConPTY acilamadi")?;
+        let child: Box<dyn Child + Send + Sync> = pair
             .slave
             .spawn_command(cmd)
             .with_context(|| format!("kabuk baslatilamadi: {exe}"))?;
-        // slave ucunu birakmak sart: yoksa surec bitse bile okuyucu EOF gormez.
         drop(pair.slave);
 
         let pid = child.process_id();
         let killer = child.clone_killer();
-        let reader = pair
-            .master
-            .try_clone_reader()
-            .context("PTY okuyucu alinamadi")?;
+        let reader = pair.master.try_clone_reader().context("PTY okuyucu alinamadi")?;
         let writer = pair.master.take_writer().context("PTY yazici alinamadi")?;
-
         let alive = Arc::new(AtomicBool::new(true));
+        let killed = Arc::new(AtomicBool::new(false));
 
         // Okuyucu -> yayinci kanali. Okuma bloklayici oldugu icin toplama
         // isini ayri bir is parcasinda recv_timeout ile yapiyoruz.
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        let id_reader = spec.id.clone();
         std::thread::Builder::new()
-            .name(format!("nterm-read-{}", id_reader))
+            .name(format!("nterm-read-{id}"))
             .spawn(move || {
                 let mut reader = reader;
                 let mut buf = vec![0u8; READ_BUF];
@@ -287,13 +359,16 @@ impl PtyManager {
             })
             .context("okuyucu is parcasi baslatilamadi")?;
 
-        let app_emit = app.clone();
-        let id_emit = spec.id.clone();
-        let alive_emit = alive.clone();
+        // Yayinci: ciktiyi kisa araliklarla toplayip tek olayda gonderir.
+        // Kanal kapaninca (okuyucu EOF gordu) son parcayi da yollayip
+        // `drained_tx`i dusuruyor. Reaper bunu, cikis olayindan ONCE ciktinin
+        // bosaldiginin isareti olarak bekliyor.
+        let (drained_tx, drained_rx) = mpsc::channel::<()>();
+        let sink_data = sink.clone();
         std::thread::Builder::new()
-            .name(format!("nterm-emit-{}", id_emit))
+            .name(format!("nterm-emit-{id}"))
             .spawn(move || {
-                let data_event = format!("pty:data:{id_emit}");
+                let _drained_tx = drained_tx;
                 let mut pending: Vec<u8> = Vec::with_capacity(MAX_CHUNK);
                 loop {
                     // Ilk parca icin sinirsiz bekle.
@@ -314,45 +389,60 @@ impl PtyManager {
                             Err(RecvTimeoutError::Disconnected) => break,
                         }
                     }
-                    let payload = DataEvent {
-                        id: id_emit.clone(),
-                        data: base64::engine::general_purpose::STANDARD.encode(&pending),
-                    };
-                    pending.clear();
-                    if app_emit.emit(&data_event, payload).is_err() {
-                        break;
+                    if !sink_data.data(&pending) {
+                        break; // alici gitti
                     }
+                    pending.clear();
                 }
-
-                // Kanal kapandi: surec bitti. Cikis kodunu bekleyip bildir.
-                let code = child.wait().ok().map(|status| status.exit_code());
-                alive_emit.store(false, Ordering::SeqCst);
-                let _ = app_emit.emit(
-                    &format!("pty:exit:{id_emit}"),
-                    ExitEvent { id: id_emit.clone(), code },
-                );
+                // Dongu bitti: son veri gonderildi, `_drained_tx` burada dusuyor.
             })
             .context("yayinci is parcasi baslatilamadi")?;
 
+        // Reaper: cocugu `wait()` ile TOPLAYAN tek yer.
+        //
+        // OLCULEN HATA: calisan uygulamanin altinda saatler once kapatilmis
+        // sekmelere ait `<defunct>` (zombi) kabuklar birikiyordu. `wait()`
+        // eskiden yalnizca yayincidaydi ve oraya ancak okuyucu EOF gorunce
+        // gelinirdi; okuyucu master'in bir dup'ini okuyor, kabuk olse bile
+        // slave'i tutan bir torun (arka plan sunucusu, nohup) varsa EOF hic
+        // gelmiyor ve cocuk toplanmiyordu.
+        //
+        // `child.wait()` yalnizca cocuk gercekten olunce donuyor; `kill()`
+        // bagimsiz bir `ChildKiller` ile sinyali gonderdiginde de donuyor.
+        // Yani toplama artik EOF'a bagli degil.
+        let alive_reap = alive.clone();
+        let killed_reap = killed.clone();
+        std::thread::Builder::new()
+            .name(format!("nterm-reap-{id}"))
+            .spawn(move || {
+                let mut child = child;
+                let code = child.wait().ok().map(|status| status.exit_code());
+                // Cikis olayi ciktinin ARKASINDA kalmali (arayuz "[oturum sona
+                // erdi]" yaziyor). Okuyucu EOF gorduyse `drained_rx` hemen
+                // kapaniyor; torun EOF'u engelliyorsa sonsuza kadar degil,
+                // yalnizca kisa bir sure bekleyip yine de bildiriyoruz.
+                let _ = drained_rx.recv_timeout(EXIT_DRAIN_GRACE);
+                alive_reap.store(false, Ordering::SeqCst);
+                // Kapatilan oturum icin cikis olayi yok: arayuz dinleyicilerini
+                // zaten kaldirdi ve `spawn` ayni kimlikle yeniden baglanabilir.
+                if !killed_reap.load(Ordering::SeqCst) {
+                    sink.exit(code);
+                }
+            })
+            .context("reaper is parcasi baslatilamadi")?;
+
         self.sessions.lock().insert(
-            spec.id.clone(),
+            id.to_string(),
             Session {
                 master: pair.master,
                 writer,
                 killer,
                 pid,
                 alive,
+                killed,
             },
         );
-
-        Ok(SpawnResult {
-            id: spec.id,
-            pid,
-            shell: exe,
-            args,
-            cwd,
-            integration,
-        })
+        Ok(pid)
     }
 
     pub fn write(&self, id: &str, data: &[u8]) -> Result<()> {
@@ -383,9 +473,13 @@ impl PtyManager {
         let Some(mut session) = self.sessions.lock().remove(id) else {
             return false;
         };
+        // Once "kapatildi" isareti, sonra sinyal: reaper `child.wait()`ten
+        // uyaninca isareti gormus olmali ki bu oturum icin cikis olayi yaymasin.
+        session.killed.store(true, Ordering::SeqCst);
         session.alive.store(false, Ordering::SeqCst);
         let _ = session.killer.kill();
-        // master'in dusmesi okuyucuya EOF verir, is parcalari kendiliginden biter.
+        // Cocugu reaper is parcasi `child.wait()` ile topluyor; sinyal onu
+        // uyandiriyor. Toplama artik okuyucunun EOF gormesine bagli degil.
         true
     }
 

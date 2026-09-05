@@ -333,3 +333,179 @@ fn zsh_bos_kullanici_zdotdiri_yazilmiyor() {
     assert_eq!(env_get(&env, "NTERMINAL_ZDOTDIR"), None);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+// ---------------------------------------------------------- oturum yasami
+//
+// Gercek bir kabukla ama Tauri olmadan: olaylar `EventSink` uzerinden bir
+// kanala geliyor. Yalnizca Unix - senaryolar /bin/sh, sinyaller ve `ps`
+// uzerine kurulu. ConPTY tarafinda ayni akis calisiyor ama zombi kavrami yok.
+
+#[cfg(unix)]
+mod oturum {
+    use super::*;
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::{Duration, Instant};
+
+    enum Olay {
+        Veri(Vec<u8>),
+        Cikis(Option<u32>),
+    }
+
+    #[derive(Clone)]
+    struct Kanal(mpsc::Sender<Olay>);
+
+    impl EventSink for Kanal {
+        fn data(&self, bytes: &[u8]) -> bool {
+            self.0.send(Olay::Veri(bytes.to_vec())).is_ok()
+        }
+        fn exit(&self, code: Option<u32>) {
+            let _ = self.0.send(Olay::Cikis(code));
+        }
+    }
+
+    /// `/bin/sh -c <betik>` baslatir; kabugun pid'ini ve olay kanalini verir.
+    fn baslat(manager: &PtyManager, id: &str, betik: &str) -> (u32, mpsc::Receiver<Olay>) {
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", betik]);
+        let size = PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 };
+        let pid = manager
+            .launch(id, cmd, size, Kanal(tx))
+            .expect("kabuk baslatilamadi")
+            .expect("pid yok");
+        (pid, rx)
+    }
+
+    /// Cikis olayina ya da sureye kadar gelen her seyi toplar: birlesik veri
+    /// ve (geldiyse) cikis kodu.
+    fn topla(rx: &mpsc::Receiver<Olay>, timeout: Duration) -> (Vec<u8>, Option<Option<u32>>) {
+        let deadline = Instant::now() + timeout;
+        let mut veri = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match rx.recv_timeout(remaining) {
+                Ok(Olay::Veri(b)) => veri.extend_from_slice(&b),
+                Ok(Olay::Cikis(code)) => return (veri, Some(code)),
+                Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
+                    return (veri, None)
+                }
+            }
+        }
+    }
+
+    /// Metin veri olaylarinda gorunene kadar bekler.
+    fn veri_bekle(rx: &mpsc::Receiver<Olay>, needle: &str, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        let mut veri = String::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match rx.recv_timeout(remaining) {
+                Ok(Olay::Veri(b)) => {
+                    veri.push_str(&String::from_utf8_lossy(&b));
+                    if veri.contains(needle) {
+                        return true;
+                    }
+                }
+                Ok(Olay::Cikis(_)) => return false,
+                Err(_) => return false,
+            }
+        }
+    }
+
+    /// Surecin `ps` durumu. None: surec tabloda yok, yani toplanmis.
+    /// Some("Z"): olmus ama `wait()` edilmemis - zombi.
+    fn surec_durumu(pid: u32) -> Option<String> {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output()
+            .expect("ps calistirilamadi");
+        let durum = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (!durum.is_empty()).then_some(durum)
+    }
+
+    /// Surec tablodan silinene kadar bekler; son gorulen durumu doner.
+    fn toplanmayi_bekle(pid: u32, timeout: Duration) -> Option<String> {
+        let deadline = Instant::now() + timeout;
+        let mut durum = surec_durumu(pid);
+        while durum.is_some() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(25));
+            durum = surec_durumu(pid);
+        }
+        durum
+    }
+
+    /// Slave ucunu kabuktan sonra da acik tutan torun: SIGHUP'i yok sayan bir
+    /// `sleep`. Arka planda birakilmis bir sunucunun ya da `nohup`lu bir
+    /// komutun sekme kapatildiktan sonra yaptigi sey tam olarak bu.
+    const TORUN: &str = "(trap '' HUP; exec sleep 10) &";
+
+    #[test]
+    fn oldurulen_kabuk_zombi_kalmiyor() {
+        // OLCULEN HATA: calisan uygulamanin altinda, saatler once kapatilmis
+        // iki sekmeye ait iki `<defunct>` zsh (ps: STAT=Z). Kabuk SIGHUP ile
+        // olmus ama `wait()` edilmemis.
+        //
+        // ZINCIR: `wait()` yalnizca yayincidaydi ve yayinci oraya ancak
+        // okuyucu EOF gorunce geliyordu. Okuyucunun master kopyasi, slave'i
+        // tutan SON surec de kapanmadan EOF vermiyor; kabuk olse bile arkada
+        // biraktigi torun slave'i tutuyorsa okuma hic donmuyor ve kabuk
+        // toplanmiyordu. Burada torun 10 saniye yasiyor; kabuk 5 saniye
+        // icinde tablodan silinmeli.
+        let manager = PtyManager::default();
+        let (pid, rx) = baslat(&manager, "zombi", &format!("{TORUN} echo HAZIR; wait"));
+        // Torun gercekten fork edilmis olmali, yoksa senaryo kurulmaz.
+        assert!(veri_bekle(&rx, "HAZIR", Duration::from_secs(10)), "kabuk baslamadi");
+
+        assert!(manager.kill("zombi"));
+
+        let durum = toplanmayi_bekle(pid, Duration::from_secs(5));
+        assert!(
+            durum.is_none(),
+            "kabuk (pid {pid}) toplanmamis, ps durumu: {durum:?} - zombi kaldi"
+        );
+        // Kapatilan oturumdan cikis olayi gelmemeli: arayuz dinleyicilerini
+        // zaten kaldirdi; `spawn` ayni kimlikle yeniden baglaniyorsa yeni
+        // oturumun dinleyicileri o kimlikte ve bu olay onu "sona erdi" sanirdi.
+        let (_, cikis) = topla(&rx, Duration::from_millis(300));
+        assert!(cikis.is_none(), "kapatilan oturum cikis olayi yolladi: {cikis:?}");
+    }
+
+    #[test]
+    fn cikis_olayi_okuyucu_eof_gormese_de_geliyor() {
+        // Kabuk kendi kendine bitiyor ama torun slave'i tutuyor: okuyucu EOF
+        // gormuyor. Cikis olayi buna ragmen gelmeli - kabugun bitisini
+        // `wait()` bildiriyor, okuyucu degil. Eski akista bu olay torun
+        // bitene kadar (burada 10 s, gercekte belki hic) gelmiyordu ve sekme
+        // "[oturum sona erdi]" yazmadan asili kaliyordu.
+        let manager = PtyManager::default();
+        let (_, rx) = baslat(&manager, "eof-yok", &format!("{TORUN} exit 3"));
+        let (_, cikis) = topla(&rx, Duration::from_secs(3));
+        assert_eq!(cikis, Some(Some(3)), "cikis olayi 3 saniyede gelmedi ya da kod yanlis");
+        assert!(!manager.alive("eof-yok"));
+    }
+
+    #[test]
+    fn cikis_olayi_son_veriden_sonra_ve_kodla_geliyor() {
+        // Arayuz cikis olayinda "[oturum sona erdi]" yaziyor; ondan sonra veri
+        // gelirse mesaj ciktinin ortasinda kalir. Cikis kodu da kabugun
+        // kendi kodu olmali - gecmis kaydi onu yaziyor.
+        let manager = PtyManager::default();
+        let (_, rx) = baslat(&manager, "sira", "echo merhaba; exit 7");
+        let (veri, cikis) = topla(&rx, Duration::from_secs(5));
+        assert_eq!(cikis, Some(Some(7)));
+        assert!(
+            String::from_utf8_lossy(&veri).contains("merhaba"),
+            "cikti cikis olayindan once gelmedi: {:?}",
+            String::from_utf8_lossy(&veri)
+        );
+        // Cikistan sonra veri yok.
+        let (sonra, _) = topla(&rx, Duration::from_millis(200));
+        assert!(sonra.is_empty(), "cikis olayindan sonra veri geldi: {sonra:?}");
+        // Oturum kaydi kapatilana kadar duruyor (`alive` false), kapatmak onu
+        // siliyor; ikinci kapatma "yoktu" diyor.
+        assert!(!manager.alive("sira"));
+        assert!(manager.list().contains(&"sira".to_string()));
+        assert!(manager.kill("sira"));
+        assert!(!manager.kill("sira"));
+    }
+}
