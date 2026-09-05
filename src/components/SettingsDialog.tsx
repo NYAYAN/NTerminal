@@ -143,6 +143,29 @@ export function SettingsDialog() {
   const [section, setSection] = useState<Section>(
     editingGroupId ? "groups" : (useStore.getState().ui.settingsSection ?? "general"),
   );
+
+  /*
+   * İstek TÜKETİLİYOR: bir açılış için geçerli, sonra siliniyor.
+   *
+   * `settingsSection` ve `editingGroupId` birer YÖNLENDİRME, kalıcı durum
+   * değil — ikisi de yalnızca yukarıdaki `useState` başlangıçlarında okunuyor
+   * ve pencere her açılışta yeniden kuruluyor (`{settingsOpen && ...}`).
+   *
+   * Silinmeselerdi yönlendirme YAPIŞIR: durum çubuğundaki güncelleme rozetiyle
+   * bir kez "Hakkında"ya giden kullanıcı, sonraki her açılışta oraya düşerdi —
+   * dişlisiyle, Ctrl+, ile ya da paletten açsa bile.
+   *
+   * Neden `close()` içinde DEĞİL: pencereyi kapatan üç yol var ve yalnızca
+   * biri oradan geçiyor (ötekiler `App`teki Escape işleyicisi ve "Aktarma"
+   * düğmesi). Tüketimi açılışa bağlamak üçünü de kapsıyor.
+   */
+  useEffect(() => {
+    const { settingsSection, editingGroupId: duzenlenen } = useStore.getState().ui;
+    if (settingsSection === null && duzenlenen === null) return;
+    setUi({ settingsSection: null, editingGroupId: null });
+    // Yalnızca kurulumda: bağımlılık listesi bilerek boş.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectedProfileId, setSelectedProfileId] = useState(settings.profiles[0]?.id ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingGroupId ?? groups[0]?.id ?? "");
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -181,7 +204,9 @@ export function SettingsDialog() {
   const [historySize, setHistorySize] = useState<string>("");
 
   const store = useStore.getState;
-  const close = () => setUi({ settingsOpen: false, editingGroupId: null });
+  // `editingGroupId` BURADA temizlenmiyor: yönlendirmeyi açılış tüketiyor
+  // (yukarıdaki etki) ve kapanış yollarının yalnızca biri buradan geçiyor.
+  const close = () => setUi({ settingsOpen: false });
 
   /**
    * Pencere ACILDIGI ANDAKI ayarlar - satir basina "geri al"in olcutu.

@@ -103,7 +103,14 @@ export function TabBar() {
       },
     })),
     { kind: "separator" },
-    { kind: "item", label: t("menu.editProfiles"), run: () => setUi({ settingsOpen: true }) },
+    {
+      kind: "item",
+      label: t("menu.editProfiles"),
+      // Bölüm ADLANDIRILIYOR: yalnızca `settingsOpen` açmak pencereyi "Genel"de
+      // bırakıyordu, oysa öğenin sözü profilleri düzenlemek. Kullanıcı açılan
+      // pencerede aradığını bulamayıp kenar çubuğunda arıyordu.
+      run: () => setUi({ settingsOpen: true, settingsSection: "profiles" }),
+    },
   ];
 
   const entriesFor = (tab: TabState, index: number): MenuEntry[] => {

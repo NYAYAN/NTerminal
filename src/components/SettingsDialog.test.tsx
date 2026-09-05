@@ -34,7 +34,10 @@ beforeEach(() => {
   // Profiller ve Gruplar iki panelli: sag taraftaki form ancak bir kayit
   // seciliyken ciziliyor. Bos depoyla olcmek o bolumleri "bos" gosterir.
   useStore.setState({
-    ui: { ...state.ui, settingsOpen: true, editingGroupId: null },
+    // `settingsSection` de sifirlaniyor: bolum istegi bir acilisi
+    // yonlendiriyor ve birakilirsa SONRAKI testin penceresini baska bir
+    // bolumde acar - testler birbirinin durumuna bagli olmamali.
+    ui: { ...state.ui, settingsOpen: true, editingGroupId: null, settingsSection: null },
     appVersion: "0.1.0",
     settings: {
       ...state.settings,
@@ -204,6 +207,65 @@ describe("ayarlar penceresi", () => {
     useStore.setState({ ui: { ...ui, editingGroupId: "g1" } });
     const { container } = render(<SettingsDialog />);
     expect(container.querySelector(".settings-nav button.on")!.textContent!.trim()).toBe("Gruplar");
+  });
+
+  it("istenen bölümle açılınca o bölüm seçili", () => {
+    // BİLDİRİLEN HATA: sekme çubuğundaki "+" menüsünden "Profilleri düzenle…"
+    // deyince pencere açılıyor ama Genel bölümünde kalıyordu — öğenin sözü
+    // profilleri düzenlemek.
+    const ui = useStore.getState().ui;
+    useStore.setState({ ui: { ...ui, settingsSection: "profiles" } });
+    const { container } = render(<SettingsDialog />);
+    expect(container.querySelector(".settings-nav button.on")!.textContent!.trim()).toBe(
+      "Profiller",
+    );
+  });
+
+  /*
+   * Yönlendirme TÜKETİLİYOR: bir açılış için geçerli.
+   *
+   * `settingsSection` ve `editingGroupId` kalıcı durum değil, birer istek.
+   * Silinmeselerdi yapışırlardı: "Hakkında"ya bir kez giden kullanıcı sonraki
+   * her açılışta oraya düşerdi — dişliyle, Ctrl+, ile ya da paletten açsa
+   * bile. Tüketim AÇILIŞA bağlı, kapanışa değil: pencereyi kapatan üç yol var
+   * ve yalnızca biri `close()`tan geçiyor.
+   */
+  it("bölüm isteği bir açılışta tükeniyor, yapışmıyor", async () => {
+    const ui = useStore.getState().ui;
+    useStore.setState({ ui: { ...ui, settingsSection: "about" } });
+
+    const ilk = render(<SettingsDialog />);
+    expect(ilk.container.querySelector(".settings-nav button.on")!.textContent!.trim()).toBe(
+      "Hakkında",
+    );
+    await settle();
+    expect(useStore.getState().ui.settingsSection, "istek silinmedi").toBe(null);
+    ilk.unmount();
+
+    // İkinci açılış: kimse bir bölüm istemedi, Genel'e düşmeli.
+    const ikinci = render(<SettingsDialog />);
+    expect(
+      ikinci.container.querySelector(".settings-nav button.on")!.textContent!.trim(),
+      "önceki açılışın bölümü yapışmış",
+    ).toBe("Genel");
+  });
+
+  it("grup isteği de tükeniyor", async () => {
+    // Aynı tuzak `editingGroupId` için de vardı ve `close()` onu temizlese de
+    // Escape ile kapatan yol oradan geçmiyor.
+    const ui = useStore.getState().ui;
+    useStore.setState({ ui: { ...ui, editingGroupId: "g1" } });
+
+    const ilk = render(<SettingsDialog />);
+    await settle();
+    expect(useStore.getState().ui.editingGroupId, "istek silinmedi").toBe(null);
+    ilk.unmount();
+
+    const ikinci = render(<SettingsDialog />);
+    expect(
+      ikinci.container.querySelector(".settings-nav button.on")!.textContent!.trim(),
+      "önceki açılışın grubu yapışmış",
+    ).toBe("Genel");
   });
 });
 
