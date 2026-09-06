@@ -437,6 +437,13 @@ mod oturum {
     /// Slave ucunu kabuktan sonra da acik tutan torun: SIGHUP'i yok sayan bir
     /// `sleep`. Arka planda birakilmis bir sunucunun ya da `nohup`lu bir
     /// komutun sekme kapatildiktan sonra yaptigi sey tam olarak bu.
+    ///
+    /// Bu torunun okuyucuyu GERCEKTEN bloklamasi PLATFORMA BAGLI ve burada
+    /// varsayilmiyor. Linux'ta master ucu, slave'i tutan son surec de
+    /// kapanana kadar EOF vermiyor. macOS'ta veriyor: olculdu, bu moduldeki
+    /// uc test toplam 40 ms'de bitiyor, yani EOF kabuk olur olmaz geliyor.
+    /// Senaryo yine de anlamli - toplama artik EOF'a hic bakmadigi icin iki
+    /// davranista da ayni sonucu vermeli, testler ikisini de kapsiyor.
     const TORUN: &str = "(trap '' HUP; exec sleep 10) &";
 
     #[test]
@@ -446,11 +453,17 @@ mod oturum {
         // olmus ama `wait()` edilmemis.
         //
         // ZINCIR: `wait()` yalnizca yayincidaydi ve yayinci oraya ancak
-        // okuyucu EOF gorunce geliyordu. Okuyucunun master kopyasi, slave'i
-        // tutan SON surec de kapanmadan EOF vermiyor; kabuk olse bile arkada
-        // biraktigi torun slave'i tutuyorsa okuma hic donmuyor ve kabuk
-        // toplanmiyordu. Burada torun 10 saniye yasiyor; kabuk 5 saniye
-        // icinde tablodan silinmeli.
+        // okuyucu EOF gorunce geliyordu. Yani toplama, kabugun OLMESINE degil
+        // PTY okuyucusunun kapanmasina bagliydi; ikisi ayni sey degil ve
+        // okuyucunun EOF gormedigi her yol kabugu zombi birakiyordu.
+        //
+        // Linux'ta bilinen bir yol var: master ucu, slave'i tutan son surec
+        // de kapanana kadar EOF vermiyor, yani kabugun arkada biraktigi bir
+        // torun okumayi sonsuza kadar acik tutabiliyor. macOS'ta bu yol YOK
+        // (bkz. `TORUN`), dolayisiyla gozlenen iki zombinin kok nedeni
+        // kanitlanmis DEGIL. Duzeltme nedenden bagimsiz: her cocuk kosulsuz
+        // bekleniyor. Bu test de sonuca bakiyor, mekanizmaya degil - torun 10
+        // saniye yasiyor, kabuk 5 saniye icinde tablodan silinmeli.
         let manager = PtyManager::default();
         let (pid, rx) = baslat(&manager, "zombi", &format!("{TORUN} echo HAZIR; wait"));
         // Torun gercekten fork edilmis olmali, yoksa senaryo kurulmaz.
@@ -472,11 +485,13 @@ mod oturum {
 
     #[test]
     fn cikis_olayi_okuyucu_eof_gormese_de_geliyor() {
-        // Kabuk kendi kendine bitiyor ama torun slave'i tutuyor: okuyucu EOF
-        // gormuyor. Cikis olayi buna ragmen gelmeli - kabugun bitisini
-        // `wait()` bildiriyor, okuyucu degil. Eski akista bu olay torun
-        // bitene kadar (burada 10 s, gercekte belki hic) gelmiyordu ve sekme
-        // "[oturum sona erdi]" yazmadan asili kaliyordu.
+        // Kabuk kendi kendine bitiyor ve arkada slave'i tutan bir torun
+        // kaliyor. Okuyucunun EOF gorup gormedigi platforma bagli (bkz.
+        // `TORUN`); cikis olayi ikisinde de gelmeli, cunku kabugun bitisini
+        // artik `wait()` bildiriyor, okuyucu degil. EOF'un geciktigi
+        // platformda eski akisla bu olay torun bitene kadar (burada 10 s,
+        // gercekte belki hic) gelmiyor ve sekme "[oturum sona erdi]"
+        // yazmadan asili kaliyordu.
         let manager = PtyManager::default();
         let (_, rx) = baslat(&manager, "eof-yok", &format!("{TORUN} exit 3"));
         let (_, cikis) = topla(&rx, Duration::from_secs(3));
