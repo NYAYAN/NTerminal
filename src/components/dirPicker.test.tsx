@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
-import { useStore } from "../store/useStore";
+import { sessions, useStore } from "../store/useStore";
 import { DirPicker } from "./DirPicker";
+import type { Group, TabState } from "../types";
 
 /**
  * Dizin seçici — yol rozetine tıklayınca açılan liste.
@@ -33,10 +34,52 @@ const listDirs = vi.fn(async (path: string) => {
   return [];
 });
 
+/*
+ * `cd` OTURUMDAN gidiyor, depo eyleminden değil.
+ *
+ * Seçici komutu artık kendisi kurmuyor: yol `changeDir` üzerinden geçiyor —
+ * klasör değiştirmenin tek yolu orası ve kilitli sekmede reddeden de o. O da
+ * tırnaklamayı `quoteForShell` ile yapıp etkin OTURUMUN `insertCommand`ına
+ * yazıyor, dolayısıyla casus orada duruyor.
+ *
+ * Beklenen komut bu yüzden TIRNAKSIZ: boşluksuz bir yolu tırnaklamak
+ * gereksiz, gerekçesi `store/lockedCwd.test.ts` içinde.
+ */
 const insertCommand = vi.fn();
 const onClose = vi.fn<() => void>();
-/** Depo eylemleri testler arasında geri yükleniyor. */
-const gercekInsert = useStore.getState().insertCommand;
+
+/** `changeDir` etkin sekmeyi VE oturumu arıyor; ikisi de kurulmalı. */
+function tab(): TabState {
+  return {
+    id: "t1",
+    title: "t1",
+    customTitle: null,
+    profileId: "p1",
+    cwd: CWD,
+    createdAt: 0,
+    lastActiveAt: 0,
+    hasScrollback: false,
+    lastCommand: null,
+    locked: false,
+  };
+}
+
+function group(): Group {
+  return {
+    id: "g1",
+    name: "g1",
+    color: null,
+    icon: null,
+    collapsed: false,
+    favorite: false,
+    ungrouped: false,
+    defaultProfileId: null,
+    defaultCwd: null,
+    env: {},
+    activeTabId: "t1",
+    tabs: [tab()],
+  };
+}
 
 /** Listedeki satır etiketleri, ekrandaki sırasıyla. */
 function satirlar(container: HTMLElement): string[] {
@@ -64,9 +107,12 @@ beforeEach(() => {
   insertCommand.mockClear();
   onClose.mockClear();
   vi.spyOn(api, "listDirs").mockImplementation(listDirs);
+  sessions.clear();
+  sessions.set("t1", { insertCommand, cwd: CWD } as never);
   const state = useStore.getState();
   useStore.setState({
-    insertCommand,
+    groups: [group()],
+    activeGroupId: "g1",
     ui: { ...state.ui, dirPicker: CWD },
   });
 });
@@ -74,8 +120,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  sessions.clear();
   const state = useStore.getState();
-  useStore.setState({ insertCommand: gercekInsert, ui: { ...state.ui, dirPicker: null } });
+  useStore.setState({ groups: [], activeGroupId: null, ui: { ...state.ui, dirPicker: null } });
 });
 
 describe("dizin seçici", () => {
@@ -86,7 +133,7 @@ describe("dizin seçici", () => {
       fireEvent.click(satir(container, "Üst klasör"));
     });
 
-    expect(insertCommand).toHaveBeenCalledWith(`cd "${UST}"`, true);
+    expect(insertCommand).toHaveBeenCalledWith(`cd ${UST}`, true);
     expect(onClose, "üst klasör pencereyi kapatmamalı").not.toHaveBeenCalled();
     expect(useStore.getState().ui.dirPicker, "seçici üst dizine taşınmalı").toBe(UST);
   });
@@ -114,7 +161,7 @@ describe("dizin seçici", () => {
       fireEvent.click(satir(container, "src"));
     });
 
-    expect(insertCommand).toHaveBeenCalledWith(`cd "${CWD}/src"`, true);
+    expect(insertCommand).toHaveBeenCalledWith(`cd ${CWD}/src`, true);
     expect(onClose, "klasör seçimi pencereyi kapatmamalı").not.toHaveBeenCalled();
     expect(useStore.getState().ui.dirPicker).toBe(`${CWD}/src`);
 
@@ -155,7 +202,7 @@ describe("dizin seçici", () => {
       fireEvent.keyDown(panel, { key: "Enter" });
     });
 
-    expect(insertCommand).toHaveBeenCalledWith(`cd "${UST}"`, true);
+    expect(insertCommand).toHaveBeenCalledWith(`cd ${UST}`, true);
     expect(onClose).not.toHaveBeenCalled();
   });
 
