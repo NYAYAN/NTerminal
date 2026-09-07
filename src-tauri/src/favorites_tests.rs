@@ -355,3 +355,33 @@ fn eski_favori_dosyasi_klasorsuz_okunuyor() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Arayuz yamayi JSON olarak gonderiyor; "alan yok" ile "alan null" ayrimi
+/// COZUMLEME asamasinda kayboluyordu. Yapiyi elle kuran testler bunu
+/// gormuyordu: klasor yolunu bosaltip kaydetmek hicbir sey yapmiyordu.
+#[test]
+fn json_yamada_null_temizle_demek() {
+    let yok: FavoritePatch = serde_json::from_str(r#"{"label":"Ad"}"#).unwrap();
+    assert_eq!(yok.cwd, None, "gonderilmeyen alan dokunulmamis sayilmali");
+    assert_eq!(yok.label, Some(Some("Ad".into())));
+
+    let null: FavoritePatch = serde_json::from_str(r#"{"cwd":null,"folder":null}"#).unwrap();
+    assert_eq!(null.cwd, Some(None), "null gonderilen alan temizlenmeli");
+    assert_eq!(null.folder, Some(None));
+
+    // Ucu ucuna: kayit gercekten yolunu birakiyor mu?
+    let store = FavoriteStore::load(temp_paths("json-null"));
+    let eklenen = store
+        .add(NewFavorite {
+            command: "npm test".into(),
+            label: None,
+            note: None,
+            group_id: None,
+            folder: None,
+            cwd: Some(r"C:\proje".into()),
+        })
+        .unwrap();
+    let yama: FavoritePatch = serde_json::from_str(r#"{"cwd":null}"#).unwrap();
+    let sonra = store.update(&eklenen.id, yama).unwrap().unwrap();
+    assert_eq!(sonra.cwd, None, "klasor yolu silinmedi");
+}

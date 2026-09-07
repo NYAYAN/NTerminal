@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
+import { isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
 import { BranchIcon, FolderIcon, NodeIcon } from "./Icons";
 
@@ -46,6 +47,7 @@ export function ContextBar() {
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
   const cwd = tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
   const git = cwd ? (allGit[cwd] ?? null) : null;
+  const locked = tab ? isLocked(tab) : false;
 
   /*
    * Dışarıdan yapılan değişiklikleri yakala.
@@ -105,14 +107,20 @@ export function ContextBar() {
   return (
     <div className="context-bar">
       {/* Dizin rozeti tıklanabilir: klasör seçici açılıyor.
-          
+
           İpucu iki satır: tam yol (rozet kısaltıyor, uzun yollarda tek ayırt
-          edici bilgi bu) ve tıklamanın ne yaptığı. */}
+          edici bilgi bu) ve tıklamanın ne yaptığı.
+
+          KİLİTLİ sekmede rozet tıklanmıyor: kilit klasörü de koruyor, seçiciyi
+          açıp seçimi reddetmek kullanıcıya boşa iş yaptırırdı. İkinci satır
+          neden tıklanmadığını söylüyor — sessiz bir devre dışı bırakma
+          "bozuk" gibi okunur. */}
       <button
         type="button"
         className="ctx-chip dir"
         title={`${cwd}
-${t("dirs.open")}`}
+${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
+        disabled={locked}
         onClick={() => setUi({ dirPicker: cwd })}
       >
         <FolderIcon size={11} />

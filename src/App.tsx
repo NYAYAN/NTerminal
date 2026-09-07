@@ -22,6 +22,7 @@ import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
+import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
@@ -183,6 +184,22 @@ export function App() {
       disposed = true;
       unlisten?.();
     };
+  }, []);
+
+  /*
+   * Kare ölçümü açılışta başlıyor ve hiç durmuyor.
+   *
+   * Bir düğmenin arkasında olamaz: ölçmek istediğimiz şey donmanın KENDİSİ ve
+   * donmuş bir uygulamada kullanıcı hiçbir düğmeye basamıyor. Sonda o yüzden
+   * hep açık ve takılmaları halka tamponda tutuyor — donma geçtikten sonra da
+   * elde sayı kalıyor (gerekçenin tamamı `lib/health.ts` içinde).
+   *
+   * Bedeli kare başına iki çıkarma ve iki dizi yazımı; `ready`i beklemiyor,
+   * çünkü açılışın kendisi de ölçülmeye değer.
+   */
+  useEffect(() => {
+    frameMonitor.start();
+    return () => frameMonitor.stop();
   }, []);
 
   // Periyodik güvenlik kaydı: uygulama beklenmedik şekilde kapanırsa (güç

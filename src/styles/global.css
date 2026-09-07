@@ -1747,6 +1747,27 @@ html[data-platform="macos"] .titlebar {
   background: var(--border);
 }
 
+/* Tasma gostergesi: sekmeler serite sigmadiginda cikan ok + sayi.
+ *
+ * Ok ile sayi TEK dugmenin icinde: iki ayri ogeye bolmek, sayiya basinca
+ * bir sey olmayan bir alan birakirdi. Sayi `--accent` degil `--muted`:
+ * bir uyari degil, bir olcu.
+ *
+ * Genislik icerige gore (`width: auto`): `icon-btn` kare, ama burada
+ * yaninda bir rakam var ve iki haneye cikabiliyor. */
+.tab-overflow {
+  width: auto;
+  gap: 3px;
+  padding: 0 5px;
+}
+
+.tab-overflow-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  line-height: 1;
+}
+
 /* Gorunum kipi secimi: iki durumlu tek dugme yerine iki ayri dugme, boylece
    hangi kipin etkin oldugu tiklamadan once gorunuyor. */
 .seg-mini {
@@ -4173,6 +4194,20 @@ html[data-platform="macos"] .titlebar {
   color: var(--text-dim);
   font-family: var(--mono-font);
   font-size: 0.8077rem;
+  /* Ipucu ADI EZMESIN.
+   *
+   * `flex: none` ipucuna kosulsuz yer veriyordu; kisayol metinleriyle
+   * ("Ctrl+C") sorun yoktu ama sekme listesinde ipucu calisan komutun
+   * kendisi ve uzun: OLCULEN sonuc, adin "Porta..." ya da "P..." diye
+   * kirpilmasi, birkac satirda ise adin tumden kaybolmasiydi. Oysa
+   * kullanici listeye ADA bakmak icin geliyor.
+   *
+   * Ust sinir + kirpma: kisa ipuclari oldugu gibi duruyor, uzun olan
+   * kendisi kisaliyor. */
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ctx-sep {

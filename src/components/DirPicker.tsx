@@ -120,8 +120,16 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
    * olurdu.
    */
   const goto = (path: string) => {
-    // `cd` her kabukta var ve boşluklu yol için tırnak gerekiyor.
-    useStore.getState().insertCommand(`cd "${path}"`, true);
+    /*
+     * Tırnaklama ve KİLİT denetimi depodaki `changeDir` içinde: klasör
+     * değiştirmenin tek yolu orası, kilitli sekmede reddediyor.
+     *
+     * Reddedildiyse SEÇİCİ DE KIMILDAMIYOR. Kabuk yerinde kaldığı için
+     * seçiciyi yeni dizine taşımak, olmayan bir gezinmeyi olmuş gibi
+     * göstermek olurdu — kullanıcı kilit uyarısını okurken liste bambaşka
+     * bir klasörü gösteriyordu.
+     */
+    if (!useStore.getState().changeDir(path)) return;
     useStore.getState().setUi({ dirPicker: path });
     /*
      * Arama BOŞALIYOR: sorgu bir ÖNCEKİ listeye aitti.

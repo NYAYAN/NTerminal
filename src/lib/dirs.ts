@@ -58,3 +58,38 @@ export function filterDirs(names: readonly string[], query: string): string[] {
   if (!q) return [...names];
   return names.filter((name) => name.toLowerCase().includes(q));
 }
+
+/**
+ * İki yol AYNI klasörü mü gösteriyor?
+ *
+ * Kilitli sekmenin klasörünü koruyan denetim buna bakıyor, o yüzden yanlış
+ * "değişti" kararı görünür bir hataya dönüşüyor: kabuk aynı yeri farklı
+ * yazınca sekme kendini boşuna geri çağırırdı. Kabuklar aynı dizini birden
+ * çok biçimde bildiriyor:
+ *
+ *  * sondaki ayırıcı — `C:\proje` ile `C:\proje\`
+ *  * ayırıcı yönü — OSC 7 `file://` yolunu eğik bölüyle veriyor, `cd` ise
+ *    ters bölüyle geri geliyor
+ *  * büyük/küçük harf — PowerShell `C:\Proje`, cmd `c:\proje` yazabiliyor
+ *
+ * Harf duyarlılığı YOLUN BİÇİMİNDEN çıkarılıyor, platform ayarından değil:
+ * sürücü harfi ya da ters bölü gören yol Windows yolu sayılıp harf
+ * gözetmiyor. POSIX yolunda gözetiyor, çünkü orada `/home/Ali` ile
+ * `/home/ali` GERÇEKTEN iki ayrı dizin — onları eşit saymak kilidi sessizce
+ * yanlış klasörde açık bırakırdı.
+ */
+export function sameDir(a: string, b: string): boolean {
+  const windowsYolu = (p: string) => /^[a-zA-Z]:/.test(p) || p.includes("\\");
+  const duzelt = (p: string) => {
+    const tek = p.trim().replace(/\\/g, "/");
+    // Sondaki ayırıcı atılıyor ama kök korunuyor: `/` ve `C:/` kendileri birer
+    // dizin, boş dizeye indirilemez.
+    const kisa = tek.length > 1 && tek.endsWith("/") ? tek.slice(0, -1) : tek;
+    return /^[a-zA-Z]:$/.test(kisa) ? `${kisa}/` : kisa;
+  };
+
+  const x = duzelt(a);
+  const y = duzelt(b);
+  if (windowsYolu(a) || windowsYolu(b)) return x.toLowerCase() === y.toLowerCase();
+  return x === y;
+}

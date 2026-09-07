@@ -7,16 +7,18 @@ import {
   resolveProfile,
   shellBadge,
   tabLabel,
+  tabSubtitle,
   tabTooltip,
 } from "../lib/labels";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
+import { hiddenCount } from "../lib/tabOverflow";
 import { dropIndex, isLocked } from "../lib/tabs";
 import { readableAccent } from "../lib/themes";
 import { sessions, useStore } from "../store/useStore";
 import type { TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
-import { ChevronIcon, PanesViewIcon, PlusIcon, TabsViewIcon } from "./Icons";
+import { ArrowIcon, ChevronIcon, PanesViewIcon, PlusIcon, TabsViewIcon } from "./Icons";
 
 export function TabBar() {
   const groups = useStore((s) => s.groups);
@@ -50,6 +52,49 @@ export function TabBar() {
     const el = stripRef.current?.querySelector<HTMLElement>(".tab.active");
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [group?.activeTabId]);
+
+  /*
+   * Şeritte kaç sekme GİZLİ kaldı.
+   *
+   * BİLDİRİLEN HATA: "çok fazla sekme ekleyince sığmayınca bir ok işaretiyle
+   * görünmeyen sekmeleri görüntüleyebilmeliyim."
+   *
+   * Şerit `overflow-x: auto` ama kaydırma çubuğu bilinçli olarak gizli
+   * (global.css `.tabbar-strip`) — dolayısıyla taşan sekmelere yalnızca fare
+   * tekerleğiyle ulaşılıyordu ve daha sekme olduğuna dair EKRANDA HİÇBİR
+   * İŞARET yoktu. Kullanıcı için o sekmeler yok demekti.
+   *
+   * Sayı hesapla değil ÖLÇÜMLE bulunuyor: sekme genişliği başlığın uzunluğuna,
+   * rozete, kilit simgesine ve yeniden adlandırma kutusuna göre değişiyor;
+   * "kaç sekme sığar" formülü ilk uzun başlıkta yanlış cevap verir.
+   */
+  const [gizliSekme, setGizliSekme] = useState(0);
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    const olc = () => {
+      const kutu = strip.getBoundingClientRect();
+      const sekmeler = [...strip.querySelectorAll<HTMLElement>(".tab")].map((el) =>
+        el.getBoundingClientRect(),
+      );
+      // Kural (ve "yarı" eşiğinin gerekçesi) `lib/tabOverflow.ts` içinde.
+      const gizli = hiddenCount(kutu, sekmeler);
+      setGizliSekme((onceki) => (onceki === gizli ? onceki : gizli));
+    };
+
+    olc();
+    // Üç ayrı yol da sayıyı değiştiriyor: kaydırma, pencere/şerit ölçüsü,
+    // sekme ekleme-çıkarma (aşağıdaki bağımlılık).
+    strip.addEventListener("scroll", olc, { passive: true });
+    const gozlemci = new ResizeObserver(olc);
+    gozlemci.observe(strip);
+    for (const el of strip.querySelectorAll<HTMLElement>(".tab")) gozlemci.observe(el);
+    return () => {
+      strip.removeEventListener("scroll", olc);
+      gozlemci.disconnect();
+    };
+  }, [group?.tabs, group?.activeTabId, renamingTabId]);
 
   if (!group) return <div className="tabbar" />;
 
@@ -87,6 +132,31 @@ export function TabBar() {
     const after = event.clientX > rect.left + rect.width / 2;
     setDropAt(dropIndex(index, after));
   };
+
+  /**
+   * Şeride sığmayan sekmelere ulaşmanın yolu.
+   *
+   * Listede GRUBUN TÜMÜ var, yalnızca gizli olanlar değil: "hangileri gizli"
+   * kaydırma konumuna bağlı ve kullanıcı menüyü açtığında aradığı sekmenin o
+   * an ekranın hangi kenarında olduğunu bilmiyor. Tam liste tek ve
+   * öngörülebilir bir cevap veriyor; etkin olan işaretli.
+   *
+   * Seçim sekmeyi etkinleştiriyor, kaydırma da yukarıdaki etkiyle
+   * kendiliğinden geliyor (etkin sekme görünüme çekiliyor).
+   */
+  const tabListMenu = (): MenuEntry[] => [
+    { kind: "header", label: t("tab.allTabs") },
+    ...group.tabs.map((tab) => ({
+      kind: "check" as const,
+      label: tabLabel(tab),
+      // Ayırt edici satır ŞART: kabuk başlığı kullanıcı adı olduğu için sekiz
+      // sekme de "nurullah.yayan" görünebiliyor. `tabSubtitle` çalışan komutu
+      // ya da klasörü veriyor — kenar çubuğunun ikinci satırıyla aynı bilgi.
+      hint: tabSubtitle(tab) || undefined,
+      checked: tab.id === group.activeTabId,
+      run: () => store().setActiveTab(tab.id),
+    })),
+  ];
 
   const profileMenu = (): MenuEntry[] => [
     { kind: "header", label: t("menu.newTab") },
@@ -316,6 +386,33 @@ export function TabBar() {
       </div>
 
       <div className="tabbar-actions">
+        {/* Taşma göstergesi.
+         *
+         * YALNIZCA gerektiğinde çiziliyor: sekmeler sığarken burada kalıcı bir
+         * düğme durması, hiçbir şey yapmayan bir denetim demek olurdu.
+         *
+         * Sayı düğmenin üstünde: "iki sekme daha var" bilgisi düğmeye
+         * basmadan önce görünmeli, yoksa kullanıcı menüyü açıp kapatarak
+         * öğrenmek zorunda kalıyor. */}
+        {gizliSekme > 0 && (
+          <button
+            className="icon-btn tab-overflow"
+            title={t("tab.hiddenTabs", { n: String(gizliSekme) })}
+            aria-label={t("tab.hiddenTabs", { n: String(gizliSekme) })}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              menu.openAt(rect.right - 8, rect.bottom + 4, tabListMenu());
+            }}
+          >
+            {/* Ok AŞAĞI, sağa değil: gizli sekmeler şeridin İKİ yanında da
+                olabiliyor (kaydırma ortadaysa hem solda hem sağda kırpılmış
+                sekme var). Sağa bakan bir ok yanlış yön iddia ediyordu; aşağı
+                ok "liste aç" demek ve yanındaki sayı kaçının gizli olduğunu
+                söylüyor. */}
+            <ArrowIcon dir="down" size={12} />
+            <span className="tab-overflow-count">{gizliSekme}</span>
+          </button>
+        )}
         <button
           className="icon-btn"
           title={t("tab.newTabTitle", { keys: key("newTab") })}

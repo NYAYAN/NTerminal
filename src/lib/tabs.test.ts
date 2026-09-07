@@ -9,6 +9,7 @@ import {
   canDeleteGroup,
   closableOthers,
   isLocked,
+  lockedCwdDrift,
   lockedTabNames,
   lockedTabs,
 } from "./tabs";
@@ -103,6 +104,42 @@ describe("sekme kilidi", () => {
       tab("c", { locked: true, cwd: "C:\\Users\\ali\\proje" }),
     ];
     expect(lockedTabNames(tabs, tabLabel)).toEqual(["Yayın", "proje"]);
+  });
+});
+
+/**
+ * Kilit KLASÖRÜ de koruyor.
+ *
+ * İki aşamada bildirildi: önce "bir sekmeye kilitle yaparsam path'i
+ * değiştirmemek gerek", sonra ilk sürüm yalnızca uygulamanın kendi
+ * `cd`'lerini kısıtladığı için "cd ile değiştirme yapabiliyorum".
+ *
+ * Kayıp neden kapanmaktan sinsi: sekme yerinde duruyor, bir sonraki komut
+ * sessizce yanlış klasörde çalışıyor.
+ */
+describe("kilitli sekmenin klasörü", () => {
+  const kilitli = (cwd: string | null) => tab("a", { locked: true, cwd });
+
+  it("kaymışsa sabit klasör geri isteniyor", () => {
+    expect(lockedCwdDrift(kilitli("C:\\proje"), "C:\\baska")).toBe("C:\\proje");
+  });
+
+  it("aynı klasörde geri çağrı yok", () => {
+    // Yanlış "değişti" kararı sekmenin kendini boşuna geri çağırması demek;
+    // biçim farkları `sameDir` içinde eleniyor.
+    expect(lockedCwdDrift(kilitli("C:\\proje"), "C:\\proje")).toBe(null);
+    expect(lockedCwdDrift(kilitli("C:\\proje"), "C:/proje/")).toBe(null);
+  });
+
+  it("kilitsiz sekmeye dokunulmuyor", () => {
+    expect(lockedCwdDrift(tab("a", { cwd: "C:\\proje" }), "C:\\baska")).toBe(null);
+  });
+
+  it("klasörü bilinmeyen sekmede sabitlenecek şey yok", () => {
+    // Kabuk entegrasyonu olmayan profil ya da henüz açılmamış sekme: kilit
+    // burada yalnızca kapatmayı koruyor.
+    expect(lockedCwdDrift(kilitli(null), "C:\\baska")).toBe(null);
+    expect(lockedCwdDrift(kilitli("C:\\proje"), "   ")).toBe(null);
   });
 });
 

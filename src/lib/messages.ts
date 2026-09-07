@@ -34,7 +34,14 @@ export const MESSAGES = {
     "Sekme kilitli — kapatmak için kilidi kaldırın",
     "The tab is locked — unlock it to close",
   ],
-  "store.tabLockedOn": ["Sekme kilitlendi", "Tab locked"],
+  "store.tabLockedCwd": [
+    "Sekme kilitli — klasör değiştirmek için kilidi kaldırın",
+    "The tab is locked — unlock it to change directory",
+  ],
+  "store.tabLockedOn": [
+    "Sekme kilitlendi — klasör de sabit",
+    "Tab locked — the directory is fixed too",
+  ],
   "store.tabLockedOff": ["Sekme kilidi kaldırıldı", "Tab unlocked"],
   "store.skippedLocked.one": [
     "{n} kilitli sekme kapatılmadı",
@@ -67,6 +74,10 @@ export const MESSAGES = {
   "dirs.parent": ["Üst klasör", "Parent directory"],
   "dirs.empty": ["Alt klasör yok", "No subdirectories"],
   "dirs.open": ["Klasör değiştir", "Change directory"],
+  "dirs.lockedTitle": [
+    "Sekme kilitli — klasör sabit",
+    "The tab is locked — the directory is fixed",
+  ],
   "app.changes": ["Değişiklikler", "Changes"],
   "app.files": ["Dosyalar", "Files"],
   "app.filesTitle": [
@@ -415,12 +426,18 @@ export const MESSAGES = {
   "tab.noIntegration": ["Kabuk entegrasyonu yok", "No shell integration"],
   "tab.notStarted": ["Henüz açılmadı", "Not started yet"],
   "tab.lockedTitle": [
-    "Kilitli — sağ tık › Kilidi aç (ya da {keys})",
-    "Locked — right-click › Unlock (or {keys})",
+    "Kilitli — klasör sabit · sağ tık › Kilidi aç (ya da {keys})",
+    "Locked — the directory is fixed · right-click › Unlock (or {keys})",
   ],
   "tab.closeTitle": ["Kapat ({keys})", "Close ({keys})"],
   "tab.newTabTitle": ["Yeni sekme ({keys})", "New tab ({keys})"],
   "tab.newWithProfile": ["Profil seçerek yeni sekme", "New tab with a specific profile"],
+  // Taşma göstergesi: sekmeler şeride sığmadığında çıkıyor.
+  "tab.hiddenTabs": [
+    "{n} sekme daha var — listeyi aç",
+    "{n} more tabs — open the list",
+  ],
+  "tab.allTabs": ["Bu gruptaki sekmeler", "Tabs in this group"],
   "tab.profileUnavailable": [
     "{name} bu makinede kullanılamıyor",
     "{name} is not available on this machine",
@@ -815,6 +832,35 @@ export const MESSAGES = {
     "Değişiklikler anında kaydedilir.",
     "Changes are saved instantly.",
   ],
+
+  // Teşhis okuması. Metinler kısa tutuluyor: panelin işi sayıyı göstermek,
+  // sayıyı ANLATMAK değil — açıklama ipucu düğmesinin arkasında.
+  "health.heading": ["Teşhis", "Diagnostics"],
+  "health.hint": [
+    "Arayüzün kendi ölçümü. İki satır iki ayrı yoldan geçiyor: görev kuyruğu çizimden bağımsız, çizim döngüsü ise GPU'ya bağlı. İkisi birden takılıyorsa sebep ana iş parçacığında (JavaScript, terminal); yalnızca çizim takılıyorsa çizim hattında (WebView2, GPU). Takılma kaydı geçmişe dönük tutulur: donma geçtikten sonra da okunabilir.",
+    "The interface measuring itself. The two rows travel different paths: the task queue is independent of rendering, the draw loop depends on the GPU. If both stall, the cause is on the main thread (JavaScript, terminal); if only drawing stalls, it is the rendering pipeline (WebView2, GPU). Stutters are recorded, so they can be read after a freeze has passed.",
+  ],
+  "health.uptime": ["Açık kalma süresi", "Uptime"],
+  "health.taskQueue": ["Görev kuyruğu sapması", "Task queue drift"],
+  "health.drawLoop": ["Çizim döngüsü boşluğu", "Draw loop gap"],
+  "health.frameLine": [
+    "Ortanca {median} ms · p95 {p95} ms · en büyük {max} ms",
+    "Median {median} ms · p95 {p95} ms · max {max} ms",
+  ],
+  "health.noSamples": ["Ölçüm yok", "No samples"],
+  "health.terminals": ["Canlı terminaller", "Live terminals"],
+  "health.terminalLine": [
+    "{lines} satır · {markers} işaretçi · {decorations} dekorasyon · {blocks} blok",
+    "{lines} lines · {markers} markers · {decorations} decorations · {blocks} blocks",
+  ],
+  "health.janks": ["Son takılmalar", "Recent stutters"],
+  "health.noJanks": ["Kayda geçen takılma yok", "No stutters recorded"],
+  "health.jankLine": [
+    "{time} · çizim {gap} ms · kuyruk {task} ms",
+    "{time} · drawing {gap} ms · queue {task} ms",
+  ],
+  "health.copy": ["Ölçümü kopyala", "Copy report"],
+  "health.copied": ["Ölçüm panoya kopyalandı", "Report copied to clipboard"],
 
   "settings.language": ["Dil", "Language"],
   "settings.languageLabel": ["Arayüz dili", "Interface language"],

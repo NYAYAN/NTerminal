@@ -67,21 +67,35 @@ pub struct NewFavorite {
     pub cwd: Option<String>,
 }
 
+/// serde `Option<Option<T>>` alanlarini "yok" ile "null" arasinda ayirir.
+///
+/// Duz `#[serde(default)]` ikisini de `None` yapiyordu: arayuz klasor yolunu
+/// bosaltip `null` gonderdiginde bu "dokunma" olarak okunuyor, yol silinmiyordu.
+/// Bu cozucuyle alan geldiginde -- degeri `null` bile olsa -- `Some(...)`
+/// oluyor, yalnizca hic gonderilmediginde `None` kaliyor.
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
 /// Duzenlenebilir alanlar. `None` = "dokunma", `Some(None)` = "temizle".
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FavoritePatch {
     #[serde(default)]
     pub command: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "double_option")]
     pub label: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "double_option")]
     pub note: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "double_option")]
     pub group_id: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "double_option")]
     pub folder: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "double_option")]
     pub cwd: Option<Option<String>>,
 }
 

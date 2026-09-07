@@ -475,6 +475,171 @@ jsdom'da kurulamıyor; canlı doğrulama CDP ile: `cd Desktop\Work\NYAYAN` beş
 alt klasör, kabul sonrası `cd Desktop` üç alt klasör, küçük harfle `cd
 desktop\work` yine `Work`un içi.
 
+### 1.14 "Yanıt vermiyor" donması: teşhis okuması
+
+**Bildirilen hata:** iki olay. (1) Altı sekme, birkaç dev sunucusu açıkken
+sekmeler arasında geçiş yapılamıyor, uygulama donuyor — **kapatıp açana kadar
+geçmiyor**. (2) `npm run build -- --configuration dev` koşarken uygulama yanıt
+vermiyor, **30-40 saniye sonra kendiliğinden** düzeliyor. Ayrıca pencereyi
+başlıktan sürüklemek arada takılıyor.
+
+**Sebep ARANDI, bulunamadı.** Canlı uygulamada (CDP + kare sondası, gerçek iş
+yüküyle) üç hipotez ölçümle ELENDİ:
+
+| Deney | Sekme geçişi | En büyük kare boşluğu |
+|---|---|---|
+| 130 MB kesintisiz çıktı akışı | 51 ms | 127 ms |
+| 16 çekirdek %97 doygun, terminalde çıktı yok | 62 ms | 43 ms |
+| `ng build --configuration dev` (bildirilen komut) | 50-72 ms | 69 ms |
+
+- **Ham çıktı hacmi değil.** ConPTY bayt borusu değil EKRAN borusu: kaydırıp
+  geçen çıktıyı özetleyerek yayıyor, ölçülen verim ~1,2 MB/s'de kalıyor.
+- **CPU açlığı değil.** Windows zamanlayıcısı ön plandaki pencereyi besliyor.
+- **Bildirilen komutun kendisi değil.** Aynı derleme, arayüzü hiç bozmadı.
+
+**Denenip GERİ ALINAN çözüm.** İlk teşhis "sınırsız IPC kuyruğu" idi:
+`app.emit` ateşle-ve-unut, arayüz yetişmezse olaylar WebView kuyruğunda
+birikiyor. Onay tabanlı geri baskı yazıldı (Rust'ta onaylanmamış bayt sayacı +
+`pty_ack`) ve ölçüldü: tavan 130 MB boyunca **hiç devreye girmedi**, en kötü
+kare boşluğu 127 → 78 ms, akış süresi 96 → 109 sn (~%13 yavaşlama). Yani
+kanıtlanmamış bir fayda için sürekli fazladan IPC. Geri alındı.
+
+**Yapılan: aramayı tahminden ölçüme taşımak.** Ayarlar › Hakkında › Teşhis
+([`components/HealthPanel.tsx`](src/components/HealthPanel.tsx),
+[`lib/health.ts`](src/lib/health.ts)) iki ayrı yoldan geçen iki sonda
+gösteriyor — görev kuyruğu (`setTimeout` sapması, çizimden bağımsız) ve çizim
+döngüsü (`requestAnimationFrame` boşluğu, GPU'ya bağlı):
+
+| Görev kuyruğu | Çizim | Anlamı |
+|---|---|---|
+| takılıyor | takılıyor | Ana iş parçacığı bloke: JavaScript, React, xterm |
+| temiz | takılıyor | Çizim hattı: WebView2 / GPU / birleştirici |
+| temiz | temiz | Donma arayüzde değil |
+
+Takılmalar (≥250 ms) zaman damgasıyla halka tamponda tutuluyor: **donmuş bir
+uygulamada kullanıcı Ayarlar'ı açamaz**, kayıt sonradan okunmalı. Yanında
+sekme başına biriken durum sayaçları var (tampon satırı, işaretçi, dekorasyon,
+blok) — kalan hipotez bu ve hangisinin büyüdüğü görülmeden doğru yeri aramak
+tahmindir.
+
+**İki yanlış sondaj yazıldı ve ölçümle atıldı** — ikisi de aynı hatanın iki
+yüzü, panelin yanlış tarafı suçlaması:
+
+1. Birleştirici, compositor'da koşan bir CSS animasyonunun `currentTime`ından
+   okunuyordu. Ana iş parçacığı bilerek 900 ms bloke edildiğinde animasyon da
+   889 ms geride görünüyordu: `Animation.currentTime` belge zaman çizelgesine
+   bağlı ve o da kare başına bir kez ilerliyor, yani iki sayı aynı şeyi
+   ölçüyordu.
+2. Takılmanın kuyruk değeri kayıt anındaki son sapmaydı ve "çizim 915 ms ·
+   kuyruk 0 ms" yazıyordu — sebebi tümüyle JavaScript olan bir donmayı çizime
+   yıkıyordu. Sebep sıralama: bloklanma bitince gecikmiş rAF ile gecikmiş
+   `setTimeout` birlikte kuyruğa giriyor ve rAF önce koşabiliyor. Değer artık
+   takılmanın kapsadığı aralıktan geriye okunuyor (`maxDriftIn`) ve 150 ms
+   sonra dolduruluyor.
+
+**Yanında düzeltilen sızıntı.** `closeTab` yalnızca `running` haritasını
+temizliyordu; `exited`, `inputSignals`, `runLinks`, `scrollAtBottom` ve
+`sessionEpoch` kapanan sekmenin anahtarını sonsuza dek taşıyordu
+(`dropTabKeys`). Küçük değerler ama uygulama günlerce açık kalıyor.
+
+Testler: `lib/health.test.ts` (yüzdelikler, halka tampon, aralık okuması),
+`store/dropTabKeys.test.ts`. Canlı doğrulama: ana iş parçacığı 900 ms bloke
+edildiğinde panel `çizim 912 ms · kuyruk 886 ms` yazıyor — ikisi birden, yani
+doğru taraf.
+
+**Açık:** belirti hâlâ yeniden üretilmedi. Sıradaki adım kullanıcının KURULU
+uygulamasında uzun bir oturum boyunca panelin okunması; geliştirme örneği
+yeniden yüklendikçe kayıt sıfırlanıyor.
+
+### 1.15 Sekme geçişi ağır komutlar altında yavaşlıyordu
+
+**Bildirilen hata:** "sekmeler arası geçişte yavaşlıyor, `ng build` `dotnet
+run` gibi komutları çalıştırınca."
+
+**Ölçüm.** Altı sekme, dördünde kesintisiz çıktı akarken geçiş 50-84 ms ve
+geçiş başına en büyük kare boşluğu 70 ms — her sekme değişiminde üç-dört kare
+düşüyor. Örnekleme profili (CDP `Profiler`, 18 geçiş, 5,5 sn) sebebi isimle
+verdi:
+
+| İş | Süre |
+|---|---|
+| genel bakış sütununun `onRender` işleyicisi (`clientHeight` okuyup yerleşimi zorluyor) | 990 ms |
+| `createRow` — DOM oluşturucu satır kuruyor | 263 ms |
+| `replaceChildren` | 189 ms |
+| `getContext` — WebGL bağlamı kuruluyor | 144 ms |
+| `_measure` — karakter ölçüsü | 141 ms |
+| `handleResize` + `getShaderParameter` (WebGL kurulumu) | 129 ms |
+
+**Kök neden:** bağlam SEKME BAŞINA DEĞİL ODAK BAŞINA veriliyordu. Odağı
+kaybeden terminalin WebGL eklentisi bırakılıyor, xterm onun yerine sıfırdan
+DOM oluşturucu kuruyor; odağı alanda ters yönde aynı iş. Yani her geçiş iki
+oluşturucu kurulumu ödüyordu. Bedeli geçişte de bitmiyor: DOM oluşturucuyla
+çizilen gizli terminaller kare başına DOM'u değiştiriyor ve bu, genel bakış
+sütununun her çizimdeki `clientHeight` okumasını gerçek bir yerleşim hesabına
+çeviriyor — listenin başındaki 990 ms buradan.
+
+**Çözüm:** bağlam artık odakla gelip gitmiyor; görünür olana veriliyor ve
+tavan (`MAX_WEBGL = 8`) zorlamadıkça KALIYOR. Görünmez olan bağlamını
+bırakmıyor, yalnızca sırada geriye atılıyor (ilk kurban). Sıralama saf ve
+ayrı: [`lib/webglLru.ts`](src/lib/webglLru.ts).
+
+**A/B (aynı yük, iki sekme arası 12 geçiş):**
+
+| | Geçiş süresi (ortanca / en büyük) | Geçişin blokladığı kare |
+|---|---|---|
+| Eski (odakla gelip giden bağlam) | 59 / 68 ms | 50 / 64 ms |
+| Yeni (kalıcı bağlam, tavan 4) | 34 / 50 ms | 22 / 45 ms |
+
+Profilde boşta geçen süre **%24,8 → %59,7**.
+
+**Tavan neden sekiz.** Yayın derlemesinde (beş sekme, dördünde çıktı) dört ile
+geçişler 27-33 ms ve kare düşmüyor, ama tavanın dışında kalan beşinci sekmeye
+ilk geçiş **233 ms** sürüyor (tek karede 231 ms blok): bağlam o sekme için
+sıfırdan kuruluyor. Kullanıcının çalışma alanı altı sekme, dolayısıyla sekiz
+bu uçurumu gerçek kullanımda tümden kaldırıyor ve motorun ~16 sınırının
+yarısında kalıyor. Uçurum yok olmuyor, dokuzuncu sekmeye taşınıyor.
+
+Yayın derlemesi ayrıca hata ayıklamadan belirgin hızlı: iki sekme arası
+ortanca **33 ms**, en büyük 34 ms, kare boşluğu 17-18 ms.
+
+Testler: `lib/webglLru.test.ts` (sıraya alma, geriye atma, kimin düştüğü,
+istek yapanın asla düşmemesi).
+
+---
+
+### 1.16 Sığmayan sekmelere ulaşmanın bir yolu yoktu
+
+**Bildirilen hata:** "çok fazla sekme ekleyince sığmayınca bir ok işaretiyle
+görünmeyen sekmeleri görüntüleyebilmeliyim."
+
+Şerit `overflow-x: auto` ama kaydırma çubuğu bilinçli olarak gizli
+(`.tabbar-strip`). Sonuç: taşan sekmelere yalnızca fare tekerleğiyle
+ulaşılıyordu ve ekranda daha sekme olduğuna dair hiçbir işaret yoktu —
+kullanıcı için o sekmeler yok demekti.
+
+**Eklenen:** şerit taştığında sekme çubuğunun sağında bir ok + gizli sekme
+sayısı; tıklayınca grubun TÜM sekmeleri listeleniyor, etkin olan işaretli.
+Ölçülen: 14 sekmeyle 1320px'te "7", 1920px'te "2", sığdığında düğme hiç
+çizilmiyor.
+
+Üç karar ve gerekçesi:
+
+- **Ok aşağı, sağa değil.** Gizli sekmeler şeridin iki yanında da olabiliyor;
+  sağa bakan ok yanlış yön iddia ediyordu.
+- **Sayı düğmenin üstünde.** "İki sekme daha var" bilgisi basmadan önce
+  görünmeli, yoksa kullanıcı menüyü açıp kapatarak öğreniyor.
+- **Listede grubun tümü var, yalnızca gizliler değil.** Hangilerinin gizli
+  olduğu kaydırma konumuna bağlı; tam liste tek ve öngörülebilir bir cevap.
+
+Menü satırlarına **ayırt edici ipucu** eklendi (`tabSubtitle`: çalışan komut
+ya da klasör): kabuk başlığı kullanıcı adı olduğu için sekiz satır da
+"nurullah.yayan" görünüyordu ve listenin var olma sebebi tam olarak doğru
+sekmeyi bulmak. `ctx-hint` bu yüzden `flex: none` olmaktan çıktı — uzun ipucu
+adı "Porta…", "P…" diye eziyor, birkaç satırda tümden kaybettiriyordu.
+
+Testler: `lib/tabOverflow.test.ts` (yarı eşiği, iki yandan kırpılma,
+ölçülemeyen sekme, hepsi sığdığında sıfır).
+
 ---
 
 ## 2. Açık işler

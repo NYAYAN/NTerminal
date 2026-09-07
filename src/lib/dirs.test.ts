@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filterDirs, joinDir, parentDir, separatorOf } from "./dirs";
+import { filterDirs, joinDir, parentDir, sameDir, separatorOf } from "./dirs";
 
 describe("yol ayırıcısı", () => {
   it("ters eğik çizgi varsa Windows", () => {
@@ -66,5 +66,44 @@ describe("süzme", () => {
 
   it("eşleşme yoksa boş", () => {
     expect(filterDirs(liste, "zzz")).toEqual([]);
+  });
+});
+
+describe("aynı klasör mü", () => {
+  /*
+   * Kilitli sekmenin klasörünü koruyan denetim buna bakıyor: yanlış "değişti"
+   * kararı sekmenin kendini boşuna geri çağırması demek, yanlış "aynı" kararı
+   * ise kilidin sessizce açık kalması.
+   */
+  it("sondaki ayırıcı fark etmiyor", () => {
+    expect(sameDir("C:\\proje", "C:\\proje\\")).toBe(true);
+    expect(sameDir("/home/ali/", "/home/ali")).toBe(true);
+  });
+
+  it("ayırıcı yönü fark etmiyor", () => {
+    // OSC 7 `file://` yolunu eğik bölüyle veriyor, `cd` ters bölüyle dönüyor.
+    expect(sameDir("C:/proje/alt", "C:\\proje\\alt")).toBe(true);
+  });
+
+  it("Windows yolunda harf gözetmiyor", () => {
+    // PowerShell `C:\Proje`, cmd `c:\proje` yazabiliyor — aynı dizin.
+    expect(sameDir("C:\\Proje", "c:\\proje")).toBe(true);
+  });
+
+  it("POSIX yolunda harf gözetiyor", () => {
+    // Orada GERÇEKTEN iki ayrı dizin; eşit saymak kilidi yanlış klasörde
+    // açık bırakırdı.
+    expect(sameDir("/home/Ali", "/home/ali")).toBe(false);
+  });
+
+  it("sürücü kökü kendisiyle eşit", () => {
+    // `C:` tek başına dizin değil; kırpma onu boş dizeye indirmemeli.
+    expect(sameDir("C:\\", "C:/")).toBe(true);
+    expect(sameDir("/", "/")).toBe(true);
+  });
+
+  it("ayrı klasörler ayrı", () => {
+    expect(sameDir("C:\\proje", "C:\\proje2")).toBe(false);
+    expect(sameDir("C:\\proje", "C:\\proje\\alt")).toBe(false);
   });
 });

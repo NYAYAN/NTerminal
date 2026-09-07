@@ -1,3 +1,4 @@
+import { sameDir } from "./dirs";
 import type { Group, TabState } from "../types";
 
 /**
@@ -41,6 +42,32 @@ export function canDeleteGroup(group: Group): boolean {
 /** Kullanıcıya gösterilecek kilitli sekme adları. */
 export function lockedTabNames(tabs: TabState[], label: (tab: TabState) => string): string[] {
   return lockedTabs(tabs).map(label);
+}
+
+/**
+ * Kabuk klasör değiştirdiğini bildirdi: kilitli sekme GERİ ÇAĞRILACAK mı?
+ *
+ * Dönen değer geri dönülecek yol; kaymadıysa (ya da sekme kilitli değilse)
+ * `null`. Kilit yalnızca kapatmayı değil klasörü de koruyor — bildirilen
+ * istek "bir sekmeye kilitle yaparsam path'i değiştirmemek gerek" ve arkasından
+ * "cd ile değiştirme yapabiliyorum".
+ *
+ * Karar burada, kabuğa yazılan komutu süzen bir yerde DEĞİL: `cd` kadar
+ * `pushd`, `Set-Location`, takma adlar ve bir betiğin içindeki dizin değişimi
+ * de var, hepsini tanımaya çalışan bir liste her zaman eksik kalır ve eksik
+ * kaldığı yerde kilit sessizce açık olur. Kabuk nereye gittiğini kendisi
+ * bildirdiği için sonuca bakmak nasıl gidildiğinden bağımsız.
+ *
+ * Sabit klasör `tab.cwd`: kilitli sekmede bu değer güncellenmiyor, dolayısıyla
+ * ikinci bir alana gerek yok.
+ */
+export function lockedCwdDrift(tab: TabState, reported: string): string | null {
+  if (!isLocked(tab)) return null;
+  const pinned = tab.cwd;
+  // Klasörü hiç bilinmeyen sekmede sabitlenecek bir şey yok (kabuk
+  // entegrasyonu olmayan profil, henüz açılmamış sekme).
+  if (!pinned || !reported.trim()) return null;
+  return sameDir(pinned, reported) ? null : pinned;
 }
 
 // ------------------------------------------------- siralama / surukle-birak

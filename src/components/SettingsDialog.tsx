@@ -30,6 +30,7 @@ import type {
   ViewMode,
 } from "../types";
 import { EnvEditor } from "./EnvEditor";
+import { HealthPanel } from "./HealthPanel";
 import { SettingHint, SettingHints } from "./SettingHint";
 import { SettingUndo } from "./SettingUndo";
 
@@ -1591,6 +1592,10 @@ export function SettingsDialog() {
                   </>
                 )}
               </div>
+              {/* Teşhis okuması EN ALTTA: günlük kullanımda kimsenin
+                  aramadığı, bir sorun çıktığında bakılan sayılar. Gerekçesi
+                  `HealthPanel` içinde. */}
+              <HealthPanel />
             </>
           )}
           </div>

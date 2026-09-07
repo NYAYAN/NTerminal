@@ -17,6 +17,13 @@ import { resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
+import {
+  MAX_WEBGL,
+  demote as lruDemote,
+  drop as lruDrop,
+  evictions as lruEvictions,
+  touch as lruTouch,
+} from "../lib/webglLru";
 import type { Settings } from "../types";
 
 interface BufferMark {
@@ -156,6 +163,15 @@ const LINK_HIGHLIGHT_DELAY = 90;
 const INPUT_NOTIFY_DELAY = 70;
 
 const INTEGRATION_GRACE_MS = 220;
+
+/**
+ * WebGL bağlamı tutan oturumlar, en son kullanılan SONDA.
+ *
+ * Modül düzeyinde çünkü tavan TÜM terminaller için geçerli: motorun sınırı
+ * pencere başına, oturum başına değil. Gerekçe ve ölçüm `lib/webglLru.ts`
+ * başında; buradaki tek iş sırayı tutmak.
+ */
+let webglOrder: TerminalSession[] = [];
 
 export class TerminalSession {
   readonly tabId: string;
@@ -629,22 +645,23 @@ export class TerminalSession {
    * "Görünür" ve "odaklı" ayrı iki şey: bölme kipinde birden çok terminal
    * aynı anda görünür ama yalnızca biri odaklı olur.
    *
-   * WebGL bağlamını YALNIZCA odaklı terminal tutuyor. Tarayıcı motoru canlı
-   * WebGL bağlamı sayısını sınırlıyor (Chromium'da ~16); sekiz bölme açıkken
-   * her birine bağlam vermek en eskilerinin kaybedilmesine, dolayısıyla
-   * gözle görülür bir sıçramaya yol açıyor. Odaklı olmayan bölmeler xterm'in
-   * DOM oluşturucusuyla çiziliyor: okumak için fazlasıyla yeterli, tek
-   * kayıp hızlı akan çıktıdaki kare sayısı.
+   * WebGL bağlamı GÖRÜNÜR olana veriliyor ve görünmez olunca GERİ
+   * ALINMIYOR — tavan (`MAX_WEBGL`) zorlamadıkça kalıyor. Gerekçesi ve
+   * ölçülen sayılar [`lib/webglLru.ts`](../lib/webglLru.ts) başında: bağlamı
+   * odakla birlikte alıp vermek her sekme geçişinde İKİ oluşturucu kurulumu
+   * ödetiyordu (biri DOM, biri WebGL) ve altı sekmeli bir pencerede geçiş
+   * 50-84 ms sürüyordu.
    */
   setDisplay(visible: boolean, focused: boolean) {
     const wasVisible = this.visible;
     this.visible = visible;
     if (!visible) {
-      this.disableWebgl();
+      // Bağlam BIRAKILMIYOR: geri dönülürse kurulum bedeli ödenmesin. Yalnızca
+      // sırada geriye atılıyor, yeni bir istek gelirse ilk kurban bu olur.
+      this.demoteWebgl();
       return;
     }
-    if (focused) this.enableWebgl();
-    else this.disableWebgl();
+    this.requestWebgl();
     // Sekme gizliyken pencere yeniden boyutlanmis olabilir.
     this.invalidateGeometry();
     this.safeFit();
@@ -687,6 +704,25 @@ export class TerminalSession {
     this.term.focus();
   }
 
+  /**
+   * Bu terminale bağlam ver ve sırada öne al; tavan aşılırsa başkasını bırak.
+   *
+   * Sıralama mantığı saf ve ayrı modülde (`lib/webglLru.ts`); ölçülen hata ve
+   * tavanın neden dört olduğu da orada.
+   */
+  private requestWebgl() {
+    webglOrder = lruTouch(webglOrder, this);
+    this.enableWebgl();
+    for (const kurban of lruEvictions(webglOrder, MAX_WEBGL, this, (s) => s.visible)) {
+      kurban.disableWebgl();
+    }
+  }
+
+  /** Görünmez oldu: bağlamı KORU ama sırada ilk düşecek yere al. */
+  private demoteWebgl() {
+    webglOrder = lruDemote(webglOrder, this);
+  }
+
   private enableWebgl() {
     if (this.webgl || !this.container) return;
     try {
@@ -695,16 +731,26 @@ export class TerminalSession {
       // DOM oluşturucuya dönüyoruz; terminal çalışmaya devam etsin.
       addon.onContextLoss(() => {
         addon.dispose();
-        if (this.webgl === addon) this.webgl = null;
+        if (this.webgl === addon) {
+          this.webgl = null;
+          // Sıradan da düş: bağlamı olmayan bir oturumu tavana saymak, gerçek
+          // bağlam sayısını olduğundan yüksek gösterip başkasını boşuna
+          // düşürürdü.
+          webglOrder = lruDrop(webglOrder, this);
+        }
       });
       this.term.loadAddon(addon);
       this.webgl = addon;
     } catch {
       this.webgl = null;
+      webglOrder = lruDrop(webglOrder, this);
     }
   }
 
   private disableWebgl() {
+    // Sıradan düşürme KOŞULSUZ: bağlam zaten yoksa bile referansı bırakmak
+    // gerekiyor, yoksa kapanmış oturumlar modül düzeyindeki dizide birikir.
+    webglOrder = lruDrop(webglOrder, this);
     if (!this.webgl) return;
     try {
       this.webgl.dispose();
@@ -737,6 +783,36 @@ export class TerminalSession {
     // mevcut dekorasyonlari gecersiz kiliyor.
     this.clearLinkDecorations();
     this.scheduleLinkHighlight();
+  }
+
+  /**
+   * Teşhis sayaçları: bu terminalin taşıdığı biriken durum.
+   *
+   * Neden bu dört sayı: donma araştırmasında (bkz. `lib/health.ts`) iş yükü
+   * hipotezleri ölçümle elendi, geriye BİRİKEN DURUM kaldı. Aşağıdakilerin
+   * hepsi kare başına ya da kaydırma başına iş üretiyor ve zamanla büyüyor;
+   * hangisinin büyüdüğünü görmeden doğru yeri aramak tahmindir.
+   *
+   * `markers` xterm'de deneysel ama okuması bedava ve tam olarak aradığımız
+   * şey: dekorasyonlar ve bloklar buna bağlı yaşıyor, sızıntı olursa burada
+   * görünür.
+   */
+  healthCounters(): {
+    bufferLines: number;
+    markers: number;
+    decorations: number;
+    blocks: number;
+    visible: boolean;
+    webgl: boolean;
+  } {
+    return {
+      bufferLines: this.term.buffer.active.length,
+      markers: this.term.markers.length,
+      decorations: this.linkDecorations.length,
+      blocks: this.blocks.length,
+      visible: this.visible,
+      webgl: this.webgl !== null,
+    };
   }
 
   /** Diske yazılacak ekran çıktısı. */
@@ -2103,5 +2179,26 @@ ${dim}[${
     const text = execute ? `${command}\r` : command;
     void api.ptyWrite(this.tabId, text).catch(() => {});
     this.term.focus();
+  }
+
+  /**
+   * Komutu çalıştırır ama kullanıcı bir metin kutusuna yazıyorsa odağı ondan
+   * ALMAZ.
+   *
+   * `insertCommand` odağı koşulsuz ızgaraya alıyor ve orada doğrusu bu:
+   * komutu kullanıcı seçmiş (geçmiş, favori) ve devamını terminalde yazması
+   * bekleniyor. Uygulamanın KENDİ düzeltmesi için aynı şey bir hata — kilitli
+   * sekmenin klasörünü geri çağırmak kullanıcının bir eylemi değil.
+   * Bildirilen belirti aynen buydu: "sekme kilitli diyor ve focus komut yaz
+   * kısmındaysa gidiyor, tekrardan tıklamak gerekiyor."
+   *
+   * Kuralın kendisi `focusTerminal` içinde ve bir kez ödenmiş (sekme
+   * adlandırma kutusu); ikinci bir odak kuralı yazmak ikisinin ayrışması
+   * demekti.
+   */
+  runQuietly(command: string) {
+    if (this.exited) return;
+    void api.ptyWrite(this.tabId, `${command}\r`).catch(() => {});
+    this.focusTerminal();
   }
 }

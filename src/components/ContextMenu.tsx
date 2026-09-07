@@ -4,7 +4,15 @@ import { ChevronIcon } from "./Icons";
 
 export type MenuEntry =
   | { kind: "item"; label: string; hint?: string; danger?: boolean; disabled?: boolean; run: () => void }
-  | { kind: "check"; label: string; checked: boolean; run: () => void }
+  /**
+   * İşaretli/işaretsiz seçim satırı.
+   *
+   * `hint` sağda soluk duran ayırt edici metin. Sekme listesinde eklendi:
+   * sekiz sekmenin adı da "nurullah.yayan" olabiliyor (kabuk kullanıcı adını
+   * başlık yapıyor) ve aynı adı sekiz kez listelemek, doğru sekmeyi bulmayı
+   * imkânsız kılıyordu — listenin var olma sebebi tam olarak bu.
+   */
+  | { kind: "check"; label: string; checked: boolean; hint?: string; run: () => void }
   | { kind: "separator" }
   | { kind: "header"; label: string }
   /**
@@ -224,6 +232,7 @@ function MenuPanel({
               >
                 <span className="ctx-mark">{entry.checked ? "✓" : ""}</span>
                 <span className="ctx-label">{entry.label}</span>
+                {entry.hint && <span className="ctx-hint">{entry.hint}</span>}
               </button>
             );
           }

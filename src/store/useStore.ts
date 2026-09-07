@@ -7,6 +7,8 @@ import {
   canDeleteGroup,
   closableOthers,
   healTabProfiles,
+  isLocked,
+  lockedCwdDrift,
   lockedTabs,
   nextCollapsedAll,
   reorder,
@@ -472,6 +474,16 @@ interface Store {
   insertPath: (path: string) => void;
   openFile: (path: string) => void;
   insertCommand: (command: string, execute: boolean) => void;
+  /**
+   * Etkin sekme kilitli mi? Kilit yalnızca kapatmayı değil KLASÖRÜ de
+   * koruyor, bu yüzden arayüz de yola dokunan denetimleri buna göre kısıyor.
+   */
+  activeTabLocked: () => boolean;
+  /**
+   * Etkin sekmenin klasörünü değiştirir. Kilitli sekmede reddediyor ve
+   * `false` dönüyor.
+   */
+  changeDir: (path: string) => boolean;
   toast: (text: string, tone?: "ok" | "err" | "info") => void;
 }
 
@@ -499,6 +511,22 @@ const GROUP_COLORS = [
 function quoteForShell(path: string): string {
   if (!/[\s&|<>^()]/.test(path)) return path;
   return `"${path.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Kabuğa `cd` yazan TEK yer.
+ *
+ * `changeDir` ve kilit denetimi aynı komutu kurmasın diye ayrı: tırnaklamayı
+ * bir yerde unutmak boşluklu yollarda sessizce yanlış klasöre gitmek demek.
+ *
+ * `quiet` odakla ilgili: kullanıcının istediği bir klasör değişiminde odağın
+ * terminale geçmesi doğru, uygulamanın kendi düzeltmesinde ise kutuya
+ * yazmakta olan birinin yazmayı bırakması demek (bkz. `runQuietly`).
+ */
+function sendCd(session: TerminalSession, path: string, opts?: { quiet?: boolean }) {
+  const command = `cd ${quoteForShell(path)}`;
+  if (opts?.quiet) session.runQuietly(command);
+  else session.insertCommand(command, true);
 }
 
 /**
@@ -593,6 +621,36 @@ export async function flushSettings(): Promise<void> {
   window.clearTimeout(settingsTimer);
   settingsTimer = null;
   await api.saveSettings(useStore.getState().settings).catch(() => {});
+}
+
+/** Sekme başına tutulan haritalar — kapanan sekme hepsinden düşmeli. */
+type PerTabMaps = Pick<
+  Store,
+  "running" | "exited" | "sessionEpoch" | "inputSignals" | "runLinks" | "scrollAtBottom"
+>;
+
+/**
+ * Kapanan sekmenin anahtarını sekme başına tutulan haritalardan düşer.
+ *
+ * Anahtar yoksa AYNI nesne dönüyor: zustand kaydı sığ karşılaştırıyor ve her
+ * seferinde yeni bir nesne vermek o haritaya bakan her bileşeni boşuna
+ * yeniden çizdirirdi.
+ */
+export function dropTabKeys(state: PerTabMaps, tabId: string): PerTabMaps {
+  const omit = <T,>(map: Record<string, T>): Record<string, T> => {
+    if (!(tabId in map)) return map;
+    const next = { ...map };
+    delete next[tabId];
+    return next;
+  };
+  return {
+    running: omit(state.running),
+    exited: omit(state.exited),
+    sessionEpoch: omit(state.sessionEpoch),
+    inputSignals: omit(state.inputSignals),
+    runLinks: omit(state.runLinks),
+    scrollAtBottom: omit(state.scrollAtBottom),
+  };
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -1165,9 +1223,22 @@ export const useStore = create<Store>((set, get) => ({
         dropBucket && get().activeGroupId === group.id
           ? (nextGroups[0]?.id ?? null)
           : get().activeGroupId,
-      running: Object.fromEntries(
-        Object.entries(get().running).filter(([id]) => id !== tabId),
-      ),
+      /*
+       * Sekmeye ait BÜTÜN kayıtlar düşüyor, yalnızca `running` değil.
+       *
+       * Önce yalnızca `running` temizleniyordu; `exited`, `inputSignals`,
+       * `runLinks`, `scrollAtBottom` ve `sessionEpoch` kapanan sekmenin
+       * anahtarını sonsuza dek taşıyordu. Tek tek küçük değerler, ama
+       * uygulama günlerce açık kalıyor ve sekme açıp kapatmak günlük bir iş:
+       * beş harita da yalnızca büyüyordu. Donma araştırmasında (bkz.
+       * `lib/health.ts`) biriken durum tam olarak aranan şeydi.
+       *
+       * `sessionEpoch` de düşüyor: epoch sekmenin xterm örneğini tazelemek
+       * için var, sekme yoksa anlamı da yok. Aynı kimlikle yeni bir sekme
+       * açılmıyor (kimlikler üretiliyor), dolayısıyla sıfırdan başlamasının
+       * bir sakıncası yok.
+       */
+      ...dropTabKeys(get(), tabId),
     });
     await get().persistNow();
   },
@@ -1239,12 +1310,22 @@ export const useStore = create<Store>((set, get) => ({
     void get().persistNow();
   },
 
-  /** Kilidi ac/kapat. Kilitli sekme kapatilamaz. */
+  /** Kilidi ac/kapat. Kilitli sekme kapatilamaz ve klasoru degismez. */
   toggleTabLock(tabId) {
     const groups = get().groups;
     const tab = groups.flatMap((g) => g.tabs).find((t) => t.id === tabId);
     if (!tab) return;
-    get().updateTab(tabId, { locked: !tab.locked });
+    /*
+     * Kilitlerken klasoru OTURUMDAN tazeliyoruz.
+     *
+     * Kilitli sekmenin sabit klasoru `tab.cwd`; ayri bir alan yok. Bu deger
+     * kabugun bildirdigi yerin gerisinde kalirsa (entegrasyon bir bildirimi
+     * kacirdi, sekme henuz hic bildirmedi) kilit kullanicinin EKRANDA
+     * gordugu klasoru degil, eski bir yolu sabitler — kilitledigi anda
+     * sekmenin kendini baska bir yere cagirmasi gibi gorunurdu.
+     */
+    const cwd = sessions.get(tabId)?.cwd ?? tab.cwd;
+    get().updateTab(tabId, { locked: !tab.locked, cwd });
     get().toast(t(tab.locked ? "store.tabLockedOff" : "store.tabLockedOn"), "ok");
   },
 
@@ -1385,6 +1466,27 @@ export const useStore = create<Store>((set, get) => ({
     session.setCallbacks({
       onTitle: (title) => get().updateTab(tab.id, { title }),
       onCwd: (cwd) => {
+        /*
+         * KİLİTLİ SEKME: klasör sabit, kabuk nereye giderse gitsin.
+         *
+         * Klasör seçicisini ve favorinin klasörünü kısıtlamak yetmiyordu —
+         * bildirilen belirti aynen buydu: "cd ile değiştirme yapabiliyorum."
+         * Kararın kendisi ve neden GİRDİYİ süzmediği `lib/tabs.ts` içinde
+         * (`lockedCwdDrift`); burada yalnızca sonucu uyguluyoruz.
+         *
+         * `tab.cwd` sürüklenen değere YAZILMIYOR: kilitli sekmenin sabit
+         * klasörü zaten o. Döngü riski de bundan yok — kabuk geri döndüğünü
+         * bildirdiğinde değer eşitleniyor ve `updateCwd` aynı yolu ikinci kez
+         * bildirmiyor.
+         */
+        const current = get().groups.flatMap((g) => g.tabs).find((item) => item.id === tab.id);
+        const geri = current ? lockedCwdDrift(current, cwd) : null;
+        if (geri) {
+          sendCd(session, geri, { quiet: true });
+          get().toast(t("store.tabLockedCwd"), "info");
+          return;
+        }
+
         get().updateTab(tab.id, { cwd });
         // Yeni dizin başka bir depo (ya da hiç depo değil) olabilir.
         void get().refreshGit(cwd);
@@ -1751,7 +1853,10 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     if (favorite.cwd && favorite.cwd !== session.cwd) {
-      session.insertCommand(`cd ${quoteForShell(favorite.cwd)}`, true);
+      // Kilitli sekmede klasör değişmiyor. Komutu yine de göndermek onu
+      // YANLIŞ klasörde çalıştırmak olurdu — favorinin klasörü bilgi değil
+      // koşul, o yüzden burada duruyoruz.
+      if (!get().changeDir(favorite.cwd)) return;
     }
     get().insertCommand(favorite.command, execute);
     await api.favoritesMarkUsed(id).catch(() => {});
@@ -2041,6 +2146,39 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     get().activeSession()?.insertCommand(command, execute);
+  },
+
+  activeTabLocked() {
+    const tab = get().activeTab()?.tab;
+    return tab ? isLocked(tab) : false;
+  },
+
+  /*
+   * Klasör değiştirmenin TEK yolu.
+   *
+   * BİLDİRİLEN İSTEK: "bir sekmeye kilitle yaparsam path'i değiştirmemek
+   * gerek." Kilit o güne kadar yalnızca kapatmayı engelliyordu; oysa bir
+   * sekmeyi kilitlemenin sebebi genelde "burada duruyor, karışma" — kilitli
+   * sekmenin altından klasörün kayması kapanmasından daha sinsi bir kayıp,
+   * çünkü sekme yerinde duruyor ve bir sonraki komut sessizce YANLIŞ klasörde
+   * çalışıyor.
+   *
+   * Kararın dağılmaması için çağıranlar kendi `cd`'lerini yazmıyor: klasör
+   * seçici de favorinin klasörü de buradan geçiyor. Kabuğa ELLE yazılan `cd`
+   * buradan geçemiyor; onu `onCwd` içindeki kilit denetimi geri alıyor.
+   */
+  changeDir(path) {
+    if (get().activeTabLocked()) {
+      get().toast(t("store.tabLockedCwd"), "info");
+      return false;
+    }
+    const session = get().activeSession();
+    if (!session) {
+      get().toast(t("store.noActiveTerminal"), "err");
+      return false;
+    }
+    sendCd(session, path);
+    return true;
   },
 
   /**
