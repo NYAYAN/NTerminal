@@ -503,7 +503,7 @@ function ChangeRow({
           onClick={() => {
             void navigator.clipboard
               ?.writeText(change.path)
-              .then(() => useStore.getState().toast(t("git.pathCopied"), "ok"))
+              .then(() => useStore.getState().toast(t("common.pathCopied"), "ok"))
               .catch(() => {});
           }}
         >

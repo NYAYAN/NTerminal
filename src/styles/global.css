@@ -2849,6 +2849,7 @@ html[data-platform="macos"] .titlebar {
   color: var(--text);
 }
 
+
 .ctx-chip.branch {
   border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
   color: color-mix(in srgb, var(--ok) 78%, var(--text-dim));
@@ -3653,6 +3654,40 @@ html[data-platform="macos"] .titlebar {
 .statusbar .status-btn:hover {
   background: var(--hover);
   color: var(--text);
+}
+
+/* Yolu kopyala: metinsiz, yalnizca simge.
+ *
+ * Dolgu daralttildi (`status-btn` metin icin 8px veriyor): simgenin iki
+ * yaninda metin genisligi kadar bosluk, dugmeyi yolun yanindan koparip
+ * ortada yuzen bir sey gibi gosteriyordu.
+ *
+ * `display: flex` simgeyi dikeyde ortaliyor. Satir ici bir SVG taban
+ * cizgisine oturuyor ve yolun metnine gore bir-iki piksel asagi kaciyordu.
+ *
+ * Simge soluk duruyor, ustune gelince tam parlakliga cikiyor: bu bir EYLEM,
+ * yanindaki yol ise BILGI. Ayni parlaklikta ikisi de esit agirlikli
+ * gorunuyor ve cubugun ne soyledigi bulaniklasiyor. */
+.statusbar .copy-cwd {
+  display: flex;
+  align-items: center;
+  padding: 1px 4px;
+  /* Cubugun kendi araligi 12px ve o aralik BAGIMSIZ ogeler icin: grup adi ile
+     yol birbirine ait degil. Bu dugme ise yolun EYLEMI; 12px + dolgu onu
+     ortada yuzen ucuncu bir oge gibi gosteriyordu. Negatif kenar bosluguyla
+     gorunen aralik 6px'e iniyor: yola ait, ustune binmiyor.
+     Sigdirma hesabi bundan zarar gormuyor - `statusFit` ogelerin OLCULEN
+     genisligini ve araligi topluyor, negatif kenar bosluguyla gercek yerlesim
+     hesaplanandan daha DAR kaliyor, yani tahmin guvenli tarafta. */
+  margin-left: -6px;
+}
+
+.statusbar .copy-cwd svg {
+  opacity: 0.5;
+}
+
+.statusbar .copy-cwd:hover svg {
+  opacity: 1;
 }
 
 /* Yeni surum rozeti.

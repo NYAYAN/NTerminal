@@ -5,22 +5,36 @@ import { fitDropLevel, type FitPart } from "../lib/statusFit";
 import { localeTag, tp, useLang, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
-import { groupLabel, resolveProfile } from "../lib/labels";
+import { groupLabel } from "../lib/labels";
 import { isMac } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 import { ContextMenu, type MenuEntry, useContextMenu } from "./ContextMenu";
+import { CopyIcon } from "./Icons";
 
 /** `data-drop` numaralarının en büyüğü. */
-const MAX_DROP_LEVEL = 3;
+const MAX_DROP_LEVEL = 2;
 
 /**
  * Durum çubuğu.
  *
  * ## Çubukta ne var, menüde ne var
  *
- * Çubuk yalnızca KİMLİK taşıyor: hangi grup, hangi profil, hangi klasör.
- * Okumalar — komut çalışıyor mu, komut takibi tam mı, geçmişten tamamlama
- * açık mı, pid, kayıtlı komut ve sekme sayısı — "⋯" menüsünde.
+ * Çubuk yalnızca KİMLİK taşıyor: hangi grup, hangi klasör. Okumalar — komut
+ * çalışıyor mu, komut takibi tam mı, geçmişten tamamlama açık mı, pid,
+ * kayıtlı komut ve sekme sayısı — "⋯" menüsünde.
+ *
+ * ## Profil adı KALDIRILDI
+ *
+ * BİLDİRİLEN İSTEK: "komut yaz altında Windows PowerShell yazıyor, bu bilgiye
+ * gerek yok."
+ *
+ * Doğru istek: kabuk sekme başına seçiliyor ve sekme ömrü boyunca
+ * değişmiyor, yani çubuktaki en durağan öğeydi — her açılışta aynı şeyi
+ * yazıyor ve karşılığında grup adı ile yolun daralmasına sebep oluyordu.
+ * Hangi kabuğun koştuğu ayrıca sekmenin kendi rozetinde duruyor (bkz.
+ * `shellBadge.test.tsx`) ve Ayarlar › Profiller'de. Menüdeki yansıması da
+ * gitti: aynı bilgiyi "gereksiz ama bir tık uzakta" diye tutmak isteği
+ * yarım uygulamak olurdu.
  *
  * Ayrım önceden YER darlığına göreydi: hepsi çubuktaydı, sığmayan menüye
  * düşüyordu. Sonuç, pencerenin genişliğine göre değişen bir şeritti; her
@@ -41,8 +55,6 @@ export function StatusBar() {
   const lang = useLang();
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
-  const profiles = useStore((s) => s.settings.profiles);
-  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
   const running = useStore((s) => s.running);
   const paths = useStore((s) => s.paths);
   const restored = useStore((s) => s.restoredSession);
@@ -66,7 +78,6 @@ export function StatusBar() {
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((t) => t.id === group.activeTabId) ?? group?.tabs[0];
   const session = tab ? sessions.get(tab.id) : undefined;
-  const profile = resolveProfile(profiles, tab?.profileId, defaultProfileId);
 
   const [historyCount, setHistoryCount] = useState<number | null>(null);
 
@@ -76,10 +87,10 @@ export function StatusBar() {
   /**
    * Sığdırma.
    *
-   * Karar CSS'te değil burada, çünkü çubukta kalan üç öğenin ikisini KULLANICI
-   * adlandırıyor (grup adı, profil adı) ve üçüncüsü bulunulan dizin; sabit bir
-   * genişlik eşiği bu üçlüyü iki uçta birden doğru yapamıyor (gerekçesi
-   * `statusFit.ts` içinde).
+   * Karar CSS'te değil burada, çünkü çubukta kalan iki öğenin birini KULLANICI
+   * adlandırıyor (grup adı), ötekisi de bulunulan dizin; sabit bir genişlik
+   * eşiği bu ikiliyi iki uçta birden doğru yapamıyor (gerekçesi `statusFit.ts`
+   * içinde).
    *
    * Yöntem: gizlemeyi kaldır, genişlikleri oku, kararı ver, uygula. Üçü de tek
    * bir düzen geçişinde — `useLayoutEffect` boyamadan önce koştuğu için ara
@@ -292,9 +303,6 @@ export function StatusBar() {
     if (hidden.has("group") && group) {
       overflow.push({ kind: "info", label: t("status.fieldGroup"), value: groupLabel(group) });
     }
-    if (hidden.has("profile") && profile) {
-      overflow.push({ kind: "info", label: t("status.fieldProfile"), value: profile.name });
-    }
     // Yol menüde de TIKLANABİLİR: çubuktaki davranışın aynısı, kaybolduğu için
     // erişilemez hâle gelmemeli. Kısaltma baştan yapılıyor (`…/Works/Şablon`);
     // tam yol menüyü kendi genişliğinin dışına taşırıyordu.
@@ -326,9 +334,8 @@ export function StatusBar() {
    * Çözüm sırayı elle vermek. Küçük sayı önce gider; numarasız olan hiç
    * gitmez.
    *
-   *   1  profil adı        — sekmenin üstünde de yazıyor
-   *   2  grup adı          — kenar çubuğunda da yazıyor
-   *   3  çalışma dizini    — buraya gelmeden zaten kısalmış olur
+   *   1  grup adı          — kenar çubuğunda da yazıyor
+   *   2  çalışma dizini    — buraya gelmeden zaten kısalmış olur
    *
    * Numarasız kalanlar üç düğme: "⋯", Geçmiş ve Favoriler. Çubuktaki tek
    * eylemler onlar; eski davranışta en sağda oldukları için kırpılan İLK şey
@@ -341,22 +348,16 @@ export function StatusBar() {
     <>
       <div className="statusbar" ref={barRef}>
         {group && (
-          <span className="item" data-drop="2" data-status="group">
+          <span className="item" data-drop="1" data-status="group">
             <span className="dot" style={{ background: group.color ?? "#666", width: 7, height: 7, borderRadius: "50%" }} />
             {groupLabel(group)}
-          </span>
-        )}
-
-        {profile && (
-          <span className="item" data-drop="1" data-status="profile">
-            {profile.name}
           </span>
         )}
 
         {tab?.cwd && (
           <span
             className="item cwd"
-            data-drop="3"
+            data-drop="2"
             data-status="cwd"
             title={`${tab.cwd}\n${t("status.revealHint")}`}
             style={{ cursor: "pointer" }}
@@ -364,6 +365,51 @@ export function StatusBar() {
           >
             {shortenPath(tab.cwd, 3)}
           </span>
+        )}
+
+        {/* Bulunulan yolu kopyala — YOLUN SAĞINDA.
+         *
+         * BİLDİRİLEN İSTEK: "bulunduğum path'i kopyala butonu ekleyelim",
+         * ardından "kopyala ikonu alttaki komut yaz altındaki path sağına
+         * gelsin". İlk hâli komut şeridindeki dizin rozetinin yanındaydı;
+         * istenen yer burası.
+         *
+         * Yolun KENDİSİ kopyalamıyor: tıklaması zaten klasörü Gezgin'de
+         * açıyor ve bir öğenin iki işi olamaz. Ayrı ve her zaman görünür bir
+         * düğme — imleçle belirmesi, bir kez keşfedilene kadar yok demek
+         * olurdu (aynı karar `GitChanges` satır eylemlerinde de verildi).
+         *
+         * Ekranda kısaltılmış yol yazıyor (`…\Work\NTerminal`), kopyalanan
+         * ise TAM yol: kopyalamanın tek anlamı başka bir yere yapıştırmak ve
+         * kısaltılmış bir yol hiçbir yere yapıştırılamaz.
+         *
+         * `data-drop` YOK, yani yer daralsa da kaybolmuyor — çubuğun öteki
+         * düğmeleri gibi (gerekçesi yukarıdaki öncelik listesinde). Yolun
+         * kendisi sığmayıp düşse bile eylem duruyor: kopyalanan şey ekrandaki
+         * ETİKET değil kabuğun çalışma dizini, o da düşmüyor.
+         *
+         * Başarısızlık SÖYLENİYOR. WebView2 pano yazmayı kullanıcı hareketine
+         * bağlıyor ve reddedebiliyor ("Write permission denied" — canlı
+         * uygulamada ölçüldü); sessiz bir başarısızlık düğmeyi bozuk değil
+         * ÖLÜ gösterir, kullanıcı da ikinci kez basıp yine hiçbir şey
+         * olmadığını görür. */}
+        {tab?.cwd && (
+          <button
+            type="button"
+            className="status-btn copy-cwd"
+            title={t("dirs.copyPath")}
+            aria-label={t("dirs.copyPath")}
+            onClick={() => {
+              const store = useStore.getState();
+              const path = tab.cwd!;
+              void navigator.clipboard
+                ?.writeText(path)
+                .then(() => store.toast(t("common.pathCopied"), "ok"))
+                .catch(() => store.toast(t("common.clipboardFailed"), "err"));
+            }}
+          >
+            <CopyIcon size={13} />
+          </button>
         )}
 
         <span className="spacer" />

@@ -11,10 +11,11 @@
  * kurulursa çubuk sıradan bir pencerede boş yere boşalıyor, ortalamaya göre
  * kurulursa en kötü hâlde taşıp sağdaki düğmeleri kırpıyor.
  *
- * Rozetler o zamandan beri "⋯" menüsüne taşındı ama gerekçe DURUYOR ve
- * taşıyanı değişti: çubukta kalan üç öğenin ikisini KULLANICI adlandırıyor
- * (grup adı, profil adı), üçüncüsü de bulunulan dizin. Ölçülemeyecek kadar
- * değişken bir üçlü; sabit bir eşik yine iki ucu birden doğru yapamaz.
+ * Rozetler o zamandan beri "⋯" menüsüne taşındı, profil adı da tamamen kalktı
+ * (gerekçesi `StatusBar.tsx`) — ama gerekçe DURUYOR ve taşıyanı değişti:
+ * çubukta kalan iki öğenin birini KULLANICI adlandırıyor (grup adı), ötekisi
+ * de bulunulan dizin. İkisi de ölçülemeyecek kadar değişken; sabit bir eşik
+ * yine iki ucu birden doğru yapamaz.
  *
  * Buradaki işlev saf: genişlikleri alıyor, hangi önceliğe kadar gizleneceğini
  * söylüyor. DOM'a dokunmadığı için testi de gerçek bir tarayıcı

@@ -58,6 +58,10 @@ export const MESSAGES = {
 
   "common.close": ["Kapat", "Close"],
   "common.loading": ["Yükleniyor…", "Loading…"],
+  // Yol kopyalandı bildirimi İKİ yerden geliyor: değişiklik listesindeki dosya
+  // satırı ve komut şeridindeki dizin rozeti. Aynı metnin iki anahtarı olması,
+  // birini değiştirip ötekini unutmanın yolu.
+  "common.pathCopied": ["Yol kopyalandı", "Path copied"],
   "dirs.search": ["Klasör ara…", "Search directories…"],
   "files.search": ["Bu dizinde dosya ara…", "Search files in this directory…"],
   "app.searchFiles": ["Dosya ara", "Search files"],
@@ -74,6 +78,7 @@ export const MESSAGES = {
   "dirs.parent": ["Üst klasör", "Parent directory"],
   "dirs.empty": ["Alt klasör yok", "No subdirectories"],
   "dirs.open": ["Klasör değiştir", "Change directory"],
+  "dirs.copyPath": ["Klasör yolunu kopyala", "Copy folder path"],
   "dirs.lockedTitle": [
     "Sekme kilitli — klasör sabit",
     "The tab is locked — the directory is fixed",
@@ -126,7 +131,6 @@ export const MESSAGES = {
   "git.copyPath": ["Dosya yolunu kopyala", "Copy file path"],
   "git.openFile": ["Dosyayı aç", "Open the file"],
   "git.revert": ["Değişiklikleri geri al", "Discard changes"],
-  "git.pathCopied": ["Yol kopyalandı", "Path copied"],
   // Panel başlığındaki toplu katlama düğmesi. Dosyalar açık geldiği için
   // varsayılan eylem "daralt"; hepsi kapalıyken aynı düğme açıyor.
   "git.collapseAllFiles": ["Dosyaları daralt", "Collapse files"],
@@ -691,7 +695,6 @@ export const MESSAGES = {
   "status.moreTitle": ["Durum bilgileri", "Status details"],
   "status.moreHeader": ["Durum", "Status"],
   "status.fieldGroup": ["Grup", "Group"],
-  "status.fieldProfile": ["Profil", "Profile"],
   "status.fieldCwd": ["Çalışma dizini", "Working directory"],
   "status.fieldIntegration": ["Komut takibi", "Command tracking"],
   // "Kabuk önerisi" ne dediği anlaşılmıyordu: neyin önerildiği de, kimin

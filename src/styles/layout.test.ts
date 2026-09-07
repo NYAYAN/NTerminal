@@ -378,15 +378,18 @@ describe("durum çubuğu daralması", () => {
   });
 
   it("yol en son gidiyor", () => {
-    // Sıra: profil (sekmenin üstünde de yazıyor) → grup (kenar çubuğunda da
-    // yazıyor) → yol. Yol en son çünkü başka hiçbir yerde yazmıyor; ilk giden
-    // olsaydı çubuk en çok işe yaradığı bilgiyi ilk elden atardı.
+    // Sıra: grup (kenar çubuğunda da yazıyor) → yol. Yol en son çünkü başka
+    // hiçbir yerde yazmıyor; ilk giden olsaydı çubuk en çok işe yaradığı
+    // bilgiyi ilk elden atardı.
+    //
+    // Profil adı bir zamanlar ilk gidendi; artık çubukta hiç yok (gerekçesi
+    // `StatusBar.tsx`), o yüzden burada da aranmıyor.
     const drop = (status: string) =>
       Number(
         new RegExp(`data-drop="(\\d)"\\s*\\n?\\s*data-status="${status}"`).exec(SOURCE)![1],
       );
-    expect(drop("profile"), "profil yoldan sonra gidiyor").toBeLessThan(drop("cwd"));
     expect(drop("group"), "grup yoldan sonra gidiyor").toBeLessThan(drop("cwd"));
+    expect(SOURCE, "profil adı çubuğa geri gelmiş").not.toContain('data-status="profile"');
   });
 
   it("düğmeler hiçbir düzeyde kaybolmuyor", () => {
