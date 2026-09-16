@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type IMarker } from "@xterm/xterm";
 import { describe, expect, it } from "vitest";
 
 import { scanForServerUrls, type ScanState } from "./serverScan";
@@ -35,8 +35,16 @@ const LIMITS = { maxUrls: 4, maxLines: 2000 };
 /** Bir xterm örneği ve ona yazıp tarama yapan yardımcılar. */
 function harness() {
   const term = new Terminal({ rows: 24, cols: 100, scrollback: 1000 });
-  let state: ScanState = { scanLine: -1, urls: [] };
+  let state: ScanState = { scannedAhead: 0, urls: [] };
   let running = false;
+  /*
+   * Çapa GERÇEK bir xterm işaretçisi — üründeki düzenekle birebir aynı.
+   *
+   * Düz bir sayı tutmak testi ürünün yanıltıcı bir kopyasına çevirirdi:
+   * düzeltilen hatanın kaynağı tam olarak sayının kırpmayla kaymamasıydı.
+   * İşaretçiyi xterm güncellediği için burada da gerçek davranış ölçülüyor.
+   */
+  let anchor: IMarker | null = null;
 
   const write = (data: string): Promise<void> =>
     new Promise((resolve) => term.write(data, () => resolve()));
@@ -50,6 +58,7 @@ function harness() {
         cursorY: buf.cursorY,
         readLine: (y) => buf.getLine(y)?.translateToString(true) ?? "",
         isWrapped: (y) => buf.getLine(y)?.isWrapped ?? false,
+        anchorLine: anchor && !anchor.isDisposed ? anchor.line : -1,
         running,
         altScreen: buf.type === "alternate",
       },
@@ -64,13 +73,14 @@ function harness() {
     /** Komut başladı: tarama işareti o anki satıra kurulur. */
     begin() {
       running = true;
-      const buf = term.buffer.active;
-      state = { scanLine: buf.baseY + buf.cursorY, urls: [] };
+      anchor?.dispose();
+      anchor = term.registerMarker(0) ?? null;
+      state = { scannedAhead: 0, urls: [] };
     },
     /** Komut bitti: liste boşalır. */
     end() {
       running = false;
-      state = { scanLine: state.scanLine, urls: [] };
+      state = { scannedAhead: state.scannedAhead, urls: [] };
     },
     /** Çıktı yaz ve tara — gerçek akışta olan sıra bu. */
     async out(data: string) {
@@ -78,7 +88,8 @@ function harness() {
       scan();
     },
     urls: () => state.urls,
-    scanLine: () => state.scanLine,
+    /** Taramanın geldiği MUTLAK satır — çapa + ilerleme. */
+    scanLine: () => (anchor && !anchor.isDisposed ? anchor.line + state.scannedAhead : -1),
   };
 }
 
@@ -211,5 +222,81 @@ describe("sunucu adresi taraması (gerçek xterm)", () => {
     await h.out("iki\r\n");
     const b = h.scanLine();
     expect(b).toBeGreaterThan(a);
+  });
+});
+
+/**
+ * Kaydırma geçmişi DOLDUĞUNDA tarama durmamalı.
+ *
+ * BİLDİRİLEN HATA: "uzun süre terminal kullandığımızda geçmiş birikiyor ve en
+ * son bir uygulama ayağa kaldırdığımda açılan sunucu portunu göstermiyor."
+ *
+ * ## Mekanizma
+ *
+ * Tarama iki mutlak satır numarasını karşılaştırıyor: işaret (`scanLine`) ve
+ * imlecin bulunduğu satır (`baseY + cursorY`). İmleç ilerlemediyse taramıyor —
+ * ConPTY'nin yeniden çizimini dışlayan kural bu.
+ *
+ * Ama kaydırma geçmişi dolduğunda `baseY` BÜYÜMEYİ BIRAKIYOR: xterm en eski
+ * satırı atıp yenisini ekliyor, yani içerik akarken `baseY + cursorY` sabit
+ * kalıyor. Komut başlarken kurulan işaret de o sabit değere eşit olduğu için
+ * "imleç ilerlemedi" koşulu ARTIK HİÇ bozulmuyor ve tarama kalıcı olarak
+ * duruyor. Tampon dolduktan sonra açılan hiçbir sunucunun adresi bulunamıyor.
+ *
+ * Modülün kendi yorumu bu bedeli biliyordu ("işaret kalıcı olarak ilerde
+ * kalabiliyor") ama "adres çıktının başlarında geçtiği için pratikte bir şey
+ * kaybettirmiyor" varsayımıyla kabul etmişti. Varsayım yanlış: kayıp, adresin
+ * çıktının neresinde olduğuyla değil, tamponun dolu olmasıyla ilgili.
+ */
+describe("kaydırma geçmişi dolu", () => {
+  /** Tamponu taşacak kadar doldurur (scrollback 1000 + 24 satır). */
+  async function doldur(h: ReturnType<typeof harness>) {
+    await h.out("dolgu satiri\r\n".repeat(1200));
+  }
+
+  it("tampon doluyken de adres bulunuyor", async () => {
+    const h = harness();
+    await doldur(h);
+    h.begin();
+    await h.out("  Local:   http://localhost:4200/\r\n");
+    expect(h.urls(), "tampon dolduktan sonra adres hiç bulunamıyor").toContain(
+      "http://localhost:4200",
+    );
+  });
+
+  it("çapa yokken taramıyor", async () => {
+    /*
+     * İşaretçi ancak komutun başladığı satır geçmişten büsbütün atıldığında
+     * kapanıyor. O anda karşılaştırılacak bir şey kalmıyor ve modül taramıyor;
+     * çapayı yeniden kurmak ÇAĞIRANIN işi (bkz. `TerminalSession.scanNewLines`,
+     * `resetScanAnchor`), yoksa uzun çıktıda rozet sessizce ölürdü.
+     */
+    const out = scanForServerUrls(
+      { scannedAhead: 0, urls: [] },
+      {
+        baseY: 0,
+        cursorY: 5,
+        readLine: () => "Local: http://localhost:4200/",
+        isWrapped: () => false,
+        anchorLine: -1,
+        running: true,
+        altScreen: false,
+      },
+      LIMITS,
+    );
+    expect(out.changed).toBe(false);
+    expect(out.state.urls).toEqual([]);
+  });
+
+  it("tampon doluyken imleç sabit kalıyor (hatanın kaynağı)", async () => {
+    // Bu iddia ürünü değil ORTAMI ölçüyor: düzeltmenin neden gerektiğini
+    // belgeliyor. `baseY` sınırına dayandığı için `baseY + cursorY` akan
+    // çıktıda artık büyümüyor.
+    const h = harness();
+    await doldur(h);
+    const buf = h.term.buffer.active;
+    const once = buf.baseY + buf.cursorY;
+    await h.out("yeni satir\r\n");
+    expect(buf.baseY + buf.cursorY, "imleç ilerliyorsa hata başka yerde").toBe(once);
   });
 });

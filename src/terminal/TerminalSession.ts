@@ -305,7 +305,24 @@ export class TerminalSession {
    * Komut başlarken o anki satıra kuruluyor: bir komutun çıktısı yalnızca
    * kendi ürettiği satırlardan okunuyor.
    */
-  private scanLine = -1;
+  /**
+   * Komutun başladığı satırın işaretçisi — taramanın ÇAPASI.
+   *
+   * Düz bir sayı DEĞİL ve bu düzeltilmiş bir hatanın izi. Mutlak satır
+   * numarası tutulduğunda kaydırma geçmişi dolunca tarama kalıcı olarak
+   * duruyordu: xterm en eski satırı atıp yenisini eklediği için `baseY`
+   * büyümeyi bırakıyor, akan çıktıda `baseY + cursorY` sabit kalıyor ve
+   * "imleç ilerledi mi" koşulu bir daha hiç sağlanmıyordu. Kullanıcının
+   * gördüğü: "uzun süre kullanınca açılan sunucunun portu görünmüyor."
+   *
+   * İşaretçiyi xterm kendisi güncelliyor (kırpmada aşağı çekiyor, satır
+   * büsbütün düşünce kapatıyor), dolayısıyla çapa ile imleç birlikte kayıyor
+   * ve aradaki fark doğru kalıyor. Komut blokları da aynı sebeple işaretçi
+   * kullanıyor.
+   */
+  private scanAnchor: IMarker | null = null;
+  /** Çapadan kaç satır ileri tarandı (bkz. `ScanState.scannedAhead`). */
+  private scannedAhead = 0;
   private activeStartedAt = 0;
   /** Komut çalışıyor mu? Sekme kapatma onayı ve göstergeler için. */
   running = false;
@@ -1243,22 +1260,46 @@ export class TerminalSession {
    */
   private scanNewLines() {
     const buf = this.term.buffer.active;
+
+    /*
+     * Çapa düştüyse YENİDEN kuruluyor.
+     *
+     * İşaretçi ancak komutun başladığı satır kaydırma geçmişinden büsbütün
+     * atıldığında kapanıyor — yani çıktı bütün geçmişi doldurduğunda. O
+     * noktada komutun başı zaten okunamaz durumda; çapayı imlece almak
+     * taramanın DURMASINI engelliyor. Yeniden kurmasaydık uzun çıktıda
+     * rozet sessizce ölürdü.
+     */
+    if (this.running && (!this.scanAnchor || this.scanAnchor.isDisposed)) {
+      this.resetScanAnchor();
+    }
+
     const out = scanForServerUrls(
-      { scanLine: this.scanLine, urls: this.serverUrls },
+      { scannedAhead: this.scannedAhead, urls: this.serverUrls },
       {
         baseY: buf.baseY,
         cursorY: buf.cursorY,
         readLine: (y) => buf.getLine(y)?.translateToString(true) ?? "",
         isWrapped: (y) => buf.getLine(y)?.isWrapped ?? false,
+        anchorLine: this.scanAnchor && !this.scanAnchor.isDisposed ? this.scanAnchor.line : -1,
         running: this.running,
         altScreen: buf.type === "alternate",
       },
       { maxUrls: RUN_URL_LIMIT, maxLines: MAX_SCAN_LINES },
     );
 
-    this.scanLine = out.state.scanLine;
+    this.scannedAhead = out.state.scannedAhead;
     this.serverUrls = out.state.urls;
     if (out.changed) this.callbacks.onRunLinks?.([...this.serverUrls]);
+  }
+
+  /** Çapayı imlecin bulunduğu satıra kurar ve sayacı sıfırlar. */
+  private resetScanAnchor() {
+    this.scanAnchor?.dispose();
+    // `registerMarker(0)` imleç satırını işaretliyor: komutun çıktısı tam
+    // oradan başlıyor. İmleç satırı aralığa DA giriyor (bkz. `scanForServerUrls`).
+    this.scanAnchor = this.term.registerMarker(0) ?? null;
+    this.scannedAhead = 0;
   }
 
   /** İstem durumu değiştiyse arayüze bildirir. */
@@ -2014,10 +2055,7 @@ ${dim}[${
     this.clearRunUrls();
     // Tarama bu satırdan İTİBAREN: komutun çıktısı kendi satırlarından
     // okunuyor. İmleç satırı da aralığa giriyor (bkz. `scanForServerUrls`).
-    {
-      const buf = this.term.buffer.active;
-      this.scanLine = buf.baseY + buf.cursorY;
-    }
+    this.resetScanAnchor();
 
     const text = command?.trim();
     if (!text) return;
