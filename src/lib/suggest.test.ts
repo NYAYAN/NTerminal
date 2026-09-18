@@ -289,7 +289,7 @@ describe("son komutlar", () => {
   const h = (...komutlar: string[]) => komutlar.map((command) => ({ command, cwd: null }));
 
   it("en yeniden eskiye, olduğu gibi", () => {
-    expect(recentCommands(h("git status", "ls", "npm test"))).toEqual([
+    expect(recentCommands(h("git status", "ls", "npm test"), null)).toEqual([
       "git status",
       "ls",
       "npm test",
@@ -298,23 +298,49 @@ describe("son komutlar", () => {
 
   it("yinelenen komut bir kez, en yeni yerinde", () => {
     // Aynı komutu üst üste beş kez çalıştırmış olmak listeyi doldurmamalı.
-    expect(recentCommands(h("ls", "ls", "git status", "ls"))).toEqual(["ls", "git status"]);
+    expect(recentCommands(h("ls", "ls", "git status", "ls"), null)).toEqual(["ls", "git status"]);
   });
 
   it("boş satırlar atlanıyor", () => {
-    expect(recentCommands(h("  ", "ls", ""))).toEqual(["ls"]);
+    expect(recentCommands(h("  ", "ls", ""), null)).toEqual(["ls"]);
   });
 
   it("sınır uygulanıyor", () => {
-    expect(recentCommands(h("a", "b", "c", "d"), 2)).toEqual(["a", "b"]);
-    expect(recentCommands(h("a", "b", "c", "d", "e", "f", "g"))).toHaveLength(MAX_SUGGESTIONS);
+    expect(recentCommands(h("a", "b", "c", "d"), null, 2)).toEqual(["a", "b"]);
+    expect(recentCommands(h("a", "b", "c", "d", "e", "f", "g"), null)).toHaveLength(
+      MAX_SUGGESTIONS,
+    );
   });
 
   it("ön ek kuralı BURADA geçerli değil", () => {
     // `rankSuggestions` en az iki harf istiyor; bu liste hiç harf istemiyor,
     // çünkü kabuğun yukarı okunun karşılığı.
     expect(rankSuggestions(h("ls"), "")).toEqual([]);
-    expect(recentCommands(h("ls"))).toEqual(["ls"]);
+    expect(recentCommands(h("ls"), null)).toEqual(["ls"]);
+  });
+
+  it("sekme verilirse yalnızca o sekmenin komutları geliyor", () => {
+    const history = [
+      { command: "git status", cwd: null, tabId: "t2" },
+      { command: "npm test", cwd: null, tabId: "t1" },
+      { command: "ls", cwd: null, tabId: "t1" },
+      { command: "yarn build", cwd: null, tabId: "t2" },
+    ];
+    expect(recentCommands(history, "t1")).toEqual(["npm test", "ls"]);
+    expect(recentCommands(history, "t2")).toEqual(["git status", "yarn build"]);
+  });
+
+  it("tabId null: tüm sekmeler karışık, zaman sırasıyla", () => {
+    const history = [
+      { command: "git status", cwd: null, tabId: "t2" },
+      { command: "npm test", cwd: null, tabId: "t1" },
+    ];
+    expect(recentCommands(history, null)).toEqual(["git status", "npm test"]);
+  });
+
+  it("başka sekmede geçmişi olmayan bir sekme için boş liste dönüyor", () => {
+    const history = [{ command: "git status", cwd: null, tabId: "t2" }];
+    expect(recentCommands(history, "t1")).toEqual([]);
   });
 
   it("dizine göre yeniden sıralamıyor", () => {
@@ -324,6 +350,6 @@ describe("son komutlar", () => {
       { command: "npm test", cwd: "/baska" },
       { command: "ls", cwd: "/burada" },
     ];
-    expect(recentCommands(gecmis)).toEqual(["npm test", "ls"]);
+    expect(recentCommands(gecmis, null)).toEqual(["npm test", "ls"]);
   });
 });

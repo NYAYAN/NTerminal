@@ -61,6 +61,14 @@ export interface SuggestEntry {
    * başlayan iki komut arasında seçim çoğu zaman buna bakılarak yapılıyor.
    */
   at?: number | null;
+  /**
+   * Komutun çalıştırıldığı sekme; bilinmiyorsa null.
+   *
+   * `recentCommands` bunu süzgeç olarak kullanıyor: boş satırda yukarı ok
+   * varsayılan olarak yalnızca BU sekmenin geçmişini göstersin, başka bir
+   * sekmede çalıştırılmış komutlarla karışmasın.
+   */
+  tabId?: string | null;
 }
 
 /**
@@ -125,14 +133,23 @@ export function rankSuggestions(
  *
  * Yinelenenler ilk (en yeni) görüldükleri yerde tutuluyor: aynı komutu üst
  * üste beş kez çalıştırmış olmak listeyi tek bir satırla doldurmamalı.
+ *
+ * ## Sekme süzgeci
+ *
+ * `tabId` verilirse yalnızca O SEKMEDE çalıştırılmış komutlar dönüyor — gerçek
+ * bir kabuğun yukarı oku da yalnızca kendi oturumunun geçmişini gösterir,
+ * başka bir sekmede çalıştırdığınız komutu araya karıştırmaz. `null` süzgeç
+ * yok demek: kullanıcı isterse (Ctrl+A) tüm sekmelerin geçmişini görebiliyor.
  */
 export function recentCommands(
   history: readonly SuggestEntry[],
+  tabId: string | null,
   limit = MAX_SUGGESTIONS,
 ): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const entry of history) {
+    if (tabId !== null && entry.tabId !== tabId) continue;
     const command = entry.command.trim();
     if (!command || seen.has(command)) continue;
     seen.add(command);

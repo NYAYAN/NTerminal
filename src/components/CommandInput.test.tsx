@@ -569,8 +569,8 @@ describe("komut satırı kutusu", () => {
   it("boş kutuda yukarı ok geçmiş panelini açıyor", () => {
     useStore.setState({
       suggestHistory: [
-        { command: "npm test", cwd: null },
-        { command: "git status", cwd: null },
+        { command: "npm test", cwd: null, tabId: TAB },
+        { command: "git status", cwd: null, tabId: TAB },
       ],
     });
     const { container } = render(<CommandInput />);
@@ -580,6 +580,82 @@ describe("komut satırı kutusu", () => {
     expect(suggest, "panel açılmadı").not.toBe(null);
     expect(suggest!.items).toEqual(["npm test", "git status"]);
     expect(useStore.getState().ui.searchOpen, "örtü açılmış").toBe(false);
+  });
+
+  /*
+   * BİLDİRİLEN İSTEK: "bir terminal açtığımda yukarı oka bastığımda o
+   * terminalin geçmişi gelsin."
+   *
+   * Eskiden liste TÜM sekmelerin ortak havuzundan geliyordu: yeni açılan bir
+   * sekmede yukarı ok, o sekmede hiç çalıştırılmamış komutları gösteriyordu.
+   * Kabuğun kendi yukarı oku da öyle çalışmaz — kendi oturumunun satırlarını
+   * hatırlar.
+   */
+  it("yukarı ok BAŞKA sekmenin komutlarını getirmiyor", () => {
+    useStore.setState({
+      suggestHistory: [
+        { command: "yarn build", cwd: null, tabId: "baska-sekme" },
+        { command: "npm test", cwd: null, tabId: TAB },
+      ],
+    });
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "ArrowUp" });
+
+    expect(useStore.getState().ui.suggest!.items).toEqual(["npm test"]);
+  });
+
+  it("Ctrl+A kapsamı tüm sekmelere genişletiyor, tekrar basmak geri alıyor", () => {
+    // Kullanıcı isterse tüm geçmişe bakabilmeli; varsayılan yine bu sekme.
+    useStore.setState({
+      suggestHistory: [
+        { command: "yarn build", cwd: null, tabId: "baska-sekme" },
+        { command: "npm test", cwd: null, tabId: TAB },
+      ],
+    });
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(useStore.getState().ui.suggest!.scope).toBe("tab");
+
+    act(() => {
+      fireEvent.keyDown(el, { key: "a", ctrlKey: true });
+    });
+    expect(useStore.getState().ui.suggest!.items).toEqual(["yarn build", "npm test"]);
+    expect(useStore.getState().ui.suggest!.scope).toBe("all");
+
+    act(() => {
+      fireEvent.keyDown(el, { key: "a", ctrlKey: true });
+    });
+    expect(useStore.getState().ui.suggest!.items).toEqual(["npm test"]);
+    expect(useStore.getState().ui.suggest!.scope).toBe("tab");
+  });
+
+  it("kendi geçmişi olmayan YENİ sekmede tüm geçmişe düşüyor", () => {
+    /*
+     * Yeni sekmenin kendi geçmişi yok; hiçbir şey açmamak "geçmişim gitti"
+     * demek olurdu — bu panelin var oluş sebebi tam olarak bunu önlemek.
+     * Liste karışık geliyor ama kapsam etiketi de "tüm sekmeler" diyor:
+     * sessizce değil, adıyla.
+     */
+    useStore.setState({
+      suggestHistory: [{ command: "yarn build", cwd: null, tabId: "baska-sekme" }],
+    });
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "ArrowUp" });
+
+    const suggest = useStore.getState().ui.suggest;
+    expect(suggest!.items).toEqual(["yarn build"]);
+    expect(suggest!.scope, "kapsam yalan söylüyor").toBe("all");
+  });
+
+  it("panel kapalıyken Ctrl+A ele geçirilmiyor: tarayıcının tümünü seç'i kalsın", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "npm test" } });
+    const olay = fireEvent.keyDown(el, { key: "a", ctrlKey: true });
+
+    expect(olay, "varsayılan engellenmiş").toBe(true);
+    expect(useStore.getState().ui.suggest).toBe(null);
   });
 
   it("geçmiş boşsa hiçbir şey açılmıyor", () => {
@@ -592,7 +668,9 @@ describe("komut satırı kutusu", () => {
 
   it("panel açıkken Enter seçileni KUTUYA yazıyor, çalıştırmıyor", () => {
     // Tek Enter'la geçmişten komut koşturmak `rm -rf` sınıfı bir kaza demek.
-    useStore.setState({ suggestHistory: [{ command: "git push --force", cwd: null }] });
+    useStore.setState({
+      suggestHistory: [{ command: "git push --force", cwd: null, tabId: TAB }],
+    });
     const { container } = render(<CommandInput />);
     const el = field(container)!;
     fireEvent.keyDown(el, { key: "ArrowUp" });

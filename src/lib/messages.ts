@@ -584,6 +584,7 @@ export const MESSAGES = {
   "recall.enter": ["Enter çalıştır", "Enter to run"],
   "recall.tabKey": ["Tab yalnızca yaz", "Tab to insert only"],
   "recall.scope": ["Ctrl+A kapsam: {scope}", "Ctrl+A scope: {scope}"],
+  "recall.showFavorites": ["Favoriler (Ctrl+F)", "Favorites (Ctrl+F)"],
   "recall.scopeAll": ["tüm sekmeler", "all tabs"],
   "recall.scopeTab": ["bu sekme", "this tab"],
 

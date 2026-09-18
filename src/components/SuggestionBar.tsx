@@ -242,6 +242,23 @@ export function SuggestionBar() {
         <span className="dim">{t("suggest.hintAccept")}</span>
         <span className="keycap keycap-word">Esc</span>
         <span className="dim">{t("suggest.hintDismiss")}</span>
+        {/* Kapsam SAĞA yaslı: soldaki üçlü "listede ne yapabilirim", bu ise
+            "liste neyi gösteriyor" — ayrı sorular, ayrı yerler.
+
+            Yalnızca yukarı okun açtığı son-komutlar panelinde anlamlı: ön ek
+            eşleşmesi (`kind: "history"`) sekmeye göre süzülmüyor, kapsamı yok.
+            `HistoryRecall` (Ctrl+R) penceresiyle AYNI kısayol ve AYNI metin —
+            iki panelde iki farklı alışkanlık öğretmemek için. */}
+        {suggest.kind === "recent" && (
+          <>
+            <span className="spacer" />
+            <span className="dim">
+              {t("recall.scope", {
+                scope: t(suggest.scope === "all" ? "recall.scopeAll" : "recall.scopeTab"),
+              })}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

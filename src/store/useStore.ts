@@ -265,12 +265,22 @@ export interface UiState {
    * satırda liste kapalı, ok tuşları kabuğun kendi geçmişine gidiyor.
    */
   /**
-   * Öneri paneli. `kind` başlığı seçiyor: geçmişten gelen komutlar "GEÇMİŞ",
-   * `cd` için diskten gelen klasörler "KLASÖRLER". Aynı başlık altında ikisini
-   * göstermek yanıltıyordu: kullanıcı klasör listesine bakıp "geçmişim
-   * neden bunlar" diye soruyordu.
+   * Öneri paneli. `kind` başlığı seçiyor: yazarken gelen ön ek eşleşmesi
+   * "history", `cd` için diskten gelen klasörler "dirs", boş satırda yukarı
+   * okun açtığı son-komutlar paneli "recent". Aynı başlık altında hepsini
+   * göstermek yanıltıyordu: kullanıcı klasör listesine bakıp "geçmişim neden
+   * bunlar" diye soruyordu.
+   *
+   * `scope` yalnızca `kind: "recent"` için anlamlı: panel bu sekmenin mi yoksa
+   * tüm sekmelerin mi geçmişini gösteriyor (bkz. `openHistorySuggestions`).
    */
-  suggest: { items: string[]; index: number; input: string; kind: "history" | "dirs" } | null;
+  suggest: {
+    items: string[];
+    index: number;
+    input: string;
+    kind: "history" | "dirs" | "recent";
+    scope?: "tab" | "all";
+  } | null;
 }
 
 interface Store {
@@ -458,7 +468,7 @@ interface Store {
   refreshGit: (cwd: string | null) => Promise<void>;
   pollGit: (cwd: string | null) => Promise<void>;
   refreshNode: () => Promise<void>;
-  noteCommand: (command: string, cwd: string | null) => void;
+  noteCommand: (command: string, cwd: string | null, tabId?: string | null) => void;
   /**
    * `hintTail`: imlecin sağındaki metin kabuğun kendi satır içi önerisi mi.
    * İsteğe bağlı — yokluğu "hayalet metin yok" demek.
@@ -467,8 +477,14 @@ interface Store {
   moveSuggestion: (direction: 1 | -1) => void;
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
-  /** Boş satırda yukarı ok: geçmiş panelini açar. Geçmiş boşsa `false`. */
-  openHistorySuggestions: () => boolean;
+  /**
+   * Boş satırda yukarı ok: geçmiş panelini açar.
+   *
+   * `scope` varsayılan `"tab"`: yalnızca etkin sekmenin geçmişi. Panel zaten
+   * açıkken `"all"` ile yeniden çağrılırsa tüm sekmelerin geçmişine genişler
+   * (Ctrl+A). Geçmiş (o kapsamda) boşsa `false` — bkz. uygulama.
+   */
+  openHistorySuggestions: (scope?: "tab" | "all") => boolean;
   closeSuggestions: () => void;
   setAppInputSink: (sink: ((text: string, mode: "replace" | "append") => void) | null) => void;
   insertPath: (path: string) => void;
@@ -1496,7 +1512,7 @@ export const useStore = create<Store>((set, get) => ({
         get().updateTab(tab.id, { lastCommand: command });
         // Öneri kaynağı anında güncellensin: yeni çalıştırdığınız komut
         // hemen önerilebilir olmalı.
-        get().noteCommand(command, sessions.get(tab.id)?.cwd ?? null);
+        get().noteCommand(command, sessions.get(tab.id)?.cwd ?? null, tab.id);
         get().closeSuggestions();
       },
       onCommandEnd: () => {
@@ -1950,16 +1966,27 @@ export const useStore = create<Store>((set, get) => ({
         command: e.command,
         cwd: e.cwd ?? null,
         at: e.startedAt,
+        tabId: e.tabId,
       })),
     });
   },
 
-  noteCommand(command, cwd) {
+  noteCommand(command, cwd, tabId = null) {
     const text = command.trim();
     if (!text) return;
+    /*
+     * Aynı komutun ESKİ kaydı yalnızca AYNI sekmede kalksın.
+     *
+     * Global temizlik (hangi sekmede olursa olsun) `recentCommands`in "bu
+     * sekmenin geçmişi" garantisini bozardı: A sekmesinde `git status`
+     * çalıştırıp B sekmesinde tekrar çalıştırınca A'nın kaydı silinip B'ye ait
+     * yeni kayıtla değişirdi — A'da yukarı ok artık o komutu göstermezdi,
+     * oysa A gerçekten çalıştırmıştı. `?? null`: kayıtsız (tabId bilinmeyen)
+     * eski girdiler de aynı ortak kovada tutuluyor.
+     */
     const next = [
-      { command: text, cwd, at: Date.now() },
-      ...get().suggestHistory.filter((e) => e.command !== text),
+      { command: text, cwd, tabId, at: Date.now() },
+      ...get().suggestHistory.filter((e) => !(e.command === text && (e.tabId ?? null) === tabId)),
     ];
     // Liste sınırsız büyümesin: öneri için son birkaç yüz komut yeterli.
     set({ suggestHistory: next.slice(0, SUGGEST_SOURCE_LIMIT) });
@@ -2193,15 +2220,51 @@ export const useStore = create<Store>((set, get) => ({
    * ortasında bir ÖRTÜ olarak: göz komut satırından kopuyor ve kapatınca geri
    * dönüyordu. Panel yazdığınız yerin hemen üstünde ve satırı örtmüyor.
    *
-   * Geçmiş boşsa `false` dönüyor: gösterilecek bir şey yokken boş bir panel
-   * açmak, tuşun bozuk olduğunu düşündürür.
+   * ## Kapsam
+   *
+   * Varsayılan `"tab"`: yalnızca ETKİN sekmenin geçmişi. Bildirilen istek
+   * tam olarak buydu — "bir terminal açtığımda yukarı okla o terminalin
+   * geçmişi gelsin". Karışık (tüm sekmeler) bir liste kabuğun gerçek yukarı
+   * okuyla tutarsız: kabuk da yalnızca kendi oturumunun satırlarını hatırlar.
+   *
+   * `"all"` kullanıcının isteyince açtığı kapı — Ctrl+A (`HistoryRecall`
+   * penceresindeki kısayolla aynı), panel zaten açıkken `CommandInput`
+   * tarafından tekrar çağrılıyor.
+   *
+   * ## YENİ sekmede tüm geçmişe düşüyor
+   *
+   * Yeni açılmış bir sekmenin kendi geçmişi yok. Orada hiçbir şey açmamak, bu
+   * özelliğin var oluş sebebini çiğnerdi: yukarı ok terminalde en köklü
+   * alışkanlık ve karşılıksız kalması "geçmişim gitti" demek. O yüzden tab
+   * kapsamı boşsa liste tüm sekmelerden kuruluyor — ama kapsam etiketi bunu
+   * SÖYLÜYOR (panelin altında "tüm sekmeler"), yani karışık liste sessizce
+   * değil, adıyla geliyor.
+   *
+   * Geçmiş her iki kapsamda da boşsa `false`: gösterilecek bir şey yokken boş
+   * bir panel açmak, tuşun bozuk olduğunu düşündürür.
    */
-  openHistorySuggestions() {
-    const items = recentCommands(get().suggestHistory);
+  openHistorySuggestions(scope = "tab") {
+    const history = get().suggestHistory;
+    const tabId = scope === "all" ? null : (get().activeTab()?.tab.id ?? null);
+    const own = recentCommands(history, tabId);
+    // Boş sekmede tüm geçmişe düş; kapsam etiketi de onunla birlikte değişiyor.
+    const fallback = own.length === 0 && tabId !== null;
+    const items = fallback ? recentCommands(history, null) : own;
     if (items.length === 0) return false;
     // `input: ""` sonradan okunuyor: kabul etme yolu bununla "kullanıcı
     // hiçbir şey yazmamıştı" ayrımını yapıyor.
-    set({ ui: { ...get().ui, suggest: { items, index: 0, input: "", kind: "history" } } });
+    set({
+      ui: {
+        ...get().ui,
+        suggest: {
+          items,
+          index: 0,
+          input: "",
+          kind: "recent",
+          scope: fallback ? "all" : scope,
+        },
+      },
+    });
     return true;
   },
 

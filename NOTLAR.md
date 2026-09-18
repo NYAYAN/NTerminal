@@ -321,6 +321,30 @@ olan onu boş satırda açan yoldu (`recentCommands` + `openHistorySuggestions`)
 ortasında bir örtü olarak. Panel açıkken Enter seçileni KUTUYA yazıyor,
 çalıştırmıyor: tek Enter'la geçmişten komut koşturmak `rm -rf` sınıfı bir kaza.
 
+**Liste O SEKMEYE ait.** İlk hâli tüm sekmelerin ortak havuzundan geliyordu ve
+bildirilen istek bunu düzeltti: "bir terminal açtığımda yukarı oka bastığımda o
+terminalin geçmişi gelsin". Gerçek bir kabuk da yalnızca kendi oturumunu
+hatırlıyor. Süzgeç `SuggestEntry.tabId` üzerinden; `Ctrl+A` kapsamı tüm
+sekmelere genişletiyor (Ctrl+R penceresindeki kısayolun aynısı) ve panelin
+altındaki etiket hangi kapsamda olduğunu söylüyor.
+
+Bunun bir yan koşulu var: öneri kaynağındaki tekrar temizliği de SEKME BAŞINA
+yapılmak zorunda (`noteCommand`). Komut metnine bakıp hangi sekmede olursa
+olsun eskisini silmek, A'da çalıştırılan bir komutu B'de tekrar çalıştırınca
+A'nın geçmişinden düşürüyordu — "bu sekmenin geçmişi" garantisi oracıkta
+bozulurdu. Yeni ve kendi geçmişi hiç olmayan bir sekmede liste tüm geçmişten
+kuruluyor: orada hiçbir şey açmamak "geçmişim gitti" demek olurdu, yani
+panelin var oluş sebebinin tersi.
+
+**Ctrl+R penceresinde favoriler artık davetsiz değil.** Bildirilen: "en üstte
+favorilere eklediklerim geliyor, gelmemeli; orada bir tik olabilir." Pencerenin
+sorduğu soru "bu sekmede ne çalıştırdım"; favori ise bir NİYET — hiç
+çalıştırılmamış bir favori listenin başını tutup aranan komutu aşağı itiyordu.
+Tik (`Ctrl+F`) eski davranışı geri veriyor. Buradaki tuzak tekrar süzgeci:
+yalnızca favoriler listedeyken çalışmak zorunda, yoksa favoriye eklenmiş bir
+komut geçmiş satırından da elenir ve Ctrl+R ile hiç bulunamazdı
+(`components/HistoryRecall.test.tsx`).
+
 ### 1.11 Yeni sürüm bildirimi
 
 Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son

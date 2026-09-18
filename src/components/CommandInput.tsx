@@ -465,6 +465,21 @@ export function CommandInput() {
       return;
     }
 
+    /*
+     * Geçmiş paneli AÇIKKEN Ctrl+A: kapsamı değiştirir (bu sekme <-> tüm
+     * sekmeler). `HistoryRecall` (Ctrl+R) penceresindeki AYNI kısayol; iki
+     * yerde farklı tuş öğretmek kullanıcıya iki ayrı alışkanlık yükler.
+     *
+     * Yalnızca `kind === "recent"` iken devrede: yazarken çıkan ön ek
+     * eşleşmesi (`kind: "history"`) sekmeye göre süzülmüyor, orada Ctrl+A'yı
+     * ele geçirmek tarayıcının "tümünü seç"ini sebepsiz yere kilitlerdi.
+     */
+    if (suggest?.kind === "recent" && e.ctrlKey && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      store.openHistorySuggestions(suggest.scope === "all" ? "tab" : "all");
+      return;
+    }
+
     if (suggest && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       store.moveSuggestion(e.key === "ArrowUp" ? 1 : -1);
@@ -486,8 +501,14 @@ export function CommandInput() {
        * kapatıyor. Panelin kendisi zaten var (`SuggestionBar`, başlığı
        * "GEÇMİŞ"); eksik olan onu boş satırda açan yoldu.
        *
-       * Geçmiş boşsa hiçbir şey açılmıyor — boş bir panel tuşu bozuk
-       * gösterirdi.
+       * Varsayılan kapsam BU SEKME — bildirilen istek buydu, "bir terminal
+       * açtığımda yukarı okla o terminalin geçmişi gelsin". Kullanıcı Ctrl+A
+       * ile tüm sekmelerin geçmişine genişletebiliyor (yukarıya bakın); yeni
+       * açılmış, kendi geçmişi olmayan bir sekmede liste kendiliğinden tüm
+       * geçmişten kuruluyor (gerekçesi `openHistorySuggestions` üzerinde).
+       *
+       * Hiçbir sekmede tek bir komut yoksa hiçbir şey açılmıyor — boş bir
+       * panel tuşu bozuk gösterirdi.
        */
       e.preventDefault();
       store.openHistorySuggestions();

@@ -37,9 +37,24 @@ export function HistoryRecall() {
 
   const [query, setQuery] = useState("");
   const [scopeAll, setScopeAll] = useState(false);
+  /**
+   * Favoriler listeye karışsın mı. VARSAYILAN HAYIR.
+   *
+   * BİLDİRİLEN: "Ctrl+R yapınca 'bu sekmenin geçmişinde ara' çıkıyor ama en
+   * üstte favorilere eklediklerim geliyor, gelmemeli."
+   *
+   * Pencerenin sorduğu soru "bu sekmede ne çalıştırdım"; favori ise bir NİYET
+   * — hiç çalıştırılmamış bir favori de listenin başını tutuyor ve aranan
+   * komutu aşağı itiyordu. Favorilerin kendi paneli var. Yine de aynı kutudan
+   * çağırmak isteyen için tik duruyor: kapatılan şey kaybolmuyor, isteğe
+   * bağlı hâle geliyor.
+   */
+  const [showFavorites, setShowFavorites] = useState(false);
   const [all, setAll] = useState<HistoryEntry[]>([]);
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // Tik ile odak kutudan çıkıyor; yazmaya devam edilebilmeli (bkz. onChange).
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void api
@@ -53,19 +68,28 @@ export function HistoryRecall() {
   }, [scopeAll, tab?.id]);
 
   const rows = useMemo<Row[]>(() => {
-    // Favoriler her zaman listenin basinda: Ctrl+R ile en cok cagrilacak
-    // komutlar onlar. Ayni komut gecmiste de varsa iki kez gosterilmiyor.
-    const favoriteRows: Row[] = favorites
-      .filter((f) => !f.groupId || f.groupId === group?.id)
-      .map((f) => ({
-        key: `fav:${f.id}`,
-        command: f.command,
-        cwd: f.cwd,
-        durationMs: null,
-        exitCode: null,
-        startedAt: f.lastUsedAt ?? f.createdAt,
-        favorite: f,
-      }));
+    // Tik açıksa favoriler listenin BAŞINDA: oradayken en çok çağrılacak
+    // komutlar onlar. Kapalıyken hiç yok (gerekçesi `showFavorites` üzerinde).
+    const favoriteRows: Row[] = !showFavorites
+      ? []
+      : favorites
+          .filter((f) => !f.groupId || f.groupId === group?.id)
+          .map((f) => ({
+            key: `fav:${f.id}`,
+            command: f.command,
+            cwd: f.cwd,
+            durationMs: null,
+            exitCode: null,
+            startedAt: f.lastUsedAt ?? f.createdAt,
+            favorite: f,
+          }));
+    /*
+     * Aynı komut iki kez görünmesin — ama süzgeç YALNIZCA favoriler
+     * listedeyken çalışıyor. Tik kapalıyken de süzseydi, favoriye eklenmiş bir
+     * komut geçmişten de düşerdi: kullanıcı en çok kullandığı komutu Ctrl+R
+     * ile hiç bulamazdı. Kova boş olduğu için aşağıdaki süzgeç o hâlde
+     * kendiliğinden etkisiz.
+     */
     const favoriteCommands = new Set(favoriteRows.map((r) => r.command));
     const historyRows: Row[] = all
       .filter((e) => !favoriteCommands.has(e.command))
@@ -79,7 +103,7 @@ export function HistoryRecall() {
         favorite: null,
       }));
     return [...favoriteRows, ...historyRows];
-  }, [all, favorites, group?.id]);
+  }, [all, favorites, group?.id, showFavorites]);
 
   const results = useMemo(() => {
     const needle = query.trim();
@@ -93,9 +117,11 @@ export function HistoryRecall() {
       .map((r) => r.row);
   }, [rows, query]);
 
+  // Liste değiştiğinde seçim başa dönüyor: kapsam ya da tik değişince eski
+  // indeks bambaşka bir komutu gösterir, Enter da onu çalıştırırdı.
   useEffect(() => {
     setIndex(0);
-  }, [query, scopeAll]);
+  }, [query, scopeAll, showFavorites]);
 
   // Seçili satırı görünür tut.
   useEffect(() => {
@@ -126,6 +152,7 @@ export function HistoryRecall() {
       <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
         <input
           autoFocus
+          ref={inputRef}
           placeholder={t(scopeAll ? "recall.placeholderAll" : "recall.placeholderTab")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -154,6 +181,11 @@ export function HistoryRecall() {
             } else if (e.key.toLowerCase() === "a" && e.ctrlKey) {
               e.preventDefault();
               setScopeAll((v) => !v);
+            } else if (e.key.toLowerCase() === "f" && e.ctrlKey) {
+              // Tikin klavye karşılığı: kutu klavyeyle kullanılıyor, favorileri
+              // açmak için fareye uzanmak akışı kesiyor.
+              e.preventDefault();
+              setShowFavorites((v) => !v);
             }
           }}
         />
@@ -215,6 +247,21 @@ export function HistoryRecall() {
             })}
           </span>
           <span>{t("common.escClose")}</span>
+          {/* Tik SAĞA yaslı: soldakiler "hangi tuş ne yapar", bu ise listenin
+              neyi içerdiğini değiştiren tek denetim. */}
+          <label className="check-row" style={{ marginLeft: "auto", padding: 0 }}>
+            <input
+              type="checkbox"
+              checked={showFavorites}
+              onChange={(e) => {
+                setShowFavorites(e.target.checked);
+                // Odak kutuya DÖNMELİ: tıkladıktan sonra yazmaya devam eden
+                // kullanıcının harfleri hiçbir yere gitmezdi (odak tikte).
+                inputRef.current?.focus();
+              }}
+            />
+            <span>{t("recall.showFavorites")}</span>
+          </label>
         </div>
       </div>
     </div>

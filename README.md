@@ -119,8 +119,11 @@ bekleyen asılı kalıyor mu, Esc/Enter ne yapıyor.
 tutulur — geçmişten ayrı, çünkü geçmiş otomatik birikip sınır aşılınca budanıyor.
 Favoriye kısa bir ad, not, klasör ve "yalnızca şu grupta görünsün" kısıtı
 verilebilir; sıralaması elle ayarlanır. Klasör tanımlıysa çalıştırmadan önce o
-klasöre geçilir. `Ctrl+Shift+B` panelini açar, `Ctrl+R` hızlı çağırmada
-favoriler listenin başında gelir, komut paletinde de doğrudan çalıştırılabilir.
+klasöre geçilir. `Ctrl+Shift+B` panelini açar, komut paletinde de doğrudan
+çalıştırılabilir. `Ctrl+R` hızlı çağırmada favoriler **varsayılan olarak
+gelmiyor** — o pencerenin sorusu "bu sekmede ne çalıştırdım" ve hiç
+çalıştırılmamış bir favori listenin başını tutuyordu; penceredeki
+**Favoriler** tiki (`Ctrl+F`) onları listenin başına geri getiriyor.
 
 **Kaldığı yerden devam.** Uygulama kapanırken grup/sekme düzeni, her sekmenin
 çalışma dizini ve ekran çıktısı diske yazılır. Yeniden açıldığında düzen geri
@@ -312,6 +315,13 @@ hemen üstünde **GEÇMİŞ** panelini açıyor: son komutlar, ne zaman
 çalıştırıldıklarıyla. **↑↓** gezer, **→** kabul eder, **Esc** kapatır. Enter
 seçileni kutuya yazar — çalıştırmaz; tek bir Enter'la geçmişten komut
 koşturmak geri dönüşü olmayan bir kaza demek.
+
+Liste **o sekmenin** geçmişi: gerçek bir kabuğun yukarı oku da yalnızca kendi
+oturumunu hatırlar, yan sekmede yazdığınız komutu araya karıştırmaz. `Ctrl+A`
+kapsamı tüm sekmelere genişletir, tekrar basmak geri alır; panelin sağ altında
+hangi kapsamda olduğu yazıyor. Yeni açılmış, kendi geçmişi olmayan bir sekmede
+liste kendiliğinden tüm geçmişten kuruluyor — yoksa yukarı ok orada hiçbir şey
+yapmazdı ve bu panelin varlık sebebi tam olarak o boşluğu doldurmak.
 
 **Yeni sürüm bildirimi.** Uygulama her açılışta GitHub'daki son yayına bakar;
 daha yenisi varsa durum çubuğunda **⬆ 0.2.0 hazır** rozeti çıkar. Rozete
@@ -745,7 +755,7 @@ dışa aktarılır.
 | `Ctrl+1`…`Ctrl+9` | Gruptaki n. sekmeye geç |
 | `Ctrl+Shift+N` | Yeni grup |
 | `Ctrl+Shift+H` | Geçmiş panelini aç/kapat |
-| `Ctrl+R` | Geçmişte hızlı arama (favoriler önce) |
+| `Ctrl+R` | Geçmişte hızlı arama (`Ctrl+A` kapsam, `Ctrl+F` favoriler) |
 | `Ctrl+Shift+B` | Favori komutlar |
 | `Ctrl+Shift+P` | Komut paleti |
 | `Ctrl+P` | Bu dizinde dosya ara |
