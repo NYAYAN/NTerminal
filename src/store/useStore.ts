@@ -129,12 +129,53 @@ export type HistoryScope = "tab" | "group" | "all";
 const gitFingerprints = new Map<string, string | null>();
 
 /**
+ * Git YAZMA işlemlerinin sırası (stage, unstage, commit, push).
+ *
+ * Rust tarafındaki `INDEX_LOCK` iki `git add`in `index.lock` yüzünden
+ * çakışmasını önlüyor ama SIRA GARANTİSİ vermiyor: aynı dosyaya art arda
+ * "ekle" ve "çıkar" gönderen bir kullanıcı (kutuya iki kez bastı) işlemlerin
+ * ters sırada koşmasıyla karşılaşabilirdi ve son durum bastığının tersi
+ * olurdu. Burada işlemler basıldıkları sırayla ARKA ARKAYA gidiyor.
+ *
+ * Bir işlemin hata vermesi sıradakini durdurmuyor: kuyruk tutulan söz hatasız
+ * (`run.then(ok, ok)`), hatayı yalnızca çağıran görüyor.
+ */
+let gitWriteQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * İşlemi sıraya koyar; BİTTİĞİNDE (hata olsa da) depoyu tazeler.
+ *
+ * Başarısızlıkta da tazeleniyor: işlem yarıda kalmış olabilir (üç dosyadan
+ * ikisi eklendi) ve listenin gerçeği göstermesi gerek. Tazeleme beklenerek
+ * dönülüyor — çağıran `await` ettiğinde satırların yeni hâli çizilmiş oluyor,
+ * yoksa kutu bir an eski durumda kalıp geri zıplardı.
+ */
+function gitWrite<T>(cwd: string, op: () => Promise<T>): Promise<T> {
+  const run = gitWriteQueue.then(async () => {
+    try {
+      return await op();
+    } finally {
+      await useStore.getState().refreshGit(cwd);
+    }
+  });
+  gitWriteQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
  * Sağ panelin sekmeleri.
  *
  * "files" BURADA YOK ve bu bilinçli: dosya ağacı ile görüntüleyici artık
  * grupların sağındaki KENDİ sütununda (`FilePanel`). Ağacı her iki yerde de
  * göstermek aynı şeyin iki kopyası, iki kapatma yolu ve "hangisi güncel"
  * sorusu demekti.
+ *
+ * Stash da BURADA YOK ve bu bilinçli: dördüncü sekme başlığa sığmıyordu (ölçüldü:
+ * sekmeler ~326px + üç simge ~96px; varsayılan 390px'te dört etiket de kırpılıyor).
+ * Stash, Değişiklikler sekmesinin içinde açılıp kapanan bir bölüm (`StashSection`).
  */
 export type SidePanelMode = "history" | "favorites" | "git";
 
@@ -183,6 +224,49 @@ export interface UiState {
    * çiziliyor, hangi depo için açıldığını buradan öğreniyor.
    */
   branchPicker: { cwd: string; current: string } | null;
+  /**
+   * Dal seçicide "Uzak dallar" bölümü açık mı.
+   *
+   * Varsayılan KAPALI: yerel dallar aranan şey, uzaklar kalabalık (bkz.
+   * `pickerRows`). Bileşenin yerel durumunda DEĞİL burada: seçici her
+   * kapanışta sökülüyor ve yerel durum olsaydı, uzak dallara bakan biri onları
+   * her açışta bölümü yeniden açmak zorunda kalırdı. Geçici arayüz durumu;
+   * uygulama her açılışta kapalı başlıyor.
+   */
+  branchRemotesOpen: boolean;
+  /**
+   * "Stash'e at" penceresinin açık olduğu depo; kapalıyken null.
+   *
+   * Depoda tutuluyor çünkü pencereyi açan iki yer var (Değişiklikler sekmesindeki
+   * düğme ve Stash sekmesi) ve pencere kaydırılan, `overflow` kırpan bir panelin
+   * içinde çizilemez: uygulamanın kökünde çiziliyor, hangi depo için açıldığını
+   * buradan öğreniyor (`branchPicker` ile aynı sebep).
+   */
+  stashDialog: { cwd: string } | null;
+  /**
+   * Değişiklikler sekmesindeki "Stash" bölümü açık mı.
+   *
+   * Varsayılan KAPALI: bölüm yalnızca stash varken görünüyor ve çoğu zaman
+   * aranan şey değişiklik listesi (dal seçicideki "Uzak dallar" ile aynı sebep).
+   * Depoda çünkü sekme değişince bileşen sökülüyor; yerel durum olsaydı açık
+   * bölüm her dönüşte kapanırdı. Geçici arayüz durumu.
+   */
+  stashOpen: boolean;
+  /**
+   * Stash uygulanınca SİLİNSİN mi (`git stash pop`).
+   *
+   * Varsayılan KAPALI: uygula ve koru. Silmek geri dönüşü olmayan taraf (stash'in
+   * içeriği çalışma ağacına taşınıyor ama kayıt gidiyor); kullanıcı bunu bilerek
+   * açmalı. Panel sökülüp kurulunca kaybolmasın diye depoda; geçici arayüz durumu.
+   */
+  stashPop: boolean;
+  /**
+   * Uygularken stash'e atılırken SAHNELENMİŞ olanlar sahnelenmiş geri gelsin mi
+   * (`--index`). Onsuz hepsi sahnelenmemiş gelir (ölçüldü: `MM` yerine ` M`);
+   * paneldeki kutular sahnelemeyi gösterdiği için seçenek var. Varsayılan kapalı:
+   * indeks o arada değiştiyse git "Conflicts in index" diye reddedebiliyor.
+   */
+  stashIndex: boolean;
   /** Node sürüm seçici açık mı. Listesi `nodeEnv`den geliyor. */
   nodePicker: boolean;
   /**
@@ -202,18 +286,22 @@ export interface UiState {
    */
   viewerPath: string | null;
   /**
-   * "Değişiklikler" listesinde KAPALI dosyaların yolları.
+   * "Değişiklikler" listesinde AÇIK dosyaların yolları; listede olmayan satır kapalı.
    *
    * İki karar taşıyor ve ikisi de bilinçli.
    *
-   * 1. Kapalı olanlar tutuluyor, açık olanlar değil. Liste git yoklamasıyla
-   *    kendiliğinden değişiyor; "açıklar" tutulsaydı yeni beliren bir dosya
-   *    kapalı gelir ve tam da görülmesi gereken şey gizli kalırdı.
+   * 1. Varsayılan KAPALI: küme boş başlıyor, satır ancak tıklanınca ya da toplu
+   *    düğmeyle açılıyor. İstek buydu ("Değişiklikler default olarak hepsi
+   *    kapalı gelsin"): elli dosyalık bir değişiklik önce elli dosya adı olarak
+   *    okunuyor, fark isteyen açıyor. Önceki hâli tersiydi (kapalılar
+   *    tutuluyordu, satırlar açık geliyordu). Liste git yoklamasıyla kendiliğinden
+   *    değiştiği için yeni beliren dosya da kapalı geliyor; bedeli yok, çünkü fark
+   *    yalnızca AÇIK satır için isteniyor (bkz. `ChangeRow`).
    * 2. Bileşenin yerel durumunda DEĞİL burada. Toplu aç/kapa düğmesi panelin
    *    BAŞLIĞINDA (`SidePanel`, kapatma çarpısının solunda), liste ise ayrı
    *    bir bileşende; ikisinin aynı gerçeği görmesi gerekiyor.
    */
-  gitCollapsed: readonly string[];
+  gitExpanded: readonly string[];
   /**
    * "Değişiklikler" satırlarında dosya adının solunda klasör zinciri de
    * gösterilsin mi.
@@ -226,6 +314,19 @@ export interface UiState {
    * ipucunda her durumda tam yol duruyor.
    */
   gitShowPaths: boolean;
+  /**
+   * Yarım kalmış commit iletileri; anahtar deponun KÖKÜ.
+   *
+   * Depoda çünkü iletiyi yazan bileşen panelin sekmesi değişince sökülüyor:
+   * yarım bir iletinin Geçmiş sekmesine bakıp dönünce kaybolması kullanıcının
+   * en sinir olacağı şey. Yerel durum olsaydı tam da bu olurdu. Kök anahtarı,
+   * çünkü aynı depoya bakan iki sekme aynı iletiyi görmeli, başka bir depoya
+   * geçen ise onunkini. Geçici arayüz durumu; uygulama kapanınca gider.
+   *
+   * Commit atılınca ilgili kayıt SİLİNİYOR — boş dizeyle bırakmak haritayı
+   * her depo için sonsuza kadar büyütürdü.
+   */
+  gitDrafts: Readonly<Record<string, string>>;
   /**
    * Dosya ağacında AÇIK olan klasörlerin mutlak yolları.
    *
@@ -467,6 +568,33 @@ interface Store {
   loadSuggestHistory: () => Promise<void>;
   refreshGit: (cwd: string | null) => Promise<void>;
   pollGit: (cwd: string | null) => Promise<void>;
+  /**
+   * Git YAZMA işlemleri: yolları indekse ekle / indeksten çıkar, commit at,
+   * gönder. Hepsi tek bir sırada koşuyor ve bitince depoyu tazeliyor (bkz.
+   * `gitWrite`). Hata olursa fırlatıyor: metin git'in kendi cümlesi ve nerede
+   * gösterileceği çağıranın işi (satır → bildirim, commit kutusu → satır içi).
+   */
+  stageFiles: (cwd: string, files: string[]) => Promise<void>;
+  unstageFiles: (cwd: string, files: string[]) => Promise<void>;
+  /** Başarıda commit'in KISA kimliğini döner. */
+  commitStaged: (cwd: string, message: string) => Promise<string>;
+  /** Başarıda hedefi (`origin/main`) döner. */
+  pushBranch: (cwd: string) => Promise<string>;
+  /**
+   * Yolları stash'e atar; başarıda yeni stash'in kimliğini döner. Diğer yazma
+   * işlemleriyle AYNI kuyrukta: stash indeksi ve çalışma ağacını yeniden yazıyor,
+   * art arda basılan bir "ekle" ile iç içe geçmemeli.
+   */
+  stashChanges: (
+    cwd: string,
+    message: string,
+    files: string[],
+    includeUntracked: boolean,
+  ) => Promise<string>;
+  /** Bir stash'i uygular; `pop` başarıda siler, `index` sahnelenmiş durumu geri yükler. */
+  applyStash: (cwd: string, id: string, options: { pop: boolean; index: boolean }) => Promise<void>;
+  /** Bir stash'i siler. Geri alınamaz: onay çağıran yerde soruluyor. */
+  dropStash: (cwd: string, id: string) => Promise<void>;
   refreshNode: () => Promise<void>;
   noteCommand: (command: string, cwd: string | null, tabId?: string | null) => void;
   /**
@@ -770,11 +898,17 @@ export const useStore = create<Store>((set, get) => ({
     searchOpen: false,
     dirPicker: null,
     branchPicker: null,
+    branchRemotesOpen: false,
+    stashDialog: null,
+    stashOpen: false,
+    stashPop: false,
+    stashIndex: false,
     nodePicker: false,
     treeOpen: false,
     viewerPath: null,
-    gitCollapsed: [],
+    gitExpanded: [],
     gitShowPaths: false,
+    gitDrafts: {},
     treeExpanded: [],
     findOpen: false,
     renamingTabId: null,
@@ -1947,6 +2081,34 @@ export const useStore = create<Store>((set, get) => ({
     }
     if (gitFingerprints.get(cwd) === imza) return;
     await get().refreshGit(cwd);
+  },
+
+  stageFiles(cwd, files) {
+    return gitWrite(cwd, () => api.gitStage(cwd, files));
+  },
+
+  unstageFiles(cwd, files) {
+    return gitWrite(cwd, () => api.gitUnstage(cwd, files));
+  },
+
+  commitStaged(cwd, message) {
+    return gitWrite(cwd, () => api.gitCommit(cwd, message));
+  },
+
+  pushBranch(cwd) {
+    return gitWrite(cwd, () => api.gitPush(cwd));
+  },
+
+  stashChanges(cwd, message, files, includeUntracked) {
+    return gitWrite(cwd, () => api.gitStashPush(cwd, message, files, includeUntracked));
+  },
+
+  applyStash(cwd, id, { pop, index }) {
+    return gitWrite(cwd, () => api.gitStashApply(cwd, id, pop, index));
+  },
+
+  dropStash(cwd, id) {
+    return gitWrite(cwd, () => api.gitStashDrop(cwd, id));
   },
 
   /**

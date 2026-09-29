@@ -372,3 +372,58 @@ export function OpenFileIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * Stash'e at — tepsiye inen ok.
+ *
+ * Ok AŞAĞI: değişiklikler çalışma ağacından kenara alınıyor. Ters yönlüsü
+ * (`UnstashIcon`) geri getirmek için; ikisi aynı tepsiyi paylaşıyor, yani aynı
+ * şeyin iki yönü gibi okunuyor.
+ */
+export function StashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 2.5 V9" />
+      <path d="M5.2 6.6 L8 9.4 L10.8 6.6" />
+      <path d="M2.8 10.5 V12.5 H13.2 V10.5" />
+    </Svg>
+  );
+}
+
+/** Stash'i uygula — tepsiden çıkan ok. */
+export function UnstashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 9.2 V2.8" />
+      <path d="M5.2 5.4 L8 2.6 L10.8 5.4" />
+      <path d="M2.8 10.5 V12.5 H13.2 V10.5" />
+    </Svg>
+  );
+}
+
+/** Sil — çöp kutusu. */
+export function TrashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 4.5 H13" />
+      <path d="M6.2 4.5 V3 H9.8 V4.5" />
+      <path d="M4.2 4.5 L4.8 13 H11.2 L11.8 4.5" />
+      <path d="M6.8 7 V10.5 M9.2 7 V10.5" />
+    </Svg>
+  );
+}
+
+/**
+ * Ayarlar — sekiz dişli çark.
+ *
+ * Dişler 8x45°, çokgen olarak çiziliyor (yay yok): 13px'te yay hesabıyla çizilmiş
+ * bir çark bulanıklaşıyor, köşeli çokgen keskin kalıyor. Ortadaki daire göbek.
+ */
+export function GearIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6.7 3.3 L6.9 1.4 L9.1 1.4 L9.3 3.3 L10.5 3.8 L11.9 2.5 L13.5 4.1 L12.2 5.6 L12.7 6.7 L14.6 6.9 L14.6 9.1 L12.7 9.3 L12.2 10.4 L13.5 11.9 L11.9 13.5 L10.5 12.2 L9.3 12.7 L9.1 14.6 L6.9 14.6 L6.7 12.7 L5.6 12.2 L4.1 13.5 L2.5 11.9 L3.8 10.4 L3.3 9.3 L1.4 9.1 L1.4 6.9 L3.3 6.7 L3.8 5.5 L2.5 4.1 L4.1 2.5 L5.5 3.8 Z" />
+      <circle cx="8" cy="8" r="2.1" />
+    </Svg>
+  );
+}

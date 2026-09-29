@@ -340,6 +340,13 @@ export interface GitChange {
   status: string;
   /** Depo köküne göre yol. */
   path: string;
+  /**
+   * Yeniden adlandırma ya da kopyalamada ESKİ yol; başka durumda yok.
+   *
+   * İndeksten çıkarırken gerekiyor: yalnızca yeni adı çıkarmak eski adın
+   * "silindi" kaydını indekste bırakıyor (bkz. `git.rs` `GitChange::orig_path`).
+   */
+  origPath?: string;
 }
 
 /**
@@ -370,6 +377,34 @@ export interface GitInfo {
   detached: boolean;
   ahead: number;
   behind: number;
+  /**
+   * Dalın yukarı akışı (`origin/main`); yoksa `null`.
+   *
+   * Yukarı akış SİLİNMİŞSE de (`[gone]`) `null`: arayüz iki durumu aynı ele
+   * alıyor — "uzakta bunun karşılığı yok, yayınla".
+   */
+  upstream: string | null;
+  /**
+   * Depoda HİÇ commit yok. Arayüz push'u kapatıyor (gönderilecek bir şey yok);
+   * commit atılabiliyor, ilk commit olarak.
+   */
+  unborn: boolean;
+  /**
+   * İndekste commit'e HAZIR dosya sayısı.
+   *
+   * `changes` 200'de kesiliyor, bu sayı kesilmiyor: commit düğmesi "kaç dosya
+   * commit'lenecek" sorusunu yanıtlıyor ve cevap listenin görünen kısmına bağlı
+   * olmamalı.
+   */
+  staged: number;
+  /**
+   * Stash'te bekleyen kayıt sayısı; Stash bölümünün başlığındaki rozet.
+   *
+   * Süreç başlatılmadan okunuyor (`logs/refs/stash` satır sayısı), o yüzden
+   * her durum okumasıyla birlikte geliyor. Listenin kendisi ayrı ve yalnızca
+   * bölüm açıkken okunuyor.
+   */
+  stashCount: number;
   changes: GitChange[];
   /**
    * Çalışma ağacının kökü (mutlak yol).
@@ -379,6 +414,46 @@ export interface GitInfo {
    * yol üretiyordu.
    */
   root: string;
+}
+
+/** Stash listesindeki tek satır. */
+export interface GitStash {
+  /**
+   * Stash commit'inin TAM karması.
+   *
+   * `stash@{n}` DEĞİL: `n` başka bir stash eklendikçe ya da silindikçe kayıyor
+   * ve ekrandaki liste ile diskteki liste ayrışabiliyor (terminalden `git stash`
+   * atıldı). Kimlik aynı stash'i gösteren tek kalıcı şey.
+   */
+  id: string;
+  /**
+   * Kullanıcının verdiği ad; verilmediyse git'in varsayılanından dal adı
+   * atılmış hâli (`1a2b3c4 son commit konusu`).
+   */
+  name: string;
+  /** Stash'in atıldığı dal; bilinmiyorsa boş. */
+  branch: string;
+  /** Unix saniyesi. */
+  time: number;
+  /** Ad kullanıcının verdiği bir ad mı; `false` ise git'in `WIP on …` varsayılanı. */
+  named: boolean;
+}
+
+/** Bir stash'in içindeki dosya. */
+export interface StashFile {
+  /** Porcelain benzeri iki karakter: `"M "`, `"A "`, `"D "`, `"R "`; takipsizde `"??"`. */
+  status: string;
+  path: string;
+  /** `-u` ile alınmış takipsiz dosya (stash'in üçüncü ebeveyninde). */
+  untracked: boolean;
+  /** Yeniden adlandırmada eski yol. */
+  origPath?: string;
+}
+
+/** Bir stash'in dosyaları ve TOPLAM dosya sayısı (liste kesilmiş olabilir). */
+export interface StashFiles {
+  files: StashFile[];
+  total: number;
 }
 
 // ------------------------------------------------------------------ geçmiş

@@ -925,3 +925,102 @@ describe("başlık çubuğundaki arama kutusu", () => {
     expect(body, "alt sınır yok").toMatch(/min-width:\s*\d+px/);
   });
 });
+
+/*
+ * Fark zemini.
+ *
+ * BİLDİRİLEN HATA: "Değişiklikler'de bir dosyanın farkına bakarken sağa doğru
+ * kaydırınca zemin rengi bir yerde kesiliyor." Satırlar blok olduğu için
+ * genişlikleri kaydırma alanının GÖRÜNEN genişliği kadardı; sarmayan uzun metin
+ * kutunun dışına taşıyor ve eklenen/silinen satırın zemini orada bitiyordu
+ * (tarayıcıda ölçüldü: 370px'lik satır, 2019px'lik kaydırma alanı).
+ *
+ * jsdom yerleşim hesaplamıyor, bu yüzden düzeltmenin dayandığı KURALLAR bağlanıyor;
+ * asıl ölçüm tarayıcıda yapıldı (satırların ve boşluk şeridinin genişliği
+ * kaydırma alanına eşit).
+ */
+describe("fark zemini", () => {
+  it("fark gövdesi tek sütunlu ızgara: satırlar en geniş satırın genişliğine geliyor", () => {
+    // Blok satırlar görünen genişlikte kalıp zemini kesiyordu.
+    const body = ruleBody(".git-diff");
+    expect(body, ".git-diff `display: grid` olmalı").toMatch(/display\s*:\s*grid\s*;/);
+    // Yatay kaydırma duruyor: sarma yok, hizalama anlam taşıyor.
+    expect(body).toMatch(/overflow-x\s*:\s*auto\s*;/);
+  });
+
+  it("satırlar kendi boyuna sabitlenmiyor: zeminler AYNI hizada bitmeli", () => {
+    // `width/min-width: max-content` her satırı KENDİ uzunluğuna getirir; kısa ve uzun
+    // satırın zemini farklı yerde biter (tırtıklı sağ kenar).
+    expect(ruleBody(".diff-line")).not.toMatch(/(?:min-|max-)?width\s*:\s*max-content/);
+    expect(ruleBody(".diff-text")).not.toMatch(/(?:min-|max-)?width\s*:\s*max-content/);
+  });
+
+  it("boşluk şeridi ızgara sütununun genişliğini belirlemiyor", () => {
+    // Kapsayan işlev adı (80 karaktere kadar) sütunu genişletip, kod satırları
+    // sığarken bile yatay kaydırma çıkarırdı.
+    expect(ruleBody(".diff-gap")).toMatch(/contain\s*:\s*inline-size\s*;/);
+  });
+});
+
+/*
+ * Panel sekme şeridi DARALABİLİYOR.
+ *
+ * Ölçülen hata: "Değişiklikler" sekmesinde başlıkta üç simge (klasör yolu, toplu
+ * katlama, kapat) varken panel ~345px'in altına inince (en dar 260px) kapatma
+ * çarpısı panelin DIŞINA taşıyordu: flex ögesi `min-width: 0` olmadan içeriğinin
+ * asgarisinin altına inmiyor. Şerit ve sekmeler artık daralıyor, etiket `…` ile
+ * kısalıyor. (Stash bölümü dördüncü sekme olsaydı varsayılan 390px'te de
+ * taşacaktı; bu yüzden sekme değil bölüm.) jsdom yerleşim hesaplamadığı için kurallar
+ * bağlanıyor; ölçüm tarayıcıda yapıldı.
+ */
+describe("panel sekme şeridi", () => {
+  it("şerit daralabiliyor: kapatma düğmesini panelin dışına itmiyor", () => {
+    expect(ruleBody(".panel-tabs")).toMatch(/min-width\s*:\s*0\s*;/);
+  });
+
+  it("sekmeler daralabiliyor ve içerik kadar başlıyor", () => {
+    const body = ruleBody(".panel-tabs button");
+    expect(body).toMatch(/min-width\s*:\s*0\s*;/);
+    expect(body).toMatch(/flex\s*:\s*0\s+1\s+auto\s*;/);
+  });
+
+  it("kırpılan şey ETİKET, sayı rozeti değil", () => {
+    expect(ruleBody(".panel-tab-label")).toMatch(/text-overflow\s*:\s*ellipsis\s*;/);
+    expect(ruleBody(".panel-tabs .pill-count")).toMatch(/flex\s*:\s*none\s*;/);
+  });
+});
+
+/*
+ * Stash başlığındaki ayar simgesi ve küçük penceresi.
+ *
+ * Pencere simgeye değil BAŞLIK SATIRINA göre konumlanıyor: simge yazıyla sayacın
+ * arasında, yani panelin sol yarısında; pencere simgenin altından açılsaydı dar
+ * panelde (en dar 260px) sağa taşardı. jsdom yerleşim hesaplamadığı için kurallar
+ * bağlanıyor; görünüm tarayıcıda ölçüldü.
+ */
+describe("stash başlığı ve ayar penceresi", () => {
+  it("pencere başlık satırına göre konumlanıyor (satır göreli, simge değil)", () => {
+    expect(ruleBody(".stash-section-head")).toMatch(/position\s*:\s*relative\s*;/);
+    expect(ruleBody(".stash-settings"), "simge konumlanmış: pencere onun altından açılır").not.toMatch(
+      /position\s*:/,
+    );
+    expect(ruleBody(".stash-settings-pop")).toMatch(/position\s*:\s*absolute\s*;/);
+  });
+
+  it("pencere paneli taşırmıyor: içeriği kadar geniş, panelden geniş olamaz", () => {
+    const body = ruleBody(".stash-settings-pop");
+    expect(body).toMatch(/width\s*:\s*max-content\s*;/);
+    expect(body).toMatch(/max-width\s*:\s*calc\(100%\s*-\s*\d+px\)\s*;/);
+  });
+
+  it("pencere listenin satırlarının üstünde", () => {
+    const z = /z-index\s*:\s*(\d+)\s*;/.exec(ruleBody(".stash-settings-pop"));
+    expect(z, "z-index yok: pencere satırların altında kalır").not.toBe(null);
+    expect(Number(z![1])).toBeGreaterThanOrEqual(10);
+  });
+
+  it("açıp kapatan düğme boşluğa uzamıyor: simge yazıya yapışık", () => {
+    // Uzasaydı ayar simgesi ve sayaç satırın sağ ucuna giderdi.
+    expect(ruleBody(".stash-toggle")).toMatch(/flex\s*:\s*0\s+1\s+auto\s*;/);
+  });
+});

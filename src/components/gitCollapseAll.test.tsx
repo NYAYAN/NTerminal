@@ -12,15 +12,15 @@ import { SidePanel } from "./SidePanel";
 /**
  * "Değişiklikler" listesinde toplu aç/kapa.
  *
- * BİLDİRİLEN İHTİYAÇ: dosyalar AÇIK geliyor (bilinçli — "neler değişmiş"
- * sorusunun yanıtı listenin tamamı), ama çok dosya değiştiğinde liste
- * uzuyor ve her satırı tek tek kapatmak aynı işi dosya sayısı kadar yapmak
- * demek. İstenen tek bir düğme: hepsini topla, gerekirse hepsini geri aç.
+ * Satırlar KAPALI geliyor (istek: "Değişiklikler default olarak hepsi kapalı
+ * gelsin"); çok dosya değiştiğinde her satırı tek tek açmak aynı işi dosya
+ * sayısı kadar yapmak demek. Tek bir düğme: hepsini aç, bakıp bitince hepsini
+ * topla.
  *
  * Düğme panelin BAŞLIĞINDA, kapatma çarpısının solunda — yani `SidePanel`in
  * içinde, liste ise `GitChanges`te. Testin `SidePanel` çizmesinin sebebi bu:
  * ölçülecek şey ikisinin AYNI gerçeği görmesi. Durum bu yüzden depoda
- * (`ui.gitCollapsed`), bileşenin yerel durumunda değil.
+ * (`ui.gitExpanded`), bileşenin yerel durumunda değil.
  */
 
 const CWD = "C:/depo";
@@ -64,9 +64,9 @@ function seed(changes: { status: string; path: string }[]) {
     groups: [group()],
     activeGroupId: "g1",
     gitInfo: {
-      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, changes, root: CWD },
+      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, upstream: "origin/main", unborn: false, staged: 0, stashCount: 0, changes, root: CWD },
     },
-    ui: { ...state.ui, historyOpen: true, panelMode: "git", gitCollapsed: [] },
+    ui: { ...state.ui, historyOpen: true, panelMode: "git", gitExpanded: [] },
   });
 }
 
@@ -99,29 +99,40 @@ describe("değişikliklerde toplu aç/kapa", () => {
     const { container } = render(<SidePanel />);
 
     const buttons = [...container.querySelector(".panel-head")!.querySelectorAll("button")];
-    const katla = buttons.findIndex((el) => el.getAttribute("title") === "Dosyaları daralt");
+    const katla = buttons.indexOf(toggleButton(container)!);
     const kapat = buttons.findIndex((el) => el.getAttribute("title") === "Paneli kapat");
     expect(katla, "katlama düğmesi yok").toBeGreaterThan(-1);
     expect(kapat, "kapatma düğmesi yok").toBeGreaterThan(-1);
     expect(katla, "katlama düğmesi çarpının sağında").toBeLessThan(kapat);
   });
 
-  it("tek basışta hepsini daraltıyor", () => {
+  it("satırlar KAPALI geliyor ve düğme AÇAN düğme", () => {
+    // Hiçbiri açık değil: yön "aç".
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: "A ", path: "b.ts" },
+    ]);
+    const { container } = render(<SidePanel />);
+
+    expect(container.querySelectorAll(".git-item.open"), "satırlar açık geliyor").toHaveLength(0);
+    expect(toggleButton(container)!.getAttribute("title")).toBe("Dosyaları aç");
+  });
+
+  it("tek basışta hepsini açıyor", () => {
     seed([
       { status: " M", path: "a.ts" },
       { status: "A ", path: "b.ts" },
       { status: "??", path: "c.ts" },
     ]);
     const { container } = render(<SidePanel />);
-    expect(container.querySelectorAll(".git-item.open"), "satırlar açık gelmiyor").toHaveLength(3);
 
     fireEvent.click(toggleButton(container)!);
 
-    expect(container.querySelectorAll(".git-item.open"), "açık satır kaldı").toHaveLength(0);
-    expect([...useStore.getState().ui.gitCollapsed].sort()).toEqual(["a.ts", "b.ts", "c.ts"]);
+    expect(container.querySelectorAll(".git-item.open"), "hepsi açılmadı").toHaveLength(3);
+    expect([...useStore.getState().ui.gitExpanded].sort()).toEqual(["a.ts", "b.ts", "c.ts"]);
   });
 
-  it("hepsi kapalıyken aynı düğme geri açıyor", () => {
+  it("hepsi açıkken aynı düğme geri topluyor", () => {
     seed([
       { status: " M", path: "a.ts" },
       { status: "A ", path: "b.ts" },
@@ -129,17 +140,19 @@ describe("değişikliklerde toplu aç/kapa", () => {
     const { container } = render(<SidePanel />);
 
     fireEvent.click(toggleButton(container)!);
-    // Yön durumdan okunuyor: hepsi kapalıysa düğme artık AÇAN düğme.
-    expect(toggleButton(container)!.getAttribute("title")).toBe("Dosyaları aç");
+    // Yön durumdan okunuyor: biri bile açıksa düğme artık DARALTAN düğme.
+    expect(toggleButton(container)!.getAttribute("title")).toBe("Dosyaları daralt");
 
     fireEvent.click(toggleButton(container)!);
-    expect(container.querySelectorAll(".git-item.open"), "geri açılmadı").toHaveLength(2);
-    expect(useStore.getState().ui.gitCollapsed).toEqual([]);
+    expect(container.querySelectorAll(".git-item.open"), "toplanmadı").toHaveLength(0);
+    expect(useStore.getState().ui.gitExpanded).toEqual([]);
+    expect(toggleButton(container)!.getAttribute("title")).toBe("Dosyaları aç");
   });
 
-  it("elle kapatılan tek satır düğmenin yönünü değiştirmiyor", () => {
-    // Biri kapalı, biri açıkken "hepsi kapalı" değil: düğme hâlâ daraltmalı,
-    // yoksa tek satır kapatan kullanıcı düğmeye basınca listeyi açıyordu.
+  it("elle açılan tek satır düğmeyi DARALTAN yapıyor", () => {
+    // Biri açık, biri kapalıyken "hepsi kapalı" değil: düğme toplamalı. Yoksa
+    // tek satır açan kullanıcı düğmeye basınca listenin kalanını da açardı ve
+    // ilk beklediği "topla" olurdu.
     seed([
       { status: " M", path: "a.ts" },
       { status: "A ", path: "b.ts" },
@@ -152,6 +165,17 @@ describe("değişikliklerde toplu aç/kapa", () => {
 
     fireEvent.click(toggleButton(container)!);
     expect(container.querySelectorAll(".git-item.open")).toHaveLength(0);
+  });
+
+  it("listede olmayan eski bir yol yönü bozmuyor", () => {
+    // Bir dosya açıkken commit'lendi: yolu kümede kalıyor ama satırı yok. Yalnızca
+    // GÜNCEL satırlara bakılmalı; yoksa hiç açık satır yokken düğme "daralt" derdi.
+    seed([{ status: " M", path: "a.ts" }]);
+    useStore.setState({ ui: { ...useStore.getState().ui, gitExpanded: ["gitti.ts"] } });
+    const { container } = render(<SidePanel />);
+
+    expect(container.querySelectorAll(".git-item.open")).toHaveLength(0);
+    expect(toggleButton(container)!.getAttribute("title")).toBe("Dosyaları aç");
   });
 
   it("değişiklik yokken düğme çizilmiyor", () => {

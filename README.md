@@ -142,11 +142,14 @@ silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a ba
 
 **Değişiklikler.** Sağ panelin *Değişiklikler* sekmesi bulunulan dizin bir git
 deposuysa değişen dosyaları listeliyor; farklar **yerinde**, listeyi
-kaybetmeden açılıyor. Satırlar açık geliyor: "neler değişmiş" sorusunun yanıtı
-listenin tamamı, her dosyayı tek tek açmak aynı soruyu dosya sayısı kadar
-sormak demekti. Tıklamak satırı katlıyor. Fark istekleri dörtlü bir kuyruktan
-geçiyor — yüz dosyalık bir değişiklikte yüz `git` sürecini aynı anda doğurmak
-makineyi ölçülebilir biçimde takıyor.
+kaybetmeden açılıyor. Satırlar **kapalı** geliyor: liste önce dosya adlarını
+gösteriyor, bir satıra tıklamak farkını açıyor, başlıktaki düğme hepsini açıyor
+ya da topluyor. Fark yalnızca satır açılınca isteniyor; yani elli dosyalık bir
+değişiklik elli `git diff` ile başlamıyor. "Hepsini aç" ise hepsini birden
+istiyor ve istekler dörtlü bir kuyruktan geçiyor — yüz dosyalık bir değişiklikte
+yüz `git` sürecini aynı anda doğurmak makineyi ölçülebilir biçimde takıyor.
+Uzun satırlı bir farkı sağa kaydırınca eklenen ve silinen satırların zemini
+satırın sonuna kadar uzanıyor.
 
 **Değişmemiş satırları açma.** `git diff` yalnızca değişenlerin çevresinde üç
 satır bağlam veriyor; gerisi çizilmiyor. Blokların arasında "**59 değişmemiş
@@ -181,6 +184,73 @@ ekran okuyucuda duruyor. Önceki hâli yazıydı ("DEĞİŞTİ", "YENİDEN
 ADLANDIRILDI") ve 88px'lik sabit bir sütun tutuyordu; o sütun dosya **yolundan**
 çıkıyordu, yani dar panelde asıl aranan bilgi kırpılırken yerinde her satırda
 tekrarlanan aynı kelime duruyordu.
+
+**Commit ve push.** Panelin başındaki kutu, terminale dönmeden commit atmayı ve
+göndermeyi sağlıyor. Her satırın solundaki **kutu** dosyayı commit'e ekler
+(`git add`), kaldırınca çıkarır (`git reset`; dosyaya dokunmaz). Üç hâli var:
+işaretli (dosyanın tamamı eklendi), işaretsiz ve **ara** — dosya *kısmen*
+eklenmiş (`MM`): commit'e yalnızca eklenen kısım girer, kutuya basmak kalanı da
+ekler. Başlıktaki toplu kutu hepsini ekler ya da çıkarır ve kaç dosyanın
+commit'e gireceğini yazar.
+
+İleti alanına yazıp **Commit**'e ya da `Ctrl+Enter`'a (mac'te `Cmd+Enter`)
+basmak yalnızca eklenen dosyaları commit'ler. `-a` yok: işaretlemediğiniz dosya
+gitmez. Dosya seçilmemişse ya da ileti boşsa düğme kapalı ve ipucu ilk eksiği
+söylüyor. Yarım kalmış ileti panelin sekmesi değişince ya da başka bir dizine
+geçince kaybolmaz (depo başına saklanır); commit atılınca silinir, atılamazsa
+**korunur**.
+
+**Push** yalnızca geçerli dalı gönderir. **Etiket göndermez** — bu depoda `v*`
+etiketi itmek yayın demek — ve zorla itme yoktur; `push.followTags` ayarınız
+açık olsa bile. Dalın yukarı akışı yoksa (yeni dal ya da uzaktan silinmiş) düğme
+**Yayınla** der: dalı uzakta oluşturur ve izlemeyi kurar. Uzak sizden ilerideyse
+düğmeye basmadan önce uyarır. Değişiklik yokken bile gönderilmemiş commit varsa
+panelde "N commit gönderilmedi" satırı ve Push görünür — commit'leri itmek için
+değişiklik olması gerekmez.
+
+Hata **kalıcı** ve kutunun içinde: git'in kendi metni satır sonlarıyla, olduğu
+gibi gösterilir. Bir commit kancasının (lint, test) ya da reddedilen bir
+push'un çıktısı üç saniyelik bir bildirimde okunmaz. Kancalar atlanmaz
+(`--no-verify` yok).
+
+Fark artık `HEAD`e karşı alınıyor: eskiden çalışma ağacını indeksle
+karşılaştırıyordu ve bir dosya eklenince satırın farkı boş çıkıyordu.
+
+**Stash.** Değişiklikleri commit'lemeden kenara almak için commit kutusundaki
+**Stash** düğmesi bir pencere açar: hangi dosyaların gideceğini seçersiniz,
+isterseniz bir ad verirsiniz (IntelliJ / WebStorm'daki gibi). Pencere
+Değişiklikler listesinde **işaretli** olan dosyalarla açılır — kısmen eklenmiş
+(`MM`) dosya da dâhil; hiçbiri işaretli değilse seçim **boş** açılır ve "Tüm
+dosyaları seç" kutusu var (boş bir Enter ile yanlışlıkla her şeyi kenara atmamak
+için hepsini varsaymıyor). Penceredeki seçimi değiştirmek listedeki kutulara
+dokunmaz. Dosya adlarının solundaki klasör yolu varsayılan olarak **gizli**;
+"Klasör yollarını göster" kutusu — panel başlığındaki klasör düğmesiyle aynı
+ayar — onu getirir. Takipsiz bir dosya seçilirse `--include-untracked`
+kendiliğinden eklenir; seçilmeyen dosyaya dokunulmaz.
+
+Stash'ler listenin en üstündeki **Stash** başlığının altında. Başlık depo
+varken her zaman görünür (temiz bir çalışma ağacında da stash uygulanabilsin
+diye), stash varsa sayısı yanında yazar ve varsayılan olarak **kapalı**. Açınca
+her stash'in adı, dalı ve zamanı görünür; satıra tıklamak dosyalarını, dosyaya
+tıklamak farkını açar (yalnızca okunur). Uygula simgesinin ne yapacağını iki kutu
+belirler: **Uyguladıktan sonra sil (pop)** ve **İndeksi geri yükle** (`--index`);
+ikisi de varsayılan olarak kapalı. Kutular başlıkta sayacın solundaki **ayar
+simgesine** basınca açılan küçük pencerede; dışarı basınca ya da `Esc` ile kapanır.
+Bir seçenek açıkken simge vurgulu durur (kutular gizli olsa da belli olsun diye) ve
+satırdaki uygula simgesinin ipucu ("Uygula ve sil") hangisinin geçerli olduğunu
+söyler. **Silmek her zaman sorar**: stash silinince
+geri getirilemez. Uygulamak sormaz — içerik silinmiyor, çalışma ağacına taşınıyor.
+Çakışma olursa git stash'i silmez ve hata metni kalıcı bir kutuda gösterilir.
+Dördüncü bir sekme olarak yazılmıştı ama panelin başlığına sığmadığı için
+Değişiklikler'in içine taşındı.
+
+**Dal seçici.** Dal rozetine tıklamak dalları listeler; birini seçmek
+`git checkout`u kabuğa yazıp çalıştırır. **Yerel dallar** üstte durur. `git
+fetch` ile gelen **uzak dallar** sayılarıyla birlikte "Uzak dallar" başlığının
+altında, varsayılan olarak **kapalı**: başlığa tıklayarak (ya da klavyeyle
+başlıkta Enter'a basarak) açılır ve uygulama açık kaldığı sürece açık kalır.
+Arama kapalı bölümdeki eşleşmeleri de bulur. Bir uzak dalı seçmek `git checkout
+--track origin/ad` gönderir; yerel bir izleme dalı oluşur.
 
 **Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
 bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı sağ
@@ -982,6 +1052,14 @@ npm test
   - **Bağlam menüsü** — alt menünün üzerine gelince/tıklayınca açılması, başka
     satıra geçince kapanması, alt menüden seçimin TÜM menüyü kapatması, devre
     dışı alt menünün açılmaması.
+  - **Git paneli (commit, push, stash)** — saf kurallar (`gitStage`, `gitStash`),
+    satır kutusunun üç hâli, yazma kuyruğunun sırası ve hata sonrası tazeleme,
+    satırların varsayılan kapalı gelmesi ve farkın yalnızca açılınca istenmesi,
+    Stash penceresinin liste seçimiyle açılması ve klasör yolu kutusu, Stash
+    bölümünün varsayılan kapalı olması ve silmenin onayı; `lib/ipcContract.test.ts`
+    arayüzün çağırdığı her Rust komutunun kayıtlı olduğunu ve argüman adlarının
+    tuttuğunu denetliyor. Rust tarafı gerçek git depolarıyla (bare uzak dâhil)
+    sınanıyor.
 - **Rust birim (51 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
   yeniden okuma, bozuk satıra dayanıklılık, sıkıştırma), yol taşınabilirliği
   (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,
