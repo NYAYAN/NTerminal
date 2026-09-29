@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { sessions, useStore } from "../store/useStore";
+import { CommandInput } from "./CommandInput";
 import { DirPicker } from "./DirPicker";
 import type { Group, TabState } from "../types";
 
@@ -108,7 +109,8 @@ beforeEach(() => {
   onClose.mockClear();
   vi.spyOn(api, "listDirs").mockImplementation(listDirs);
   sessions.clear();
-  sessions.set("t1", { insertCommand, cwd: CWD } as never);
+  // `focus`: seçici kapanırken odak komut satırına (kutu yoksa terminale) dönüyor.
+  sessions.set("t1", { insertCommand, cwd: CWD, focus: () => {} } as never);
   const state = useStore.getState();
   useStore.setState({
     groups: [group()],
@@ -216,5 +218,107 @@ describe("dizin seçici", () => {
     });
 
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+/*
+ * Klavyeyle gezinme SÜRÜYOR.
+ *
+ * BİLDİRİLEN HATA: "Komut yazın üstündeki klasör dizini alanına tıklayıp
+ * klavyeden yön tuşları ile klasör seçip enter basınca o klasör dizinine
+ * gidiyor, sonrasında yön tuşları ile seçim yapmaya devam edemiyorum. Mouse
+ * ile tıklamak gerekiyor."
+ *
+ * Seçici açık kalıyor ama `cd` gerçek bir komut: kabuk istemden çıkıyor, komut
+ * kutusu kapanıyor, istem dönünce yeniden açılıyor. Kutunun odak etkisi bu iki
+ * geçişte odağı koşulsuz taşıyordu — önce terminale, sonra kutuya; arama kutusu
+ * odağı kaybediyor, ok tuşları komut kutusuna gidiyordu. Testler bu yüzden İKİ
+ * bileşeni birlikte çiziyor: hata ikisinin arasında.
+ */
+describe("dizin seçici ve komut kutusu", () => {
+  const focus = vi.fn();
+  let signals = { atPrompt: true, altScreen: false, integration: true };
+
+  /** Kabuğun durumu: istemde mi, komut çalışıyor mu. */
+  function shell(atPrompt: boolean, running: boolean) {
+    signals = { atPrompt, altScreen: false, integration: true };
+    useStore.setState({ inputSignals: { t1: signals }, running: { t1: running } });
+  }
+
+  function birlikte() {
+    return (
+      <>
+        <CommandInput />
+        <DirPicker cwd={CWD} onClose={onClose} />
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    focus.mockClear();
+    sessions.set("t1", {
+      insertCommand,
+      cwd: CWD,
+      focus,
+      setAppInput: () => {},
+      inputSignals: () => signals,
+    } as never);
+    const state = useStore.getState();
+    useStore.setState({
+      settings: { ...state.settings, behavior: { ...state.settings.behavior, appInput: true } },
+    });
+    shell(true, false);
+  });
+
+  afterEach(() => {
+    useStore.setState({ inputSignals: {}, running: {} });
+  });
+
+  it("Enter'dan sonra cd başlayıp bitse de odak arama kutusunda kalıyor", async () => {
+    const { container } = render(birlikte());
+    await waitFor(() => expect(satirlar(container)).toContain("src"));
+    const kutu = container.querySelector<HTMLInputElement>(".pop-search")!;
+    expect(document.activeElement, "açılışta odak aramada değil").toBe(kutu);
+
+    await act(async () => {
+      fireEvent.keyDown(kutu, { key: "ArrowDown" });
+    });
+    await act(async () => {
+      fireEvent.keyDown(kutu, { key: "Enter" });
+    });
+    expect(insertCommand).toHaveBeenCalledWith(`cd ${CWD}/src`, true);
+
+    // Kabuk `cd`yi çalıştırıyor, sonra istem dönüyor.
+    act(() => shell(false, true));
+    act(() => shell(true, false));
+
+    expect(focus, "odak terminale alındı").not.toHaveBeenCalled();
+    expect(document.activeElement, "odak arama kutusundan alındı").toBe(kutu);
+    expect(container.querySelector(".command-input-field"), "kutu geri gelmedi").not.toBe(null);
+  });
+
+  it("kapanınca odak komut kutusuna dönüyor", async () => {
+    // Escape ile kapanan seçici odağı boşa düşürseydi bir sonraki komut için
+    // yine fareyle kutuya tıklamak gerekirdi.
+    const { container, rerender } = render(birlikte());
+    await waitFor(() => expect(satirlar(container).length).toBeGreaterThan(0));
+
+    // Gerçekte seçiciyi `App` kaldırıyor; testte ağaç seçicisiz yeniden çiziliyor.
+    rerender(<CommandInput />);
+
+    expect(document.activeElement).toBe(container.querySelector(".command-input-field"));
+  });
+
+  it("kapanırken başka bir metin kutusuna geçildiyse odağa dokunmuyor", async () => {
+    const baska = document.createElement("input");
+    document.body.appendChild(baska);
+    const { container, rerender } = render(birlikte());
+    await waitFor(() => expect(satirlar(container).length).toBeGreaterThan(0));
+
+    baska.focus();
+    rerender(<CommandInput />);
+
+    expect(document.activeElement).toBe(baska);
+    baska.remove();
   });
 });

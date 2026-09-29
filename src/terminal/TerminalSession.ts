@@ -14,6 +14,7 @@ import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
 import { resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
+import { typingOutsideTerminal } from "../lib/focus";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
@@ -708,16 +709,10 @@ export class TerminalSession {
    * sekmeye çift tıklandığında adlandırma kutusu açılıyor, hemen ardından
    * (sekme ilk kez açılıyorsa kabuk başlatıldıktan sonra, asenkron olarak)
    * `setActive` terminale odaklanıyor, kutu `onBlur` ile kapanıp kaydediyordu.
+   * Kuralın kendisi `lib/focus.ts` içinde: komut kutusu da aynısına uyuyor.
    */
   private focusTerminal() {
-    const active = document.activeElement as HTMLElement | null;
-    if (active && active !== document.body) {
-      const isFormField = active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT";
-      // xterm girdiyi kendi gizli textarea'sı üzerinden alıyor; onu bir
-      // "kullanıcı yazıyor" durumu saymamalıyız.
-      const insideTerminal = !!active.closest(".xterm");
-      if (isFormField && !insideTerminal) return;
-    }
+    if (typingOutsideTerminal()) return;
     this.term.focus();
   }
 
@@ -2230,9 +2225,9 @@ ${dim}[${
    * Bildirilen belirti aynen buydu: "sekme kilitli diyor ve focus komut yaz
    * kısmındaysa gidiyor, tekrardan tıklamak gerekiyor."
    *
-   * Kuralın kendisi `focusTerminal` içinde ve bir kez ödenmiş (sekme
-   * adlandırma kutusu); ikinci bir odak kuralı yazmak ikisinin ayrışması
-   * demekti.
+   * Kuralın kendisi `lib/focus.ts` içinde (`typingOutsideTerminal`) ve iki
+   * kez ödenmiş (sekme adlandırma kutusu, dizin seçici); ikinci bir odak
+   * kuralı yazmak ikisinin ayrışması demekti.
    */
   runQuietly(command: string) {
     if (this.exited) return;

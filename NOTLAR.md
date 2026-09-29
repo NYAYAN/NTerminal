@@ -380,6 +380,20 @@ de öneri kaynağını yeniden yüklüyor; o kaynak açılışta bir kez kuruluy
 panelden silinen komut uygulama yeniden açılana kadar yukarı okta görünmeye
 devam ediyordu (`components/historyDeleteSync.test.tsx`).
 
+**Komut kutusu başka bir metin kutusundaki odağı almıyor.** Bildirilen: "klasör
+dizini alanına tıklayıp klavyeden yön tuşları ile klasör seçip enter basınca o
+klasör dizinine gidiyor, sonrasında yön tuşları ile seçim yapmaya devam
+edemiyorum. Mouse ile tıklamak gerekiyor." Dizin seçici `cd`'yi gerçek bir
+komut olarak gönderip açık kalıyor; komut başlayınca kutu kapanıyor, istem
+dönünce açılıyor ve kutunun kip etkisi bu iki geçişte odağı koşulsuz önce
+terminale, sonra kutuya taşıyordu — seçicinin arama kutusundan. Kural artık tek
+yerde, `lib/focus.ts` (`typingOutsideTerminal`): kullanıcı terminalin dışında
+bir metin kutusuna yazıyorsa odağa dokunulmuyor. Sekme adlandırma kutusu için
+`focusTerminal`da bir kez ödenmiş kuralın aynısı; ikinci bir kopya yazmak
+yerine oradan çıkarıldı. Seçici kapanınca odak da komut kutusuna (komut
+çalışıyorsa terminale) dönüyor; yoksa Escape'ten sonra yine fareye uzanmak
+gerekirdi (`components/dirPicker.test.tsx`).
+
 ### 1.11 Yeni sürüm bildirimi
 
 Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son

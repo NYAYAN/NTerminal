@@ -332,6 +332,28 @@ describe("komut satırı kutusu", () => {
     host.remove();
   });
 
+  it("komut başlayınca odak terminale, bitince kutuya geçiyor", () => {
+    /*
+     * Olağan akış. Kutunun odak etkisi artık başka bir metin kutusundaki
+     * odağa dokunmuyor (dizin seçicinin arama kutusu — `dirPicker.test.tsx`);
+     * o istisna bu akışı bozmamalı: çalışan komut tuşları almalı, istem
+     * dönünce de yeni komut kutuya yazılabilmeli.
+     */
+    const { container } = render(<CommandInput />);
+    const shell = (atPrompt: boolean, running: boolean) => {
+      const signals = { atPrompt, altScreen: false, integration: true };
+      inputSignals.mockReturnValue(signals);
+      useStore.setState({ inputSignals: { [TAB]: signals }, running: { [TAB]: running } });
+    };
+    focus.mockClear();
+
+    act(() => shell(false, true));
+    expect(focus, "komut çalışırken odak terminale geçmedi").toHaveBeenCalled();
+
+    act(() => shell(true, false));
+    expect(document.activeElement, "istem dönünce odak kutuya gelmedi").toBe(field(container));
+  });
+
   it("kutu kapanınca terminalin stdin'i geri açılıyor", () => {
     // Bölme kipinde görünür bir kilitlenmeydi: yan bölmeye tıklıyorsunuz,
     // kutu ona ait değil, yazdığınız da hiçbir yere gitmiyor.

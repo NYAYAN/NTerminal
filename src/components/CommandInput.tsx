@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { tokenizeCommand } from "../lib/cmdline";
+import { typingOutsideTerminal } from "../lib/focus";
 import { passThroughSequence, resolveInputMode, SIGINT } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
@@ -162,8 +163,28 @@ export function CommandInput() {
     const session = sessions.get(tabId);
     if (!session) return;
     session.setAppInput(active);
-    if (active) ref.current?.focus();
-    else session.focus();
+    /*
+     * Odak taşınıyor — kullanıcı BAŞKA bir metin kutusuna yazmıyorsa.
+     *
+     * BİLDİRİLEN HATA: "klasör dizini alanına tıklayıp klavyeden yön tuşları
+     * ile klasör seçip enter basınca o klasör dizinine gidiyor, sonrasında yön
+     * tuşları ile seçim yapmaya devam edemiyorum. Mouse ile tıklamak
+     * gerekiyor." Dizin seçici `cd`'yi gerçek bir komut olarak gönderiyor ve
+     * açık kalıyor; komut başlayınca kutu kapanıyor, istem dönünce açılıyor.
+     * Bu etki her iki geçişte odağı koşulsuz taşıyordu: önce terminale, sonra
+     * kutuya — seçicinin arama kutusundan, ok tuşları da kutuya gidiyordu.
+     * Aynı yoldan yan paneldeki arama kutusuna yazarken biten bir komut da
+     * odağı çekip alıyordu.
+     *
+     * Kural `focusTerminal`dakinin aynısı (`lib/focus.ts`); yalnızca kutunun
+     * kendisi "başka bir kutu" sayılmıyor.
+     */
+    const elsewhere =
+      typingOutsideTerminal() && !document.activeElement?.closest(".command-input");
+    if (!elsewhere) {
+      if (active) ref.current?.focus();
+      else session.focus();
+    }
 
     /*
      * Temizlik ŞART, süs değil.
