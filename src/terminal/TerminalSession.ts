@@ -13,7 +13,7 @@ import { hasVisibleContent, type BlockView } from "../lib/blocks";
 import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
-import { resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
+import { looksLikeSecretPrompt, resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { getTheme } from "../lib/themes";
@@ -1355,7 +1355,8 @@ export class TerminalSession {
   }
 
   /**
-   * Uygulama kipi: tuşlar terminale değil, arayüzdeki kutuya gidiyor.
+   * Uygulama kipi: tuşlar terminale değil, arayüzdeki kutuya gidiyor — istemde
+   * komut yazılırken de, komut çalışırken ona yanıt yazılırken de.
    *
    * `disableStdin` ŞART. Odak yalnızca kutuda diye varsaymak yetmiyor:
    * kullanıcı metin seçmek için terminale tıkladığında odak oraya geçiyor ve
@@ -1414,6 +1415,40 @@ export class TerminalSession {
   sendKeys(data: string) {
     if (!data) return;
     void api.ptyWrite(this.tabId, data).catch(() => {});
+  }
+
+  /**
+   * Program "uygulama imleç tuşları" kipini açtı mı (DECCKM)?
+   *
+   * Komut çalışırken kutu boşsa oklar programa KUTUDAN gidiyor, xterm'den
+   * değil; doğru diziyi (`ESC O A` / `ESC [ A`) seçmek için kipi buradan
+   * okuyoruz. Kodlamanın kendisi `lib/inputMode.ts` içinde.
+   */
+  applicationCursorKeys(): boolean {
+    return this.term.modes.applicationCursorKeysMode;
+  }
+
+  /**
+   * Çalışan program şu an bir parola mı soruyor?
+   *
+   * Kutu komut çalışırken yazılanı GÖSTERİYOR, terminal ise parola sorarken
+   * yansıtmıyor. Kutu bu soruya bakıp yazılanı gizliyor. Karar saf bir
+   * işlevde (`looksLikeSecretPrompt`, gerekçesi orada); burası yalnızca
+   * sorunun metnini ekrandan okuyor: imlecin satırı, imlece kadar.
+   *
+   * Uzun bir soru (`Password for 'https://…':`) ekranda birkaç satıra
+   * sarılabiliyor ve sözcük üst satırda kalıyor; sarılmış satırlar bu yüzden
+   * birleştiriliyor. Sınır var: bir sorunun onlarca satır sürmesi beklenmiyor.
+   */
+  secretPrompt(): boolean {
+    const buf = this.term.buffer.active;
+    let y = buf.baseY + buf.cursorY;
+    let text = buf.getLine(y)?.translateToString(true, 0, buf.cursorX) ?? "";
+    for (let i = 0; i < 8 && y > 0 && buf.getLine(y)?.isWrapped; i++) {
+      y -= 1;
+      text = (buf.getLine(y)?.translateToString(false) ?? "") + text;
+    }
+    return looksLikeSecretPrompt(text);
   }
 
   private syncCellHeight() {

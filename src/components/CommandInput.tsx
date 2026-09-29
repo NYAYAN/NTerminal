@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { tokenizeCommand } from "../lib/cmdline";
-import { passThroughSequence, resolveInputMode, SIGINT } from "../lib/inputMode";
+import { passThroughSequence, resolveInputMode, SIGINT, stdinKeyAction } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
 import { promptedTabs } from "../lib/promptSeen";
@@ -23,10 +23,12 @@ import { sessions, useStore } from "../store/useStore";
  *
  * ## Ne zaman devrede
  *
- * Yalnızca kabuk istemde beklerken. Komut çalışırken, `vim` gibi tam ekran
- * programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan
- * terminale gidiyor — o programlar tuşları BİR BİR, o an istiyor. Kararı
- * `lib/inputMode.ts` veriyor; bu bileşen yalnızca sonucunu uyguluyor.
+ * Kabuk istemde beklerken KOMUT satırı; komut çalışırken o komutun YANIT
+ * satırı — `ng serve`in "(Y/n)" sorusu da buraya yazılıyor, yazılan Enter'la
+ * çalışan programa gidiyor. `vim` gibi tam ekran programlarda ve kabuk
+ * entegrasyonu olmayan profillerde tuşlar doğrudan terminale gidiyor — orada
+ * ekranı program yönetiyor. Kararı `lib/inputMode.ts` veriyor; bu bileşen
+ * yalnızca sonucunu uyguluyor.
  *
  * ## Tab kutuyu TERK ETMİYOR
  *
@@ -81,7 +83,18 @@ export function CommandInput() {
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
   const tabId = tab?.id ?? null;
 
-  const [value, setValue] = useState("");
+  /*
+   * İki satır, iki ALICI: kabuğa yazılan komut taslağı ve çalışan programa
+   * yazılan yanıt.
+   *
+   * Tek bir değer yetmiyor. Komut kabuğa değil programa giderken yarım kalmış
+   * bir yanıt, komut bitince kutuda kalıp bir sonraki Enter'da KOMUT olarak
+   * çalışırdı ("y" ya da bir parola). Tersi de doğru: istemde yarım bırakılan
+   * taslak (geçmiş panelinden bir komut çalıştırılınca) çalışan programa
+   * gitmemeli ve komut bitince yerinde olmalı.
+   */
+  const [draft, setDraft] = useState("");
+  const [reply, setReply] = useState("");
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const highlightRef = useRef<HTMLPreElement | null>(null);
 
@@ -112,9 +125,14 @@ export function CommandInput() {
     integration: signals?.integration ?? false,
     atPrompt: signals?.atPrompt ?? false,
     altScreen: signals?.altScreen ?? false,
+    running,
     exited,
   });
-  const active = mode === "app";
+  // Kutu açık: istemde komut satırı ya da çalışan komutun yanıt satırı.
+  const active = mode !== "raw";
+  const stdin = mode === "stdin";
+  const value = stdin ? reply : draft;
+  const setValue = stdin ? setReply : setDraft;
 
   useEffect(() => {
     if (!tabId) return;
@@ -146,8 +164,14 @@ export function CommandInput() {
 
   // Sekme değişince kutu boşalmalı: yazılan metin O sekmenin kabuğuna ait.
   useEffect(() => {
-    setValue("");
+    setDraft("");
+    setReply("");
   }, [tabId]);
+
+  // Komut bitti: gönderilmemiş yanıtın alıcısı kalmadı.
+  useEffect(() => {
+    if (!stdin) setReply("");
+  }, [stdin]);
 
   /**
    * Veri yolunu tek kapıya indir ve odağı doğru yere ver.
@@ -161,8 +185,7 @@ export function CommandInput() {
     const session = sessions.get(tabId);
     if (!session) return;
     session.setAppInput(active);
-    if (active) ref.current?.focus();
-    else session.focus();
+    if (!active) session.focus();
 
     /*
      * Temizlik ŞART, süs değil.
@@ -174,6 +197,19 @@ export function CommandInput() {
      */
     return () => session.setAppInput(false);
   }, [active, tabId]);
+
+  /*
+   * Odak kutuya — istem açılınca da, komut başlayınca da.
+   *
+   * `stdin` de bağımlılık ve bu şart: komut başladığında kutu açık KALIYOR,
+   * yalnızca alıcısı değişiyor; `active` aynı kaldığı için yukarıdaki etki
+   * koşmuyor. Komut kenar çubuğundaki bir düğmeden (geçmiş, favori)
+   * başladıysa odak o düğmede kalır ve programın sorusuna yazılan hiçbir yere
+   * gitmezdi.
+   */
+  useEffect(() => {
+    if (active) ref.current?.focus();
+  }, [active, stdin, tabId]);
 
   /*
    * Terminale tıklamak odağı kutudan ALMAMALI.
@@ -201,10 +237,12 @@ export function CommandInput() {
   }, [active]);
 
   // Yazdıkça öneri listesi. Kabuğun satırını okumuyoruz artık — metin burada.
+  // Yalnızca KOMUT satırında: çalışan programa yazılan yanıtın ("y", bir
+  // parola) komut geçmişiyle ilgisi yok.
   useEffect(() => {
-    if (!active) return;
+    if (!active || stdin) return;
     useStore.getState().updateSuggestions({ prefix: value, full: value, hintTail: false });
-  }, [value, active]);
+  }, [value, active, stdin]);
 
   /**
    * Öneri kabul etme yolu.
@@ -230,7 +268,11 @@ export function CommandInput() {
       ref.current?.focus();
     });
     return () => useStore.getState().setAppInputSink(null);
-  }, [active]);
+    // `stdin`: komut başlayınca yazılan satır değişiyor (taslak → yanıt).
+    // Eski kayıt taslağa yazmaya devam ederdi; Ctrl+P ile seçilen yol,
+    // dosya yolu soran programın satırına değil gizli taslağa düşerdi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, stdin]);
 
   // Kutu içeriğe göre büyüsün; tek satırlık başlangıç yüksekliği korunuyor.
   useLayoutEffect(() => {
@@ -238,16 +280,20 @@ export function CommandInput() {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value, active]);
+  }, [value, active, stdin]);
 
   /*
-   * Komut çalışırken kutu kapanıyor — ama YERİNE bir şerit geliyor.
+   * Kutu KAPALIYKEN komut çalışıyorsa YERİNE bir şerit geliyor.
    *
    * ÖLÇÜLEN SORUN: "Komut yazdım, Enter'a bastım, komut satırı kayboldu.
    * Durdurmak istersem nasıl yapacağım?" Kip doğru çalışıyordu (tuşlar
    * çalışan komuta gitsin diye kutu kapanıyor) ama ekranda bunu söyleyen ve
    * durdurmanın yolunu gösteren hiçbir şey yoktu; kullanıcı kutunun
    * kaybolmasını bir arıza gibi görüyordu.
+   *
+   * Uygulama komut satırı açıkken komut çalışırken de KUTU çiziliyor (yanıt
+   * satırı, aşağıda) ve durdurma düğmesi onun içinde. Şerit artık yalnızca
+   * ayar kapalıyken (klasik terminal) geliyor.
    *
    * Şerit AYNI yerde duruyor: gözün baktığı yer değişmiyor.
    *
@@ -355,6 +401,16 @@ export function CommandInput() {
 
   const send = (data: string) => sessions.get(tabId)?.sendKeys(data);
 
+  /*
+   * Program parola soruyor: yazılan NOKTA olarak görünüyor.
+   *
+   * Terminal parola sorarken yazılanı yansıtmıyor; kutu yansıtıyordu. Karar
+   * oturumun (sorunun metni ekranda); gerekçesi `looksLikeSecretPrompt`
+   * üzerinde. Kutu boşken sınıf takılmıyor: gizlenecek bir şey yok ve yer
+   * tutucu da noktaya dönmesin.
+   */
+  const secret = stdin && value.length > 0 && !!sessions.get(tabId)?.secretPrompt();
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const store = useStore.getState();
     const box = e.currentTarget;
@@ -376,6 +432,8 @@ export function CommandInput() {
      * kısayoluyla kopyalandığında seçim duruyor: orada ikinci bir anlam yok.
      */
     const copyBoxSelection = (collapse: boolean) => {
+      // Gizli yanıt (parola) panoya çıkmıyor; parola alanları da kopyalatmaz.
+      if (secret) return;
       const text = box.value.slice(box.selectionStart, box.selectionEnd);
       void navigator.clipboard
         .writeText(text)
@@ -433,6 +491,47 @@ export function CommandInput() {
         return;
       }
       // "sigint": aşağıda kabuğa gidiyor.
+    }
+
+    /*
+     * Çalışan komutun satırı. Kural `stdinKeyAction` üzerinde ve tek cümle:
+     * kutu boşken kutunun kullanmadığı tuş doğrudan programa gidiyor, yazmaya
+     * başlayınca satır kutuda toplanıyor ve Enter'la gönderiliyor.
+     *
+     * Ctrl+C buraya karar verilmiş olarak geliyor ("kes"): SIGINT gidiyor ve
+     * gönderilmemiş satır bırakılıyor — terminal sürücüsü de kesmede bekleyen
+     * satırı atıyor.
+     */
+    if (stdin) {
+      if (pass === SIGINT) {
+        e.preventDefault();
+        send(SIGINT);
+        setValue("");
+        return;
+      }
+      // IME bileşimi sürerken Enter bileşimi onaylıyor, satırı göndermiyor.
+      if (e.nativeEvent.isComposing) return;
+      const action = stdinKeyAction(e, {
+        empty: value.length === 0,
+        appCursor: session?.applicationCursorKeys() ?? false,
+      });
+      if (!action) return;
+      e.preventDefault();
+      if (action.kind === "send") {
+        send(action.data);
+        return;
+      }
+      /*
+       * Satır sonları terminalin gönderdiği biçimde: Enter `\r`. Yapıştırılan
+       * ya da Shift+Enter'la bölünen yanıt `\n` taşıyor; ızgaraya yapıştırmak
+       * da her satırı `\r` ile gönderiyordu (xterm böyle çeviriyor) ve program
+       * aynı baytları almalı.
+       */
+      const line = value.replace(/\r?\n/g, "\r");
+      if (action.kind === "submit") send(`${line}\r`);
+      if (action.kind === "flush") send(line + action.data);
+      setValue("");
+      return;
     }
 
     /*
@@ -549,12 +648,43 @@ export function CommandInput() {
     }
   };
 
+  /*
+   * Komut çalışırken kutu YANIT satırı: `>_` yerine "Komut çalışıyor…"
+   * şeridinin yanıp sönen noktası, sağda Durdur düğmesi.
+   *
+   * Şeridin iki işi (komutun çalıştığını söylemek, durdurmanın yolunu
+   * göstermek) kutuya taşındı; şerit kutunun yerine geçtiği için ikisi aynı
+   * anda çizilemiyordu. Silahlı hâl (ilk Ctrl+C) da burada: kırmızı zemin ve
+   * "Tekrar basın". Ölçüler komut satırıyla aynı — komut başlayınca alt kenar
+   * oynamamalı (bkz. `.command-running`).
+   *
+   * Renklendirme YOK: yazılan bir kabuk komutu değil ve `y`yi komut rengine
+   * boyamak yanıltıcı olurdu. Metin kutunun kendi rengiyle çiziliyor.
+   */
+  const boxClass = stdin ? (armed ? "command-input stdin armed" : "command-input stdin") : "command-input";
+  const fieldClass = stdin
+    ? secret
+      ? "command-input-field plain secret"
+      : "command-input-field plain"
+    : "command-input-field";
+  const placeholder = stdin
+    ? armed
+      ? t("input.stopAgain")
+      : t("input.running")
+    : t("input.placeholder");
+
   return (
-    <div className="command-input">
+    <div className={boxClass} style={stdin ? rowStyle : undefined}>
       <div className="command-input-row">
-        <span className="command-input-mark" aria-hidden="true">
-          {">_"}
-        </span>
+        {stdin ? (
+          <span className="command-input-mark running" aria-hidden="true">
+            <span className="running-dot" />
+          </span>
+        ) : (
+          <span className="command-input-mark" aria-hidden="true">
+            {">_"}
+          </span>
+        )}
 
         <div className="command-input-box">
           {/*
@@ -565,24 +695,26 @@ export function CommandInput() {
             Sondaki boşluk bilinçli: satır sonunda yeni satır varken tarayıcı
             son boş satırı çizmiyor ve katman bir satır kısa kalıyor.
           */}
-          <pre ref={highlightRef} className="command-input-hl" aria-hidden="true" style={typography}>
-            {tokenizeCommand(value).map((token, index) => (
-              <span key={index} className={`tok-${token.kind}`}>
-                {token.text}
-              </span>
-            ))}
-            {" "}
-          </pre>
+          {!stdin && (
+            <pre ref={highlightRef} className="command-input-hl" aria-hidden="true" style={typography}>
+              {tokenizeCommand(value).map((token, index) => (
+                <span key={index} className={`tok-${token.kind}`}>
+                  {token.text}
+                </span>
+              ))}
+              {" "}
+            </pre>
+          )}
 
           <textarea
             ref={ref}
-            className="command-input-field"
+            className={fieldClass}
             rows={1}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
-            placeholder={t("input.placeholder")}
+            placeholder={placeholder}
             style={typography}
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -595,6 +727,22 @@ export function CommandInput() {
             }}
           />
         </div>
+
+        {stdin && (
+          <button
+            type="button"
+            className="running-stop"
+            title={t("input.stopTitle")}
+            // Tıklama odağı kutudan ALMIYOR: kesmeyi yok sayan bir programda
+            // (ya da "emin misiniz?" diye soranda) yazmaya kutuda devam
+            // edilebilmeli, odak düğmede kalırsa yazılan hiçbir yere gitmez.
+            onMouseDown={(e) => e.preventDefault()}
+            // Şeritteki düğmeyle aynı yol (`stopRunning`), gerekçesi orada.
+            onClick={() => useStore.getState().stopRunning(tabId)}
+          >
+            {armed ? t("input.stopAgainShort") : t("input.stop")}
+          </button>
+        )}
       </div>
     </div>
   );

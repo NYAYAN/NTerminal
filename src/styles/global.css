@@ -3001,6 +3001,26 @@ html[data-platform="macos"] .titlebar {
   opacity: 0.75;
 }
 
+/* Komut calisirken isaretin yerinde "calisiyor" noktasi.
+ *
+ * Genislik `>_` ile AYNI (2ch, ayni yazi tipi): yazilan metin komut
+ * satirindakiyle ve terminaldeki satirlarla ayni sutundan baslamali; komut
+ * basladiginda metin yana kaymamali. Yukseklik bir satir, nokta o satirin
+ * ortasinda - cok satirli yanitta da ilk satira hizali. */
+.command-input-mark.running {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2ch;
+  height: var(--cmd-row-h, 20px);
+  padding-top: 0;
+  opacity: 1;
+}
+
+.command-input-mark.running .running-dot {
+  margin-left: 0;
+}
+
 /* Metin kutusu ile renkli katmani UST USTE tutan kap. */
 .command-input-box {
   position: relative;
@@ -3056,6 +3076,18 @@ html[data-platform="macos"] .titlebar {
   background: transparent;
   color: transparent;
   caret-color: var(--text);
+}
+
+/* Calisan komutun yanit satiri renklendirilmiyor: arkada renkli katman yok,
+   metni kutu kendisi ciziyor. */
+.command-input-field.plain {
+  color: var(--text);
+}
+
+/* Parola sorusu: yazilan nokta olarak gorunuyor (bkz. `looksLikeSecretPrompt`).
+   Terminal o sirada yaziyi yansitmiyor; kutu da gostermemeli. */
+.command-input-field.secret {
+  -webkit-text-security: disc;
 }
 
 /* Secim: metin saydam oldugu icin varsayilan secim BOS bir dikdortgen
@@ -3165,12 +3197,14 @@ html[data-platform="macos"] .titlebar {
  * Serit KIRMIZILASIYOR ve dugme dolguya geciyor. Iki kanal birden bilincli:
  * yalnizca metin degisseydi ("Durdur" -> "Tekrar basin") goz onu bir saniyelik
  * pencerede yakalayamazdi; renk degisimi cevre gorusle bile fark ediliyor. */
-.command-running.armed {
+.command-running.armed,
+.command-input.armed {
   background: color-mix(in srgb, var(--err) 10%, var(--term-bg));
   border-top-color: color-mix(in srgb, var(--err) 55%, transparent);
 }
 
-.command-running.armed .running-dot {
+.command-running.armed .running-dot,
+.command-input.armed .running-dot {
   background: var(--err);
 }
 
@@ -3185,7 +3219,8 @@ html[data-platform="macos"] .titlebar {
   color: var(--err);
 }
 
-.command-running.armed .running-stop {
+.command-running.armed .running-stop,
+.command-input.armed .running-stop {
   background: color-mix(in srgb, var(--err) 22%, transparent);
   border-color: var(--err);
   color: var(--err);
@@ -3224,6 +3259,12 @@ html[data-platform="macos"] .titlebar {
 .command-input-field::selection {
   background: color-mix(in srgb, var(--accent) 38%, transparent);
   color: transparent;
+}
+
+/* Yanit satirinda metin katmanin degil kutunun: secim onu saydam yapsaydi
+   secilen harfler kaybolurdu. */
+.command-input-field.plain::selection {
+  color: var(--text);
 }
 
 /* Yer tutucu saydamliktan MUAF: kendi rengi var, yoksa hic gorunmezdi. */

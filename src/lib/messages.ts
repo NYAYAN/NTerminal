@@ -930,12 +930,15 @@ export const MESSAGES = {
     "With no selection Ctrl+C always goes to the shell (interrupting the running command). The selection is cleared after copying, so a second Ctrl+C interrupts.",
   ],
   "input.placeholder": ["Komut yazın", "Type a command"],
+  // Hem şeridin metni hem komut çalışırken kutunun yer tutucusu. Kısa ve
+  // durum bildiren: kutunun yazılacak yer olduğunu odak ve imleç zaten
+  // söylüyor, arayüzün kendini anlatması gerekmiyor.
   "input.running": ["Komut çalışıyor…", "Command running…"],
   "input.starting": ["Kabuk başlatılıyor…", "Starting shell…"],
   "input.stop": ["Durdur", "Stop"],
   "input.stopTitle": [
-    "Çalışan komutu durdurur (SIGINT). Klavyeden: Ctrl+C'ye arka arkaya iki kez.",
-    "Stops the running command (SIGINT). From the keyboard: press Ctrl+C twice in a row.",
+    "Çalışan komutu durdurur (SIGINT). Klavyeden Ctrl+C; odak kutuda ya da terminalde değilse arka arkaya iki kez.",
+    "Stops the running command (SIGINT). From the keyboard: Ctrl+C — twice in a row when the focus is outside the box and the terminal.",
   ],
   // İlk basıştan sonraki hâl. Metin EMİR kipinde ve kısa: kullanıcı o an
   // tuşun üstünde ve okuyacak vakti yok.
@@ -990,8 +993,8 @@ export const MESSAGES = {
     "Let the app draw the command line (outside the terminal)",
   ],
   "settings.appInputHint": [
-    "Yazdıklarınız pencerenin dibindeki kutuda toplanır ve kabuğa Enter’da gider; kaydırma satırı oynatmaz. Yalnızca kabuk istemde beklerken geçerli: komut çalışırken, vim gibi tam ekran programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan terminale gider. Tab kutuda kalır: öneri listesi açıkken seçili satırı kabul eder (cd için klasörler arasında kat kat iner), kapalıyken bir şey yapmaz.",
-    "What you type collects in a box at the bottom of the window and reaches the shell on Enter, so scrolling never moves it. It applies only while the shell is at a prompt: while a command runs, in full-screen programs such as vim, and in profiles without shell integration, keys go straight to the terminal. Tab stays in the box: with the suggestion list open it accepts the selected row (for cd it walks down folder by folder); with the list closed it does nothing.",
+    "Yazdıklarınız pencerenin dibindeki kutuda toplanır ve kabuğa Enter’da gider; kaydırma satırı oynatmaz. Komut çalışırken kutu o komutun yanıt satırı olur: programın sorusuna yanıt buraya yazılır, kutu boşken oklar ve Enter doğrudan programa gider. vim gibi tam ekran programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan terminale gider. Tab kutuda kalır: öneri listesi açıkken seçili satırı kabul eder (cd için klasörler arasında kat kat iner), kapalıyken bir şey yapmaz; komut çalışırken yazılanı tamamlaması için programa devreder.",
+    "What you type collects in a box at the bottom of the window and reaches the shell on Enter, so scrolling never moves it. While a command runs, the box becomes that command’s input line: answers to its questions are typed here, and with the box empty the arrow keys and Enter go straight to the program. In full-screen programs such as vim and in profiles without shell integration, keys go straight to the terminal. Tab stays in the box: with the suggestion list open it accepts the selected row (for cd it walks down folder by folder); with the list closed it does nothing; while a command runs it hands what you typed to the program to complete.",
   ],
   "settings.promptAtBottom": [
     "Komut satırı her zaman pencerenin dibinde dursun",

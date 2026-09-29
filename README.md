@@ -301,14 +301,40 @@ olmayan bir yürütülebilir ya da silinmiş bir çalışma dizini, koşulsuz bi
 yeniden başlatmada saniyede yüzlerce süreç demek olurdu. O durumda eski kutu
 geri geliyor ve nereye bakılacağını söylüyor.
 
-**Çalışan komutu durdurma.** Komut çalışırken komut satırı kapanıp yerine
-"Komut çalışıyor…" şeridi geliyor; düğmesi tek tıkla durduruyor. Klavyeden
-**Ctrl+C iki kez arka arkaya**: ilk basış şeridi kırmızıya çevirip "tekrar
-basın" diyor, ikincisi kabuğa SIGINT gönderiyor. İki basış, tuşun ikinci
-anlamı yüzünden — Ctrl+C aynı zamanda kopyalama, ve tek basışta durdurmak
-kopyalamak isteyenin işini keserdi. Silah 1,5 saniye sonra kendiliğinden
-düşüyor. Terminalin İÇİNDE kural yok: orada düz Ctrl+C kabuğun kendi tuşu ve
-tek basışta gidiyor.
+**Komut çalışırken yanıt da komut satırına yazılır.** `ng serve`in
+"Would you like to use a different port? (Y/n)" sorusu, `npm init`in soruları,
+`Read-Host`, bir REPL — çalışan program bir şey sorduğunda yanıt terminalin
+içine değil, alttaki kutuya yazılıyor ve Enter'la programa gidiyor. Kutu komut
+çalışırken kapanmıyor; `>_` yerine yanıp sönen bir nokta ve "Komut çalışıyor…"
+yazısı çıkıyor. Kural tek cümle: **kutu boşken** tuşlar doğrudan programa
+gidiyor, yazmaya başlayınca satır kutuda toplanıp Enter'la gönderiliyor.
+Böylece:
+
+- Boş kutuda Enter programa gider — "(Y/n)" sorusunda varsayılanı kabul etmek.
+- Boş kutuda oklar, Boşluk, Esc, Backspace ve `Ctrl+<harf>` programa gider:
+  `ng new`in stil listesi gibi oklarla seçilen listeler, işaret kutuları,
+  "devam etmek için bir tuşa basın" çalışıyor.
+- Yazarken oklar ve Backspace kutuyu düzenler; **Tab** yazılanı programa
+  devredip tamamlatır (REPL, ssh ardındaki kabuk), **Esc** yazılanı bırakır.
+- Program parola soruyorsa (`password:`, `passphrase … :`, `Parola:`) yazılan
+  nokta olarak görünüyor ve panoya kopyalanamıyor.
+- Yazılan yanıt komut geçmişine girmiyor, öneri listesi açılmıyor. Komut
+  gönderilmemiş bir yanıtla biterse o yanıt silinir; istemde yarım bırakılan
+  komut taslağı ise komut bitince yerinde durur.
+
+Tam ekran programlarda (`vim`, `less`, `git log`) kutu yine kapanıyor ve tuşlar
+doğrudan terminale gidiyor: orada ekranı program yönetiyor.
+
+**Çalışan komutu durdurma.** Yanıt satırının sağındaki **Durdur** düğmesi tek
+tıkla durduruyor. Klavyeden kutudayken ya da terminalin içindeyken düz
+`Ctrl+C` tek basışta gidiyor — kabuğun kendi tuşu. Odak başka bir yerdeyse
+(kenar çubuğu, sekme çubuğu) **Ctrl+C iki kez arka arkaya**: ilk basış satırı
+kırmızıya çevirip "tekrar basın" diyor, ikincisi kabuğa SIGINT gönderiyor. İki
+basış, tuşun ikinci anlamı yüzünden — Ctrl+C aynı zamanda kopyalama, ve odak
+yazılan yerde değilken tek basışta durdurmak kopyalamak isteyenin işini
+keserdi. Silah 1,5 saniye sonra kendiliğinden düşüyor. Uygulama komut satırı
+ayarı kapalıysa (klasik terminal) kutunun yerinde "Komut çalışıyor…" şeridi ve
+aynı düğme duruyor.
 
 **Boş satırda ↑: geçmiş paneli.** Komut satırı boşken yukarı ok, kutunun
 hemen üstünde **GEÇMİŞ** panelini açıyor: son komutlar, ne zaman
@@ -832,7 +858,8 @@ da sığmazsa aynı menünün altına, ayrı bir bölüme düşüyor.
 `Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
 gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan
 komutu durdurur. Komut kutusunda da aynı: seçili metin kopyalanır ve seçim
-kalkar, seçim yoksa satır bırakılır ve kesme kabuğa gider.
+kalkar, seçim yoksa satır bırakılır ve kesme kabuğa gider. Komut çalışırken
+kutu o komutun yanıt satırı olduğundan orada da tek basış yetiyor.
 
 Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
 açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.
@@ -1097,6 +1124,12 @@ türlerinin hiçbiri Linux'ta karşılık bulmuyor.
 - Bağlantı renklendirmesi yalnızca **görünür satırlara** uygulanıyor; çok hızlı
   akan çıktıda renk bir kare gecikmeli oturuyor (erteleme penceresi 90 ms).
 - `cmd.exe` için çıkış kodu bildirilemiyor (yukarıda anlatıldı).
+- Komut çalışırken kutuya yazılan yanıt programa **Enter'la** gidiyor. Yazdıkça
+  süzülen listeler (bazı `npx create-*` araçlarının arama kutuları) süzgeci bu
+  yüzden yazarken değil Enter'da görüyor; Jest/Vitest'in izleme kipindeki tek
+  harflik kısayollar da harf + Enter ile çalışıyor. Tuşları anında göndermek
+  gereken bir programda *Ayarlar › Terminal › Komut satırını uygulama çizsin*
+  kapatılabilir; o zaman terminal klasik davranışa döner.
 - Bölünmüş bölme (split pane) yok; ayrım gruplar ve sekmeler üzerinden.
 - **fish** için kabuk entegrasyonu yok: bash/zsh söz dizimini paylaşmadığı için
   kendi betiği gerekiyor. Profil olarak açılıyor ve terminal çalışıyor, ama

@@ -664,6 +664,64 @@ adı "Porta…", "P…" diye eziyor, birkaç satırda tümden kaybettiriyordu.
 Testler: `lib/tabOverflow.test.ts` (yarı eşiği, iki yandan kırpılma,
 ölçülemeyen sekme, hepsi sığdığında sıfır).
 
+### 1.17 Komut çalışırken yanıt da kutuya yazılıyor
+
+**Bildirilen:** "`ng serve` dediğimde 'Would you like to use a different port?
+(Y/n)' geliyor; bu bilgiyi komut yazma kısmına yazamıyoruz, doğrudan mesajın
+çıktığı yere yazıyoruz — gerçek bir terminal yapısı sağlamamış oluyor."
+
+Eski karar bilinçliydi ve [`lib/inputMode.ts`](src/lib/inputMode.ts) başında
+yazıyordu: komut çalışırken kutu kapanıyor, tuşlar ızgaraya gidiyor, çünkü
+"program tuşları BİR BİR, o an isteyebilir". Doğru bir gözlem ama kullanıcıya
+iki yazma yeri bırakıyordu: komut aşağıya, programın sorusuna yanıt yukarıya.
+
+**Bugünkü hâl: üçüncü kip, `stdin`.** Kabuk istemdeyse `app` (komut satırı),
+komut çalışıyorsa `stdin` (yanıt satırı), tam ekran programda ya da
+entegrasyonsuz profilde `raw`. Yanıt satırında kural tek cümle
+([`stdinKeyAction`](src/lib/inputMode.ts)): **kutu boşken** kutunun kullanmadığı
+tuşlar doğrudan programa, yazmaya başlayınca satır kutuda ve Enter'la gidiyor.
+Satırı Enter'a kadar tutmak terminal sürücüsünün kanonik kipte zaten yaptığı
+iş; "tuşları o an isteyen" programların istediği tuşlar (oklar, Enter, Boşluk,
+Esc, Ctrl+harf) boş kutuda anında geçtiği için seçim listeleri ve "bir tuşa
+basın" çalışıyor. Dolu kutuda Tab satırı programa devrediyor (`flush`):
+tamamlamayı REPL ya da ssh ardındaki kabuk yapıyor ve satırı görmeden
+yapamaz.
+
+Yan kararlar, her biri bir tuzağı kapatıyor:
+
+- **İki ayrı değer** (`draft` / `reply`). Tek değerle, gönderilmemiş bir yanıt
+  komut bitince kutuda kalıp sonraki Enter'da KOMUT olarak çalışırdı.
+- **Parola sezgisi** ([`looksLikeSecretPrompt`](src/lib/inputMode.ts)). Terminal
+  parola sorarken yankıyı kapatıyor, kutu kapatmıyordu; ConPTY konsolun kipini
+  dışarı vermediği için elde kalan sorunun metni. İki noktayla biten ve parola
+  sözcüğü taşıyan satır → yazılan nokta, panoya kopyalanmıyor.
+- **Ctrl+C kutuda tek basış.** `App.tsx`in iki basış kuralı odak "yazılan yerin
+  dışındayken" içindi; yanıt satırı artık yazılan yer, terminalin içi gibi
+  dışarıda bırakıldı (`shellCtrlC`). mac'te kutudaki seçim Cmd+C'de kopyalama
+  sayılıyor (`boxSelected`), yoksa tuş durdurma silahına dönerdi.
+- **Odak etkisi `stdin`e de bağlı.** Komut başlarken kutu açık kaldığı için
+  `active` değişmiyor; komut kenar çubuğundaki bir düğmeden başlarsa odak
+  orada kalırdı.
+- **Ölçü aynı.** Yanıt satırı komut satırıyla aynı yükseklikte (ölçüldü: ikisi
+  de 32px, terminal 750px'te sabit) — komut başlarken terminal yeniden
+  ölçülendirilmiyor, "flash" geri gelmiyor. `>_` yerine gelen nokta `2ch`
+  genişlikte, metin aynı sütundan başlıyor.
+
+**Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
+izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`
+çoğunda zararsız: "testleri yeniden koş"). Tuşları anında isteyen bir program
+için çıkış yolu ayar: komut satırı kapatılınca terminal klasik davranışa
+dönüyor. Ayrı bir "çalışırken kutu" ayarı eklenmedi; ihtiyaç doğarsa yeri
+`resolveInputMode`deki `running` dalı.
+
+Gözle doğrulandı (yalıtılmış geliştirme örneği, CDP): `(Y/n)` sorusuna kutudan
+`n` → program `"n"` aldı; parola sorusunda kutu `•••••••`, program 7 karakter
+aldı; oklarla liste seçimi; kutudan tek Ctrl+C; odak dışarıdayken silahlı hâl
+ve Durdur düğmesi. Testler: `lib/inputMode.test.ts` (kip, tuş kodlaması,
+parola sezgisi), `components/CommandInput.test.tsx` (yanıt satırı — yeni
+15 testin 15'i de eski bileşende düşüyor), `store/stopRunning.test.ts`
+(kaynaktaki `shellCtrlC` / `copyWins` kuralı).
+
 ---
 
 ## 2. Açık işler

@@ -73,6 +73,10 @@ const writeText = vi.fn(async () => {});
  * tetikliyor. Sahte oturum da bunu vermek zorunda.
  */
 const inputSignals = vi.fn(() => ({ atPrompt: true, altScreen: false, integration: true }));
+/** Program uygulama imleç tuşlarını istemiş mi (DECCKM); varsayılan hayır. */
+const applicationCursorKeys = vi.fn(() => false);
+/** Çalışan program parola mı soruyor; kuralın kendisi `inputMode.test.ts` içinde. */
+const secretPrompt = vi.fn(() => false);
 
 /** Kabuğun bildirdiği sinyaller; varsayılan "istemde bekliyor". */
 function seed(signals: Partial<{ atPrompt: boolean; altScreen: boolean; integration: boolean }> = {}) {
@@ -107,6 +111,8 @@ beforeEach(() => {
   ctrlCAction.mockReset().mockReturnValue("sigint");
   copyForCtrlC.mockClear();
   writeText.mockClear();
+  applicationCursorKeys.mockReset().mockReturnValue(false);
+  secretPrompt.mockReset().mockReturnValue(false);
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
   sessions.set(TAB, {
     sendKeys,
@@ -115,6 +121,8 @@ beforeEach(() => {
     ctrlCAction,
     copyForCtrlC,
     inputSignals,
+    applicationCursorKeys,
+    secretPrompt,
   } as never);
   seed();
 });
@@ -122,8 +130,29 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   sessions.delete(TAB);
-  useStore.setState({ groups: [], activeGroupId: null, inputSignals: {}, appInputSink: null });
+  useStore.setState({
+    groups: [],
+    activeGroupId: null,
+    inputSignals: {},
+    appInputSink: null,
+    running: {},
+    stopArmed: null,
+  });
 });
+
+/** Komut çalışıyor: kabuk istemde değil ve depo komutu "çalışıyor" biliyor. */
+function seedRunning(signals: Partial<{ altScreen: boolean; integration: boolean }> = {}) {
+  seed({ atPrompt: false, ...signals });
+  useStore.setState({ running: { [TAB]: true } });
+}
+
+/** Uygulama komut satırı ayarını kapatır (klasik terminal). `seed` ayarı açtığı için ondan SONRA. */
+function appInputOff() {
+  const state = useStore.getState();
+  useStore.setState({
+    settings: { ...state.settings, behavior: { ...state.settings.behavior, appInput: false } },
+  });
+}
 
 describe("komut satırı kutusu", () => {
   it("kabuk istemde beklerken açılıyor", () => {
@@ -131,42 +160,249 @@ describe("komut satırı kutusu", () => {
     expect(field(container)).not.toBe(null);
   });
 
-  it("komut çalışırken DURDUR şeridi geliyor", () => {
+  it("ayar kapalıyken komut çalışırken DURDUR şeridi geliyor", () => {
     // ÖLÇÜLEN SORUN: "Enter'a bastım, komut satırı kayboldu. Durdurmak
-    // istersem nasıl yapacağım?" Kutunun kapanması doğru; ekranda bunu
-    // söyleyen ve yolu gösteren bir şey olmaması değil.
-    seed({ atPrompt: false });
-    useStore.setState({ running: { [TAB]: true } });
-
+    // istersem nasıl yapacağım?" Klasik terminalde (ayar kapalı) kutu hiç
+    // yok; ekranda komutun çalıştığını söyleyen ve yolu gösteren şey şerit.
+    seedRunning();
+    appInputOff();
     const { container } = render(<CommandInput />);
-    expect(field(container), "çalışırken kutu kapalı olmalı").toBe(null);
+    expect(field(container), "ayar kapalıyken kutu olmamalı").toBe(null);
 
-    const stop = container.querySelector<HTMLButtonElement>(".running-stop");
+    const stop = container.querySelector<HTMLButtonElement>(".command-running .running-stop");
     expect(stop, "durdurma düğmesi yok").not.toBe(null);
     fireEvent.click(stop!);
     // Ctrl+C'nin baytı tek yerden geliyor; düğme de onu göndermeli.
     expect(sendKeys).toHaveBeenCalledWith("\x03");
-
-    useStore.setState({ running: {} });
   });
 
   it("tam ekran programda şerit de YOK", () => {
     // vim/less ekranı kendisi yönetiyor; Ctrl+C'nin anlamı programa ait.
-    seed({ atPrompt: false, altScreen: true });
-    useStore.setState({ running: { [TAB]: true } });
+    seedRunning({ altScreen: true });
     const { container } = render(<CommandInput />);
     expect(container.innerHTML).toBe("");
-    useStore.setState({ running: {} });
   });
 
-  it("komut çalışırken kutu kapalı", () => {
-    // Çalışan komut tuşları o an isteyebilir (parola, y/n). Kutu burada
-    // açık kalsaydı kullanıcı ona cevap veremezdi.
-    seed({ atPrompt: false });
-    useStore.setState({ running: { [TAB]: true } });
+  /*
+   * BİLDİRİLEN: "Terminalde `ng serve` dediğimde 'Would you like to use a
+   * different port? (Y/n)' mesajı geliyor. Bu bilgiyi komut yazma kısmına
+   * yazamıyoruz, doğrudan mesajın çıktığı yere yazıyoruz — gerçek bir
+   * terminal yapısı sağlamamış oluyor."
+   *
+   * Eski hâl bilinçliydi: komut çalışınca kutu kapanıyor, tuşlar ızgaraya
+   * gidiyordu ("program tuşları o an isteyebilir"). Kullanıcı için yazılan
+   * yer iki taneydi. Kutu artık açık kalıyor ve çalışan programın satırı
+   * oluyor.
+   */
+  it("komut çalışırken kutu AÇIK kalıyor ve yanıt Enter'la programa gidiyor", () => {
+    seedRunning();
     const { container } = render(<CommandInput />);
-    expect(field(container)).toBe(null);
-    useStore.setState({ running: {} });
+    const el = field(container);
+    expect(el, "çalışırken kutu kapanmış").not.toBe(null);
+    expect(container.querySelector(".command-input.stdin"), "yanıt satırı değil").not.toBe(null);
+    // Yer tutucu DURUM söylüyor, kutuyu anlatmıyor. İlk hâli "Komut
+    // çalışıyor… soru sorarsa yanıtı buraya yazın"dı; bildirilen: "amatörce
+    // değil mi". Buraya yazılacağını odak ve imleç zaten söylüyor.
+    expect(el!.placeholder).toBe("Komut çalışıyor…");
+    expect(document.activeElement, "odak kutuda değil").toBe(el);
+    // Tek giriş kapısı: terminalin kendi girdisi kapalı.
+    expect(setAppInput).toHaveBeenCalledWith(true);
+
+    fireEvent.change(el!, { target: { value: "n" } });
+    // Yazarken hiçbir şey gitmiyor: satır Enter'a kadar kutuda.
+    expect(sendKeys).not.toHaveBeenCalled();
+    fireEvent.keyDown(el!, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("n\r");
+    expect(el!.value).toBe("");
+  });
+
+  it("çok satırlı yanıt terminalin satır sonuyla gidiyor", () => {
+    // Izgaraya yapıştırmak her satırı `\r` ile gönderiyordu (xterm böyle
+    // çeviriyor); kutudan giden de aynı baytlar olmalı, `\n` değil.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "bir\niki\r\nüç" } });
+    fireEvent.keyDown(el, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("bir\riki\rüç\r");
+  });
+
+  it("boş yanıt satırında Enter programa gidiyor: varsayılanı kabul etmek", () => {
+    // "(Y/n)" sorusunda büyük harf varsayılan; çoğu zaman yanıt yalnızca Enter.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    fireEvent.keyDown(field(container)!, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("\r");
+  });
+
+  it("boş yanıt satırında oklar ve Boşluk doğrudan programa: seçim listeleri", () => {
+    // `ng new`in "Which stylesheet format?" listesi oklarla, işaret kutulu
+    // listeler Boşlukla sürülüyor. Tuş o an gitmeli, Enter'ı beklememeli.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.keyDown(el, { key: "ArrowDown" });
+    expect(sendKeys).toHaveBeenLastCalledWith("\x1b[B");
+    fireEvent.keyDown(el, { key: " " });
+    expect(sendKeys).toHaveBeenLastCalledWith(" ");
+
+    // Program uygulama imleç kipini açtıysa kodlama değişiyor.
+    applicationCursorKeys.mockReturnValue(true);
+    fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(sendKeys).toHaveBeenLastCalledWith("\x1bOA");
+  });
+
+  it("yazmaya başlayınca oklar kutunun: satır düzenleniyor, programa gitmiyor", () => {
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "my-app" } });
+    const olay = fireEvent.keyDown(el, { key: "ArrowLeft" });
+    expect(sendKeys).not.toHaveBeenCalled();
+    expect(olay, "imleç hareketi engellenmiş").toBe(true);
+  });
+
+  it("Tab yazılanı programa devrediyor: tamamlamayı program yapıyor", () => {
+    // REPL ya da ssh ardındaki kabuk satırı görmeden tamamlayamaz; program
+    // aynı baytları, aynı sırada alıyor.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "impo" } });
+    const olay = fireEvent.keyDown(el, { key: "Tab" });
+    expect(sendKeys).toHaveBeenCalledWith("impo\t");
+    expect(el.value).toBe("");
+    // Tarayıcının Tab'ı odağı terminale taşırdı; kutu "kaybolmuş" olurdu.
+    expect(olay, "varsayılan engellenmeli").toBe(false);
+  });
+
+  it("yanıt satırında Ctrl+C tek basışta kesiyor ve gönderilmemiş satırı bırakıyor", () => {
+    // Terminal sürücüsü de kesmede bekleyen satırı atıyor.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "yarım" } });
+    el.setSelectionRange(el.value.length, el.value.length);
+    fireEvent.keyDown(el, { key: "c", ctrlKey: true });
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+    expect(el.value).toBe("");
+  });
+
+  it("yanıt satırında geçmiş önerisi ve geçmiş paneli açılmıyor", () => {
+    // Çalışan programa yazılan "y"nin, bir parolanın komut geçmişiyle ilgisi
+    // yok; boş satırda yukarı ok da geçmişi değil programın listesini sürüyor.
+    useStore.setState({
+      suggestHistory: [{ command: "npm test", cwd: null, tabId: TAB }],
+    });
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(sendKeys).toHaveBeenCalledWith("\x1b[A");
+    fireEvent.change(el, { target: { value: "npm" } });
+    expect(useStore.getState().ui.suggest, "öneri listesi açılmış").toBe(null);
+  });
+
+  it("yanıt satırı renklendirilmiyor", () => {
+    // Yazılan bir kabuk komutu değil; `y`yi komut rengine boyamak yanıltıcı.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    fireEvent.change(field(container)!, { target: { value: "npm" } });
+    expect(container.querySelector(".command-input-hl"), "renkli katman var").toBe(null);
+    expect(field(container)!.classList.contains("plain")).toBe(true);
+  });
+
+  it("yanıt satırında Durdur düğmesi var ve SIGINT gönderiyor", () => {
+    // Şeridin işi (çalıştığını söylemek, durdurmanın yolunu göstermek) kutuya
+    // taşındı; şerit kutunun yerine geçtiği için ikisi birden çizilemiyordu.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const stop = container.querySelector<HTMLButtonElement>(".command-input .running-stop");
+    expect(stop, "durdurma düğmesi yok").not.toBe(null);
+    // Kesmeyi yok sayan programda yazmaya kutuda devam edilebilmeli: düğme
+    // odağı almıyor.
+    expect(fireEvent.mouseDown(stop!), "düğme odağı kutudan alıyor").toBe(false);
+    fireEvent.click(stop!);
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+  });
+
+  /*
+   * Parola sorusu: yazılan gizleniyor.
+   *
+   * Terminal parola sorarken yazılanı yansıtmıyor. Kutu yansıtıyor; bu
+   * olmasa `ssh`in sorusuna yazılan parola kutuda açık metin dururdu.
+   */
+  it("parola sorusunda yazılan nokta olarak görünüyor ve panoya çıkmıyor", () => {
+    secretPrompt.mockReturnValue(true);
+    const state = useStore.getState();
+    useStore.setState({
+      settings: { ...state.settings, keybindings: { ...state.settings.keybindings, copy: "Ctrl+Shift+C" } },
+    });
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    // Boşken gizlenecek bir şey yok; yer tutucu noktaya dönmesin.
+    expect(el.classList.contains("secret")).toBe(false);
+
+    fireEvent.change(el, { target: { value: "hunter2" } });
+    expect(el.classList.contains("secret"), "parola açık görünüyor").toBe(true);
+
+    el.setSelectionRange(0, el.value.length);
+    fireEvent.keyDown(el, { key: "C", ctrlKey: true, shiftKey: true });
+    expect(writeText, "parola panoya yazıldı").not.toHaveBeenCalled();
+
+    fireEvent.keyDown(el, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("hunter2\r");
+  });
+
+  it("parola sorusu yoksa yanıt açık görünüyor", () => {
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "n" } });
+    expect(el.classList.contains("secret")).toBe(false);
+  });
+
+  it("komut bitince gönderilmemiş yanıt kutuda kalmıyor, komut taslağı geri geliyor", () => {
+    /*
+     * Tek değer olsaydı iki kaza birden: komut bitmeden gönderilmemiş "y"
+     * bir sonraki Enter'da KOMUT olarak çalışır, istemde yarım bırakılan
+     * taslak da (geçmiş panelinden bir komut çalıştırılınca) çalışan
+     * programın satırına düşerdi.
+     */
+    const { container, rerender } = render(<CommandInput />);
+    fireEvent.change(field(container)!, { target: { value: "git status" } });
+
+    act(() => seedRunning());
+    rerender(<CommandInput />);
+    expect(field(container)!.value, "taslak programa gidecek satırda").toBe("");
+    fireEvent.change(field(container)!, { target: { value: "y" } });
+
+    act(() => {
+      useStore.setState({ running: {} });
+      seed();
+    });
+    rerender(<CommandInput />);
+    expect(field(container)!.value, "yanıt komut satırında kaldı").toBe("git status");
+    expect(sendKeys).not.toHaveBeenCalled();
+  });
+
+  it("komut başlayınca odak kutuya geliyor", () => {
+    // Komut kenar çubuğundaki bir düğmeden (geçmiş, favori) başlarsa odak o
+    // düğmede kalır ve programın sorusuna yazılan hiçbir yere gitmezdi.
+    // Kutu açık kaldığı için bunu "kutu açıldı" olayı yakalamıyor.
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+
+    const { container, rerender } = render(<CommandInput />);
+    button.focus();
+    expect(document.activeElement).toBe(button);
+
+    act(() => seedRunning());
+    rerender(<CommandInput />);
+    expect(document.activeElement, "odak düğmede kaldı").toBe(field(container));
+
+    button.remove();
   });
 
   /*
@@ -711,15 +947,26 @@ describe("komut satırı kutusu", () => {
   it("silahlı durumda şerit tekrar basmayı söylüyor", () => {
     // Bir basışın hiçbir şey yapmıyormuş gibi görünmesi, iki basış kuralını
     // kullanıcı gözünde arızaya çevirirdi.
-    seed({ atPrompt: false });
-    useStore.setState({ running: { [TAB]: true }, stopArmed: TAB });
+    seedRunning();
+    appInputOff();
+    useStore.setState({ stopArmed: TAB });
 
     const { container } = render(<CommandInput />);
     expect(container.querySelector(".command-running.armed"), "silahlı hâl çizilmedi")
       .not.toBe(null);
     expect(container.textContent).toContain("Durdurmak için tekrar basın");
+  });
 
-    useStore.setState({ running: {}, stopArmed: null });
+  it("silahlı durumda yanıt satırı da tekrar basmayı söylüyor", () => {
+    // İlk Ctrl+C odak kutunun DIŞINDAYKEN geliyor (kenar çubuğu, sekme
+    // çubuğu); geri bildirim yine bakılan yerde, kutunun kendisinde.
+    seedRunning();
+    useStore.setState({ stopArmed: TAB });
+
+    const { container } = render(<CommandInput />);
+    expect(container.querySelector(".command-input.armed"), "silahlı hâl çizilmedi").not.toBe(null);
+    expect(field(container)!.placeholder).toBe("Durdurmak için tekrar basın");
+    expect(container.querySelector(".running-stop")!.textContent).toBe("Tekrar basın");
   });
 
   it("kabuk kapandıysa kutu da şerit de YOK", () => {

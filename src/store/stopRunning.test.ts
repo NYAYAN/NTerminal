@@ -89,10 +89,12 @@ describe("durdurma silahı", () => {
 describe("kaynaktaki kural", () => {
   const APP = readFileSync(join(process.cwd(), "src/App.tsx"), "utf8");
 
-  it("terminaldeki düz Ctrl+C dışarıda bırakılıyor", () => {
-    // Bu satır gitse `ng serve` terminalde de iki basış isterdi.
+  it("terminaldeki ve komut kutusundaki düz Ctrl+C dışarıda bırakılıyor", () => {
+    // Bu satır gitse `ng serve` terminalde de iki basış isterdi. Kutu da
+    // aynı yerde: komut çalışırken kutu açık kalıyor ve çalışan programın
+    // satırı oluyor — `ng serve`i kutudan durdurmak da tek basış olmalı.
     expect(APP, "kabuğun kendi tuşu için ayrım yok").toMatch(
-      /shellCtrlC\s*=\s*inTerminal && event\.ctrlKey/,
+      /shellCtrlC\s*=\s*\(inTerminal \|\| inCommandInput\) && event\.ctrlKey/,
     );
     expect(APP, "ayrım koşulda kullanılmıyor").toContain("!shellCtrlC");
   });
@@ -104,7 +106,11 @@ describe("kaynaktaki kural", () => {
     expect(APP).toContain("store.armStop(");
   });
 
-  it("kopyalanacak bir şey varken kopyalama kazanıyor", () => {
-    expect(APP).toMatch(/copyWins\s*=\s*matchCombo\(event, keys\.copy\) && !!session\?\.hasSelection\(\)/);
+  it("kopyalanacak bir şey varken kopyalama kazanıyor — kutudaki seçim de", () => {
+    // mac'te komut çalışırken kutuda seçilen metni Cmd+C ile kopyalamak
+    // isteyenin tuşu, yalnızca ızgaraya bakılsaydı durdurma silahına dönerdi.
+    expect(APP).toMatch(
+      /copyWins\s*=\s*matchCombo\(event, keys\.copy\) && \(!!session\?\.hasSelection\(\) \|\| boxSelected\)/,
+    );
   });
 });

@@ -292,9 +292,9 @@ export function App() {
        * Dinleyici capture fazında olduğu için burada ele alınan tuş kutuya hiç
        * ulaşmıyor (`run` içinde `stopPropagation`); kutunun kendi tuşları
        * (Enter, Tab, oklar, kopyala/yapıştır kısayolları) burada bir eşleşme
-       * bulmadığı için dokunulmadan geçiyor. Ctrl+C'nin BİR istisnası var:
-       * aşağıdaki iki basışlı durdurma dalı yalnızca komut ÇALIŞIRKEN
-       * tetikleniyor ve o sırada kutu zaten çizilmiyor (yerinde şerit var).
+       * bulmadığı için dokunulmadan geçiyor. Ctrl+C de öyle: aşağıdaki iki
+       * basışlı durdurma dalı kutuyu terminalin kendisi gibi dışarıda
+       * bırakıyor (`shellCtrlC`), kararı kutu veriyor.
        */
       const inCommandInput = !!target?.closest(".command-input");
       if (!inTerminal && !inCommandInput && target?.closest("input, textarea, select")) {
@@ -351,19 +351,36 @@ export function App() {
        *
        * mac'te Cmd+C de kabul ediliyor: kopyalanacak bir seçim yokken zaten
        * hiçbir şey yapmıyordu, dolayısıyla kaybedilen bir davranış yok.
+       *
+       * KOMUT KUTUSU DA HARİÇ, terminalle aynı sebeple: komut çalışırken kutu
+       * açık kalıyor ve çalışan programın yanıt satırı oluyor — yani artık
+       * terminalin girdi satırı orası. Kutunun kendi Ctrl+C kararı var
+       * (`resolveCtrlC`: seçim varsa kopyala, yoksa kes); burada yutulsaydı
+       * `ng serve`i kutudan durdurmak iki basış isterdi.
        */
       const stopKey =
         event.key.toLowerCase() === "c" &&
         !event.shiftKey &&
         !event.altKey &&
         (event.ctrlKey || (isMac() && event.metaKey));
-      // Kabuğun kendi tuşu: terminalde, düz Ctrl+C.
-      const shellCtrlC = inTerminal && event.ctrlKey && !event.metaKey;
-      // Kopyalama yalnızca GERÇEKTEN kopyalama kısayolu basıldığında ve
-      // kopyalanacak bir şey varken kazanıyor. Windows'ta Ctrl+C kopyalama
-      // kısayolu DEĞİL (o Ctrl+Shift+C), yani orada bu dal hep durdurmaya
-      // gidiyor.
-      const copyWins = matchCombo(event, keys.copy) && !!session?.hasSelection();
+      // Kabuğun kendi tuşu: terminalde ya da komut kutusunda, düz Ctrl+C.
+      const shellCtrlC = (inTerminal || inCommandInput) && event.ctrlKey && !event.metaKey;
+      /*
+       * Kopyalama yalnızca GERÇEKTEN kopyalama kısayolu basıldığında ve
+       * kopyalanacak bir şey varken kazanıyor. Windows'ta Ctrl+C kopyalama
+       * kısayolu DEĞİL (o Ctrl+Shift+C), yani orada bu dal hep durdurmaya
+       * gidiyor.
+       *
+       * Kutudaki seçim de sayılıyor: mac'te komut çalışırken kutuda seçilen
+       * metni Cmd+C ile kopyalamak isteyenin tuşu, yalnızca ızgaraya
+       * bakılsaydı durdurma silahına dönüşürdü. Kopyalamayı kutu kendisi
+       * yapıyor (`CommandInput.onKeyDown`).
+       */
+      const boxSelected =
+        inCommandInput &&
+        target instanceof HTMLTextAreaElement &&
+        target.selectionStart !== target.selectionEnd;
+      const copyWins = matchCombo(event, keys.copy) && (!!session?.hasSelection() || boxSelected);
       const runningTab = store.activeTab();
       if (
         stopKey &&
