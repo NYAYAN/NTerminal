@@ -533,3 +533,67 @@ describe("entegrasyon kanıtı", () => {
     }
   });
 });
+
+/**
+ * Dizin bildirimi: kesin olan (`633;P;Cwd`) ham OSC 7'nin ÜSTÜNE yazılmamalı.
+ *
+ * Kabuk betikleri her istemde İKİ dizi yolluyor: `633;P;Cwd=<yol>` (kaçışlı ama
+ * KESİN) ve `7;file://<ana makine><yol>` (standart, ama betikler yolu yüzde
+ * kodlamadan HAM yazıyor). Arayüz OSC 7'yi `decodeURIComponent` ile çözüyor.
+ * Ham yolda `%` geçen bir klasör (`a%20b`, `%41`, `100%`) yanlış çözülüyor ve
+ * OSC 7 ikinci geldiği için doğru değerin üstüne yazıyordu: "Klasörü aç", git
+ * rozeti ve yeni sekmenin başlangıç dizini var olmayan bir yola bakıyordu.
+ */
+describe("dizin bildirimi", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+  const cwd633 = (yol: string) => `${ESC}]633;P;Cwd=${yol}${BEL}`;
+  const cwd7 = (yol: string) => `${ESC}]7;file://Makine.local${yol}${BEL}`;
+
+  async function kurulu(tabId: string) {
+    h.reset();
+    const s = session(tabId);
+    const onCwd = vi.fn<(cwd: string) => void>();
+    s.setCallbacks({ onCwd });
+    await s.start(null);
+    await flush(s);
+    onCwd.mockClear();
+    return { s, onCwd };
+  }
+
+  it("adında %20 geçen klasör: kesin bildirim kazanıyor", async () => {
+    const { s, onCwd } = await kurulu("cw1");
+    // Kabuğun gerçekte yolladığı sıra: önce 633, sonra HAM 7.
+    h.emit("cw1", cwd633("/tmp/a%20b") + cwd7("/tmp/a%20b"));
+    await flush(s);
+    expect(s.cwd, "OSC 7'nin yanlış çözümü doğru dizinin üstüne yazdı").toBe("/tmp/a%20b");
+    expect(onCwd).not.toHaveBeenCalledWith("/tmp/a b");
+    void s.dispose(true);
+  });
+
+  it("adında geçersiz yüzde dizisi olan klasör de korunuyor", async () => {
+    const { s } = await kurulu("cw2");
+    h.emit("cw2", cwd633("/tmp/100%_test") + cwd7("/tmp/100%_test"));
+    await flush(s);
+    expect(s.cwd).toBe("/tmp/100%_test");
+    void s.dispose(true);
+  });
+
+  it("Türkçe karakterli ve boşluklu yol", async () => {
+    const { s } = await kurulu("cw3");
+    h.emit("cw3", cwd633("/Users/ali/Masaüstü/İş Klasörü") + cwd7("/Users/ali/Masaüstü/İş Klasörü"));
+    await flush(s);
+    expect(s.cwd).toBe("/Users/ali/Masaüstü/İş Klasörü");
+    void s.dispose(true);
+  });
+
+  it("yalnızca OSC 7 gönderen kabukta (633 yok) OSC 7 kullanılmaya devam ediyor", async () => {
+    // Özel profil, fish, kendi betiği: yalnızca standart OSC 7 var ve orada
+    // yüzde kodlama DOĞRU çözülmeli. Düzeltmenin bedeli bu olmamalı.
+    const { s } = await kurulu("cw4");
+    h.emit("cw4", cwd7("/tmp/a%20b/c"));
+    await flush(s);
+    expect(s.cwd).toBe("/tmp/a b/c");
+    void s.dispose(true);
+  });
+});

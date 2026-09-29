@@ -37,6 +37,28 @@ export function unescapeOsc(value: string): string {
 }
 
 /**
+ * Yalnızca GEÇERLİ `%XX` dizilerini çözer; geçersizler olduğu gibi kalır.
+ *
+ * `decodeURIComponent` tek bir geçersiz dizide (`100%_test`, `%E0%A4`) bütün
+ * yükü atıyordu (`URIError`) ve `cwdFromFileUri` `null` dönüyordu: yalnızca
+ * OSC 7 gönderen bir kabukta bu klasörde dizin bildirimi hiç güncellenmiyordu.
+ * Kabuklar bazen yolu yüzde kodlamadan HAM yazıyor; ham yolda `%` sıradan bir
+ * karakter.
+ *
+ * Ardışık geçerli diziler TEK parça çözülüyor: çok baytlı UTF-8 karakter
+ * (`%C3%BC` = ü) ancak birlikte anlam kazanıyor.
+ */
+function decodeValidPercent(text: string): string {
+  return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+  });
+}
+
+/**
  * OSC 7 yükünü dosya yoluna çevirir.
  *
  * Gelen biçimler: `file:///C:/Users/x`, `file://makine/C:/Users/x` (Windows),
@@ -59,7 +81,7 @@ export function cwdFromFileUri(payload: string): string | null {
         ? withoutScheme
         : withoutScheme.slice(slash);
 
-    path = decodeURIComponent(path);
+    path = decodeValidPercent(path);
     // `/C:/Users/x` -> `C:/Users/x`
     path = path.replace(/^\/([A-Za-z]:)/, "$1");
 

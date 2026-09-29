@@ -299,6 +299,16 @@ export class TerminalSession {
   /** Kabuktan en az bir OSC 133 işareti geldi mi — iddianın KANITI. */
   private integrationSeen = false;
   private integrationProbe: number | null = null;
+  /**
+   * Kabuk KESİN dizin bildirimini (`633;P;Cwd`) en az bir kez yolladı mı.
+   *
+   * Yolladıysa OSC 7 yok sayılıyor: entegrasyon betikleri her istemde İKİSİNİ de
+   * yolluyor ve OSC 7'deki yol yüzde kodlamadan HAM yazılıyor; `decodeURIComponent`
+   * ile çözülünce adında `%20` geçen bir klasör yanlış çıkıyor ve OSC 7 ikinci
+   * geldiği için doğru değerin üstüne yazıyordu (bkz. `TerminalSession.test.ts`,
+   * "dizin bildirimi").
+   */
+  private preciseCwd = false;
   exited = false;
   exitCode: number | null = null;
   spawned = false;
@@ -1893,6 +1903,8 @@ export class TerminalSession {
     // OSC 7: standart "çalışma dizini bildirimi"
     this.disposables.push(
       this.term.parser.registerOscHandler(7, (payload) => {
+        // Kesin bildirim geldiyse bu ham yola ihtiyaç yok (bkz. `preciseCwd`).
+        if (this.preciseCwd) return true;
         const cwd = cwdFromFileUri(payload);
         if (cwd) this.updateCwd(cwd);
         return true;
@@ -2193,7 +2205,10 @@ ${dim}[${
         this.oscCommand = parsed.value.length > 0 ? parsed.value : null;
         break;
       case "P":
-        if (parsed.key === "Cwd" && parsed.value) this.updateCwd(parsed.value);
+        if (parsed.key === "Cwd" && parsed.value) {
+          this.preciseCwd = true;
+          this.updateCwd(parsed.value);
+        }
         // Kabuk komut onerisini acabildi mi? Acamadiysa arayuz ne
         // yapilmasi gerektigini soyluyor - sessiz kalmak "uygulama
         // bozuk" izlenimi veriyordu.

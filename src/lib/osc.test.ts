@@ -119,6 +119,25 @@ describe("OSC 7 dizin çözümlemesi", () => {
     expect(cwdFromFileUri("")).toBe(null);
     expect(cwdFromFileUri("   ")).toBe(null);
   });
+
+  it("çok baytlı UTF-8 yüzde dizilerini birlikte çözer", () => {
+    // `%C3%BC` tek başına anlamsız; ancak ARDIŞIK dizi ü'dür.
+    expect(cwdFromFileUri("file://mac/Users/ali/Masa%C3%BCst%C3%BC")).toBe("/Users/ali/Masaüstü");
+  });
+
+  it("GEÇERSİZ yüzde dizisi yükü atmıyor, ham bırakıyor", () => {
+    // Kabuklar yolu bazen yüzde kodlamadan ham yazıyor; ham yolda `%` sıradan
+    // bir karakter. `decodeURIComponent` tek geçersiz dizide bütün yükü atıp
+    // `null` dönüyordu: yalnızca OSC 7 gönderen kabukta bu klasörde dizin
+    // bildirimi hiç güncellenmiyordu.
+    expect(cwdFromFileUri("file://mac/tmp/100%_test")).toBe("/tmp/100%_test");
+    expect(cwdFromFileUri("file://mac/tmp/50%")).toBe("/tmp/50%");
+    expect(cwdFromFileUri("file://mac/tmp/%E0%A4")).toBe("/tmp/%E0%A4"); // eksik UTF-8
+  });
+
+  it("geçerli ve geçersiz diziler bir arada", () => {
+    expect(cwdFromFileUri("file://mac/tmp/a%20b/100%_x")).toBe("/tmp/a b/100%_x");
+  });
 });
 
 describe("base64 çözme", () => {
