@@ -464,6 +464,23 @@ describe("toplu kutu", () => {
     expect(errorBox(container)!.textContent).toContain("Dosya seçimi değiştirilemedi");
     expect(errorBox(container)!.textContent).toContain("kilit");
   });
+
+  it("sonraki basış eski hatayı siliyor", async () => {
+    // Gerçek örnek: git izlenen bir dosyayı eklerken bile "yok sayılan yol" uyarısıyla 1 döndü;
+    // kullanıcı kutuya bir daha basıp seçimi geri aldı ama hata kutusu ekranda kaldı.
+    seed(repo([c(" M", "a.ts")]));
+    gitSays(repo([c(" M", "a.ts")]));
+    vi.spyOn(api, "gitStage").mockRejectedValueOnce("kilit").mockResolvedValue(undefined);
+    const { container } = render(<GitChanges />);
+
+    fireEvent.click(master(container));
+    await flush();
+    expect(errorBox(container), "ilk basışta hata görünmeli").not.toBe(null);
+
+    fireEvent.click(master(container));
+    await flush();
+    expect(errorBox(container), "başarılı basıştan sonra eski hata kaldı").toBe(null);
+  });
 });
 
 // -------------------------------------------------------------------- commit

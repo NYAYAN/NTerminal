@@ -1,6 +1,6 @@
 import type { ITheme } from "@xterm/xterm";
 
-import { ensureContrast, harmonizeTheme, onColor } from "./contrast";
+import { ensureContrast, filledColors, harmonizeTheme } from "./contrast";
 import type { MsgKey } from "./messages";
 
 export interface TerminalTheme {
@@ -245,10 +245,21 @@ export function applyThemeToDocument(theme: TerminalTheme) {
     "--warn",
     ensureContrast(theme.xterm.yellow ?? "#d29922", surface, MIN_UI_TEXT_CONTRAST),
   );
-  // Dolgulu dugmelerin metin rengi: CSS karsitlik hesabi yapamiyor, biz
-  // yapiyoruz. Aksi halde koyu vurgu renginde koyu metin cikiyor.
-  root.style.setProperty("--accent-fg", onColor(accent));
-  root.style.setProperty("--err-fg", onColor(err));
+  /*
+   * Dolgulu dugmelerin zemini ve metni: CSS karsitlik hesabi yapamiyor, biz
+   * yapiyoruz (bkz. `filledColors`). Metin BEYAZ, zemin beyaza 4.5 karsitlik verecek
+   * kadar koyulastirilmis vurgu; `--accent` / `--err` ise METIN ve gosterge olarak
+   * yuzeyde kaliyor (acik, yuzeye gore duzeltilmis). Iki ayri renk: ayni renk hem
+   * koyu yuzeyde metin olarak okunacak kadar acik hem beyaz yaziya zemin olacak kadar
+   * koyu olamaz.
+   */
+  const accentFilled = filledColors(accent);
+  const errFilled = filledColors(err);
+  root.style.setProperty("--accent-solid", accentFilled.fill);
+  root.style.setProperty("--accent-fg", accentFilled.text);
+  root.style.setProperty("--accent-chip", accentFilled.chip);
+  root.style.setProperty("--err-solid", errFilled.fill);
+  root.style.setProperty("--err-fg", errFilled.text);
 
   /*
    * Komut satırının sözdizimi renkleri.

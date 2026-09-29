@@ -806,10 +806,24 @@ Pencere bu hâline üç ölçülmüş kusurdan geçerek geldi:
 dolgulu düğme var — dolgu "burada devam et" demek, ikisi olunca hiçbiri demiyor.
 Yıkıcı birincil eylem (onay penceresindeki *Kapat* / *Sil*) dolgulu ve kırmızı.
 
-Dolgunun üzerindeki metin rengi CSS'te sabitlenemiyor: vurgu rengi temaya göre
-açık ya da koyu olabiliyor. Karşıtlık hesabıyla siyah/beyaz seçilip tema
-uygulanırken bir değişkene yazılıyor (`--accent-fg`, `--err-fg`). Önceki hâli
-`color-mix(accent 12%, #000)` idi — koyu vurgu renginde koyu üstüne koyu.
+Dolgulu düğmede yazı **beyaz**, zemin ise vurgu renginin beyaza en az 4.5:1
+karşıtlık verecek kadar koyulaştırılmış hâli (`--accent-solid` / `--err-solid`; yazı
+`--accent-fg` / `--err-fg`). CSS bu hesabı yapamadığı için tema uygulanırken
+`filledColors()` (`src/lib/contrast.ts`) yazıyor. Açık mavi bir vurguda (One Half
+Dark `#61afef`) zemin `#447ba7` oluyor; vurgu zaten koyuysa (açık temalar) olduğu gibi
+kalıyor, çok açık bir renk (sarı gibi) çamurlaşmasın diye eski kurala düşüyor.
+`--accent` / `--err` yüzeyde metin ve gösterge olarak açık kalıyor: aynı renk hem koyu
+yüzeyde okunacak kadar açık hem beyaz yazıya zemin olacak kadar koyu olamaz.
+
+Üzerine gelince zemin biraz koyulaşıyor (açıklaşsaydı beyaz yazı 4.5'in altına
+inerdi). **Devre dışı** dolgulu düğme soluk zemin ve açık gri yazı taşıyor, `opacity`
+yok: eskiden düğme bütünüyle soluyor, koyu yazı zemine karışıyordu (2.5:1); şimdi en az
+3:1. Sayaç hapı yazının TERSİ renkten türüyor (beyaz yazıda koyu hap).
+
+Bu yazı rengi kuralı iki kez değişti. İlkinde `color-mix(accent 12%, #000)` vardı — koyu
+vurgu renginde koyu üstüne koyu. Sonra karşıtlığı yüksek olan siyah/beyaz seçildi; açık
+bir vurguda bu hep koyu yazı demekti ve "Commit düğmesindeki metin rengi yanlış gibi"
+diye bildirildi.
 
 Odak halkası iki katmanlı: iç katman yüzey renginde bir ayırıcı çiziyor. Tek
 katmanlı vurgu renkli bir halka, vurgu renkli **dolgunun** üzerinde
@@ -1046,9 +1060,11 @@ npm test
     **vazgeçilince silme gerçekten olmuyor mu**. İkincisi kritik; onayı
     gösterip cevabı yok saymak en kötü durum. Ayrıca eklemenin ve
     yapılamayacak işlemlerin soru sormaması.
-  - **Düğme renkleri** — 4 tema için dolgulu birincil, dolgulu yıkıcı, sessiz
-    kırmızı, yeşil rozet ve çerçeveli düğme ≥ 4.5 karşıtlık; odak halkasının
-    iki katmanlı olması.
+  - **Düğme renkleri** — 4 tema için dolgulu birincil ve yıkıcı düğmede beyaz yazı
+    ≥ 4.5 karşıtlık, zeminin çamurlaşmaması, üzerine gelince/basılınca okunma, devre
+    dışı düğmede ≥ 3:1 (iki yüzeyde), sayaç hapında okunma; sessiz kırmızı, yeşil rozet
+    ve çerçeveli düğme ≥ 4.5; odak halkasının iki katmanlı olması. `filledColors`
+    renk uzayını tarayarak her rengin okunduğunu sınıyor.
   - **Bağlam menüsü** — alt menünün üzerine gelince/tıklayınca açılması, başka
     satıra geçince kapanması, alt menüden seçimin TÜM menüyü kapatması, devre
     dışı alt menünün açılmaması.

@@ -958,6 +958,58 @@ Gözle iki yerleşim hatası bulundu: dört sekme (yukarıda) ve stash tarih met
 eylem simgelerinin üstüne binmesi (`.stash-meta` artık kırpılabiliyor; ad dar
 panelde bile en az 48px kalıyor).
 
+### 1.20 Dolgulu düğmelerde beyaz yazı
+
+**Bildirilen:** "Commit butonundaki text color yanlış gibi bakar mısın." Gerçek
+pencerenin commit kutusu bölge yakalamasıyla okundu: One Half Dark'ta etkin Commit
+açık mavi (`#61afef`) zeminde koyu lacivert (`#0b0f14`) yazı; devre dışıyken
+`opacity: 0.4` zemini ve koyu yazıyı birlikte solduruyor, yazı zemine karışıyor
+(2,5:1). Ortada bir hata yoktu: kural (`onColor`, karşıtlığı yüksek olan) tam bunu
+üretiyordu ve beyaz yazı bu zeminde 2,4:1 verirdi. "Yanlış"ın ne olduğu belli olmadığı
+için üç seçenek yan yana çizilip kullanıcıya bırakıldı (şimdiki / beyaz yazı /
+yalnızca devre dışı düzelsin); kullanıcı **2. seçeneği** seçti.
+
+**Yapılan:** [`filledColors()`](src/lib/contrast.ts): metin BEYAZ, zemin vurgunun
+beyaza 4,5:1 verecek kadar koyulaştırılmış hâli (`ensureContrast(vurgu, "#ffffff")`,
+ton korunuyor). Tema uygulanırken `--accent-solid`, `--accent-fg`, `--accent-chip`
+(ve yıkıcı için `--err-solid`, `--err-fg`) yazılıyor; `button.primary` zeminini
+`--accent-solid`den alıyor. One Half Dark: `#61afef` → `#447ba7`.
+
+Kararlar:
+
+- **`--accent` yüzeyde metin olarak açık kalıyor, dolgu için AYRI değişken.** Aynı renk
+  hem koyu yüzeyde okunacak kadar açık hem beyaz yazıya zemin olacak kadar koyu
+  olamaz. Açık temalarda vurgu zaten koyu: `--accent-solid` = `--accent`.
+- **Çamurlaşma sınırı:** koyulaşmış zeminin parlaklığı vurgunun en az %35'i olmalı;
+  değilse (sarı gibi çok açık renk) eski kurala düşülüyor (zemin aynen, yazı `onColor`).
+- **Hover/active zemini KOYULAŞIYOR** (siyaha karışım, %88 / %76). Açıklaştırmak beyaz
+  yazının karşıtlığını 4,5'in altına indirirdi: zemin zaten sınırda.
+- **Devre dışı: `opacity` yok**, soluk zemin (vurgunun %30'u, saydam) + açık gri yazı
+  (tema metninin %65'i). Ölçüm: en az 3:1 dört temada iki yüzeyde. %60 denendi,
+  Solarized Açık 2,999'da kaldı.
+- **Sayaç hapı yazının TERSİ renkten** (`--accent-chip`): beyaz yazıda koyu hap. Yazıyla
+  aynı tonda hap (önceki hâli) beyaz yazıda sayıyı 2,9:1'e düşürüyordu.
+- **Yıkıcı düğme de aynı kurala girdi** ("tüm dolgulu düğmeler değişir" seçeneği
+  gösterilmişti). Koyulaşan kırmızı One Half Dark'ta biraz mat.
+
+**Gözle bulunan hata:** devre dışı yıkıcı düğme soluk zeminde BEYAZ yazı taşıyordu (açık
+temada ~1,9:1): `button.primary.destructive` ile `button.primary:disabled` AYNI özgüllükte
+(0,2,1) ve yıkıcı kural dosyada SONRA geliyor, yani yazı rengini o veriyordu. Yazı rengi
+`destructive:disabled` kuralına da yazıldı (özgüllük 0,3,1) ve testle bağlandı.
+
+**Testler:** türetme artık tek yerde; `surfaceContrast.test.ts` `applyThemeToDocument`in
+hesabını elle yeniden yazıyordu (kopya, ayrışma riski), şimdi `filledColors`ı çağırıyor.
+`lib/filledColors.test.ts` renk uzayını tarıyor (her renkte yazı ≥ 4,5:1), jsdom'da
+tema uygulanınca değişkenlerin yazıldığını sınıyor. 22 mutasyon **scratchpad'deki
+kopyada** koşuldu (canlı Vite izlediği için; bkz. hafıza notu): dördü ayakta kaldı, biri
+mutasyon donanımının yanlış negatifiydi (toplama aşamasında düşen test dosyası "geçti"
+sayılıyordu; düzeltildi), üçü gerçek boşluktu (yıkıcı kuralın yapısı, hover şiddeti,
+hover/active ilişkisi) ve kapatıldı.
+
+**Yan bulgu (düzeltildi):** toplu kutunun hata kutusu bir sonraki basışta silinmiyordu
+(`commit` ve `push` siliyordu); başarılı bir seçimden sonra da "Dosya seçimi
+değiştirilemedi" ekranda kalıyordu. `toggleAll` başında `setError(null)`. Kaynağı §2.4'te.
+
 ---
 
 ## 2. Açık işler
@@ -1034,6 +1086,17 @@ karşılığı var.
   sahte IPC'li harness'te sınandı; ikisini bağlayan IPC sözleşmesini
   `lib/ipcContract.test.ts` denetliyor. Windows/CI'da Rust testleri de
   koşulmadı (yalnızca macOS).
+- **YANLIŞ HATA: `git add` izlenen ama yok sayılan klasördeki dosyada `1` dönüyor.**
+  Gerçek örnek (yatas): `.gitignore` `js-storefront/yatas/.vscode`u yok sayıyor, içindeki
+  dosyalar ise izleniyor. `git add -- <izlenen dosya>` dosyayı EKLİYOR ama "The following
+  paths are ignored by one of your .gitignore files: …" yazıp çıkış kodu **1** veriyor
+  (scratch depoda üretildi). `stage` çıkış koduna bakıyor: toplu kutu "Dosya seçimi
+  değiştirilemedi" gösteriyor, oysa iş görülmüş. Önerilen düzeltme
+  ([`git.rs`](src-tauri/src/git.rs) `stage`): izlenenler için `add -u -- <yollar>` (yok sayma
+  denetimi yok), izlenmeyenler için `ls-files --others --exclude-standard -z -- <yollar>`
+  ile dosyaları bulup tek tek `add`. **`-f` kullanma:** dizin yolunda (porcelain
+  `?? dizin/` veriyor) yok sayılan dosyaları da ekler. Rust'a dokunacağı için
+  (`tauri dev` uygulamayı yeniden başlatır) kullanıcıya sorulmadan yapılmadı.
 
 ### 2.5 Stash'in açık uçları
 
@@ -1177,5 +1240,13 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Bu oturumun sonunda: **1042 arayüz testi**, **133 Rust testi**, tip denetimi
-temiz.
+Son ölçüm (Stash oturumunun sonu): **1645 arayüz testi** (102 dosya), **252 Rust
+birim + 9 entegrasyon testi**, tip denetimi temiz. (Önceki satır 1042 ve 133
+diyordu; gerçekle örtüşmüyordu, güncellendi.)
+
+Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
+`.claude/worktrees/` altındaki iç içe worktree'lerin test dosyalarını da topluyor
+(git onları yok sayıyor ama vitest saymıyor). Bu ölçümde 91 dosya daha geliyordu ve
+bir oturum bir süre 2889 test bildirdi. Gerçek sayı için yalnızca izlenen dosyaları
+içeren bir kopyada ya da `--exclude '.claude/**'` ile koştur; worktree'lerden biri
+yarım işteyse ana paket de onun yüzünden düşebilir.

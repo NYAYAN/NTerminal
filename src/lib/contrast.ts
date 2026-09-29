@@ -102,6 +102,48 @@ export function onColor(background: string): string {
   return contrastRatio(white, background) >= contrastRatio(black, background) ? white : black;
 }
 
+/** Dolgulu düğmenin zemini korunmuş sayılması için asgari parlaklık payı (bkz. `filledColors`). */
+const MIN_FILL_KEEP = 0.35;
+
+export interface FilledColors {
+  /** Düğmenin zemini. */
+  fill: string;
+  /** Zeminin üstündeki metin. */
+  text: string;
+  /**
+   * Zeminin üstündeki sayaç hapının zeminini üretmek için karışacak renk: metnin TERSİ.
+   * Beyaz metinde siyah (koyu hap), koyu metinde beyaz (açık hap); yoksa hap metinle
+   * aynı tonda kalıp sayı okunmaz.
+   */
+  chip: string;
+}
+
+/**
+ * Dolgulu düğmenin (birincil, yıkıcı) zemini ve üstündeki metin rengi.
+ *
+ * İSTEK: "Commit düğmesindeki metin rengi yanlış gibi" — koyu lacivert yazı açık mavi
+ * zeminde duruyordu (kural: iki renkten karşıtlığı yüksek olan, bkz. `onColor`; açık
+ * bir vurguda hep koyu yazı çıkıyor) ve kullanıcı beyaz yazı istedi (IntelliJ / GitHub
+ * gibi). Beyaz yazı açık maviye ancak zemin koyulaşırsa okunuyor, o yüzden karar tersine
+ * döndü: metin BEYAZ, zemin beyaza `minRatio` karşıtlık verecek kadar koyulaştırılmış
+ * vurgu (`ensureContrast`, ton korunuyor). Vurgu zaten koyuysa (açık temalar) olduğu gibi
+ * kalıyor.
+ *
+ * Çok açık bir renk (sarı gibi) yarıdan fazla koyulaşmayı gerektirir ve zemin çamurlaşır
+ * — orada eski kural geçerli: zemin rengin kendisi, metin `onColor`. `MIN_FILL_KEEP`
+ * koyulaşmış zeminin parlaklığının rengin parlaklığına oranının alt sınırı.
+ */
+export function filledColors(color: string, minRatio = MIN_FOREGROUND_CONTRAST): FilledColors {
+  const white = "#ffffff";
+  const darkened = ensureContrast(color, white, minRatio);
+  const kept = luminance(darkened) >= luminance(color) * MIN_FILL_KEEP;
+  if (kept && contrastRatio(white, darkened) >= minRatio) {
+    return { fill: darkened, text: white, chip: "#000000" };
+  }
+  const text = onColor(color);
+  return { fill: color, text, chip: text === white ? "#000000" : "#ffffff" };
+}
+
 export function ensureContrast(color: string, background: string, minRatio: number): string {
   const rgb = parseHex(color);
   if (!rgb) return color;

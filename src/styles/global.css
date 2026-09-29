@@ -100,10 +100,13 @@ body {
  * Bir kutuda yalnizca BIR dolgulu dugme olmali - dolgu "burada devam et"
  * demek, ikisi olunca hicbiri demiyor.
  *
- * Dolgunun uzerindeki metin rengi `--accent-fg` / `--err-fg` degiskenlerinden
- * geliyor; bunlari tema uygulanirken karsitlik hesabiyla JS yaziyor. Onceki
- * hali `color-mix(accent 12%, #000)` idi - vurgu rengi koyu olan bir temada
- * koyu uzerine koyu cikiyordu.
+ * Dolgunun zemini `--accent-solid` / `--err-solid`, uzerindeki metin `--accent-fg` /
+ * `--err-fg`: bunlari tema uygulanirken karsitlik hesabiyla JS yaziyor (bkz.
+ * `filledColors`). Metin BEYAZ, zemin beyaza 4.5 karsitlik verecek kadar koyulastirilmis
+ * vurgu (istek: "Commit dugmesindeki metin rengi yanlis gibi"; onceki hali acik mavi
+ * zeminde koyu lacivert yaziydi). `--accent` / `--err` ise yuzeyde METIN ve gosterge
+ * olarak kaliyor. Onceki hali `color-mix(accent 12%, #000)` idi - vurgu rengi koyu olan
+ * bir temada koyu uzerine koyu cikiyordu.
  */
 button {
   font: inherit;
@@ -164,34 +167,57 @@ button:focus-visible {
 }
 
 button.primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-weight: 600;
 }
 
+/* Uzerine gelince ve basilinca zemin KOYULASIYOR (siyaha karisim). Aciklastirmak
+   beyaz yazinin karsitligini 4.5'in altina indirirdi: zemin zaten tam sinirda.
+   `filter: brightness()` metni de soluklastiriyordu; karisim yalnizca zemini
+   degistiriyor. */
 button.primary:hover:not(:disabled) {
-  /* `filter: brightness()` metni de soluklastiriyordu; karisim yalnizca
-     zemini degistiriyor. */
-  background: color-mix(in srgb, var(--accent) 86%, var(--text));
+  background: color-mix(in srgb, var(--accent-solid) 88%, #000);
 }
 
 button.primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 78%, var(--text));
+  background: color-mix(in srgb, var(--accent-solid) 76%, #000);
+}
+
+/* Devre disi dolgulu dugme: soluk zemin + acik gri yazi, `opacity` YOK.
+ *
+ * Onceki hali temel kuraldaki `opacity: 0.4` idi: zemin de yazi da yuzeye dogru
+ * soluyor, koyu yazi zemine karisiyordu (olculen 2.5:1, "yazi rengi yanlis"). Simdi
+ * zemin vurgunun %30'u (saydam: neyin ustundeyse ona uyuyor), yazi tema metninin %65'i
+ * - olculen en az 3:1 (Solarized Acik %60'ta 2.999'da kaldi), disabled oldugu belli ve
+ * yine okunuyor. */
+button.primary:disabled {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 65%, transparent);
 }
 
 /* Yikici birincil eylem: dolgulu ama kirmizi. Onay penceresinde "Kapat" /
    "Sil" bunu kullaniyor - eylem hem birincil hem geri donusu zor. */
 button.primary.destructive {
-  background: var(--err);
+  background: var(--err-solid);
   color: var(--err-fg);
 }
 
 button.primary.destructive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--err) 86%, var(--text));
+  background: color-mix(in srgb, var(--err-solid) 88%, #000);
 }
 
 button.primary.destructive:active:not(:disabled) {
-  background: color-mix(in srgb, var(--err) 78%, var(--text));
+  background: color-mix(in srgb, var(--err-solid) 76%, #000);
+}
+
+/* Yazi rengi de burada: `button.primary.destructive` (beyaz yazi) ile `button.primary:disabled`
+   AYNI ozgullukte ve yikici kural dosyada sonra geliyor; burada tekrarlanmazsa devre disi
+   yikici dugme soluk zeminde BEYAZ yazi tasirdi (acik temada ~1.9:1). */
+button.primary.destructive:disabled {
+  background: color-mix(in srgb, var(--err) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 65%, transparent);
 }
 
 button.outline {
@@ -2769,10 +2795,11 @@ html[data-platform="macos"] .titlebar {
 }
 
 /* Sayac DOLGULU dugmenin uzerinde: `.pill-count`in vurgu renkli zemini vurgu
-   renkli dolgunun icinde kayboluyordu. Zemin dugmenin YAZI renginden turetiliyor,
-   yani her temada dolgudan farkli. */
+   renkli dolgunun icinde kayboluyordu. Zemin dugmenin YAZI renginin TERSINDEN
+   turetiliyor (`--accent-chip`): beyaz yazida koyu hap, aksi halde acik. Yazi rengiyle
+   ayni tonda bir hap (onceki hali) beyaz yazida sayiyi 2.9:1'e dusuruyordu. */
 .git-commit-btn .pill-count {
-  background: color-mix(in srgb, var(--accent-fg) 26%, transparent);
+  background: color-mix(in srgb, var(--accent-chip) 26%, transparent);
   color: inherit;
 }
 

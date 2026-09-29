@@ -126,6 +126,9 @@ export function GitCommitBox({
    */
   const toggleAll = async () => {
     const store = useStore.getState();
+    // Yeni bir deneme eski hatayı siler (`commit` ve `push` da öyle): yoksa başarılı bir
+    // seçimden sonra da "Dosya seçimi değiştirilemedi" kutusu ekranda kalıyordu.
+    setError(null);
     try {
       if (summary.state === "staged") await store.unstageFiles(cwd, unstagePaths(changes));
       else await store.stageFiles(cwd, stagePaths(changes));
