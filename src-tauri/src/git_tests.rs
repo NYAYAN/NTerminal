@@ -475,6 +475,26 @@ fn windows_satir_sonu_ve_bos_satir_zarar_vermiyor() {
     assert_eq!(parse_refs(text), vec![yerel("main"), yerel("dev")]);
 }
 
+/// Iki asamali okuma: `remotes: false` uzak ref'lere hic bakmiyor.
+///
+/// Secici once bu listeyi ciziyor ve "yerel dallar" diye sunuyor; icine uzak
+/// bir dal karissaydi bolumun disinda, basliksiz gorunurdu. Uzak izleme dali
+/// agsiz kuruluyor: `update-ref`, `git fetch`in biraktigi ref'in aynisi.
+#[test]
+fn yerel_okuma_uzak_dallari_getirmiyor() {
+    let root = repo_bir_commitli("dallar-yerel");
+    git(&root, &["branch", "-M", "main"]);
+    git(&root, &["update-ref", "refs/remotes/origin/yeni-ozellik", "HEAD"]);
+    let yol = root.to_string_lossy();
+
+    assert_eq!(branches(&yol, false), vec![yerel("main")]);
+    assert_eq!(
+        branches(&yol, true),
+        vec![yerel("main"), uzak("origin", "yeni-ozellik")]
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // ------------------------------------- yukari akis ve sahnelenen dosya sayisi
 
 #[test]

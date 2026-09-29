@@ -3237,6 +3237,19 @@ button.pop-group {
   padding-left: 22px;
 }
 
+/* Tavanin otesindeki dallarin sayisi (bkz. `SECTION_ROW_LIMIT`). Bir dal
+   satiri degil ve oyle gorunmemeli: soluk, kucuk, isaretcisiz. Girintisi ait
+   oldugu bolumun satirlariyla ayni. */
+.pop-more {
+  padding: 5px 8px;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+}
+
+.pop-more.nested {
+  padding-left: 22px;
+}
+
 .pop-empty {
   padding: 10px 12px;
   color: var(--text-dim);

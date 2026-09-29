@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { REMOTES_GRACE_MS, SECTION_ROW_LIMIT } from "../lib/branches";
 import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { anchorAbove } from "../lib/popover";
@@ -343,5 +344,169 @@ describe("arama", () => {
     const etiket = container.querySelector(".pop-group.static")!;
     const uzak = container.querySelectorAll(".pop-row")[1];
     expect(etiket.compareDocumentPosition(uzak) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+/**
+ * Binlerce uzak dalda seçici.
+ *
+ * ÖLÇÜLDÜ (10 bin uzak dal): bölümü açmak 510 ms, her ok tuşu 45 ms — 90 bin
+ * DOM öğesi. Kuralın kendisi (tavan, sayı, gezilemezlik) `lib/branches.test.ts`
+ * içinde; burada bağlanan arayüzün payı: DOM'a gerçekten en fazla tavan kadar
+ * satır girmesi, "daha" satırının metni ve ok tuşlarının onu atlaması.
+ */
+describe("çok sayıda dal", () => {
+  const cok = (n: number): GitBranch[] => [
+    { name: "main", remote: null },
+    ...Array.from({ length: n }, (_, i) => ({ name: `dal-${i}`, remote: "origin" })),
+  ];
+
+  it("açılan bölüm DOM'a en fazla tavan kadar satır koyuyor, kalanı sayıyor", async () => {
+    remotesOpen(true);
+    const { container } = await ac(cok(SECTION_ROW_LIMIT + 5));
+
+    expect(container.querySelectorAll(".pop-row.nested")).toHaveLength(SECTION_ROW_LIMIT);
+    expect(container.querySelector(".pop-more.nested")!.textContent).toBe(
+      "5 dal daha — aramayı daraltın",
+    );
+    // Başlık yine TAMAMINI sayıyor: tavan yalnızca çizileni küçültüyor.
+    expect(baslik(container)!.querySelector(".pill-count")!.textContent).toBe(
+      String(SECTION_ROW_LIMIT + 5),
+    );
+  });
+
+  it("aramada da tavan; tekil ve çoğul İngilizcede ayrışıyor", async () => {
+    const { container } = await ac(cok(SECTION_ROW_LIMIT + 1));
+    fireEvent.change(container.querySelector(".pop-search")!, { target: { value: "dal-" } });
+
+    expect(container.querySelectorAll(".pop-row")).toHaveLength(SECTION_ROW_LIMIT);
+    expect(container.querySelector(".pop-more")!.textContent).toBe("1 dal daha — aramayı daraltın");
+
+    act(() => setLanguage("en"));
+    expect(container.querySelector(".pop-more")!.textContent).toBe(
+      "1 more branch — narrow the search",
+    );
+  });
+
+  it("ok tuşları 'daha' satırını atlıyor: yukarı ok son DALA iniyor", async () => {
+    // "Daha" satırı gezilebilir olsaydı listenin sonu o olurdu ve Enter hiçbir
+    // şey yapmazdı.
+    remotesOpen(true);
+    const { container } = await ac(cok(SECTION_ROW_LIMIT + 5));
+    fireEvent.keyDown(container.querySelector(".pop-search")!, { key: "ArrowUp" });
+
+    const satirlar = container.querySelectorAll(".pop-row");
+    expect(satirlar[satirlar.length - 1].className).toContain("on");
+    expect(container.querySelector(".pop-more")!.className).not.toContain("on");
+  });
+});
+
+/**
+ * Uzaklar yavaşken seçici önce yerel dalları çiziyor.
+ *
+ * ÖLÇÜLDÜ (50 bin uzak dal): tam liste 634 ms (paketli ref) ile 8 sn (`git
+ * fetch` sonrası, her ref ayrı dosya); yalnızca yerel dallar 29-56 ms. Tam
+ * listeyi beklemek, her gün geçilen birkaç yerel dal için saniyelerce
+ * "Yükleniyor…" demekti. Öbür yandan çoğu depoda iki okuma da hızlı ve orada
+ * iki aşamalı çizim yalnızca titreme olurdu. Sınanan bu iki sınır.
+ */
+describe("iki aşamalı yükleme", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  /**
+   * Yerel liste hemen, tam liste elle çözülen bir sözle geliyor. `eskiIkili`:
+   * `remotes`'u tanımayan bir Rust ikilisi gibi yerel çağrıya da HER ŞEYİ dön.
+   */
+  function yavasTam({ eskiIkili = false } = {}) {
+    let coz!: (l: GitBranch[]) => void;
+    const tam = new Promise<GitBranch[]>((resolve) => (coz = resolve));
+    vi.spyOn(api, "gitBranches").mockImplementation((_path, remotes) =>
+      remotes ? tam : Promise.resolve(eskiIkili ? LISTE : LISTE.filter((b) => !b.remote)),
+    );
+    const view = render(<BranchPicker cwd="/depo" current="main" onClose={vi.fn()} />);
+    return { ...view, bitir: (l: GitBranch[]) => act(async () => coz(l)) };
+  }
+
+  const sure = (ms: number) =>
+    act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  const okunuyor = (c: HTMLElement) => c.querySelector<HTMLElement>(".pop-group.static[aria-busy]");
+
+  it("tam liste gecikirse süre dolunca yerel dallar, uzak başlığı '…'", async () => {
+    const { container, bitir } = yavasTam();
+    await sure(REMOTES_GRACE_MS - 1);
+    // Süre dolmadan: tek seferde çizme şansı hâlâ var, liste henüz yok.
+    expect(container.querySelector(".pop-empty")!.textContent).toBe("Yükleniyor…");
+
+    await sure(1);
+    expect(adlar(container)).toEqual(["main", "dev"]);
+    expect(okunuyor(container)!.querySelector(".pill-count")!.textContent).toBe("…");
+    expect(baslik(container), "okunurken basılabilir başlık olmamalı").toBe(null);
+
+    await bitir(LISTE);
+    expect(okunuyor(container)).toBe(null);
+    expect(baslik(container)!.querySelector(".pill-count")!.textContent).toBe("2");
+  });
+
+  it("tam liste süre içinde gelirse tek seferde: '…' hiç görünmüyor", async () => {
+    // Çoğu depo böyle; iki aşama burada bir kare "…" gösterip sayıya dönerdi.
+    const { container, bitir } = yavasTam();
+    await sure(REMOTES_GRACE_MS - 50);
+    // Yerel liste çoktan geldi ama çizilmedi: tam liste hâlâ bekleniyor.
+    expect(okunuyor(container)).toBe(null);
+    expect(container.querySelector(".pop-empty")!.textContent).toBe("Yükleniyor…");
+    await bitir(LISTE);
+    expect(baslik(container)!.querySelector(".pill-count")!.textContent).toBe("2");
+
+    // Süre sonradan dolsa da yerel listeye geri dönülmüyor.
+    await sure(100);
+    expect(okunuyor(container)).toBe(null);
+    expect(baslik(container)).not.toBe(null);
+  });
+
+  it("okunurken arama boş dönse de 'Dal bulunamadı' demiyor", async () => {
+    const { container, bitir } = yavasTam();
+    await sure(REMOTES_GRACE_MS);
+    fireEvent.change(container.querySelector(".pop-search")!, { target: { value: "yeni" } });
+
+    expect(container.querySelector(".pop-empty"), "henüz bilmiyoruz, 'yok' denmemeli").toBe(null);
+    expect(okunuyor(container)).not.toBe(null);
+
+    await bitir(LISTE);
+    expect(adlar(container)).toEqual(["yeni-ozellik"]);
+  });
+
+  it("tam okuma düşerse gelmiş yerel liste korunuyor", async () => {
+    // Boş listeyle ezmek, elde olan dalları "Dal bulunamadı" diye gizlerdi.
+    vi.spyOn(api, "gitBranches").mockImplementation((_path, remotes) =>
+      remotes
+        ? new Promise<GitBranch[]>((_, reject) =>
+            setTimeout(() => reject(new Error("git yok")), REMOTES_GRACE_MS * 2),
+          )
+        : Promise.resolve(LISTE.filter((b) => !b.remote)),
+    );
+    const { container } = render(<BranchPicker cwd="/depo" current="main" onClose={vi.fn()} />);
+    await sure(REMOTES_GRACE_MS * 2);
+
+    expect(adlar(container)).toEqual(["main", "dev"]);
+    expect(okunuyor(container), "düşen okuma hâlâ 'okunuyor' gösteriyor").toBe(null);
+    expect(container.querySelector(".pop-empty")).toBe(null);
+  });
+
+  it("eski ikili yerel çağrıya her şeyi dönse de ilk aşama yalnızca yerel", async () => {
+    // Geliştirmede arayüz HMR'la yenileniyor, Rust ancak uygulama yeniden
+    // başlatılınca: yeni arayüz eski ikiliyle bir süre birlikte çalışıyor.
+    const { container } = yavasTam({ eskiIkili: true });
+    await sure(REMOTES_GRACE_MS);
+
+    expect(adlar(container)).toEqual(["main", "dev"]);
+    expect(okunuyor(container)).not.toBe(null);
   });
 });

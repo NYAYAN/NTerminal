@@ -200,6 +200,15 @@ export const MESSAGES = {
     "Yalnızca uzakta olan dallar (git fetch ile gelenler)",
     "Branches that exist only on the remote (the ones fetched with git fetch)",
   ],
+  // Uzaklar arkadan okunurken başlığın sayısı "…" (bkz. `REMOTES_GRACE_MS`).
+  "git.remotesLoading": ["Uzak dallar okunuyor…", "Reading remote branches…"],
+  // Tavanın ötesindeki dallar (bkz. `SECTION_ROW_LIMIT`): sayı gerçek, satırlar
+  // çizilmiyor. Binlerce dalda aranan dala kaydırarak değil, arayarak varılıyor.
+  "git.moreBranches.one": ["{n} dal daha — aramayı daraltın", "{n} more branch — narrow the search"],
+  "git.moreBranches.other": [
+    "{n} dal daha — aramayı daraltın",
+    "{n} more branches — narrow the search",
+  ],
   // Değişiklikler panelinde commit ve push. Satırdaki kutu dosyayı commit'e
   // ekliyor (`git add`), kaldırınca çıkarıyor (`git reset`); kutu "kısmen"
   // durumunda dosyanın yalnızca bir kısmı indekste.

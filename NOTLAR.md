@@ -833,6 +833,46 @@ kalıyordu). jsdom'da yerleşim olmadığı için test yalnızca NE ZAMAN
 Testler: `lib/branches.test.ts` (kurallar), `components/branchPicker.test.tsx`
 (tıklama, klavye, arama, durumun hatırlanması, yeniden yerleşim).
 
+**Çok sayıda dalda — önce ölçüldü, sonra düzeltildi.** Soru: "çok fazla dal olursa
+performans sorunu olur mu?" Sentetik depoda ölçüldü (macOS, sıcak önbellek, her
+dal AYRI commit'te — aynı commit'e işaret etselerdi sıralama bedava görünürdü;
+arayüz üretim derlemesi, Chromium, boyama hariç):
+
+| uzak dal | git, paketli ref | git, `fetch` sonrası | git, yalnızca yerel | bölümü açmak | aramada ilk harf |
+|---|---|---|---|---|---|
+| 2.000 | 32 ms | 66 ms | 15–19 ms | 62 ms | 49 ms |
+| 10.000 | 51 ms | 356 ms | 13–14 ms | 510 ms | 402 ms |
+| 50.000 | 634 ms | 8 sn | 29–56 ms | ölçülmedi | ölçülmedi |
+
+"`fetch` sonrası" = her ref ayrı dosya; `git gc` / `pack-refs` onları paketliyor.
+
+- **Çizim tavanı** (`SECTION_ROW_LIMIT` = 200). Darboğaz çizimdi: süzme 0,6 ms,
+  IPC ayrıştırma ~0; 10 bin dalda her ok tuşu 45 ms, 90 bin DOM öğesi. Bölüm en
+  fazla 200 dal çiziyor, kalanını "N dal daha — aramayı daraltın" satırı sayıyor;
+  başlıktaki sayı yine TAMAMI. Tavanla 10 bin dalda açmak 5 ms, ilk harf 6 ms, ok
+  tuşu 0,7 ms (50 bin: 6 / 10 / 0,8 ms).
+- **`git_branches` `async` + `spawn_blocking`.** Süreyi kısaltmıyor, ana iş
+  parçacığını bırakıyor: Tauri'nin makrosu `async` olmayan komutu IPC'yi işleyen
+  iş parçacığında satır içi koşuyor (kaynaktan doğrulandı).
+- **İki aşamalı yükleme** (`remotes: false`, `REMOTES_GRACE_MS` = 150 ms). Yerel
+  dallar uzak dal sayısından bağımsız okunuyor. Tam liste 150 ms içinde gelirse
+  tek seferde çiziliyor (çoğu depo; iki aşama orada yalnızca titreme olurdu);
+  gelmezse yerel dallar hemen, uzak başlığı "…" ile. Okunurken arama "Dal
+  bulunamadı" demiyor: henüz bilmiyoruz. Eski bir ikili `remotes`'u tanımayıp
+  her şeyi dönse de (arayüz HMR'la yenilenip Rust yeniden başlatılmadan) ilk aşama
+  yalnızca yerel dalları gösteriyor.
+
+Kazanç getirmediği ölçülenler: `--count` sıralamadan SONRA uygulanıyor;
+commit-graph `committerdate` sıralamasını hızlandırmadı. `git_fingerprint` ile
+önbellek de olmaz: yalnızca `HEAD` ve `index`'e bakıyor, `fetch` ikisine de
+dokunmuyor ve liste bayatlardı. Ölçülmeyenler: Windows ve Defender (ref dosyası
+okuma orada daha yavaş olabilir), soğuk önbellek, boyama.
+
+Testler: `lib/branches.test.ts` (tavan, bekleme hâli), `components/branchPicker.test.tsx`
+(DOM'daki satır sayısı, iki aşama sahte zamanlayıcıyla, düşen okuma, eski ikili),
+`git_tests.rs` (`yerel_okuma_uzak_dallari_getirmiyor`). Hepsi kaynak bozularak
+doğrulandı: 9 mutasyon, 9'u da yakalandı.
+
 ### 1.19 Stash
 
 **İstek:** "bir de stash yapısı ekleyebilir miyiz? IntelliJ, WebStorm'daki gibi.

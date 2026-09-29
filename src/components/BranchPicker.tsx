@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { checkoutCommand, isNavigable, pickerRows } from "../lib/branches";
-import { useT } from "../lib/i18n";
+import { checkoutCommand, isNavigable, pickerRows, REMOTES_GRACE_MS } from "../lib/branches";
+import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
 import { anchorAbove } from "../lib/popover";
@@ -34,6 +34,14 @@ import { BranchIcon, ChevronIcon } from "./Icons";
  * yerel dallar üstte, uzaklar sayıyla birlikte açılıp kapanan bir başlığın
  * altında ve varsayılan KAPALI. Kuralların tamamı ve gerekçeleri `pickerRows`
  * içinde; burası yalnızca çiziyor ve klavyeyi bağlıyor.
+ *
+ * ## Uzaklar arkadan geliyor
+ *
+ * Liste iki okumayla geliyor: yalnızca yerel dallar (uzak dal sayısından
+ * bağımsız, hızlı) ve tamamı. Tam liste `REMOTES_GRACE_MS` içinde gelirse tek
+ * seferde çiziliyor — çoğu depo böyle. Gelmezse yerel dallar hemen, uzak
+ * başlığı "…" ile çiziliyor; tam liste gelince yerini alıyor. Ölçüm ve
+ * gerekçe `REMOTES_GRACE_MS` içinde.
  */
 export function BranchPicker({
   cwd,
@@ -46,6 +54,8 @@ export function BranchPicker({
 }) {
   const t = useT();
   const [list, setList] = useState<GitBranch[] | null>(null);
+  /** Liste şimdilik yalnızca yerel dallar; uzaklar hâlâ okunuyor. */
+  const [remotesPending, setRemotesPending] = useState(false);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const remotesOpen = useStore((s) => s.ui.branchRemotesOpen);
@@ -70,16 +80,48 @@ export function BranchPicker({
 
   useEffect(() => {
     let cancelled = false;
+    let full = false;
+    let late = false;
+    let locals: GitBranch[] | null = null;
+    // Yerel liste yalnızca bekleme süresi dolduysa VE tam liste hâlâ yoksa
+    // çiziliyor; ikisinden hangisi önce olursa öteki onu bekliyor.
+    const showLocals = () => {
+      if (cancelled || full || !late || !locals) return;
+      setList(locals);
+      setRemotesPending(true);
+    };
+    const timer = window.setTimeout(() => {
+      late = true;
+      showLocals();
+    }, REMOTES_GRACE_MS);
+
     void api
-      .gitBranches(cwd)
-      .then((l) => !cancelled && setList(l))
-      .catch(() => !cancelled && setList([]));
+      .gitBranches(cwd, false)
+      .then((l) => {
+        locals = l;
+        showLocals();
+      })
+      .catch(() => {});
+    void api
+      .gitBranches(cwd, true)
+      // Tam okuma düşerse elde ne varsa o: gelmiş bir yerel listeyi boşla ezmeyelim.
+      .catch(() => locals ?? [])
+      .then((l) => {
+        if (cancelled) return;
+        full = true;
+        setList(l);
+        setRemotesPending(false);
+      });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [cwd]);
 
-  const rows = useMemo(() => pickerRows(list ?? [], query, remotesOpen), [list, query, remotesOpen]);
+  const rows = useMemo(
+    () => pickerRows(list ?? [], query, remotesOpen, remotesPending),
+    [list, query, remotesOpen, remotesPending],
+  );
 
   /*
    * Panel rozetin ÜSTÜNE oturuyor ve konumu panelin YÜKSEKLİĞİNDEN hesaplanıyor
@@ -185,6 +227,35 @@ export function BranchPicker({
                 <div key="remote-label" className="pop-group static">
                   <span className="pop-group-name">{t("git.remoteBranches")}</span>
                   <span className="pill-count">{row.count}</span>
+                </div>
+              );
+            }
+
+            if (row.kind === "remote-pending") {
+              // Uzaklar henüz okunuyor: sayının yerinde "…", basılamıyor. Satır
+              // başlığın yerini şimdiden tutuyor; liste gelince panel zıplamıyor.
+              return (
+                <div
+                  key="remote-pending"
+                  className="pop-group static"
+                  title={t("git.remotesLoading")}
+                  aria-busy="true"
+                >
+                  <span className="pop-group-name">{t("git.remoteBranches")}</span>
+                  <span className="pill-count">…</span>
+                </div>
+              );
+            }
+
+            if (row.kind === "more") {
+              // Tavanın ötesi (bkz. `SECTION_ROW_LIMIT`): sayı gerçek, satırlar
+              // çizilmiyor. Bir dal değil; basılmıyor, ok tuşları üstüne inmiyor.
+              return (
+                <div
+                  key={row.remote ? "more-remote" : "more-local"}
+                  className={row.remote ? "pop-more nested" : "pop-more"}
+                >
+                  {tp("git.moreBranches", row.hidden)}
                 </div>
               );
             }

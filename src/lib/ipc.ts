@@ -100,7 +100,12 @@ export const api = {
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
-  gitBranches: (path: string) => invoke<GitBranch[]>("git_branches", { path }),
+  /**
+   * Depodaki dallar, en son commit alan başta. `remotes: false` yalnızca yerel
+   * dallar: uzak dal sayısından bağımsız ve hızlı, seçici önce onu çiziyor.
+   */
+  gitBranches: (path: string, remotes: boolean) =>
+    invoke<GitBranch[]>("git_branches", { path, remotes }),
   /**
    * Bir dosyadaki değişiklikleri geri alır. YIKICI: takip edilen dosya HEAD'e
    * dönüyor, takipsiz dosya siliniyor. Onay çağıran tarafta soruluyor.

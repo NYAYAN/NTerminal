@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { checkoutCommand, filterBranches, isNavigable, pickerRows, type PickerRow } from "./branches";
+import {
+  checkoutCommand,
+  filterBranches,
+  isNavigable,
+  pickerRows,
+  SECTION_ROW_LIMIT,
+  type PickerRow,
+} from "./branches";
 import type { GitBranch } from "../types";
 
 const yerel = (name: string): GitBranch => ({ name, remote: null });
@@ -50,11 +57,16 @@ describe("dal araması", () => {
 describe("dal seçici satırları", () => {
   const liste = [yerel("main"), uzak("yeni-ozellik"), yerel("dev"), uzak("api-v2", "upstream")];
 
-  /** Satırları okunur bir dizeye çevirir: dal adı, ▸ = başlık, — = düz etiket. */
+  /**
+   * Satırları okunur bir dizeye çevirir: dal adı, ▸ = başlık, — = düz etiket,
+   * + = tavanın ötesinde kalan dal sayısı, … = uzaklar henüz okunuyor.
+   */
   const ozet = (rows: readonly PickerRow[]) =>
     rows.map((r) => {
       if (r.kind === "branch") return r.branch.remote ? `${r.branch.remote}/${r.branch.name}` : r.branch.name;
       if (r.kind === "remote-toggle") return `▸${r.count}${r.open ? " açık" : " kapalı"}`;
+      if (r.kind === "more") return `+${r.hidden}`;
+      if (r.kind === "remote-pending") return "…";
       return `—${r.count}`;
     });
 
@@ -118,5 +130,97 @@ describe("dal seçici satırları", () => {
     expect(rows.map(isNavigable)).toEqual([false, true]);
     const kapali = pickerRows(liste, "", false);
     expect(kapali.every(isNavigable)).toBe(true);
+  });
+
+  it("uzaklar okunurken yerel dallar hemen, bölümün yerinde sayısız etiket", () => {
+    // Tam liste gecikince seçici önce yerelleri çiziyor (bkz. `REMOTES_GRACE_MS`).
+    expect(ozet(pickerRows([yerel("main"), yerel("dev")], "", false, true))).toEqual([
+      "main",
+      "dev",
+      "…",
+    ]);
+  });
+
+  it("okunurken arama boş dönse de etiket duruyor: 'uzakta yok' denmiyor", () => {
+    // Henüz bilmiyoruz; boş liste "Dal bulunamadı" diye okunurdu.
+    expect(ozet(pickerRows([yerel("main")], "yeni", false, true))).toEqual(["…"]);
+  });
+
+  it("okunurken bölümün açık/kapalı hâli etkisiz ve etiket gezilemiyor", () => {
+    const rows = pickerRows([yerel("main")], "", true, true);
+    expect(ozet(rows)).toEqual(["main", "…"]);
+    expect(rows.map(isNavigable)).toEqual([true, false]);
+  });
+
+  it("okunurken listedeki uzak girdiler yok sayılıyor", () => {
+    // `remotes`'u tanımayan eski ikili yerel çağrıya da her şeyi dönüyor
+    // (geliştirmede, Rust yeniden başlatılmadan önce).
+    expect(ozet(pickerRows(liste, "", true, true))).toEqual(["main", "dev", "…"]);
+  });
+});
+
+/**
+ * Çizim tavanı.
+ *
+ * ÖLÇÜLDÜ (10 bin uzak dal, üretim derlemesi): bölümü açmak 510 ms, aramada
+ * ilk harf 402 ms, her ok tuşu 45 ms sürüyordu; bedel binlerce satırı çizmekte,
+ * süzmekte değil (0,6 ms). Bölüm artık en fazla `SECTION_ROW_LIMIT` dal
+ * çiziyor, kalanı tek bir satırda sayılıyor. Sınanan iki sınır: tavanın SAYIYI
+ * küçültmemesi (başlık yine tamamını söylüyor, arama yalan söylemiyor) ve
+ * "daha" satırının gezilememesi.
+ */
+describe("çizim tavanı", () => {
+  const uzaklar = (n: number) => Array.from({ length: n }, (_, i) => uzak(`dal-${i}`));
+  const dalAdlari = (rows: readonly PickerRow[]) =>
+    rows.flatMap((r) => (r.kind === "branch" ? [r.branch.name] : []));
+
+  it("açık bölüm en fazla tavan kadar dal çiziyor, kalanını tek satırda sayıyor", () => {
+    const rows = pickerRows([yerel("main"), ...uzaklar(SECTION_ROW_LIMIT + 50)], "", true);
+
+    expect(dalAdlari(rows)).toHaveLength(1 + SECTION_ROW_LIMIT);
+    expect(rows.at(-1)).toEqual({ kind: "more", hidden: 50, remote: true });
+  });
+
+  it("çizilenler listenin BAŞI: Rust'tan gelen en-son-commit sırası korunuyor", () => {
+    // Tavan rastgele bir dilim değil; en taze dallar görünmeli.
+    const rows = pickerRows(uzaklar(SECTION_ROW_LIMIT + 1), "", false);
+    const adlar = dalAdlari(rows);
+    expect(adlar[0]).toBe("dal-0");
+    expect(adlar.at(-1)).toBe(`dal-${SECTION_ROW_LIMIT - 1}`);
+  });
+
+  it("başlıktaki sayı tavandan etkilenmiyor", () => {
+    const rows = pickerRows([yerel("main"), ...uzaklar(1000)], "", false);
+    expect(rows.at(-1)).toEqual({ kind: "remote-toggle", count: 1000, open: false });
+  });
+
+  it("aramada da tavan: eşleşen sayısı gerçek, fazlası tek satırda", () => {
+    const rows = pickerRows(uzaklar(500), "dal-", false);
+
+    expect(rows[0]).toEqual({ kind: "remote-label", count: 500 });
+    expect(dalAdlari(rows)).toHaveLength(SECTION_ROW_LIMIT);
+    expect(rows.at(-1)).toEqual({ kind: "more", hidden: 300, remote: true });
+  });
+
+  it("tam tavan kadar dalda 'daha' satırı yok", () => {
+    const rows = pickerRows(uzaklar(SECTION_ROW_LIMIT), "", false);
+    expect(rows.some((r) => r.kind === "more")).toBe(false);
+  });
+
+  it("yerel bölüm de tavanlı; uzak başlığı 'daha' satırından SONRA geliyor", () => {
+    // Binlerce yerel dal nadir ama aynı bedel; tavan iki bölümde de aynı kural.
+    const yereller = Array.from({ length: SECTION_ROW_LIMIT + 3 }, (_, i) => yerel(`y-${i}`));
+    const rows = pickerRows([...yereller, uzak("x")], "", false);
+
+    expect(rows.slice(-2)).toEqual([
+      { kind: "more", hidden: 3, remote: false },
+      { kind: "remote-toggle", count: 1, open: false },
+    ]);
+  });
+
+  it("'daha' satırı gezilemiyor", () => {
+    // Bir dal değil: Enter'ın gönderecek komutu yok.
+    const rows = pickerRows(uzaklar(SECTION_ROW_LIMIT + 1), "", false);
+    expect(rows.filter((r) => !isNavigable(r)).map((r) => r.kind)).toEqual(["remote-label", "more"]);
   });
 });

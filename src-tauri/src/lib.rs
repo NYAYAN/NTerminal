@@ -623,16 +623,27 @@ fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<Str
     Ok(git::diff(&path, &file, untracked))
 }
 
-/// Depodaki yerel dallar; depo degilse bos liste.
 /// Bir dosyadaki degisiklikleri geri alir. Yikici; onay ARAYUZDE soruluyor.
 #[tauri::command]
 fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
     git::revert(&path, &file, untracked)
 }
 
+/// Depodaki yerel ve uzak dallar; depo degilse bos liste.
+///
+/// `async` + `spawn_blocking`: `for-each-ref` her ref'i okuyor ve suresi dal
+/// sayisiyla buyuyor. OLCULDU (macOS, sicak onbellek): 10 bin uzak dal
+/// paketliyken 51 ms, `git fetch` sonrasi her ref ayri dosyayken 356 ms; 50 bin
+/// dalda 634 ms / 8 sn. Es zamanli bir komut ana is parcaciginda kosuyor
+/// (asagidaki nota bakin) ve o sure boyunca pencere cevap vermezdi.
+///
+/// `remotes: false` yalnizca yerel dallar: secici once onlari ciziyor, uzaklari
+/// ikinci bir cagriyla arkadan bekliyor (bkz. `git::branches`).
 #[tauri::command]
-fn git_branches(path: String) -> CmdResult<Vec<git::GitBranch>> {
-    Ok(git::branches(&path))
+async fn git_branches(path: String, remotes: bool) -> CmdResult<Vec<git::GitBranch>> {
+    tauri::async_runtime::spawn_blocking(move || git::branches(&path, remotes))
+        .await
+        .map_err(fail)
 }
 
 // Asagidaki dort komut (stage / unstage / commit / push) hep `async` +

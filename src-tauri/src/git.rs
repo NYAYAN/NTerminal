@@ -310,20 +310,29 @@ pub struct GitBranch {
 /// Ayni adla yerel dal varsa uzak kopyasi listelenmiyor: ikisi ayni seye
 /// gidiyor ve iki satir "hangisi?" sorusunu dogurur. `origin/HEAD` gibi
 /// simgesel basvurular da yok - dal degil, isaretci.
-pub fn branches(path: &str) -> Vec<GitBranch> {
-    let Ok(out) = quiet_command("git")
-        .args([
-            "-C",
-            path,
-            "--no-optional-locks",
-            "for-each-ref",
-            "--sort=-committerdate",
-            "--format=%(refname)%09%(symref)",
-            "refs/heads/",
-            "refs/remotes/",
-        ])
-        .output()
-    else {
+///
+/// ## `remotes: false` - yalnizca yerel dallar
+///
+/// Uzak dallarin sayisi yerel dallarinkinden bagimsiz buyuyor ve okumanin
+/// suresini onlar belirliyor. OLCULDU (macOS, 50 bin uzak dal): yalnizca
+/// `refs/heads/` 29-56 ms; hepsi 634 ms (paketli ref) ile 8 sn (`git fetch`
+/// sonrasi, her ref ayri dosya). Secici yerel dallari once cizip uzaklari
+/// arkadan bekleyebilsin diye yerel liste ayri istenebiliyor. Tekillestirme
+/// ayni kaliyor: uzak satir yoksa elenecek bir sey de yok.
+pub fn branches(path: &str, remotes: bool) -> Vec<GitBranch> {
+    let mut args = vec![
+        "-C",
+        path,
+        "--no-optional-locks",
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(refname)%09%(symref)",
+        "refs/heads/",
+    ];
+    if remotes {
+        args.push("refs/remotes/");
+    }
+    let Ok(out) = quiet_command("git").args(&args).output() else {
         return Vec::new();
     };
     if !out.status.success() {
