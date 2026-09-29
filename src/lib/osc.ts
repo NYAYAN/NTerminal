@@ -69,27 +69,37 @@ function decodeValidPercent(text: string): string {
  * değiştirmek onu bozar.
  */
 export function cwdFromFileUri(payload: string): string | null {
+  return cwdCandidatesFromFileUri(payload)?.decoded ?? null;
+}
+
+/**
+ * OSC 7 yolunun İKİ okuması: yüzde çözümlemesi yapılmış ve yapılmamış.
+ *
+ * Kabuk betikleri yolu bazen yüzde KODLAMADAN ham yazıyor (zsh ve bash
+ * betiklerimiz), bazen kodlayarak (standart). Hangisi olduğu yükten
+ * anlaşılamıyor; çağıran, elindeki KESİN bilgiyle (`633;P;Cwd`) karşılaştırıp
+ * seçiyor (bkz. `TerminalSession`, OSC 7 işleyicisi).
+ */
+export function cwdCandidatesFromFileUri(
+  payload: string,
+): { raw: string; decoded: string } | null {
   const trimmed = payload.trim();
   if (!trimmed) return null;
-  try {
-    const withoutScheme = trimmed.replace(/^file:\/\//i, "");
-    // Ana makine adı varsa at: şema sonrası ilk '/' öncesindeki kısım.
-    const slash = withoutScheme.indexOf("/");
-    let path = withoutScheme.startsWith("/")
+  const withoutScheme = trimmed.replace(/^file:\/\//i, "");
+  // Ana makine adı varsa at: şema sonrası ilk '/' öncesindeki kısım.
+  const slash = withoutScheme.indexOf("/");
+  const rawPath = withoutScheme.startsWith("/")
+    ? withoutScheme
+    : slash === -1
       ? withoutScheme
-      : slash === -1
-        ? withoutScheme
-        : withoutScheme.slice(slash);
+      : withoutScheme.slice(slash);
 
-    path = decodeValidPercent(path);
+  const finish = (p: string) => {
     // `/C:/Users/x` -> `C:/Users/x`
-    path = path.replace(/^\/([A-Za-z]:)/, "$1");
-
-    if (/^[A-Za-z]:/.test(path)) return path.replace(/\//g, "\\");
-    return path;
-  } catch {
-    return null;
-  }
+    const path = p.replace(/^\/([A-Za-z]:)/, "$1");
+    return /^[A-Za-z]:/.test(path) ? path.replace(/\//g, "\\") : path;
+  };
+  return { raw: finish(rawPath), decoded: finish(decodeValidPercent(rawPath)) };
 }
 
 export type Osc133Kind = "A" | "B" | "C" | "D" | null;

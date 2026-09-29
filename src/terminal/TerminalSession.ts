@@ -15,7 +15,7 @@ import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
 import { looksLikeSecretPrompt, resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
 import { typingOutsideTerminal } from "../lib/focus";
-import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
+import { cwdCandidatesFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { shouldResize } from "../lib/ptySize";
 import { getTheme, resolveThemeId } from "../lib/themes";
@@ -300,15 +300,19 @@ export class TerminalSession {
   private integrationSeen = false;
   private integrationProbe: number | null = null;
   /**
-   * Kabuk KESİN dizin bildirimini (`633;P;Cwd`) en az bir kez yolladı mı.
+   * Kabuğun son KESİN dizin bildirimi (`633;P;Cwd`); yoksa `null`.
    *
-   * Yolladıysa OSC 7 yok sayılıyor: entegrasyon betikleri her istemde İKİSİNİ de
-   * yolluyor ve OSC 7'deki yol yüzde kodlamadan HAM yazılıyor; `decodeURIComponent`
-   * ile çözülünce adında `%20` geçen bir klasör yanlış çıkıyor ve OSC 7 ikinci
-   * geldiği için doğru değerin üstüne yazıyordu (bkz. `TerminalSession.test.ts`,
-   * "dizin bildirimi").
+   * OSC 7 bununla KARŞILAŞTIRILIYOR (bkz. OSC 7 işleyicisi): zsh/bash betikleri
+   * her istemde İKİSİNİ de yolluyor ve OSC 7'deki yol yüzde kodlamadan HAM
+   * yazılıyor; çözülünce adında `%20` geçen bir klasör yanlış çıkıyor ve OSC 7
+   * ikinci geldiği için doğru değerin üstüne yazıyordu.
+   *
+   * "Kesin bildirim HER ZAMAN kazansın" kuralı YANLIŞ: cmd.exe istemi bu yolu
+   * kaçışsız ham `$P` olarak yolluyor ve `unescapeOsc` `\x64`ü karakter kodu
+   * sanıp yolu bozuyor; orada doğruyu veren OSC 7. Karşılaştırma ikisini de
+   * karşılıyor.
    */
-  private preciseCwd = false;
+  private cwd633: string | null = null;
   exited = false;
   exitCode: number | null = null;
   spawned = false;
@@ -1903,10 +1907,15 @@ export class TerminalSession {
     // OSC 7: standart "çalışma dizini bildirimi"
     this.disposables.push(
       this.term.parser.registerOscHandler(7, (payload) => {
-        // Kesin bildirim geldiyse bu ham yola ihtiyaç yok (bkz. `preciseCwd`).
-        if (this.preciseCwd) return true;
-        const cwd = cwdFromFileUri(payload);
-        if (cwd) this.updateCwd(cwd);
+        const yol = cwdCandidatesFromFileUri(payload);
+        if (!yol) return true;
+        // Kesin bildirimle AYNI dizini gösteriyorsa (ham ya da çözülmüş okumayla)
+        // yapacak bir şey yok: yüzde çözümlemesi yalnızca zarar verirdi
+        // (bkz. `cwd633`). Farklıysa (cmd.exe'de 633 bozuk) OSC 7 doğruyu veriyor.
+        if (this.cwd633 !== null && (yol.raw === this.cwd633 || yol.decoded === this.cwd633)) {
+          return true;
+        }
+        this.updateCwd(yol.decoded);
         return true;
       }),
     );
@@ -2206,7 +2215,7 @@ ${dim}[${
         break;
       case "P":
         if (parsed.key === "Cwd" && parsed.value) {
-          this.preciseCwd = true;
+          this.cwd633 = parsed.value;
           this.updateCwd(parsed.value);
         }
         // Kabuk komut onerisini acabildi mi? Acamadiysa arayuz ne

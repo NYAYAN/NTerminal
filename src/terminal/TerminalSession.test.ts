@@ -587,6 +587,23 @@ describe("dizin bildirimi", () => {
     void s.dispose(true);
   });
 
+  it("cmd.exe: kaçışsız ham $P 633'te bozulunca OSC 7 doğruyu veriyor", async () => {
+    // GERİLEME (inceleme bulgusu): cmd istemi `633;P;Cwd=$P` yolunu ham
+    // yazıyor ve `unescapeOsc` yoldaki `\x64`ü karakter kodu sanıyor:
+    // `C:\src\app\x64\Release` -> `C:\src\appd\Release`. Eskiden hemen
+    // ardından gelen OSC 7 doğruyu yazıyordu; "kesin bildirim kazansın" kuralı
+    // (tek başına) bu yolu kesip cmd sekmesinin dizinini kalıcı bozuyordu.
+    //
+    // Doğru kural: OSC 7 yalnızca kesin bildirimle AYNI dizini gösteriyorsa
+    // atlanır (yüzde çözümlemesinin zarar verdiği durum); farklıysa OSC 7 kullanılır.
+    const { s } = await kurulu("cw5");
+    const yol = "C:\\src\\app\\x64\\Release";
+    h.emit("cw5", `${ESC}]633;P;Cwd=${yol}${BEL}${ESC}]7;file:///${yol}${BEL}`);
+    await flush(s);
+    expect(s.cwd, "cmd sekmesinin dizini bozuldu").toBe(yol);
+    void s.dispose(true);
+  });
+
   it("yalnızca OSC 7 gönderen kabukta (633 yok) OSC 7 kullanılmaya devam ediyor", async () => {
     // Özel profil, fish, kendi betiği: yalnızca standart OSC 7 var ve orada
     // yüzde kodlama DOĞRU çözülmeli. Düzeltmenin bedeli bu olmamalı.

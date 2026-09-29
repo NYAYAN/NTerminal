@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { cwdFromFileUri, parseOsc133, parseOsc633, unescapeOsc } from "./osc";
+import {
+  cwdCandidatesFromFileUri,
+  cwdFromFileUri,
+  parseOsc133,
+  parseOsc633,
+  unescapeOsc,
+} from "./osc";
 import { base64ToBytes } from "./ipc";
 import { formatDuration, fuzzyScore, baseName, dirName, shortenPath } from "./format";
 import { matchCombo, parseCombo, prettyCombo } from "./keys";
@@ -137,6 +143,45 @@ describe("OSC 7 dizin çözümlemesi", () => {
 
   it("geçerli ve geçersiz diziler bir arada", () => {
     expect(cwdFromFileUri("file://mac/tmp/a%20b/100%_x")).toBe("/tmp/a b/100%_x");
+  });
+});
+
+describe("OSC 7 yolunun iki okuması", () => {
+  // Kabuk betikleri (zsh, bash) yolu yüzde KODLAMADAN ham yazıyor; cmd.exe ve
+  // standart göndericiler kodlayarak. Yükten hangisi olduğu anlaşılamıyor:
+  // `TerminalSession` iki okumayı da kesin bildirimle (633;P;Cwd) karşılaştırıyor.
+  // Tek okuma (hep çözümle) adında `%20` geçen klasörü, tek okuma (hiç çözümleme)
+  // kodlanmış yolu bozuyordu.
+
+  it("ham ve çözülmüş okuma birbirinden ayrılıyor", () => {
+    expect(cwdCandidatesFromFileUri("file://mac/tmp/a%20b")).toEqual({
+      raw: "/tmp/a%20b",
+      decoded: "/tmp/a b",
+    });
+  });
+
+  it("yüzde içermeyen yolda ikisi aynı", () => {
+    expect(cwdCandidatesFromFileUri("file:///home/ali/kod")).toEqual({
+      raw: "/home/ali/kod",
+      decoded: "/home/ali/kod",
+    });
+  });
+
+  it("Windows yolunda ham okuma da sürücü biçimine çevriliyor", () => {
+    // cmd.exe: `file:///C:\src\appd\Release` (ters bölü ham `$P`den geliyor).
+    expect(cwdCandidatesFromFileUri("file:///C:\\src\\appd\\Release")).toEqual({
+      raw: "C:\\src\\appd\\Release",
+      decoded: "C:\\src\\appd\\Release",
+    });
+    expect(cwdCandidatesFromFileUri("file:///C:/Program%20Files/Git")).toEqual({
+      raw: "C:\\Program%20Files\\Git",
+      decoded: "C:\\Program Files\\Git",
+    });
+  });
+
+  it("boş yükte null", () => {
+    expect(cwdCandidatesFromFileUri("")).toBe(null);
+    expect(cwdCandidatesFromFileUri("  ")).toBe(null);
   });
 });
 
