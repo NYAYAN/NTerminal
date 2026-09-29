@@ -47,6 +47,63 @@ pub const TERMINAL_ENV: [(&str, &str); 2] = [
 /// nobetcisi. Gerekcenin tamami `spawn` icinde, silindigi yerde.
 pub const CLEAR_INHERITED_ENV: [&str; 1] = ["NTERMINAL_INTEGRATION_LOADED"];
 
+/// PowerShell'e entegrasyon betigini yukleten komut (`-Command` degeri).
+///
+/// BILDIRILEN HATA: baska bir bilgisayara kurulan uygulamada dipte
+/// "Kabuk baslatiliyor..." seridi hic kalkmiyor, komut kutusu hic acilmiyordu.
+///
+/// KOK NEDEN: betik `-File` ile yukleniyordu ve `-File` YURUTME ILKESINE
+/// tabi. Stok bir Windows istemcisinde ilke `Restricted`: hicbir .ps1
+/// calismiyor, PowerShell "bu sistemde betik calistirmak devre disi" deyip
+/// entegrasyonsuz bir isteme dusuyor. Istem isareti (OSC 133) hic gelmiyor ve
+/// serit sonsuza kadar bekliyor. Gelistirme makinesinde gorunmuyordu cunku
+/// orada grup ilkesi `MachinePolicy = Unrestricted` koyuyor.
+///
+/// Ilke yalnizca DOSYAYI denetliyor (PowerShell kaynaginda yalnizca
+/// `ExternalScript` turu `CheckPolicy`den geciyor). Ayni metni okuyup betik
+/// blogu olarak calistirmak, komutlari isteme yazmakla ayni sey - Microsoft'un
+/// belgeledigi gibi ilke bir guvenlik siniri degil ve buna izin veriyor. Boylece:
+///
+///  - `Restricted`, `AllSigned` ve grup ilkesiyle zorlanan ilkede de yukleniyor
+///    (`-ExecutionPolicy Bypass` bunu yapamazdi: grup ilkesi onu eziyor);
+///  - dosya internetten gelmis gibi isaretliyse (`Zone.Identifier`) ya da veri
+///    klasoru bir ag paylasimindaysa uyari/soru cikmiyor;
+///  - kullanicinin OTURUMUNUN ilkesi degismiyor. `-ExecutionPolicy Bypass`
+///    butun sekmeyi (ve miras yoluyla cocuk sureclerini) Bypass'a cekerdi;
+///    kullanicinin kendi betikleri N-Terminal'de baska, disarida baska
+///    davranirdi.
+///
+/// `&` (nokta degil): betik `-File`daki gibi kendi kapsaminda kosuyor, yerel
+/// degiskenleri kullanicinin oturumuna sizmiyor. Kalici her sey zaten
+/// `Global:` ile tanimli.
+///
+/// Yuklenemezse (Constrained Language gibi) arayuze `Integration=failed`
+/// bildiriliyor: arayuz sekmeyi entegrasyonsuz sayiyor, sonsuz bir
+/// "baslatiliyor" yerine duz terminal kaliyor. `Write-Host` ve `[char]`
+/// bilincli: kisitli dil kipinde de calisan tek yol onlar.
+pub const POWERSHELL_BOOTSTRAP: &str = concat!(
+    "try { & ([scriptblock]::Create([IO.File]::ReadAllText($env:NTERMINAL_INTEGRATION_SCRIPT))) } ",
+    "catch { Write-Host -NoNewline ([char]27 + ']633;P;Integration=failed' + [char]7); ",
+    "Write-Host -ForegroundColor Red ('N-Terminal: ' + $_) }",
+);
+
+/// Betigin yolunu tasiyan ortam degiskeni.
+///
+/// Yol komut satirina GOMULMUYOR: tek tirnakli PowerShell dizesinde `'` ve
+/// onun dort Unicode esi (U+2018..U+201B) de ayirici sayiliyor; `O'Neil` gibi
+/// bir kullanici adi komutu bozardi. Ortam degiskeninde alintilama derdi yok.
+pub const POWERSHELL_SCRIPT_ENV: &str = "NTERMINAL_INTEGRATION_SCRIPT";
+
+/// Uygulamayla gelen PSReadLine'in ikili modulu (yalnizca Windows PowerShell 5.1).
+///
+/// Betik bunu yalnizca PSReadLine HIC yuklenmemisse kullaniyor. `Restricted`
+/// ilkede kabuk modulu kendisi yukleyemiyor: `PSReadLine.psm1` de bir betik ve
+/// engelleniyor. PSReadLine olmadan komut baslangici (`133;C`) Enter aninda
+/// gelmiyor ve kutu calisan komutun ustunde acik kaliyordu. Ikili modul (DLL)
+/// ilkeye tabi degil; `.psm1`in tek isi olan `PSConsoleHostReadLine`i betik
+/// kendisi tanimliyor. Bkz. nterminal.ps1, "PSReadLine yedegi".
+pub const PSREADLINE_DLL_ENV: &str = "NTERMINAL_PSREADLINE";
+
 const COALESCE_WINDOW: Duration = Duration::from_millis(6);
 /// Tek olayda gonderilecek azami bayt.
 const MAX_CHUNK: usize = 128 * 1024;
@@ -511,7 +568,8 @@ impl PtyManager {
 /// Basarili olursa true doner.
 ///
 /// `env` de yaziliyor cunku zsh argumanla yuklenemiyor: `--init-file`
-/// karsiligi yok, tek yol ZDOTDIR ortam degiskeni (bkz. Zsh dali).
+/// karsiligi yok, tek yol ZDOTDIR ortam degiskeni (bkz. Zsh dali). PowerShell
+/// de betigin yolunu oradan okuyor (bkz. `POWERSHELL_SCRIPT_ENV`).
 ///
 /// `user_zdotdir`: kullanicinin GERCEK ZDOTDIR'i. Kopru dosyalari bununla onun
 /// kendi baslangic dosyalarini buluyor; None ise $HOME'a dusuyorlar.
@@ -543,10 +601,12 @@ fn apply_integration(
                 args.push("-NoLogo".into());
             }
             // -NoExit: betik kostuktan sonra etkilesimli kal.
-            // -File: yol argumani olarak gectigi icin alintilama derdi yok.
+            // -Command, -File DEGIL: -File yurutme ilkesine takiliyor. Gerekcesi
+            // `POWERSHELL_BOOTSTRAP` uzerinde.
             args.push("-NoExit".into());
-            args.push("-File".into());
-            args.push(script.to_string_lossy().to_string());
+            args.push("-Command".into());
+            args.push(POWERSHELL_BOOTSTRAP.into());
+            env.push((POWERSHELL_SCRIPT_ENV.into(), script.to_string_lossy().to_string()));
 
             // Yalnizca Windows PowerShell 5.1: uygulamayla gelen PSReadLine'i
             // gorunur kil.
@@ -581,6 +641,14 @@ fn apply_integration(
                         format!("{};{}", modules.to_string_lossy(), existing)
                     };
                     env.push(("PSModulePath".into(), value));
+
+                    // Ilke modulu engellerse betigin yedegi (bkz.
+                    // `PSREADLINE_DLL_ENV`). Ayni kosulda: oneri kapaliysa
+                    // kabugun kendi kurulumuna yine dokunmuyoruz.
+                    let dll = modules.join("PSReadLine").join("Microsoft.PowerShell.PSReadLine2.dll");
+                    if dll.is_file() {
+                        env.push((PSREADLINE_DLL_ENV.into(), dll.to_string_lossy().to_string()));
+                    }
                 }
             }
             true

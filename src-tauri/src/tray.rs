@@ -88,9 +88,12 @@ pub fn setup(app: &AppHandle, lang: &str) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-show" => show_main(app),
-            // Cikis simgeden geliyor, yani pencere gizli olabilir. Kabuk
-            // sureclerini burada birakmak arkada sahipsiz surecler birakirdi;
-            // `exit` pencereleri yikiyor ve `Destroyed` kancasi topluyor.
+            // Cikis simgeden geliyor, yani pencere gizli olabilir. `exit`
+            // pencereleri YIKMIYOR - Tauri cikista onlari yalnizca gizliyor
+            // (`cleanup_before_exit`) - yani `Destroyed` kancasi burada
+            // kosmuyor. Kabuklar yine de arkada kalmiyor: surec bitince
+            // ConPTY'ler kapaniyor ve icindeki surecler, torunlar dahil,
+            // sonlaniyor. Windows'ta olculdu, bkz. pty_tests.rs `kapanis`.
             "tray-quit" => app.exit(0),
             _ => {}
         });

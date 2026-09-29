@@ -4,6 +4,7 @@ mod favorites;
 mod files;
 mod git;
 mod history;
+mod instance;
 mod model;
 mod nodever;
 mod osinfo;
@@ -708,6 +709,18 @@ pub fn run() {
         );
     }
 
+    // Ayni veri klasoruyle calisan bir N-Terminal varsa ikinci kopya acilmiyor:
+    // oradaki pencere (arka planda gizli olabilir) one geliyor. Kabuk
+    // entegrasyonuna, calisma alanina ve ekran ciktilarina dokunmadan once;
+    // gerekcesi instance.rs'de.
+    let Some(instance) = instance::acquire(&data_paths.root) else {
+        eprintln!(
+            "[nterminal] {} klasoruyle calisan bir N-Terminal var; penceresi one getirildi",
+            data_paths.root.display()
+        );
+        return;
+    };
+
     let integration = match shellint::install(&data_paths) {
         Ok(installed) => installed.dir,
         Err(err) => {
@@ -750,6 +763,9 @@ pub fn run() {
         .manage(state)
         .setup(move |app| {
             tray::setup(app.handle(), &lang)?;
+            // Uygulama yeniden acildiginda gelen haber (bkz. instance.rs).
+            let handle = app.handle().clone();
+            instance.on_activate(move || tray::show_main(&handle));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

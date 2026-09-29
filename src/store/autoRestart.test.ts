@@ -17,12 +17,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   exitHandlers: new Map<string, (code: number | null) => void>(),
   scrollbackSave: vi.fn(async () => {}),
+  /** Kabuk hiç doğmuyor: profildeki yol bu makinede yok. */
+  spawnFails: false,
 }));
 
 vi.mock("../lib/ipc", () => ({
   api: new Proxy(
     {
-      ptySpawn: async () => ({ pid: 1, shell: "/bin/zsh", integration: true, cwd: "/x" }),
+      ptySpawn: async () => {
+        if (h.spawnFails) throw new Error("kabuk baslatilamadi: /yok/zsh");
+        return { pid: 1, shell: "/bin/zsh", integration: true, cwd: "/x" };
+      },
       scrollbackSave: (...a: unknown[]) => h.scrollbackSave(...(a as [])),
     } as Record<string, unknown>,
     { get: (target, prop) => target[prop as string] ?? (async () => undefined) },
@@ -143,8 +148,39 @@ beforeEach(() => {
   useStore.setState({ restartTab: gercekRestartTab });
   h.exitHandlers.clear();
   h.scrollbackSave.mockClear();
+  h.spawnFails = false;
   sessions.clear();
   seed();
+});
+
+describe("kabuk hiç doğmazsa", () => {
+  it("bir kez yeniden deneniyor, sonra kutu çıkıyor; şerit takılı kalmıyor", async () => {
+    /*
+     * BİLDİRİLEN HATA: "Kabuk başlatılıyor…" şeridi hiç kalkmadı.
+     *
+     * Bu dosyanın başındaki döngü koruması yalnızca kabuğun AÇILIP hemen
+     * ölmesini görüyordu (çıkış olayı). Profildeki yol bu makinede yoksa
+     * kabuk hiç doğmuyor: çıkış olayı da gelmiyordu, sinyal de. Depo boş
+     * kalıyor, şerit "başlatılıyor" diye bekliyor, kutu hiç çıkmıyordu.
+     */
+    h.spawnFails = true;
+    const restartTab = vi.fn(async () => {});
+    useStore.setState({ restartTab });
+
+    await kabuk();
+    expect(restartTab, "ilk başarısızlıkta bir kez denenmeli").toHaveBeenCalledTimes(1);
+    expect(useStore.getState().exited[TAB]).toBeFalsy();
+    expect(
+      useStore.getState().inputSignals[TAB]?.integration,
+      "depoda sinyal yok: şerit başlatılıyor der",
+    ).toBe(false);
+
+    // Yeniden başlatılan oturum da doğamıyor.
+    sessions.clear();
+    await kabuk();
+    expect(restartTab, "ikinci kez de denendi: açılamayan kabukta döngü").toHaveBeenCalledTimes(1);
+    expect(useStore.getState().exited[TAB], "kabuk açılamıyor kutusu çizilmiyor").toBe(true);
+  });
 });
 
 describe("kabuk kapanınca", () => {

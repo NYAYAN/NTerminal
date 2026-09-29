@@ -60,6 +60,10 @@ vi.mock("../lib/ipc", () => {
   const ilkIstem = `${ESC}]133;A${BEL}${ESC}]133;B${BEL}`;
 
   const ptySpawn = vi.fn(async (spec: { id: string }) => {
+    // Rust tarafının hata metni: profildeki kabuk bu makinede yok.
+    if (spec.id.startsWith("dogmayan")) {
+      throw new Error("kabuk baslatilamadi: C:\\Program Files\\PowerShell\\7\\pwsh.exe");
+    }
     // ÇIKTI SPAWN DÖNMEDEN yayımlanıyor: ConPTY okuyucusu Rust tarafında
     // süreç doğduğu anda başlıyor, komutun yanıtı arayüze varmadan önce.
     h.emit(spec.id, ilkIstem);
@@ -146,6 +150,62 @@ describe("oturum başlangıcı", () => {
     expect(h.yayin.map((y) => y.id)).toEqual(["t3", "t4"]);
     void a.dispose(true);
     void b.dispose(true);
+  });
+});
+
+/**
+ * "Kabuk başlatılıyor…" şeridi SONSUZA KADAR kalmamalı.
+ *
+ * BİLDİRİLEN HATA: başka bir bilgisayara kurulan uygulamada şerit hiç
+ * kalkmadı. Şerit, depoda sinyal yokken ya da entegre bir kabuk henüz ilk
+ * istemini bildirmemişken çiziliyor (bkz. `CommandInput`). İstem işareti hiç
+ * gelmeyecekse oturum bunu depoya SÖYLEMEK zorunda; yoksa şerit yalan
+ * söylemeye devam eder.
+ *
+ * Kök neden kabuk tarafındaydı (betik yürütme ilkesine takılıyordu, bkz.
+ * pty.rs `POWERSHELL_BOOTSTRAP`). Bu testler aynı belirtinin öteki iki
+ * kapısını kapatıyor: kabuğun hiç doğmaması ve betiğin yüklenememesi.
+ */
+describe("istem hiç gelmeyecekse", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+
+  it("kabuk doğmadıysa depo duyuyor: sinyal ve çıkış", async () => {
+    // Profilde bu makinede olmayan bir kabuk yolu (başka makineden içe
+    // alınmış ayar). Eskiden yalnızca oturumun kendi bayrağı kalkıyordu; depo
+    // hiçbir şey duymadığı için şerit sonsuza kadar "başlatılıyor" diyordu.
+    h.reset();
+    const s = session("dogmayan-1");
+    const onInputSignals = vi.fn();
+    const onExit = vi.fn();
+    s.setCallbacks({ onInputSignals, onExit });
+    await s.start(null);
+
+    expect(onInputSignals, "depoya hiç sinyal gitmedi: şerit sonsuza kadar kalır").toHaveBeenCalled();
+    expect(onInputSignals.mock.lastCall?.[0].integration).toBe(false);
+    // Çıkış yolu: depo bir kez yeniden deniyor, olmazsa "kabuk açılamıyor"
+    // kutusunu çiziyor (bkz. autoRestart.test.ts).
+    expect(onExit).toHaveBeenCalledWith(null);
+    void s.dispose(true);
+  });
+
+  it("betik yüklenemediyse oturum entegrasyonsuz sayılıyor", async () => {
+    // Kabuk tarafı bunu `633;P;Integration=failed` ile bildiriyor.
+    h.reset();
+    const s = session("t7");
+    const onInputSignals = vi.fn();
+    s.setCallbacks({ onInputSignals });
+    await s.start(null);
+    await flush(s);
+    expect(s.inputSignals().integration, "taklit bozulmuş").toBe(true);
+
+    h.emit("t7", `${ESC}]633;P;Integration=failed${BEL}`);
+    await flush(s);
+
+    expect(s.inputSignals().integration).toBe(false);
+    expect(s.integration, "durum çubuğu ve sekme noktası bunu okuyor").toBe(false);
+    expect(onInputSignals.mock.lastCall?.[0].integration, "depo duymadı").toBe(false);
+    void s.dispose(true);
   });
 });
 

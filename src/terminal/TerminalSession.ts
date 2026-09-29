@@ -652,6 +652,22 @@ export class TerminalSession {
         `\r\n\x1b[31m${t("term.spawnFailed")}\x1b[0m ${String(err)}\r\n`,
       );
       this.exited = true;
+      /*
+       * Depo DUYMALI: kabuk hiç doğmadı.
+       *
+       * ÖLÇÜLEN HATA: burada yalnızca oturumun kendi bayrağı kalkıyordu. Depo
+       * ne sinyal ne çıkış aldı; komut kutusu "sinyal yok = kabuk başlıyor"
+       * diye okuyup "Kabuk başlatılıyor…" şeridini sonsuza kadar çizdi.
+       * Profilde bu makinede olmayan bir kabuk yolu (başka makineden içe
+       * alınmış ayar) tam olarak buraya düşüyordu.
+       *
+       * Çıkış olarak bildiriliyor: kabuğun açılıp hemen ölmesiyle aynı yol.
+       * Depo bir kez yeniden deniyor, yine olmazsa "kabuk açılamıyor"
+       * kutusunu (profili kontrol et, yeniden başlat, kapat) çiziyor.
+       */
+      this.integration = false;
+      this.emitInputSignals();
+      this.callbacks.onExit?.(null);
       return;
     }
   }
@@ -1964,6 +1980,20 @@ ${dim}[${
         if (parsed.key === "Prediction") {
           this.prediction = parsed.value as PredictionState;
           this.callbacks.onPrediction?.(this.prediction);
+        }
+        /*
+         * Kabuk entegrasyon betiğini YÜKLEYEMEDİ (bkz. pty.rs,
+         * `POWERSHELL_BOOTSTRAP`): kısıtlı dil kipi, okunamayan dosya.
+         *
+         * Oturum entegrasyonsuz sayılıyor. Sayılmasaydı istem işareti hiç
+         * gelmeyeceği hâlde komut kutusu "Kabuk başlatılıyor…" diye sonsuza
+         * kadar beklerdi — tam da bu bildirimin var olma sebebi olan hata.
+         * Kabuk ayakta: tuşlar terminale gidiyor, sebep de terminalde kırmızı
+         * yazılı.
+         */
+        if (parsed.key === "Integration" && parsed.value === "failed") {
+          this.integration = false;
+          this.emitInputSignals();
         }
         break;
       case "X": {

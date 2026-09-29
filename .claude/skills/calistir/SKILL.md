@@ -32,6 +32,20 @@ Running `target\debug\nterminal.exe`
 
 İlk derleme birkaç dakika sürebilir; `target/` sıcaksa 10 saniyenin altında.
 
+Günlükte bunun yerine şu satırı görürsen yeni örnek **açılmadı**:
+
+```
+[nterminal] <klasör> klasoruyle calisan bir N-Terminal var; penceresi one getirildi
+```
+
+Uygulama tek örnek: aynı veri klasörüyle ikinci kez açılınca çalışanın
+penceresini öne getirip çıkıyor (`src-tauri/src/instance.rs`). Öne gelen,
+önceki bir denemeden kalmış geliştirme örneği ve **eski kodu** çalıştırıyor.
+Kapatma düğmesi varsayılan olarak pencereyi yalnızca gizlediği için böyle bir
+örnek görünmeden yaşayabiliyor. Onu kapat (aşağıda "Kapatma"), sonra yeniden
+başlat. Kilidin ad alanı geliştirme yapısında ayrı; kurulu uygulama
+geliştirme örneğini engellemiyor.
+
 ## Kurulu uygulama açıkken: AYRI veri klasörü
 
 Önce bak: `Get-Process nterminal` iki satır veriyorsa (biri
@@ -67,6 +81,9 @@ Start-Process "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri\t
 
 Bu yol `tauri dev`i atlıyor: Vite'ı kendin başlatıyorsun, hazır exe'yi ortam
 değişkeniyle açıyorsun. Rust değiştirmediysen yeterli; HMR yine çalışıyor.
+Önce aynı klasörle kalmış bir geliştirme örneği olmadığına bak (aşağıda
+"Kapatma"daki ilk komutun seçtiği süreçler). Varsa yeni exe açılmadan çıkar ve
+eskisi öne gelir; ayrıntısı "Başlat"ta.
 Ekran görüntüsü alırken süreci yola göre seç (`$_.Path -like "*target\debug*"`),
 yoksa kullanıcının penceresini öne getirirsin. İşin bitince geçici klasörü sil.
 
@@ -191,6 +208,11 @@ Start-Process "C:\Users\nurullah.yayan\Desktop\Work\NYAYAN\NTerminal\src-tauri\t
   "Vantage Bileşeni". Başka port seç ve sürücüye `CDP_PORT` ile söyle:
   `$env:CDP_PORT = "9333"` (bash: `export CDP_PORT=9333`).
 
+Portun hazır olduğunu PowerShell'in `Invoke-RestMethod http://localhost:9333/json`
+çağrısıyla yoklama. Bu makinede 90 saniye boyunca cevap alamadı, oysa port
+açıktı ve `cdp.mjs` (Node `fetch`) hemen bağlandı. Hazır olmayı
+`node .claude/skills/calistir/cdp.mjs eval "document.readyState"` ile bekle.
+
 Sürücünün `eval` komutu sayfada JS koşturup sonucu JSON yazıyor; uzun bir
 ölçüm betiğini dosyaya koyup `eval @yol` ile ver. Not: Bash aracı komut
 metnindeki çift ters bölüyü teke indiriyor — Windows yolu içeren dosya
@@ -218,9 +240,26 @@ gönderilen ulaşıyor. `Input.insertText` gerçek `input` olayı üretir, React
 
 ## Kapatma
 
+Yalnızca kendi başlattığını kapat, yola ve porta göre seç:
+
 ```powershell
-Get-Process nterminal, cargo, node -ErrorAction SilentlyContinue |
-  Where-Object { $_.Path -like "*NTerminal*" } | Stop-Process -Force
+# Geliştirme örneği: target\debug altındaki exe.
+Get-Process nterminal -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like "*\src-tauri\target\debug\nterminal.exe" } | Stop-Process -Force
+# Vite: node.exe depoda değil, Node kurulumunda. Porttan bul.
+Get-NetTCPConnection -LocalPort 5273 -State Listen -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
+Örnekle birlikte sekmelerindeki süreçler (torunlar dahil) ve WebView2'nin
+hata ayıklama portu (9333) da kapanıyor; ölçüldü, arkada süreç kalmadı.
+
+Eski tarif (`Get-Process nterminal, cargo, node | Where-Object { $_.Path -like
+"*NTerminal*" }`) iki yönden yanlıştı. `-like` büyük/küçük harfe bakmıyor ve
+kurulu uygulamanın `C:\Program Files\N-Terminal\nterminal.exe` yolunu da
+tutuyordu: kullanıcının kendi terminalini, içindeki sunucularla birlikte
+öldürürdü (denendi, açık üç kurulu örneğin üçünü de seçti). Vite'ın
+`node.exe`'si ise depoda değil, hiç eşleşmiyordu; 5273 açık kalıyordu.
+
 Kullanıcı "kapat" demediyse **kapatma** — çalışan uygulamaya bakıyor olabilir.
+Açık bıraktığında hangi portların (5273, 9333) açık kaldığını söyle.

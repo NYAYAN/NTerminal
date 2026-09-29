@@ -9,8 +9,10 @@
 #   OSC 633;P;Cwd=   gecerli dizin
 #   OSC 7;file://    gecerli dizin (standart bicim)
 #
-# Bu dosya `-NoExit -File` ile yuklenir; kullanicinin kendi profili ve
-# istem (prompt) fonksiyonu korunur, sadece sarmalanir.
+# Bu dosya `-NoExit -Command` ile, metni okunup betik blogu olarak yuklenir
+# (-File DEGIL: -File yurutme ilkesine takiliyor, bkz. pty.rs
+# POWERSHELL_BOOTSTRAP). Kullanicinin kendi profili ve istem (prompt)
+# fonksiyonu korunur, sadece sarmalanir.
 
 if ($env:NTERMINAL_INTEGRATION_LOADED -eq '1') { return }
 $env:NTERMINAL_INTEGRATION_LOADED = '1'
@@ -25,6 +27,8 @@ $Global:__NTermLastHistoryId = -1
 # basmak (komut yok, dolayisiyla SawCommand false) yedegi tetikler ve onceki
 # komut ikinci kez kaydedilir.
 $Global:__NTermUseHistoryFallback = $true
+# Ilk istemde uygulamanin baslatma komutu gecmisten silinecek (bkz. prompt).
+$Global:__NTermFirstPrompt = $true
 # Komut satiri pencerenin dibinde dursun mu? Arayuz bildirmediyse HAYIR:
 # eski bir surumle calisirken davranisi sessizce degistirmiyoruz.
 $Global:__NTermPromptBottom = ($env:NTERMINAL_PROMPT_BOTTOM -eq '1')
@@ -103,6 +107,21 @@ function Global:prompt {
     # $? ve $LASTEXITCODE ilk satirda okunmali: sonraki her ifade bunlari ezer.
     $lastSuccess = $?
     $lastExit = $Global:LASTEXITCODE
+
+    # Uygulamanin baslatma komutu (-Command) oturum gecmisine YAZILIYOR; -File
+    # yazilmiyordu. Kalsaydi kullanicinin `Get-History`sinde 1 numarada o
+    # dururdu ve PSReadLine yokken asagidaki gecmis yedegi onu kullanicinin
+    # ilk komutu sanip bildirirdi. Ilk istem, o komut bittikten sonra kosan
+    # ilk kod. Yalnizca BIZIM satirimiz siliniyor.
+    if ($Global:__NTermFirstPrompt) {
+        $Global:__NTermFirstPrompt = $false
+        try {
+            $first = Get-History -Count 1 -ErrorAction SilentlyContinue
+            if ($null -ne $first -and $first.CommandLine -like '*NTERMINAL_INTEGRATION_SCRIPT*') {
+                Clear-History -Id $first.Id -ErrorAction SilentlyContinue
+            }
+        } catch { }
+    }
 
     $out = ''
 
@@ -194,6 +213,48 @@ function Global:prompt {
     $out += $userPrompt
     $out += $Global:__NTermESC + ']133;B' + $Global:__NTermBEL
     return $out
+}
+
+# --- PSReadLine yedegi ------------------------------------------------------
+#
+# Uygulama Windows PowerShell 5.1'e kendi PSReadLine'ini (2.3.6) veriyor:
+# `PSModulePath`in basina ekliyor, kabuk acilirken onu yukluyor (bkz. pty.rs).
+# `Restricted` ya da `AllSigned` ilkede bu yukleme BASARISIZ: modulun
+# `PSReadLine.psm1`i de bir betik ve ilke onu engelliyor. Kabuk o zaman
+# PSReadLine'siz aciliyor ve bunun iki bedeli var:
+#
+#   - asagidaki `PSConsoleHostReadLine` kancasi kurulamiyor. Komut baslangici
+#     (133;C) Enter aninda degil, komut BITTIKTEN sonra gecmis yedeginden
+#     geliyor; arada arayuz kabugu istemde saniyor ve komut kutusu calisan
+#     komutun ustunde acik kaliyor.
+#   - gecmisten tamamlama "desteklenmiyor" gorunuyor ve ipucu kullaniciya
+#     zaten elinde olan modulu kurmasini soyluyor.
+#
+# Bu betik ilkeye takilmadan yuklendigi icin eksigi burada tamamlayabiliyor:
+# ikili modul (DLL) ilkeye tabi degil, `.psm1`in tek isi olan
+# `PSConsoleHostReadLine` ise asagida birebir tanimlaniyor. Bicim dosyasi
+# (.ps1xml) da engelli; yoklugu yalnizca `Get-PSReadLineOption` ciktisinin
+# gorunumunu etkiliyor.
+#
+# Yalnizca PSReadLine HIC yoksa: kullanicinin kendi kurulumu ya da kabugun
+# yukledigi surum duruyorsa ona dokunulmuyor. Uygulama degiskeni yalnizca
+# oneri acikken veriyor - `PSModulePath` karariyla ayni kosul.
+if (-not [string]::IsNullOrEmpty($env:NTERMINAL_PSREADLINE) -and
+    -not (Get-Command -Name PSConsoleHostReadLine -CommandType Function -ErrorAction SilentlyContinue)) {
+    try {
+        Import-Module -Name $env:NTERMINAL_PSREADLINE -Global -ErrorAction Stop
+        # PSReadLine.psm1'in govdesi (2.3.6), birebir.
+        function Global:PSConsoleHostReadLine {
+            [System.Diagnostics.DebuggerHidden()]
+            param()
+            $lastRunStatus = $?
+            Microsoft.PowerShell.Core\Set-StrictMode -Off
+            [Microsoft.PowerShell.PSConsoleReadLine]::ReadLine($host.Runspace, $ExecutionContext, $lastRunStatus)
+        }
+    } catch {
+        # Modul yuklenemedi: gecmis yedegiyle devam. Oneri bolumu durumu
+        # 'unsupported' olarak bildiriyor.
+    }
 }
 
 # --- komut metni yakalama ---------------------------------------------------

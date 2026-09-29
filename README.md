@@ -496,6 +496,22 @@ gönderiyor:
 Betikler `src-tauri/shell-integration/` altında; exe'nin içine gömülü olarak
 dağıtılıyor ve her açılışta veri klasörüne yazılıyor.
 
+**PowerShell betiği `-File` ile YÜKLENMİYOR.** `-File` yürütme ilkesine tabi
+ve stok bir Windows istemcisinde ilke `Restricted`: betik çalışmıyor, istem
+işareti hiç gelmiyor, dipte "Kabuk başlatılıyor…" şeridi sonsuza kadar
+kalıyordu (başka bir bilgisayara kurulumda bildirildi; geliştirme makinesinde
+grup ilkesi `Unrestricted` koyduğu için görünmüyordu). Uygulama bunun yerine
+`-Command` ile küçük bir yükleyici veriyor: yükleyici betiğin metnini okuyup
+betik bloğu olarak çalıştırıyor. İlke yalnızca dosyayı denetlediği için
+`Restricted`, `AllSigned`, grup ilkesi ve "internetten indirildi" işaretli
+dosya bunu durdurmuyor; kullanıcının oturumunun ilkesi de değişmiyor
+(`-ExecutionPolicy Bypass` bütün sekmeyi Bypass'a çekerdi). Aynı ilke
+uygulamayla gelen PSReadLine'ın `.psm1`ini de engellediğinde betik modülü
+DLL'inden kendisi yüklüyor. Yükleme yine de başarısız olursa kabuk
+`OSC 633;P;Integration=failed` bildiriyor ve sekme entegrasyonsuz düz terminal
+olarak açılıyor. Ayrıntılar `src-tauri/src/pty.rs` içinde,
+`POWERSHELL_BOOTSTRAP` üzerinde.
+
 ### Destek durumu
 
 | Kabuk | Platform | Komut metni | Çıkış kodu | Süre | Klasör |
@@ -625,6 +641,28 @@ Exe'nin yanına `nterminal-data` adlı bir klasör açarsanız tüm yapılandır
 oradan okunur/yazılır. Uygulamayı klasörüyle birlikte kopyalamak (USB, ağ
 paylaşımı) ayarları da taşır. `NTERMINAL_DATA_DIR` ortam değişkeni de aynı işi
 yapar.
+
+### Tek örnek (Windows)
+
+Aynı veri klasörüyle yalnızca bir N-Terminal çalışıyor. Uygulamayı yeniden
+açmak ikinci bir kopya başlatmıyor; çalışanın penceresini, arka planda gizli
+olsa bile, öne getiriyor.
+
+Kapatma düğmesinin varsayılanı "arka planda çalış": pencere gizleniyor,
+sekmelerdeki komutlar sürüyor. Eskiden uygulamayı yeniden açmak aynı sekmeleri
+kuran yeni bir süreç başlatıyordu, eski süreç ise gizli pencerede çalışmaya
+devam ediyordu. Bildirilen hatada gizli kopyadaki `ng serve` 1453 portunu
+tutuyordu ve yeni kopyada başlatılan `ng serve` portu alamadı. Aynı anda üç
+kopya çalışıyordu ve hepsi aynı `workspace.json`a birbirinin üstüne yazıyordu.
+
+Kilit uygulamaya değil veri klasörüne bağlı: taşınabilir kopya ya da
+`NTERMINAL_DATA_DIR` ile başka klasör kullanan bir örnek yan yana açılabilir.
+Geliştirme yapısının kilidi ayrı; kurulu uygulama açıkken `npm start` yine
+açılıyor. Ayrıntılar `src-tauri/src/instance.rs` içinde.
+
+Uygulamadan gerçekten çıkmak için saatin yanındaki simgeden *Çıkış*'ı seçin ya
+da *Ayarlar › Oturum › Kapatma düğmesi*ni *Uygulamadan tamamen çık* yapın.
+Çıkışta sekmelerdeki süreçler (sunucular dahil) kapanıyor ve portlar boşalıyor.
 
 ---
 
@@ -977,8 +1015,14 @@ npm test
   (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,
   kabuk başlatma argümanları, Windows sürüm okuma, favori deposu (sıralama,
   yinelenen komut, bozuk dosyaya dayanıklılık) ve **dışa aktar → başka makine
-  gibi oku → uygula** zincirinin tamamı.
-- **Uçtan uca (8 test)** — gerçek ConPTY içinde gerçek PowerShell, bash ve
+  gibi oku → uygula** zincirinin tamamı. Windows'ta ayrıca **tek örnek kilidi**
+  (aynı klasörle ikinci açılış açılmıyor ve ilk örneğe haber veriyor, farklı
+  klasörler yan yana açılıyor, klasörün farklı yazımları aynı kilidi veriyor)
+  ve **kapanışta portun boşalması**: sekmede port dinleyen bir torun sunucu
+  başlatılıp önce sekme kapatılıyor, sonra (ayrı bir süreçte) uygulama
+  oturumları kapatmadan çıkıyor. İkisinde de portun gerçekten boşaldığına
+  bakılıyor.
+- **Uçtan uca (13 test)** — gerçek ConPTY içinde gerçek PowerShell, bash ve
   cmd.exe başlatıp OSC işaretlerini okuyor: istem işaretleri, komut metni, çıkış
   kodu `0` ve yerel uygulamanın `3`'ü, hatadan sonra tekrar `0`, noktalı virgül
   kaçışı, klasör bildirimi. Bash testi ayrıca iki şeyi kilitliyor: ilk bildirilen
@@ -986,7 +1030,7 @@ npm test
   hattı tek kayıt açmalı. Ayrı bir test de boş satırda Enter'a basmanın önceki
   komutu ikinci kez kaydetmediğini doğruluyor.
 
-  Son iki test sonradan eklendi:
+  Sonradan eklenenler:
   - **Renk** — `ng serve` / `dotnet run` gibi araçlar rengi kendileri üretiyor;
     bizim işimiz yalnızca ANSI'yi geçirmek değil, onlara "renk üretebilirsin"
     demek. Test gerçek ConPTY içinde gerçek Node'a soruyor: `isTTY` doğru mu,
@@ -999,6 +1043,13 @@ npm test
     dizin) sessizce ölür; kullanıcı yalnızca "geçmiş boş" görür. Test tahmini
     desteklemeyen kabukla çalışıyor: önemli olan önerinin görünmesi değil,
     isteğin zarar vermemesi.
+  - **Yürütme ilkesi** — betiğin "internetten indirildi" işaretli
+    (`Zone.Identifier`) bir kopyası `-File` ile yüklenmiyor (hatanın
+    mekanizması; `Bypass` dışındaki her ilkede) ama uygulamanın yükleyicisiyle
+    yükleniyor. Yanında üç test daha: PSReadLine'ın `.psm1`i düştüğünde betik
+    modülü DLL'inden yüklüyor ve komut başlangıcı yine Enter anında geliyor;
+    yükleyici başarısız olursa bunu bildiriyor; `-Command` metni kullanıcının
+    `Get-History`sinde kalmıyor.
 
 Entegrasyon testleri ConPTY'nin açılışta gönderdiği `ESC[6n` imleç konumu
 sorgusunu elle yanıtlıyor — gerçek uygulamada bunu xterm.js kendiliğinden

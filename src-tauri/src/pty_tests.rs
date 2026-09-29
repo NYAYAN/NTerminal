@@ -71,14 +71,114 @@ fn powershell_argumanlari() {
     let (ok, env) = integrate(ShellKind::Pwsh, &mut args, &dir);
     assert!(ok);
 
-    // Kullanicinin argumanlari basta kalmali, sonra -NoExit -File <betik>.
+    // Kullanicinin argumanlari basta kalmali, sonra -NoExit -Command <yukleyici>.
     // -NoLogo kullanicidan geldigi icin IKINCI kez eklenmemeli.
     assert_eq!(args[0], "-NoLogo");
     assert_eq!(args[1], "-NoExit");
-    assert_eq!(args[2], "-File");
-    assert!(args[3].ends_with("nterminal.ps1"));
+    assert_eq!(args[2], "-Command");
+    assert_eq!(args[3], POWERSHELL_BOOTSTRAP);
+    assert_eq!(args.len(), 4, "yukleyiciden sonra arguman kalmamali: {args:?}");
     assert_eq!(args.iter().filter(|a| a.eq_ignore_ascii_case("-nologo")).count(), 1);
-    assert!(env.is_empty(), "PowerShell ortam degiskeni gerektirmiyor");
+    // Betigin yolu ortam degiskeninde; pwsh'e PSReadLine yolu verilmiyor.
+    let script = env_get(&env, POWERSHELL_SCRIPT_ENV).expect("betik yolu bildirilmedi");
+    assert!(std::path::Path::new(script) == dir.join("nterminal.ps1"), "yanlis yol: {script}");
+    assert_eq!(env.len(), 1, "pwsh'e yalnizca betik yolu gitmeli: {env:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Betik yurutme ilkesine takilmayan yoldan yukleniyor.
+///
+/// BILDIRILEN HATA: baska bir bilgisayarda "Kabuk baslatiliyor..." seridi hic
+/// kalkmiyordu. Betik `-File` ile yukleniyordu; stok Windows'ta ilke
+/// `Restricted` ve `-File` orada calismiyor. Ilke yalnizca DOSYAYI
+/// denetliyor, metni okuyup calistirmayi degil (gerekcesi
+/// `POWERSHELL_BOOTSTRAP` uzerinde).
+///
+/// Uc sart birden: `-File` hic gecmemeli, yol komut satirina gomulmemeli
+/// (tirnak kacisi `O'Neil` gibi bir adda bozulurdu) ve yukleyicinin okudugu
+/// degisken, uygulamanin yazdigi degiskenle AYNI olmali - ikisi ayri
+/// sabitlerde duruyor ve ayrismalari entegrasyonu sessizce oldururdu.
+#[test]
+fn powershell_betigi_yurutme_ilkesine_takilmayan_yoldan_yukleniyor() {
+    let dir = fixture_dir("ps-ilke");
+    for kind in [ShellKind::PowerShell, ShellKind::Pwsh] {
+        let mut args: Vec<String> = Vec::new();
+        let (ok, env) = integrate(kind, &mut args, &dir);
+        assert!(ok);
+        assert!(
+            !args.iter().any(|a| a.eq_ignore_ascii_case("-File")),
+            "{kind:?}: -File yurutme ilkesine takiliyor: {args:?}"
+        );
+        let script = env_get(&env, POWERSHELL_SCRIPT_ENV).expect("betik yolu yok");
+        assert!(
+            !args.iter().any(|a| a.contains(script)),
+            "{kind:?}: yol komut satirina gomulmus: {args:?}"
+        );
+    }
+    assert!(
+        POWERSHELL_BOOTSTRAP.contains(&format!("$env:{POWERSHELL_SCRIPT_ENV}")),
+        "yukleyici baska bir degiskeni okuyor: {POWERSHELL_BOOTSTRAP}"
+    );
+    // Cift tirnak komut satirinda kacislaniyor; hic olmamasi o katmani
+    // tumden devre disi birakiyor.
+    assert!(!POWERSHELL_BOOTSTRAP.contains('"'), "yukleyicide cift tirnak var");
+    // Yuklenemezse arayuz bunu duymali; yoksa "baslatiliyor" yine sonsuz.
+    assert!(POWERSHELL_BOOTSTRAP.contains("]633;P;Integration=failed"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Betik baslatma komutunu gecmisten silerken onu METNINDEN taniyor.
+///
+/// `-Command` metni oturum gecmisine yaziliyor (`-File` yazilmiyordu). Betik
+/// ilk istemde yalnizca degisken adini iceren satiri siliyor; ad degisip
+/// betik eski adi aramaya devam ederse kullanicinin gecmisinde 1 numarada
+/// yukleyici durur, PSReadLine yokken de ilk "komut" olarak kaydedilirdi.
+#[test]
+fn betik_baslatma_komutunu_ayni_adla_taniyor() {
+    let script = include_str!("../shell-integration/nterminal.ps1");
+    assert!(
+        script.contains(&format!("-like '*{POWERSHELL_SCRIPT_ENV}*'")),
+        "nterminal.ps1 yukleyiciyi {POWERSHELL_SCRIPT_ENV} adiyla aramiyor"
+    );
+    assert!(
+        script.contains(&format!("$env:{PSREADLINE_DLL_ENV}")),
+        "nterminal.ps1 PSReadLine yedegini {PSREADLINE_DLL_ENV} adindan okumuyor"
+    );
+}
+
+/// Windows PowerShell 5.1'e uygulamanin PSReadLine'i ve onun YEDEGI.
+///
+/// Iki degisken ayni kosula bagli: oneri aciksa ikisi de var, kapaliysa
+/// hicbiri - kullanici oneriyi kapattiysa kabugun kendi kurulumuna
+/// dokunulmuyor. Yedek (`NTERMINAL_PSREADLINE`) `Restricted` ilkede modulun
+/// kendisi yuklenemediginde betigin DLL'i dogrudan yukleyebilmesi icin.
+#[test]
+#[cfg(windows)]
+fn windows_powershell_psreadline_yolu_ve_yedegi() {
+    let dir = fixture_dir("ps-psrl");
+    let psrl = dir.join("modules").join("PSReadLine");
+    std::fs::create_dir_all(&psrl).unwrap();
+    std::fs::write(psrl.join("PSReadLine.psd1"), "@{}").unwrap();
+    std::fs::write(psrl.join("Microsoft.PowerShell.PSReadLine2.dll"), "").unwrap();
+
+    for (prediction, beklenen) in [(None, true), (Some("list"), true), (Some("off"), false)] {
+        let mut args: Vec<String> = Vec::new();
+        let mut env = Vec::new();
+        assert!(apply_integration(ShellKind::PowerShell, &mut args, &mut env, &dir, None, prediction));
+        let yol = env_get(&env, "PSModulePath");
+        let dll = env_get(&env, PSREADLINE_DLL_ENV);
+        assert_eq!(yol.is_some(), beklenen, "oneri {prediction:?}: PSModulePath {yol:?}");
+        assert_eq!(dll.is_some(), beklenen, "oneri {prediction:?}: yedek {dll:?}");
+        if let (Some(yol), Some(dll)) = (yol, dll) {
+            assert!(yol.starts_with(&*dir.join("modules").to_string_lossy()));
+            assert!(std::path::Path::new(dll) == psrl.join("Microsoft.PowerShell.PSReadLine2.dll"));
+        }
+    }
+
+    // pwsh 7 kendi PSReadLine'iyla geliyor: ona ikisi de verilmiyor.
+    let (_, env) = integrate(ShellKind::Pwsh, &mut Vec::new(), &dir);
+    assert!(env_get(&env, "PSModulePath").is_none());
+    assert!(env_get(&env, PSREADLINE_DLL_ENV).is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -94,10 +194,10 @@ fn powershell_afisi_susturuluyor() {
         args.iter().any(|a| a.eq_ignore_ascii_case("-nologo")),
         "afis susturulmamis: {args:?}"
     );
-    // -File'dan ONCE gelmeli, yoksa betige arguman olarak gecer.
+    // -Command'dan ONCE gelmeli: ondan sonraki her sey komut metnine katilir.
     let nologo = args.iter().position(|a| a.eq_ignore_ascii_case("-nologo")).unwrap();
-    let file = args.iter().position(|a| a == "-File").unwrap();
-    assert!(nologo < file, "-NoLogo, -File'dan sonra: {args:?}");
+    let command = args.iter().position(|a| a == "-Command").unwrap();
+    assert!(nologo < command, "-NoLogo, -Command'dan sonra: {args:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -522,5 +622,220 @@ mod oturum {
         assert!(manager.list().contains(&"sira".to_string()));
         assert!(manager.kill("sira"));
         assert!(!manager.kill("sira"));
+    }
+}
+
+// ------------------------------------------- Windows: kapanista torun sunucu
+//
+// BILDIRILEN HATA: "uygulamadan cikinca acik portlar kapanmiyor". Sekmede
+// calisan sunucu (`ng serve`, `dotnet run`) kabugun cocugu, yani uygulamanin
+// TORUNU; `kill()` ise yalnizca kabugu sonlandiriyor (TerminateProcess). Bu
+// testler torunun da gittigini, portun GERCEKTEN bosaldigini olcuyor.
+//
+// Olculen sonuc: iki yol da saglam - ConPTY kapaninca ona bagli butun
+// surecler sonlaniyor. Hatanin sebebi baska yerdeydi: arka plana gizlenen
+// ornek yasarken uygulamayi yeniden acmak IKINCI bir ornek baslatiyordu (bkz.
+// instance.rs). Testler, oturum kurma bicimi degisirse (is nesnesi, baska
+// baslatma bayraklari) bu davranisin sessizce kaybolmamasi icin duruyor.
+
+#[cfg(windows)]
+mod kapanis {
+    use super::*;
+    use std::io::{BufRead, BufReader};
+    use std::net::{SocketAddr, TcpStream};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    #[derive(Clone)]
+    struct Kanal(mpsc::Sender<Vec<u8>>);
+
+    impl EventSink for Kanal {
+        fn data(&self, bytes: &[u8]) -> bool {
+            self.0.send(bytes.to_vec()).is_ok()
+        }
+        fn exit(&self, _code: Option<u32>) {}
+    }
+
+    fn powershell() -> String {
+        let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+        format!("{root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+    }
+
+    /// `PORT=<n>;PID=<n>;...;SON` satirindan port ve pid.
+    ///
+    /// Ayirici bosluk DEGIL: ConPTY bosluk dizilerini imlec ilerletmeye
+    /// (`ESC[<n>C`) cevirebiliyor, `;` oldugu gibi geliyor.
+    fn ayikla(metin: &str) -> Option<(u16, u32)> {
+        let satir = &metin[metin.find("PORT=")?..];
+        let satir = &satir[..satir.find(";SON")?];
+        let mut port = None;
+        let mut pid = None;
+        for parca in satir.split(';') {
+            if let Some(v) = parca.strip_prefix("PORT=") {
+                port = v.parse().ok();
+            } else if let Some(v) = parca.strip_prefix("PID=") {
+                pid = v.parse().ok();
+            }
+        }
+        Some((port?, pid?))
+    }
+
+    /// Sekmede on planda calisan bir sunucu (`ng serve` gibi): kabuk
+    /// PowerShell, sunucu onun cocugu - yani uygulamanin TORUNU. Loopback'te
+    /// bos bir port dinliyor ve portunu ekrana yaziyor.
+    fn sunucu_baslat(manager: &PtyManager, id: &str) -> (u16, u32) {
+        let torun = "$l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); \
+                     Write-Output ('PORT=' + $l.LocalEndpoint.Port + ';PID=' + $PID + ';SON'); \
+                     Start-Sleep 120";
+        let utf16: Vec<u8> = torun.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(utf16);
+        let mut cmd = CommandBuilder::new(powershell());
+        cmd.args([
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            &format!("& '{}' -NoProfile -EncodedCommand {b64}", powershell()),
+        ]);
+        let (tx, rx) = mpsc::channel();
+        let size = PtySize { rows: 24, cols: 200, pixel_width: 0, pixel_height: 0 };
+        manager.launch(id, cmd, size, Kanal(tx)).expect("kabuk baslatilamadi");
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut metin = String::new();
+        let mut yanitlandi = false;
+        while Instant::now() < deadline {
+            if let Ok(parca) = rx.recv_timeout(Duration::from_millis(200)) {
+                metin.push_str(&String::from_utf8_lossy(&parca));
+                // ConPTY acilista imlec konumunu soruyor (`ESC[6n`) ve yanit
+                // gelene kadar hicbir sey cizmiyor; uygulamada xterm.js yanitliyor.
+                if !yanitlandi && metin.contains("\u{1b}[6n") {
+                    manager.write(id, b"\x1b[1;1R").expect("imlec yaniti yazilamadi");
+                    yanitlandi = true;
+                }
+                if let Some(bulunan) = ayikla(&metin) {
+                    return bulunan;
+                }
+            }
+        }
+        panic!("sunucu 30 saniyede baslamadi, cikti: {metin:?}");
+    }
+
+    fn port_acik(port: u16) -> bool {
+        TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_millis(500))
+            .is_ok()
+    }
+
+    fn kapanmasini_bekle(port: u16, sure: Duration) -> bool {
+        let deadline = Instant::now() + sure;
+        while Instant::now() < deadline {
+            if !port_acik(port) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        !port_acik(port)
+    }
+
+    fn surec_var(pid: u32) -> bool {
+        let out = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+            .output()
+            .expect("tasklist calistirilamadi");
+        String::from_utf8_lossy(&out.stdout).contains(&format!("\"{pid}\""))
+    }
+
+    /// Test dusse bile arkada sunucu birakmasin.
+    fn oldur(pid: u32) {
+        let _ = Command::new("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
+    }
+
+    #[test]
+    fn sekme_kapaninca_torundeki_sunucu_portu_birakiyor() {
+        // Sekme kapatma ve "Uygulamadan tamamen cik" kapatma dugmesi bu yoldan
+        // geciyor (`Destroyed` -> `kill_all`).
+        let manager = PtyManager::default();
+        let (port, pid) = sunucu_baslat(&manager, "sunucu");
+        assert!(port_acik(port), "sunucu {port} portunu dinlemiyor");
+
+        assert!(manager.kill("sunucu"));
+
+        let kapandi = kapanmasini_bekle(port, Duration::from_secs(10));
+        let yasiyor = surec_var(pid);
+        oldur(pid);
+        assert!(
+            kapandi,
+            "sekme kapatildi ama {port} portu 10 saniye sonra hala acik (torun pid {pid}, yasiyor: {yasiyor})"
+        );
+    }
+
+    const YARDIMCI: &str = "NTERMINAL_TEST_KAPANIS_YARDIMCI";
+
+    /// Ayri surecte kosan "uygulama": sunucuyu baslatip portunu yaziyor ve
+    /// oturumlari KAPATMADAN cikiyor. Simgedeki "Cikis" tam olarak bunu
+    /// yapiyor: Tauri cikista pencereleri yikmiyor, `kill_all` hic
+    /// cagrilmiyor ve surec bitiyor (bkz. tray.rs).
+    #[test]
+    #[ignore = "alt surec: `uygulama_cikinca_torundeki_sunucu_portu_birakiyor` kendini bu adla calistiriyor"]
+    fn yardimci_uygulama() {
+        if std::env::var_os(YARDIMCI).is_none() {
+            return;
+        }
+        let manager = PtyManager::default();
+        let (port, pid) = sunucu_baslat(&manager, "sunucu");
+        let kabuk = manager.pid("sunucu").unwrap_or(0);
+        println!("PORT={port};PID={pid};KABUK={kabuk};SON");
+        let _ = std::io::stdout().flush();
+        std::process::exit(0);
+    }
+
+    #[test]
+    fn uygulama_cikinca_torundeki_sunucu_portu_birakiyor() {
+        let exe = std::env::current_exe().expect("test ikilisi bulunamadi");
+        let mut alt = Command::new(exe)
+            .args([
+                "--exact",
+                "pty::tests::kapanis::yardimci_uygulama",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(YARDIMCI, "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("alt surec baslatilamadi");
+        let stdout = alt.stdout.take().expect("alt surecin ciktisi yok");
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            for satir in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if tx.send(satir).is_err() {
+                    break;
+                }
+            }
+        });
+        let (port, pid, kabuk) = loop {
+            match rx.recv_timeout(Duration::from_secs(40)) {
+                Ok(satir) => {
+                    if let Some((port, pid)) = ayikla(&satir) {
+                        break (port, pid, satir);
+                    }
+                }
+                Err(_) => {
+                    let _ = alt.kill();
+                    panic!("alt surec 40 saniyede portu bildirmedi");
+                }
+            }
+        };
+        let durum = alt.wait().expect("alt surec beklenemedi");
+        assert!(durum.success(), "alt surec basarisiz: {durum:?}");
+
+        let kapandi = kapanmasini_bekle(port, Duration::from_secs(10));
+        let yasiyor = surec_var(pid);
+        oldur(pid);
+        assert!(
+            kapandi,
+            "uygulama cikti ama {port} portu 10 saniye sonra hala acik (torun pid {pid}, yasiyor: {yasiyor}; {kabuk})"
+        );
     }
 }
