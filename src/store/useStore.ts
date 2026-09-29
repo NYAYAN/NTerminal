@@ -145,6 +145,9 @@ export type HistoryScope = "tab" | "group" | "all";
  * Depoda DEĞİL: bu bir önbellek, arayüzün çizdiği bir şey değil. Depoya
  * yazmak her yoklamada bütün aboneleri boşuna uyandırırdı.
  */
+/** Dizin başına en son verilen `refreshGit` istek numarası (bkz. orada). */
+const gitSeq = new Map<string, number>();
+
 const gitFingerprints = new Map<string, string | null>();
 
 /**
@@ -2322,10 +2325,24 @@ export const useStore = create<Store>((set, get) => ({
      * şey: `cd` sonrası dal ve `± n` rozetleri `gitInfo[yeni dizin]` yazılana
      * kadar ekranda olmuyor, yani bekleme ne kadarsa rozetler o kadar yok.
      */
+    /*
+     * EN YENİ istek kazanır.
+     *
+     * `git_info` artık `async` + `spawn_blocking` (ana iş parçacığını
+     * dondurmasın diye): aynı dizin için iki yenileme PARALEL koşuyor ve yavaş
+     * olan ilki hızlı olan ikincisinden SONRA bitebiliyor. Sonuç dizine göre
+     * saklandığı için eski `git status` yenisinin üstüne yazıyor ve rozet
+     * bir sonraki yenilemeye kadar bayat kalıyordu (`git commit` sonrası
+     * commit öncesi sayı). Her istek bir numara alıyor; yalnızca en son
+     * verilenin cevabı yazılıyor.
+     */
+    const seq = (gitSeq.get(cwd) ?? 0) + 1;
+    gitSeq.set(cwd, seq);
     const [info, imza] = await Promise.all([
       api.gitInfo(cwd).catch(() => null),
       api.gitFingerprint(cwd).catch(() => null),
     ]);
+    if (gitSeq.get(cwd) !== seq) return;
     gitFingerprints.set(cwd, imza);
     set({ gitInfo: { ...get().gitInfo, [cwd]: info } });
   },
