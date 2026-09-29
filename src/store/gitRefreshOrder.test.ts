@@ -11,6 +11,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * dizine göre saklandığı için ESKİ `git status` YENİNİN ÜSTÜNE yazıyordu:
  * `git commit`ten sonra rozet, commit'ten önceki değişiklik sayısını gösterip
  * bir sonraki yenilemeye kadar öyle kalıyordu.
+ *
+ * ## Düzeltmenin kendi hatası: AÇLIK
+ *
+ * İlk düzeltme "yalnızca EN SON VERİLEN isteğin cevabı yazılsın" diyordu. Bu bir
+ * açlık riski taşıyor: yeni istekler öncekiler bitmeden gelirse (süren bir
+ * derleme `index`i saniyede değiştiriyor, büyük depoda `git status` 1,5 sn
+ * sürüyor, `pollGit` her saniye yeni yenileme başlatıyor) HİÇBİR cevap yazılmaz
+ * ve rozet süren işlem bitene kadar bayat kalır — düzeltmeden önceki davranıştan
+ * daha kötü. Doğru kural: uygulanan sonuç GERİYE GİTMEZ. Daha yeni bir istek
+ * zaten yazıldıysa eski cevap atılır; yazılmadıysa (yenisi hâlâ sürüyorsa) eski
+ * cevap de yazılır, çünkü ekranda olandan daha yeni.
  */
 
 const h = vi.hoisted(() => ({
@@ -62,6 +73,55 @@ describe("git yenilemesi sırası", () => {
 
     const son = useStore.getState().gitInfo["/depo"] as { changes: unknown[] } | null;
     expect(son?.changes.length, "bayat sonuç yeniyi ezdi").toBe(0);
+  });
+
+  it("yeni sorgular eskisi bitmeden geldikçe AÇ KALMA yok: en yeniden önce biten sonuç yazılıyor", async () => {
+    // Üç yenileme üst üste, hiçbiri bitmedi. En yeni sürerken ilk biten cevap
+    // ekrandaki durumdan daha taze; "yalnız en son verilen yazılır" kuralı onu
+    // atıyor ve rozet HİÇ güncellenmiyordu.
+    const bir = ertelenmis<unknown>();
+    const iki = ertelenmis<unknown>();
+    const uc = ertelenmis<unknown>();
+    h.gitInfo.mockReturnValueOnce(bir.p).mockReturnValueOnce(iki.p).mockReturnValueOnce(uc.p);
+    const p1 = useStore.getState().refreshGit("/depo");
+    const p2 = useStore.getState().refreshGit("/depo");
+    const p3 = useStore.getState().refreshGit("/depo");
+
+    const gorunen = () => (useStore.getState().gitInfo["/depo"] as { changes: unknown[] } | null | undefined);
+
+    bir.coz(bilgi(1));
+    await p1;
+    expect(gorunen()?.changes.length, "yenisi sürerken biten eski cevap atıldı: rozet aç kaldı").toBe(1);
+
+    uc.coz(bilgi(3));
+    await p3;
+    expect(gorunen()?.changes.length).toBe(3);
+
+    iki.coz(bilgi(2)); // en yeni zaten yazıldı: bu bayat
+    await p2;
+    expect(gorunen()?.changes.length, "bayat sonuç yeniyi ezdi").toBe(3);
+  });
+
+  it("önbellekteki imza yalnızca yazılan sonuçla birlikte güncelleniyor", async () => {
+    // Bayat cevabın imzası yeni sonucun imzasını ezmemeli: `pollGit` imzaları
+    // karşılaştırıp yeniden sorgulamaya karar veriyor; ezilirse ya gereksiz
+    // sorgu ya da kaçırılmış değişiklik olur.
+    const eski = ertelenmis<unknown>();
+    const yeni = ertelenmis<unknown>();
+    h.gitInfo.mockReturnValueOnce(eski.p).mockReturnValueOnce(yeni.p);
+    h.gitFingerprint.mockResolvedValueOnce("imza-eski").mockResolvedValueOnce("imza-yeni");
+    const a = useStore.getState().refreshGit("/imza");
+    const b = useStore.getState().refreshGit("/imza");
+    yeni.coz(bilgi(0));
+    await b;
+    eski.coz(bilgi(4));
+    await a;
+
+    // Aynı imza (imza-yeni) ile yoklama: ek sorgu AÇMAMALI.
+    h.gitInfo.mockClear();
+    h.gitFingerprint.mockResolvedValueOnce("imza-yeni");
+    await useStore.getState().pollGit("/imza");
+    expect(h.gitInfo, "imza ezildi: değişmeyen depo yeniden sorgulandı").not.toHaveBeenCalled();
   });
 
   it("sorgular sırayla bitince de son sorgunun sonucu kalıyor", async () => {

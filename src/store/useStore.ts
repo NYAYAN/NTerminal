@@ -145,8 +145,12 @@ export type HistoryScope = "tab" | "group" | "all";
  * Depoda DEĞİL: bu bir önbellek, arayüzün çizdiği bir şey değil. Depoya
  * yazmak her yoklamada bütün aboneleri boşuna uyandırırdı.
  */
-/** Dizin başına en son verilen `refreshGit` istek numarası (bkz. orada). */
+/**
+ * Dizin başına `refreshGit` istek numaraları (bkz. orada): en son VERİLEN ve en
+ * son YAZILAN. Yazılan hiçbir zaman geriye gitmez.
+ */
 const gitSeq = new Map<string, number>();
+const gitApplied = new Map<string, number>();
 
 const gitFingerprints = new Map<string, string | null>();
 
@@ -2326,15 +2330,22 @@ export const useStore = create<Store>((set, get) => ({
      * kadar ekranda olmuyor, yani bekleme ne kadarsa rozetler o kadar yok.
      */
     /*
-     * EN YENİ istek kazanır.
+     * Yazılan sonuç GERİYE GİTMEZ.
      *
      * `git_info` artık `async` + `spawn_blocking` (ana iş parçacığını
      * dondurmasın diye): aynı dizin için iki yenileme PARALEL koşuyor ve yavaş
      * olan ilki hızlı olan ikincisinden SONRA bitebiliyor. Sonuç dizine göre
      * saklandığı için eski `git status` yenisinin üstüne yazıyor ve rozet
      * bir sonraki yenilemeye kadar bayat kalıyordu (`git commit` sonrası
-     * commit öncesi sayı). Her istek bir numara alıyor; yalnızca en son
-     * verilenin cevabı yazılıyor.
+     * commit öncesi sayı). Her istek bir numara alıyor; daha yeni numaralı bir
+     * cevap zaten yazıldıysa eski cevap atılıyor.
+     *
+     * "Yalnızca EN SON VERİLENİN cevabı yazılsın" DENENDİ ve AÇLIK üretti: yeni
+     * istekler öncekiler bitmeden gelirse (süren bir derleme `index`i saniyede
+     * değiştirirken büyük depoda `git status` 1,5 sn sürüyor, `pollGit` her
+     * saniye yenisini başlatıyor) hiçbir cevap yazılmıyor, rozet süren işlem
+     * bitene kadar bayat kalıyordu. Yenisi hâlâ sürüyorsa biten eski cevap
+     * ekrandakinden daha taze, yazılıyor.
      */
     const seq = (gitSeq.get(cwd) ?? 0) + 1;
     gitSeq.set(cwd, seq);
@@ -2342,7 +2353,8 @@ export const useStore = create<Store>((set, get) => ({
       api.gitInfo(cwd).catch(() => null),
       api.gitFingerprint(cwd).catch(() => null),
     ]);
-    if (gitSeq.get(cwd) !== seq) return;
+    if ((gitApplied.get(cwd) ?? 0) > seq) return;
+    gitApplied.set(cwd, seq);
     gitFingerprints.set(cwd, imza);
     set({ gitInfo: { ...get().gitInfo, [cwd]: info } });
   },
