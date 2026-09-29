@@ -85,6 +85,18 @@ export function HistoryPanel() {
     refresh();
   }, [refresh]);
 
+  /*
+   * Silmeden sonra öneri kaynağı da diskten yeniden kuruluyor.
+   *
+   * O kaynak (`suggestHistory`) açılışta bir kez yükleniyor. Buradan silinen
+   * bir komut, yukarı okun açtığı panelde ve yazarken gelen önerilerde
+   * uygulama yeniden açılana kadar görünmeye devam ederdi.
+   */
+  const afterDelete = () => {
+    refresh();
+    void store().loadSuggestHistory();
+  };
+
   // Komut bitince liste kendiliğinden güncellensin.
   useEffect(() => {
     refresh();
@@ -157,7 +169,7 @@ export function HistoryPanel() {
     if (!ok) return;
     const removed = await api.historyDelete(selectedEntries.map((e) => e.id)).catch(() => 0);
     setSelected(new Set());
-    refresh();
+    afterDelete();
     store().toast(tp("history.deleted", removed), "ok");
   };
 
@@ -180,7 +192,7 @@ export function HistoryPanel() {
       })
       .catch(() => 0);
     setSelected(new Set());
-    refresh();
+    afterDelete();
     store().toast(tp("history.deleted", removed), "ok");
   };
 
@@ -231,7 +243,7 @@ export function HistoryPanel() {
               danger: true,
             })
             .then((ok) => {
-              if (ok) void api.historyDelete([entry.id]).then(() => refresh());
+              if (ok) void api.historyDelete([entry.id]).then(afterDelete);
             });
         },
       },

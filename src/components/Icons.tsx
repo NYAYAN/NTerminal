@@ -129,6 +129,21 @@ export function PlusIcon(props: IconProps) {
 }
 
 /**
+ * Çarpı — satırı listeden silen düğme (öneri panelinde geçmişten silme).
+ *
+ * Öneri satırı kullanıcının seçtiği tek aralıklı yazı tipiyle çiziliyor; `×`
+ * karakteri orada da dosya başlığındaki sorunu taşırdı.
+ */
+export function CloseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4.5 4.5 L11.5 11.5" />
+      <path d="M11.5 4.5 L4.5 11.5" />
+    </Svg>
+  );
+}
+
+/**
  * Grup kenar çubuğunu daraltma/açma düğmesi.
  *
  * Pencere ve içindeki sol sütun: hangi panelin açılıp kapandığı simgenin

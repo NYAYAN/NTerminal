@@ -478,6 +478,14 @@ interface Store {
   acceptSuggestion: () => void;
   acceptSuggestionAt: (index: number) => void;
   /**
+   * Paneldeki bir komutu GEÇMİŞTEN siler — onay sorarak.
+   *
+   * Kapsam panelinki: "bu sekme" gösteriliyorsa yalnızca bu sekmenin
+   * kayıtları, "tüm sekmeler" ya da yazarken gelen ön ek listesiyse hepsi.
+   * Klasör önerilerinde (`kind: "dirs"`) bir şey yapmıyor; onlar geçmiş değil.
+   */
+  deleteSuggestionAt: (index: number) => Promise<void>;
+  /**
    * Boş satırda yukarı ok: geçmiş panelini açar.
    *
    * `scope` varsayılan `"tab"`: yalnızca etkin sekmenin geçmişi. Panel zaten
@@ -2119,6 +2127,115 @@ export const useStore = create<Store>((set, get) => ({
     // Listeye tıklanarak kabul edilmiş olabilir: odak terminale dönmeli,
     // yoksa kullanıcı yazmaya devam edemiyor.
     session?.focus();
+  },
+
+  /*
+   * Paneldeki bir komutu geçmişten silme.
+   *
+   * BİLDİRİLEN İSTEK: "terminal geçmişini yukarı ok tuşuna basınca
+   * gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+   *
+   * ## Kapsam panelinki
+   *
+   * Satır "bu listede görünen komut" ve silme de listenin kapsamında kalıyor.
+   * Panel bu sekmeyi gösteriyorsa yalnızca bu sekmenin kayıtları gidiyor:
+   * sekmelerin geçmişi birbirinden bağımsız (bkz. `noteCommand`), yanlış
+   * sekmede çalıştırılmış bir komutu temizlemek öteki sekmenin yukarı okunu
+   * değiştirmemeli. "Tüm sekmeler" ve yazarken gelen ön ek listesi (o zaten
+   * sekmeye göre süzülmüyor) komutun bütün kayıtlarını siliyor. Hangisinin
+   * olacağını onay penceresi açıkça yazıyor.
+   *
+   * ## Diskten, yalnızca listeden değil
+   *
+   * `suggestHistory` açılışta diskten kuruluyor; yalnızca bellekten silmek
+   * komutu bir sonraki açılışta geri getirirdi. Disk TAM eşleşmeyle
+   * (`command`) aranıyor: bellekteki liste son 400 komut, daha eski tekrarlar
+   * yalnızca diskte. Gelen kayıtlar bir kez daha süzülüyor — silme geri
+   * alınamıyor ve süzgeci tanımayan bir ikili (sıcak yenilemede eski Rust
+   * derlemesi) kapsamın TAMAMINI döndürürdü.
+   *
+   * Onay soruluyor: "ekranlarda herhangi bir yerdeki silme işlemi onay
+   * istemeli" (bkz. `deleteConfirm.test.ts`).
+   */
+  async deleteSuggestionAt(index) {
+    const suggest = get().ui.suggest;
+    const command = suggest?.items[index];
+    if (!suggest || !command || suggest.kind === "dirs") return;
+    const tabScope = suggest.kind === "recent" && suggest.scope !== "all";
+    const tabId = tabScope ? (get().activeTab()?.tab.id ?? null) : null;
+    // Sekme bilinmiyorsa "bu sekme" silmesi TÜM geçmişe dönüşmemeli.
+    if (tabScope && !tabId) return;
+    const matches = (entry: { command: string; tabId?: string | null }) =>
+      entry.command.trim() === command && (tabId === null || entry.tabId === tabId);
+
+    // Onay penceresi odağı kendi düğmesine alıyor; kapanınca kullanıcı
+    // kaldığı yerde (kutu ya da terminal) yazmaya devam edebilmeli.
+    const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const ok = await get().askConfirm({
+      title: t("confirm.deleteHistoryTitle"),
+      message: t(tabId ? "confirm.forgetTabMessage" : "confirm.forgetAllMessage", { command }),
+      detail: t(tabId ? "confirm.forgetTabDetail" : "confirm.forgetAllDetail"),
+      confirmLabel: t("confirm.delete"),
+      danger: true,
+    });
+    if (back?.isConnected) back.focus();
+    if (!ok) return;
+
+    try {
+      const page = await api.historyQuery({
+        tabId,
+        command,
+        dedupe: false,
+        limit: get().settings.behavior.historyLimit,
+      });
+      const ids = page.entries.filter(matches).map((entry) => entry.id);
+      if (ids.length > 0) await api.historyDelete(ids);
+    } catch {
+      get().toast(t("suggest.deleteFailed"), "err");
+      return;
+    }
+
+    const history = get().suggestHistory.filter((entry) => !matches(entry));
+    set({ suggestHistory: history });
+
+    /*
+     * Panel AÇIK kalıyor: istenmeyenler çoğu zaman birden fazla ve her
+     * silmeden sonra paneli yeniden açtırmak işi uzatır. Liste boşaldıysa
+     * kapanıyor. "Bu sekme" boşalınca tüm geçmişe DÜŞMÜYOR — az önce bakılan
+     * liste başka bir listeye dönüşmemeli; yukarı ok yeniden basılınca o düşüş
+     * zaten oluyor (bkz. `openHistorySuggestions`).
+     *
+     * Seçim KOMUTA bağlı, konuma değil. Fareyle başka bir satır silindiğinde
+     * seçili komut yerinde kalıyor; yalnızca konum korunsaydı seçim bir alttaki
+     * satırın kaymasıyla başka bir komuta geçerdi (düzenekte görüldü: `git
+     * pull` seçiliyken `npm test` silindi, seçim `npm run build`e atladı).
+     * Seçili satırın kendisi silindiyse yerine bir sonraki (daha eski) komut
+     * geliyor.
+     *
+     * Onay beklerken liste değiştiyse (başka sekmede komut başladı ve panel
+     * kapandı, ya da kullanıcı yazmaya devam etti) dokunulmuyor.
+     */
+    const current = get().ui.suggest;
+    if (
+      !current ||
+      current.kind !== suggest.kind ||
+      current.input !== suggest.input ||
+      current.scope !== suggest.scope
+    ) {
+      return;
+    }
+    const items =
+      current.kind === "recent"
+        ? recentCommands(history, tabId)
+        : rankSuggestions(history, current.input, get().activeSession()?.cwd ?? null);
+    const kept = items.indexOf(current.items[current.index]);
+    const nextIndex = kept >= 0 ? kept : Math.min(current.index, items.length - 1);
+    set({
+      ui: {
+        ...get().ui,
+        suggest: items.length > 0 ? { ...current, items, index: nextIndex } : null,
+      },
+    });
   },
 
   setAppInputSink(sink) {

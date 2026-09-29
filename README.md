@@ -323,6 +323,16 @@ hangi kapsamda olduğu yazıyor. Yeni açılmış, kendi geçmişi olmayan bir s
 liste kendiliğinden tüm geçmişten kuruluyor — yoksa yukarı ok orada hiçbir şey
 yapmazdı ve bu panelin varlık sebebi tam olarak o boşluğu doldurmak.
 
+İstenmeyen bir komutu panelden **geçmişten silebilirsiniz**: satırın sağındaki
+**×** (her satırda soluk durur, üzerine gelince belirginleşir) ya da seçiliyken
+**Shift+Delete** (mac'te ⇧⌦, yani Shift+Fn+⌫). Silmeden önce onay sorulur.
+Silme panelin kapsamını izler: panel bu sekmeyi gösteriyorsa yalnızca bu
+sekmenin kayıtları gider, diğer sekmelerin geçmişi değişmez; `Ctrl+A` ile tüm
+sekmelere geçip silmek komutun bütün kayıtlarını siler. Kayıtlar diskten de
+silinir — komut bir sonraki açılışta geri gelmez, metni geçmiş dosyasında da
+kalmaz. Yazarken açılan öneri listesinde de aynı düğme ve tuş çalışır; o liste
+sekmeye göre süzülmediği için orada silme her zaman bütün sekmeleri kapsar.
+
 **Yeni sürüm bildirimi.** Uygulama her açılışta GitHub'daki son yayına bakar;
 daha yenisi varsa durum çubuğunda **⬆ 0.2.0 hazır** rozeti çıkar. Rozete
 tıklamak *Ayarlar › Hakkında*'yı açıyor — sürüm notları orada, indirme sayfasını

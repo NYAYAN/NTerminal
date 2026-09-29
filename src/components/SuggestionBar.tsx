@@ -3,8 +3,10 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { placeSuggestions } from "../lib/anchor";
 import { formatWhen } from "../lib/format";
 import { useT } from "../lib/i18n";
+import { prettyCombo } from "../lib/keys";
+import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
-import { ArrowIcon } from "./Icons";
+import { ArrowIcon, CloseIcon } from "./Icons";
 
 /** İmleç satırı örtülmek üzereyken listenin bıraktığı boşluk (px). */
 const ANCHOR_GAP = 4;
@@ -180,6 +182,11 @@ export function SuggestionBar() {
 
   if (!suggest) return null;
 
+  // Klasör önerileri diskten geliyor, geçmiş değil: silinecek bir şey yok.
+  const deletable = suggest.kind !== "dirs";
+  const deleteKey = prettyCombo(DELETE_SUGGESTION_KEY);
+  const deleteTitle = t("suggest.deleteTitle", { key: deleteKey });
+
   return (
     <div className="suggest-bar" ref={ref}>
       <div className="suggest-head">
@@ -195,30 +202,54 @@ export function SuggestionBar() {
       <div className="suggest-list">
         {suggest.items.map((item, index) => {
           const at = times.get(item);
+          const rowClass = index === suggest.index ? "suggest-row on" : "suggest-row";
           return (
-            <button
-              key={item}
-              className={index === suggest.index ? "suggest-row on" : "suggest-row"}
-              // Tıklama terminalden odağı almasın; kabul ettikten sonra odak
-              // zaten terminale geri veriliyor.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => useStore.getState().acceptSuggestionAt(index)}
-            >
-              {/* İstem işareti her satırda: satırın bir KOMUT olduğunu söylüyor.
-                  Seçim ayrı işaretlerle belli oluyor (arka plan, sol çizgi). */}
-              <span className="suggest-mark" aria-hidden="true">
-                {">_"}
-              </span>
-              <span className="suggest-cmd">
-                {/* Yazdığınız kısım vurgusuz, önerinin devamı vurgulu: "bunu
-                    yazdınız, şu eklenecek" ayrımı görünsün. */}
-                <span className="suggest-typed">{item.slice(0, suggest.input.length)}</span>
-                <span className="suggest-rest">{item.slice(suggest.input.length)}</span>
-              </span>
-              {/* Zaman bilinmiyorsa (eski kayıt, henüz yüklenmemiş geçmiş) alan
-                  boş kalıyor: yer tutuyor ki komutlar satır satır kaymasın. */}
-              <span className="suggest-when">{at ? formatWhen(at) : ""}</span>
-            </button>
+            /*
+             * Satır ile silme düğmesi KARDEŞ, iç içe değil: satırın kendisi
+             * bir düğme (tıklamak kabul ediyor) ve iç içe düğme hem geçersiz
+             * işaretleme hem karışık tıklama demek — `GitChanges`teki satır
+             * eylemleriyle aynı karar.
+             */
+            <div key={item} className="suggest-item">
+              <button
+                className={deletable ? `${rowClass} deletable` : rowClass}
+                // Tıklama terminalden odağı almasın; kabul ettikten sonra odak
+                // zaten terminale geri veriliyor.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => useStore.getState().acceptSuggestionAt(index)}
+              >
+                {/* İstem işareti her satırda: satırın bir KOMUT olduğunu söylüyor.
+                    Seçim ayrı işaretlerle belli oluyor (arka plan, sol çizgi). */}
+                <span className="suggest-mark" aria-hidden="true">
+                  {">_"}
+                </span>
+                <span className="suggest-cmd">
+                  {/* Yazdığınız kısım vurgusuz, önerinin devamı vurgulu: "bunu
+                      yazdınız, şu eklenecek" ayrımı görünsün. */}
+                  <span className="suggest-typed">{item.slice(0, suggest.input.length)}</span>
+                  <span className="suggest-rest">{item.slice(suggest.input.length)}</span>
+                </span>
+                {/* Zaman bilinmiyorsa (eski kayıt, henüz yüklenmemiş geçmiş) alan
+                    boş kalıyor: yer tutuyor ki komutlar satır satır kaymasın. */}
+                <span className="suggest-when">{at ? formatWhen(at) : ""}</span>
+              </button>
+              {/* Her satırda duruyor: soluk, üzerine gelince etkin (bkz.
+                  `.suggest-del`). Tıklanan SATIR siliniyor, seçili olan değil —
+                  kabul etmedeki kuralın aynısı. Odağı kutudan almıyor: onay
+                  kapandığında kullanıcı kaldığı yerden yazmaya devam etmeli. */}
+              {deletable && (
+                <button
+                  type="button"
+                  className="suggest-del"
+                  title={deleteTitle}
+                  aria-label={deleteTitle}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => void useStore.getState().deleteSuggestionAt(index)}
+                >
+                  <CloseIcon size={12} />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -242,6 +273,12 @@ export function SuggestionBar() {
         <span className="dim">{t("suggest.hintAccept")}</span>
         <span className="keycap keycap-word">Esc</span>
         <span className="dim">{t("suggest.hintDismiss")}</span>
+        {deletable && (
+          <>
+            <span className="keycap keycap-word">{deleteKey}</span>
+            <span className="dim">{t("suggest.hintDelete")}</span>
+          </>
+        )}
         {/* Kapsam SAĞA yaslı: soldaki üçlü "listede ne yapabilirim", bu ise
             "liste neyi gösteriyor" — ayrı sorular, ayrı yerler.
 

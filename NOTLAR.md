@@ -345,6 +345,41 @@ yalnızca favoriler listedeyken çalışmak zorunda, yoksa favoriye eklenmiş bi
 komut geçmiş satırından da elenir ve Ctrl+R ile hiç bulunamazdı
 (`components/HistoryRecall.test.tsx`).
 
+**Panelden geçmiş silme.** Bildirilen istek: "terminal geçmişini yukarı ok
+tuşuna basınca gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+Her satırın sağında bir `×`, klavyeden `Shift+Delete`
+(`DELETE_SUGGESTION_KEY` — tarayıcıların öneri listesindeki karşılığı; yalnız
+Delete olamazdı, yazarken gelen listede kutudaki metni siliyor). `×` ilk hâlinde
+yalnızca seçili satırda ve imleç üstündeyken çiziliyordu; bildirilen: "x iconu
+sabit, üzerine mouse ile gelince aktif hale gelsin, yoksa boşluk görünüyor" —
+öteki satırlarda ona ayrılan yer boş bir yarık gibi duruyordu. Şimdi her
+satırda soluk, üzerine gelince etkin; değişiklikler panelindeki satır
+eylemleriyle (`.git-actions`) aynı desen ve aynı ölçü. "Silme her
+zaman sorar" kuralı gereği onay soruluyor (`store/deleteConfirm.test.ts`).
+Üç karar, hepsi `deleteSuggestionAt` üzerinde ve `store/deleteSuggestion.test.ts`
+ile bağlı:
+
+- *Kapsam panelinki.* Panel bu sekmeyi gösteriyorsa yalnızca bu sekmenin
+  kayıtları gidiyor — `noteCommand`daki sekme başına tekrar temizliğiyle aynı
+  gerekçe: yanlış sekmede çalıştırılmış bir komutu temizlemek öteki sekmenin
+  yukarı okunu değiştirmemeli. Onay penceresi hangisinin olacağını yazıyor.
+- *Diskten, tam eşleşmeyle.* Bellekteki liste son 400 komut; yalnızca oradan
+  silmek komutu bir sonraki açılışta geri getirirdi. `HistoryFilter.command`
+  bunun için eklendi: `query` "içinde geçen" arıyor ve `ls` silinirken
+  `ls -la` de giderdi. Kimlikler arayüzde bir kez daha süzülüyor; süzgeci
+  tanımayan eski bir Rust derlemesi (sıcak yenileme) kapsamın tamamını döndürür.
+- *Seçim komuta bağlı.* Fareyle başka bir satır silinince seçili komut yerinde
+  kalıyor. İlk hâli konumu koruyordu ve düzenekte görüldü: `git pull`
+  seçiliyken `npm test` silinince seçim `npm run build`e atladı.
+
+İki yan bulgu aynı işte kapandı. `history_delete` artık günlüğü HEMEN
+sıkıştırıyor: `del` satırı kaydı yalnızca yeniden oynatırken gizliyordu,
+silinen komutun metni eski `add` satırında diskte duruyordu — tek tek silinen
+komut çoğu zaman yanlışlıkla yazılmış bir parola. Geçmiş panelindeki silmeler
+de öneri kaynağını yeniden yüklüyor; o kaynak açılışta bir kez kuruluyor ve
+panelden silinen komut uygulama yeniden açılana kadar yukarı okta görünmeye
+devam ediyordu (`components/historyDeleteSync.test.tsx`).
+
 ### 1.11 Yeni sürüm bildirimi
 
 Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son

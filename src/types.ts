@@ -399,7 +399,10 @@ export interface HistoryEntry {
 export interface HistoryFilter {
   tabId?: string | null;
   groupId?: string | null;
+  /** İçinde geçen metin; komutta ve dizinde aranıyor. */
   query?: string | null;
+  /** Komutu TAM OLARAK bu olan kayıtlar (büyük/küçük harf dahil). */
+  command?: string | null;
   onlySucceeded?: boolean | null;
   dedupe?: boolean;
   limit?: number;

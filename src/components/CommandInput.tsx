@@ -5,6 +5,7 @@ import { passThroughSequence, resolveInputMode, SIGINT } from "../lib/inputMode"
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
 import { promptedTabs } from "../lib/promptSeen";
+import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
 
 /**
@@ -477,6 +478,26 @@ export function CommandInput() {
     if (suggest?.kind === "recent" && e.ctrlKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
       store.openHistorySuggestions(suggest.scope === "all" ? "tab" : "all");
+      return;
+    }
+
+    /*
+     * Panel açıkken Shift+Delete: seçili komutu GEÇMİŞTEN siler — onay
+     * sorarak, panelin kapsamında (bkz. `deleteSuggestionAt`). Tuşun neden bu
+     * olduğu `DELETE_SUGGESTION_KEY` üzerinde.
+     *
+     * Kutuda seçim varsa dokunulmuyor: Windows'ta Shift+Delete "kes" demek ve
+     * yazarken gelen listede kutu dolu olabilir. Klasör önerileri geçmiş
+     * değil; orada tuş kendi işini yapıyor.
+     */
+    if (
+      suggest &&
+      suggest.kind !== "dirs" &&
+      !boxSelection &&
+      matchCombo(e.nativeEvent, DELETE_SUGGESTION_KEY)
+    ) {
+      e.preventDefault();
+      void store.deleteSuggestionAt(suggest.index);
       return;
     }
 

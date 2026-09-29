@@ -835,6 +835,20 @@ describe("öneri paneli", () => {
     expect(row).toMatch(/padding:\s*var\(--suggest-row-pad\)/);
   });
 
+  it("silme çarpısı her satırda duruyor: soluk, üzerine gelince etkin", () => {
+    // BİLDİRİLEN: "x iconu sabit, üzerine mouse ile gelince aktif hale gelsin,
+    // yoksa boşluk görünüyor." İlk hâli çarpıyı yalnızca seçili satırda ve
+    // imleç üstündeyken çiziyordu; öteki satırlarda ona ayrılan yer boş bir
+    // yarık gibi duruyordu.
+    const del = ruleBody(".suggest-del");
+    expect(del, "çarpı yine gizli başlıyor").not.toMatch(/display:\s*none/);
+    expect(del, "çarpı soluk değil").toMatch(/opacity:\s*0?\.\d+/);
+    expect(
+      ruleBody(".suggest-del:hover:not(:disabled)"),
+      "üzerine gelince etkinleşmiyor",
+    ).toMatch(/opacity:\s*1\s*;/);
+  });
+
   it("düzen değişince yeniden yerleşiyor", () => {
     // `resize` tek başına yetmiyor: kenar çubuğunu sürüklemek pencereyi
     // büyütmüyor ama panelin dayanağını yerinden oynatıyor.

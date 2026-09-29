@@ -1560,6 +1560,60 @@ html[data-platform="macos"] .titlebar {
   font-size: 0.8077rem;
 }
 
+/* Satir ve gecmisten silme dugmesi.
+ *
+ * Dugme satirin KARDESI (ic ice dugme olmasin diye) ama satirin USTUNDE,
+ * sag uctaki dolgunun icinde duruyor: satirin arka plani, sol cizgisi ve
+ * secili hali tek parca kaliyor. Dolgu yalnizca silinebilir satirlarda
+ * (klasor onerilerinde dugme yok) ve zaman damgasi carpinin altinda kalmasin
+ * diye var. */
+.suggest-item {
+  position: relative;
+}
+
+.suggest-row.deletable {
+  padding-right: 32px;
+}
+
+/* Carpi HER satirda duruyor, soluk; yalnizca uzerine gelince ETKIN.
+ *
+ * BILDIRILEN: "x iconu sabit, uzerine mouse ile gelince aktif hale gelsin,
+ * yoksa bosluk gorunuyor." Ilk hali carpiyi yalnizca secili satirda ve imlec
+ * ustundeyken ciziyordu; oteki satirlarda ona ayrilan yer (`.deletable`
+ * dolgusu) bos bir yarik gibi duruyordu. Degisiklikler panelindeki satir
+ * eylemleriyle ayni desen ve ayni olcu (bkz. `.git-actions`): hep gorunur,
+ * soluk, uzerine gelince tam parlaklikta. Soluklugun sebebi de orada: bes
+ * satirin bes carpisi tam parlaklikta listeyi bir silme tarlasina cevirirdi. */
+.suggest-del {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 6px;
+  margin: auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  /* Temel dugme kurali 26px'lik bir taban veriyor; satir da o kadar ve
+     carpi onu tam dolduracakti. */
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--text-dim);
+  opacity: 0.45;
+  transition:
+    opacity 90ms ease,
+    color 90ms ease,
+    background 90ms ease;
+}
+
+.suggest-del:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 16%, transparent);
+}
+
 .suggest-foot {
   display: flex;
   align-items: center;

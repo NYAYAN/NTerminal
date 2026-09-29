@@ -104,6 +104,7 @@ export function prettyCombo(combo: string): string {
     tab: "Tab",
     enter: "Enter",
     escape: "Esc",
+    delete: "Del",
     " ": "Space",
     arrowup: "↑",
     arrowdown: "↓",

@@ -683,6 +683,101 @@ describe("komut satırı kutusu", () => {
   });
 
   /*
+   * Panelden geçmiş silme: Shift+Delete.
+   *
+   * BİLDİRİLEN İSTEK: "terminal geçmişini yukarı ok tuşuna basınca
+   * gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+   *
+   * Silmenin kendisi (onay, kapsam, disk) depoda test ediliyor
+   * (`store/deleteSuggestion.test.ts`). Burada bağlanan şey tuşun SEÇİLİ
+   * satırı istemesi ve metin düzenlemeyi ele geçirmemesi: yazarken gelen
+   * listede kutu dolu, Delete de Windows'taki Shift+Delete (kes) de orada
+   * kendi işini yapmalı.
+   */
+  describe("Shift+Delete", () => {
+    const deleteSuggestionAt = vi.fn(async () => {});
+    const original = useStore.getState().deleteSuggestionAt;
+
+    beforeEach(() => {
+      deleteSuggestionAt.mockClear();
+      useStore.setState({
+        deleteSuggestionAt,
+        suggestHistory: [
+          { command: "npm test", cwd: null, tabId: TAB },
+          { command: "gti status", cwd: null, tabId: TAB },
+        ],
+      });
+    });
+
+    afterEach(() => {
+      useStore.setState({ deleteSuggestionAt: original });
+    });
+
+    it("panelde SEÇİLİ komutu silmeye gönderiyor", () => {
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      fireEvent.keyDown(el, { key: "ArrowUp" });
+      act(() => {
+        fireEvent.keyDown(el, { key: "ArrowUp" });
+      });
+      expect(useStore.getState().ui.suggest!.index).toBe(1);
+
+      let olay = true;
+      act(() => {
+        olay = fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).toHaveBeenCalledWith(1);
+      expect(olay, "varsayılan engellenmedi").toBe(false);
+    });
+
+    it("yalnız Delete geçmişe dokunmuyor", () => {
+      // Kazara basılabilecek tek tuş; onay sorsa bile her seferinde bir
+      // pencere açmak panelde gezinmeyi bozardı.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      fireEvent.keyDown(el, { key: "ArrowUp" });
+      act(() => {
+        fireEvent.keyDown(el, { key: "Delete" });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+    });
+
+    it("kutuda seçim varken kesmeye kalıyor", () => {
+      // Windows'ta Shift+Delete "kes"; yazarken gelen listede kutu dolu.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      act(() => {
+        fireEvent.change(el, { target: { value: "npm" } });
+      });
+      expect(useStore.getState().ui.suggest?.kind, "ön ek listesi açılmadı").toBe("history");
+      el.setSelectionRange(0, 3);
+
+      let olay = false;
+      act(() => {
+        olay = fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+      expect(olay, "kesme engellendi").toBe(true);
+    });
+
+    it("klasör önerilerinde geçmişe dokunmuyor", () => {
+      // O satırlar diskteki klasörler, geçmiş değil.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      act(() => {
+        const ui = useStore.getState().ui;
+        useStore.setState({
+          ui: { ...ui, suggest: { items: ["cd src"], index: 0, input: "", kind: "dirs" } },
+        });
+      });
+      act(() => {
+        fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+    });
+  });
+
+  /*
    * mac'te Cmd tuşu Ctrl DEĞİL.
    *
    * ÖLÇÜLEN HATA: kutuya yapıştırmak isteyen kullanıcıya WebKit'in pano izni

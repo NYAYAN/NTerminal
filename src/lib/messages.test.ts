@@ -98,7 +98,7 @@ describe("büyük harf düzeni", () => {
    * "Ctrl+A kapsam: Tüm sekmeler", "3 kayıt · Okunuyor…". Sondaki dosya adı
    * ise arayüz metni değil.
    *
-   * `suggest.hint*` üçlüsü de öyle: her biri bir TUŞ ROZETİNİN ardından
+   * `suggest.hint*` parçaları da öyle: her biri bir TUŞ ROZETİNİN ardından
    * geliyor ("[↑][↓] gez"), yani cümlenin başı değil ortası.
    */
   const PARCA = new Set<string>([
@@ -109,6 +109,7 @@ describe("büyük harf düzeni", () => {
     "suggest.hintNav",
     "suggest.hintAccept",
     "suggest.hintDismiss",
+    "suggest.hintDelete",
     "recall.scopeAll",
     "recall.scopeTab",
     "settings.historyReading",

@@ -48,6 +48,17 @@ export const MIN_PREFIX = 2;
  */
 export const MAX_SUGGESTIONS = 5;
 
+/**
+ * Panelde seçili komutu geçmişten silen tuş.
+ *
+ * Tarayıcıların öneri listesindeki karşılığı (Chrome'un adres çubuğu); mac'te
+ * Shift+Fn+⌫. Yalnız Delete olamazdı: yazarken gelen listede o tuş kutudaki
+ * metni siliyor. Tek yerde duruyor çünkü üç yer kullanıyor — komut kutusu, ham
+ * kipte terminal ve panelin alt satırındaki ipucu. Ayrışırlarsa ipucu
+ * çalışmayan bir tuşu gösterir.
+ */
+export const DELETE_SUGGESTION_KEY = "Shift+Delete";
+
 /** Geçmişten gelen bir komut ve çalıştırıldığı dizin. */
 export interface SuggestEntry {
   command: string;

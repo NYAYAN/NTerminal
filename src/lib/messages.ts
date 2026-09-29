@@ -256,6 +256,24 @@ export const MESSAGES = {
     "{n} kayıt geçmişten silinecek.",
     "{n} records will be deleted from the history.",
   ],
+  // Yukarı okun açtığı panelden komut silme. Kapsam metinde: panel o an "bu
+  // sekme"yi gösteriyorsa silme de yalnızca bu sekmenin kayıtlarını kapsıyor.
+  "confirm.forgetTabMessage": [
+    "\"{command}\" bu sekmenin geçmişinden silinecek.",
+    "\"{command}\" will be deleted from this tab's history.",
+  ],
+  "confirm.forgetTabDetail": [
+    "Komutun bu sekmedeki bütün kayıtları silinir; diğer sekmelerin geçmişi değişmez.",
+    "Every record of the command in this tab is deleted; other tabs' history does not change.",
+  ],
+  "confirm.forgetAllMessage": [
+    "\"{command}\" bütün sekmelerin geçmişinden silinecek.",
+    "\"{command}\" will be deleted from the history of every tab.",
+  ],
+  "confirm.forgetAllDetail": [
+    "Komutun bütün kayıtları silinir, hangi sekmede çalıştırılmış olursa olsun.",
+    "Every record of the command is deleted, whichever tab ran it.",
+  ],
   "confirm.deleteProfileTitle": ["Profili sil", "Delete profile"],
   "confirm.deleteProfileMessage": [
     "\"{name}\" kabuk profili silinecek.",
@@ -953,6 +971,12 @@ export const MESSAGES = {
   "suggest.hintNav": ["gez", "navigate"],
   "suggest.hintAccept": ["kabul et", "accept"],
   "suggest.hintDismiss": ["kapat", "dismiss"],
+  "suggest.hintDelete": ["sil", "delete"],
+  "suggest.deleteTitle": ["Geçmişten sil ({key})", "Delete from history ({key})"],
+  "suggest.deleteFailed": [
+    "Komut geçmişten silinemedi",
+    "Could not delete the command from the history",
+  ],
   "settings.appSuggestions": [
     "Uygulamanın kendi geçmişinden öneri (her kabukta)",
     "Suggest from the app's own history (in every shell)",

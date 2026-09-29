@@ -27,6 +27,7 @@ import { useT, useLang } from "./lib/i18n";
 import { api } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
+import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
 import { flushAllState, useStore } from "./store/useStore";
 
 export function App() {
@@ -401,6 +402,11 @@ export function App() {
         if (event.key === "ArrowUp") return run(() => store.moveSuggestion(1));
         if (event.key === "ArrowDown") return run(() => store.moveSuggestion(-1));
         if (event.key === "ArrowRight") return run(() => store.acceptSuggestion());
+        // Kutudaki karşılığıyla aynı tuş (bkz. `CommandInput`); klasör
+        // önerileri geçmiş değil, orada tuş kabuğa gidiyor.
+        if (suggest.kind !== "dirs" && matchCombo(event, DELETE_SUGGESTION_KEY)) {
+          return run(() => void store.deleteSuggestionAt(suggest.index));
+        }
         if (event.key === "Enter" || event.key === "Tab") {
           store.closeSuggestions();
           // preventDefault YOK: tuş kabuğa gitmeye devam etsin.
