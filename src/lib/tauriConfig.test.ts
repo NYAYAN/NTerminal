@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -28,6 +29,7 @@ const CONFIG = JSON.parse(
     targets: string | string[];
     icon: string[];
     macOS?: { minimumSystemVersion?: string };
+    windows?: { wix?: { template?: string } };
   };
 };
 
@@ -79,6 +81,56 @@ describe("tauri yapılandırması", () => {
     const csp = CONFIG.app.security.csp;
     expect(csp).toContain("script-src 'self'");
     expect(csp).not.toContain("unsafe-eval");
+  });
+});
+
+/**
+ * MSI kısayolları ve görev çubuğu simgesi.
+ *
+ * BİLDİRİLEN: "uygulamayı kurduktan sonra taskbar üzerinde bir süre sonra
+ * iconu gidiyor" — sabitlenmiş düğme duruyor, resmi boşalıyor.
+ *
+ * ÖLÇÜLEN: sabitlenmiş kısayolun simgesi
+ * `C:\Windows\Installer\{A34D7293-…}\ProductIcon` idi ve dosya yoktu. Tauri'nin
+ * MSI şablonu Başlat menüsü kısayoluna `Icon="ProductIcon"` veriyor; o simge
+ * ürün koduna bağlı klasörde duruyor, ürün kodu her derlemede değişiyor ve
+ * güncelleme eski klasörü siliyor. Kısayoldan sabitlenen düğme yolu kopyaladığı
+ * için HER güncellemeden sonra boşalıyordu. Tam gerekçe şablonun başında.
+ *
+ * Kod tarafında hiçbir belirti yok: MSI kuruluyor, uygulama açılıyor, simge
+ * günler sonra kayboluyor. O yüzden şablon testle bağlı.
+ */
+describe("MSI kısayolları", () => {
+  const TEMPLATE = join(process.cwd(), "src-tauri", "wix", "main.wxs");
+  const scope = join(process.cwd(), "node_modules", "@tauri-apps");
+  // Şablon kurulu CLI'nin ikilisinden okunuyor; CLI'nin yerel paketi her
+  // platformda farklı adla geliyor.
+  const cliKurulu =
+    existsSync(scope) && readdirSync(scope).some((name) => name.startsWith("cli-"));
+
+  it("yapılandırma projenin WiX şablonunu kullanıyor", () => {
+    expect(CONFIG.bundle.windows?.wix?.template, "şablon bağlanmamış").toBe("wix/main.wxs");
+    expect(existsSync(TEMPLATE), "src-tauri/wix/main.wxs yok").toBe(true);
+  });
+
+  it("Başlat menüsü kısayolu MSI önbelleğindeki simgeyi kullanmıyor", () => {
+    const text = readFileSync(TEMPLATE, "utf8");
+    const start = text.indexOf('<Shortcut Id="ApplicationStartMenuShortcut"');
+    expect(start, "Başlat menüsü kısayolu bulunamadı").toBeGreaterThan(-1);
+    const element = text.slice(start, text.indexOf("</Shortcut>", start));
+    expect(element, "kısayol yine ürün koduna bağlı simgeyi gösteriyor").not.toMatch(/\bIcon=/);
+    // Kimlik düşerse sabitlenen düğme çalışan pencereyle aynı gruba girmez.
+    expect(element, "AppUserModelID kaybolmuş").toContain('Key="System.AppUserModel.ID"');
+  });
+
+  it.skipIf(!cliKurulu)("şablon kurulu Tauri CLI'nin şablonundan kaymamış", () => {
+    // Elle kopyalanmış şablon Tauri güncellenince sessizce eskir. Düşerse:
+    // `node scripts/wix-template.mjs` şablonu yeniden üretiyor.
+    const run = spawnSync(process.execPath, ["scripts/wix-template.mjs", "--check"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
   });
 });
 

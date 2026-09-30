@@ -502,6 +502,21 @@ altında: Windows'ta `bundle/nsis/*.exe` ve `bundle/msi/*.msi`, macOS'ta
 macOS paketi bir Mac'te üretilmek zorunda: Apple SDK'sı olmadan çapraz derleme
 mümkün değil. Windows kurucusu da aynı şekilde Windows'ta üretiliyor.
 
+**MSI şablonu projede, ama elle yazılmıyor.** `src-tauri/wix/main.wxs`
+Tauri'nin kendi şablonu, tek bir satır eksik: Başlat menüsü kısayolunun
+`Icon="ProductIcon"` satırı. O simge Windows Installer'ın ürün koduna bağlı
+önbelleğinde duruyor, ürün kodu her derlemede değişiyor ve güncelleme eski
+klasörü siliyor. Kısayoldan görev çubuğuna sabitlenen düğmenin resmi her MSI
+güncellemesinden sonra boşalıyordu; simgesiz kısayol exe'nin simgesini
+gösteriyor. Şablon kurulu CLI'den üretiliyor:
+
+```bash
+node scripts/wix-template.mjs
+```
+
+Tauri güncellendiğinde bu komut yeniden koşulmalı; unutulursa `npm test`
+şablonun CLI'dekinden kaydığını söylüyor.
+
 ### macOS: "hasarlı" uyarısı ve açma yolu
 
 **Paketler imzasız.** İndirilen bir `.dmg`'den kurulan uygulama ilk açılışta

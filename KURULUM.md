@@ -53,6 +53,15 @@ ama Başlat menüsüne kısayol koymaz.
 > **`Access is denied` hatası alırsan** N-Terminal açıktır: çalışan
 > `nterminal.exe` üzerine yazılamıyor. Uygulamayı kapatıp yeniden dene.
 
+> **MSI ile güncelledikten sonra görev çubuğundaki simge boşaldıysa:** bu
+> düzeltmeden önce üretilen MSI'lar Başlat menüsü kısayoluna Windows
+> Installer'ın önbelleğindeki bir simgeyi veriyordu ve o dosya her
+> güncellemede siliniyor. O kısayoldan sabitlenmiş düğme bir süre sonra
+> resimsiz kalıyordu. Yeni MSI'da kısayol exe'nin kendi simgesini kullanıyor.
+> Eski bir kurulumdan kalan sabitlemeyi bir kez düzeltmek yetiyor: görev
+> çubuğundaki simgeye sağ tık → *Görev çubuğundan kaldır*, sonra Başlat
+> menüsünde N-Terminal'e sağ tık → *Görev çubuğuna sabitle*.
+
 ## 3. Kur
 
 `N-Terminal_0.1.0_x64-setup.exe` dosyasına çift tıkla, ileri de. Kurulum

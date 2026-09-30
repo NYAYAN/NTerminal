@@ -51,6 +51,11 @@
     ],
     "macOS": {
       "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "wix": {
+        "template": "wix/main.wxs"
+      }
     }
   }
 }

@@ -1111,6 +1111,48 @@ parola sezgisi), `components/CommandInput.test.tsx` (yanıt satırı — yeni
 15 testin 15'i de eski bileşende düşüyor), `store/stopRunning.test.ts`
 (kaynaktaki `shellCtrlC` / `copyWins` kuralı).
 
+### 1.22 MSI güncellemesinden sonra görev çubuğu simgesi boşalıyordu
+
+**Bildirilen:** "uygulamayı kurduktan sonra taskbar üzerinde bir süre sonra
+iconu gidiyor" — düğme duruyor, resmi boşalıyor.
+
+**Ölçülen.** Görev çubuğuna sabitlenmiş kısayolun simgesi
+`C:\Windows\Installer\{A34D7293-…}\ProductIcon` idi ve dosya yoktu. Başlat
+menüsü kısayolu o gün yeniden yazılmıştı ve yeni bir ürün kodunun klasörünü
+gösteriyordu; masaüstü kısayolu ise exe'nin kendisini.
+
+**Kök neden.** Tauri'nin MSI şablonu Başlat menüsü kısayoluna
+`Icon="ProductIcon"` veriyor. Windows Installer o simgeyi ürün koduna bağlı bir
+klasöre koyuyor; Tauri her derlemede yeni ürün kodu üretiyor, güncelleme de
+eski ürünü kaldırırken klasörü siliyor. Kısayoldan sabitlenen düğme yolu
+kopyaladığı için her güncellemeden sonra silinmiş bir dosyayı gösteriyordu.
+Simge önbelleği eski resmi bir süre tuttuğu için belirti "bir süre sonra"
+geliyordu. NSIS kurucusu kısayola simge vermiyor (exe'ninki), orada sorun yok.
+
+**Çözüm.** Projenin kendi WiX şablonu (`src-tauri/wix/main.wxs`,
+`bundle.windows.wix.template`): Tauri'nin şablonu, o tek satır eksik. Elle
+kopyalanmadı — `scripts/wix-template.mjs` şablonu kurulu CLI'nin ikilisinden
+çıkarıp değişikliği uyguluyor, çünkü elle kopyalanan şablon Tauri
+güncellenince sessizce eskir. `tauriConfig.test.ts` üç şeyi bağlıyor:
+yapılandırma şablonu kullanıyor, Başlat menüsü kısayolunda `Icon=` yok (AppID
+duruyor), şablon CLI'dekinden kaymamış. Hata geri konunca ikincisi ve
+üçüncüsü düşüyor (denendi).
+
+İki karar:
+
+- **Masaüstü kısayoluna AppID eklenmedi.** NSIS ikisine de veriyor ama
+  Windows kimliği Başlat menüsü kısayolundan çözüyor (Tauri, tao ve wry
+  kaynaklarında süreç kimliği atayan bir çağrı yok); kanıtlanmış bir sorunu
+  çözmeyen bir değişiklik şablonu gereksiz yere Tauri'ninkinden uzaklaştırırdı.
+- **Eski sabitlemeler kendiliğinden düzelmiyor.** Eski bir MSI'dan sabitlenmiş
+  düğme ölü yolu taşımaya devam ediyor; bir kez kaldırıp Başlat menüsünden
+  yeniden sabitlemek yetiyor (KURULUM.md). Uygulamanın açılışta kendi
+  kısayolunu onarması düşünüldü, kullanıcının dosyalarına kendiliğinden
+  dokunmak olduğu için yapılmadı.
+
+**Yan bulgu (açık, §2.6).** Aynı kurulumda eski sürüm, Windows Installer'ın
+kapatma isteğinde çöktü.
+
 ---
 
 ## 2. Açık işler
@@ -1219,7 +1261,29 @@ karşılığı var.
 - **Zaman aşımı yok.** Takılan bir `git` süreci "atılıyor…"da kalır; tüm yazma
   işleri tek kuyrukta olduğu için sonrakiler de bekler (push için de aynı, §2.4).
 - **Gerçek Tauri penceresinde elle denenmedi; Windows'ta Rust testleri koşulmadı.**
-  Rust gerçek git'le, arayüz sahte IPC'li harness'te sınandı.
+  Rust gerçek git'le, arayüz sahte IPC'li harness'te sınandı. (30 Eylül:
+  yanıt kutusuyla birleştirmeden sonra Windows'ta koşuldu — 264 + 13, stash
+  testleri dahil geçti.)
+
+### 2.6 Windows Installer'ın kapatma isteğinde çökme
+
+**Gözlenen (30 Eylül, Windows olay günlüğü).** MSI kurulurken Restart Manager
+açık N-Terminal'e (09:23'ten beri çalışan, pid 16988) kapanmasını söyledi;
+süreç iki saniye sonra `0xc0000409` ile düştü (Application Error 1000, ardından
+WER `BEX64`). Rust'ta bu kod çoğunlukla panik → abort demek; örneğin pencere
+yordamında çıkıp FFI sınırını geçemeyen bir panik.
+
+**Sonuçları.** Çöken süreç tepsi simgesini kaldıramıyor (hayalet simge fare
+üstüne gelene kadar duruyor) ve düzgün kapanışın işleri (çalışma alanı, ekran
+çıktıları) yapılmıyor. Aynı yol büyük olasılıkla Windows güncellemesinden sonra
+yeniden başlatmada ve oturum kapatmada da işliyor.
+
+**Nasıl yakalanır.** Kullanıcının uygulamasına dokunmadan: yalıtılmış bir
+geliştirme örneği (`NTERMINAL_DATA_DIR`, ayrı WebView2 klasörü) açıp penceresine
+`WM_QUERYENDSESSION` + `WM_ENDSESSION` (`ENDSESSION_CLOSEAPP`) göndermek ya da
+Restart Manager API'siyle (`RmStartSession` → `RmRegisterResources(exe)` →
+`RmShutdown`) aynı isteği üretmek. Geliştirme yapısı paniğin iletisini ve
+yerini yazar.
 
 ---
 
