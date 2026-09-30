@@ -345,6 +345,55 @@ yalnızca favoriler listedeyken çalışmak zorunda, yoksa favoriye eklenmiş bi
 komut geçmiş satırından da elenir ve Ctrl+R ile hiç bulunamazdı
 (`components/HistoryRecall.test.tsx`).
 
+**Panelden geçmiş silme.** Bildirilen istek: "terminal geçmişini yukarı ok
+tuşuna basınca gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+Her satırın sağında bir `×`, klavyeden `Shift+Delete`
+(`DELETE_SUGGESTION_KEY` — tarayıcıların öneri listesindeki karşılığı; yalnız
+Delete olamazdı, yazarken gelen listede kutudaki metni siliyor). `×` ilk hâlinde
+yalnızca seçili satırda ve imleç üstündeyken çiziliyordu; bildirilen: "x iconu
+sabit, üzerine mouse ile gelince aktif hale gelsin, yoksa boşluk görünüyor" —
+öteki satırlarda ona ayrılan yer boş bir yarık gibi duruyordu. Şimdi her
+satırda soluk, üzerine gelince etkin; değişiklikler panelindeki satır
+eylemleriyle (`.git-actions`) aynı desen ve aynı ölçü. "Silme her
+zaman sorar" kuralı gereği onay soruluyor (`store/deleteConfirm.test.ts`).
+Üç karar, hepsi `deleteSuggestionAt` üzerinde ve `store/deleteSuggestion.test.ts`
+ile bağlı:
+
+- *Kapsam panelinki.* Panel bu sekmeyi gösteriyorsa yalnızca bu sekmenin
+  kayıtları gidiyor — `noteCommand`daki sekme başına tekrar temizliğiyle aynı
+  gerekçe: yanlış sekmede çalıştırılmış bir komutu temizlemek öteki sekmenin
+  yukarı okunu değiştirmemeli. Onay penceresi hangisinin olacağını yazıyor.
+- *Diskten, tam eşleşmeyle.* Bellekteki liste son 400 komut; yalnızca oradan
+  silmek komutu bir sonraki açılışta geri getirirdi. `HistoryFilter.command`
+  bunun için eklendi: `query` "içinde geçen" arıyor ve `ls` silinirken
+  `ls -la` de giderdi. Kimlikler arayüzde bir kez daha süzülüyor; süzgeci
+  tanımayan eski bir Rust derlemesi (sıcak yenileme) kapsamın tamamını döndürür.
+- *Seçim komuta bağlı.* Fareyle başka bir satır silinince seçili komut yerinde
+  kalıyor. İlk hâli konumu koruyordu ve düzenekte görüldü: `git pull`
+  seçiliyken `npm test` silinince seçim `npm run build`e atladı.
+
+İki yan bulgu aynı işte kapandı. `history_delete` artık günlüğü HEMEN
+sıkıştırıyor: `del` satırı kaydı yalnızca yeniden oynatırken gizliyordu,
+silinen komutun metni eski `add` satırında diskte duruyordu — tek tek silinen
+komut çoğu zaman yanlışlıkla yazılmış bir parola. Geçmiş panelindeki silmeler
+de öneri kaynağını yeniden yüklüyor; o kaynak açılışta bir kez kuruluyor ve
+panelden silinen komut uygulama yeniden açılana kadar yukarı okta görünmeye
+devam ediyordu (`components/historyDeleteSync.test.tsx`).
+
+**Komut kutusu başka bir metin kutusundaki odağı almıyor.** Bildirilen: "klasör
+dizini alanına tıklayıp klavyeden yön tuşları ile klasör seçip enter basınca o
+klasör dizinine gidiyor, sonrasında yön tuşları ile seçim yapmaya devam
+edemiyorum. Mouse ile tıklamak gerekiyor." Dizin seçici `cd`'yi gerçek bir
+komut olarak gönderip açık kalıyor; komut başlayınca kutu kapanıyor, istem
+dönünce açılıyor ve kutunun kip etkisi bu iki geçişte odağı koşulsuz önce
+terminale, sonra kutuya taşıyordu — seçicinin arama kutusundan. Kural artık tek
+yerde, `lib/focus.ts` (`typingOutsideTerminal`): kullanıcı terminalin dışında
+bir metin kutusuna yazıyorsa odağa dokunulmuyor. Sekme adlandırma kutusu için
+`focusTerminal`da bir kez ödenmiş kuralın aynısı; ikinci bir kopya yazmak
+yerine oradan çıkarıldı. Seçici kapanınca odak da komut kutusuna (komut
+çalışıyorsa terminale) dönüyor; yoksa Escape'ten sonra yine fareye uzanmak
+gerekirdi (`components/dirPicker.test.tsx`).
+
 ### 1.11 Yeni sürüm bildirimi
 
 Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son
@@ -664,7 +713,344 @@ adı "Porta…", "P…" diye eziyor, birkaç satırda tümden kaybettiriyordu.
 Testler: `lib/tabOverflow.test.ts` (yarı eşiği, iki yandan kırpılma,
 ölçülemeyen sekme, hepsi sığdığında sıfır).
 
-### 1.17 Komut çalışırken yanıt da kutuya yazılıyor
+### 1.17 Değişiklikler panelinde commit ve push
+
+**İstek:** "proje içerisinde git repoda bir değişiklik varsa değişiklikleri
+gösterdiğimiz bir yapı var N-Terminal içerisinde. Bu yapıda dosyaları commit ve
+push edebileceğimiz bir yapı istiyorum."
+
+**Eklenen:** satır başına "commit'e ekle" kutusu (üç hâl: işaretli, işaretsiz,
+kısmen), toplu kutu, ileti alanı, Commit ve Push
+([`GitCommit.tsx`](src/components/GitCommit.tsx)); Rust'ta `stage`, `unstage`,
+`commit`, `push` ([`git.rs`](src-tauri/src/git.rs)); saf kurallar
+[`lib/gitStage.ts`](src/lib/gitStage.ts). Kullanıcıya dönük anlatım README'de.
+
+Kararlar (gerekçelerin tamamı kodun yanında):
+
+- **Git doğrudan çağrılıyor, kabuğa yazılmıyor.** Dal geçişi kabuğa yazılıyor
+  (tek satır, geri dönüşü bir adım). Commit'in iletisi var, hangi dosyaların
+  girdiği listede görünmeli ve sonucu ("reddedildi", "kanca başarısız") ekranda
+  kalmalı; kabuğa yazmak kabuğun boşta olmasını şart koşardı.
+- **Hata bildirimde değil kutunun içinde, kalıcı.** Toast 3,2 saniye; bir kanca
+  ya da reddedilen push çıktısı bu sürede okunmaz. Metin git'in kendisi ve
+  **stderr + stdout birlikte**: `git commit` "commit edilecek bir şey yok"
+  iletisini STDOUT'a yazıyor (ölçüldü, stderr boş).
+- **`commit` yalnızca indeksi alır** (`-a` yok) ve **kancalar atlanmaz**
+  (`--no-verify` yok): kutular tam olarak neyin gireceğini gösteriyor; kancayı
+  kullanıcı koymuş.
+- **Push etiket göndermez.** `--no-follow-tags`. Ölçüldü: `push.followTags=true`
+  iken yalın `git push` yerelde duran açıklamalı etiketi de uzağa itiyor, bayrak
+  bunu yapılandırmaya rağmen engelliyor. Bu depoda `v*` etiketi itmek yayın
+  (`build.yml` `yayin` işi) ve yerelde uzağa gitmemesi gereken bir
+  `trailer-oncesi-yedek` etiketi duruyor. Zorla itme hiç yok.
+- **Yukarı akışı olmayan dal "Yayınla"** (`push -u origin HEAD`). `[gone]` (uzak
+  dal silinmiş) yukarı akış sayılmıyor: silinmiş bir dala gönderilmez, dal
+  yeniden oluşur. Hiç commit yoksa (`unborn`) ve ayrık HEAD'de düğme kapalı.
+- **Fark `HEAD`e karşı.** Ölçülen hata: panel `git diff -- dosya` çalıştırıyordu,
+  o da çalışma ağacını İNDEKSLE karşılaştırıyor; dosya sahnelenince fark 0
+  satır çıkıyor ve satır "Gösterilecek fark yok" diyordu. `HEAD`e karşı fark
+  sahnelenmiş, sahnelenmemiş ve karışık (`MM`) durumun hepsinde toplam
+  değişikliği veriyor; commit'siz depoda `--cached`e düşülüyor.
+- **Satır anahtarı yalnızca yol** (eskiden `durum + yol`). Kutuya basmak durumu
+  değiştiriyor; satır sökülüp kurulunca açık bağlam kayboluyor, fark yeniden
+  isteniyor ve klavyeyle Boşluk'a basanın odağı yok oluyordu. Fark isteğinin
+  anahtarı da ham durum değil `diffKind`: sahnelemek içeriği değiştirmiyor.
+- **Yazma işlemleri tek sırada** (`gitWrite`, `useStore.ts`). Rust'taki
+  `INDEX_LOCK` iki `git add`in `index.lock` yüzünden çakışmasını önlüyor ama
+  SIRA garantisi vermiyor: aynı dosyaya art arda "ekle" ve "çıkar" ters
+  sırada koşarsa son durum bastığının tersi olur. Kuyruk bir işlemin hatasında
+  kilitlenmiyor; her işlem bitince (hata da olsa) depo tazeleniyor.
+- **Rust komutları `async` + `spawn_blocking`.** Eşzamansız olmayan komut Tauri'de
+  ana iş parçacığında koşuyor: push bir ağ isteği, commit kullanıcının
+  kancalarını çalıştırıyor. Hiçbiri pencereyi dondurmamalı.
+- **İleti taslağı depoda** (`ui.gitDrafts`, anahtar deponun kökü). Panel sekmesi
+  değişince bileşen sökülüyor; yerel durum olsaydı yarım ileti kaybolurdu.
+  Commit atılamazsa ileti korunuyor.
+
+Ölçülen dört git davranışı, hepsi `git_tests.rs`'te gerçek depoyla sınanıyor:
+
+- `restore --staged` commit'siz depoda "could not resolve HEAD" ile düşüyor →
+  indeksten çıkarma `reset -q`.
+- Yeniden adlandırmada yalnızca yeni adı çıkarmak eski adın "silindi" kaydını
+  indekste bırakıyor → `GitChange::orig_path`, ikisi birlikte gidiyor.
+- `git add -- "[a].txt"` `a.txt`yi de ekliyor (köşeli parantez karakter sınıfı) →
+  `--literal-pathspecs`.
+- `git status` ASCII dışı yolları sekizlik kaçışla veriyor
+  (`"\303\247al..."`) → `-c core.quotepath=false`. Bu **mevcut** diff, geri alma
+  ve dosya açma işlemlerini de düzeltiyor: Türkçe harfli bir dosya adında
+  hiçbiri çalışmıyordu (yol `git`in bulamadığı bir dizeydi).
+
+**Doğrulama.** Rust: gerçek depolar ve gerçek `bare` uzak, ağa çıkmıyor.
+Arayüz: `lib/gitStage.test.ts`, `components/gitCommit.test.tsx`,
+`store/gitWrite.test.ts`. `lib/ipcContract.test.ts` TS'in çağırdığı her Rust
+komutunun kayıtlı olduğunu ve argüman adlarının tuttuğunu denetliyor — arayüz
+testleri IPC'yi taklit ettiği, Rust testleri arayüzü bilmediği için başka hiçbir
+test "komut adında yazım hatası" sınıfını görmüyor.
+
+Her koruma kaynakta bozulup ilgili testin düştüğü görülerek doğrulandı (Rust 15,
+arayüz 38 mutasyon). Bu denetim iki testin aslında bir şey yakalamadığını
+çıkardı: "commit ATMIYOR" testleri eşzamanlı `expect` yapıyordu ama commit
+kuyrukta mikro-görev olarak `api`ye gidiyor (§3), ve "ikinci basış yok sayılıyor"
+testleri ilk işlem SÜRERKEN sayıyordu, oysa koruma kalksa da ikinci işlem
+kuyrukta bekliyor. Gerçek arayüz sahte IPC'li bir tarayıcı harness'inde
+(`?t=` tuzağı için §3) tıklanarak da denendi; orada dal seçicinin yeniden
+konumlanmaması hatası ortaya çıktı (§1.18).
+
+### 1.18 Dal seçicide uzak dallar ayrı bir bölümde
+
+**Bildirilen sorun:** "branch'leri gösteriyoruz, bu gösterdiğimiz yerde remote
+origin'ler de geliyor. Bu da karışıklığa sebebiyet veriyor. Yerel olanlar
+gözüksün, bir de collapse gibi bir şey olsun, remote göstermesi için kişi
+açmak isterse gelsin."
+
+**Yapılan:** yerel dallar üstte, başlıksız; `git fetch` ile gelen uzak dallar
+sayıyla birlikte "Uzak dallar" başlığının altında ve varsayılan **kapalı**.
+Kuralların tamamı [`pickerRows`](src/lib/branches.ts) içinde:
+
+- **Arama katlamayı eziyor.** Uzak dallar zaten fetch sonrası bir dalı
+  bulabilmek için listeleniyor; kapalı bölümün içindeki eşleşmeyi göstermemek
+  aramanın yalan söylemesi demek. Aramada başlık basılamayan düz etiket, sayı
+  yalnızca eşleşenleri sayıyor.
+- **Gösterilecek yerel dal yoksa bölüm açık ve düz:** katlayacak başka bir şey
+  yok.
+- **Başlık klavyeyle gezilebilir** (alt ok, Enter açıp kapatıyor); düz etiket
+  gezilmiyor (Enter'ın yapacağı bir şey yok).
+- **Açık/kapalı durumu depoda** (`ui.branchRemotesOpen`): seçici her kapanışta
+  sökülüyor, yerel durum olsaydı uzak dallara bakan her açışta yeniden açardı.
+  Uygulama her açılışta kapalı başlıyor.
+- **Vurgulanan satır yalnızca klavyede kaydırılıyor:** fareyle üzerine gelinen
+  satırı kaydırmak listeyi imlecin altından kaydırıp yeni bir `mouseenter`
+  üretiyordu.
+
+**Gözle bulunan hata:** panelin konumu yüksekliğinden hesaplanıyor
+(`anchorAbove`) ve yalnızca liste yüklenince koşuyordu. "Uzak dallar" açılınca
+panel 120px'ten 340px'e büyüyüp alt kenarı rozetin üstüne biniyor ve satırları
+ekran dışına taşıyordu. Şimdi satır sayısı değişince de yeniden yerleşiyor
+(arama da aynı sebeple: süzülen liste kısalınca panel rozetten uzakta asılı
+kalıyordu). jsdom'da yerleşim olmadığı için test yalnızca NE ZAMAN
+çağrıldığına bakıyor; gerçek konumu yalnızca göz doğruladı.
+
+Testler: `lib/branches.test.ts` (kurallar), `components/branchPicker.test.tsx`
+(tıklama, klavye, arama, durumun hatırlanması, yeniden yerleşim).
+
+**Çok sayıda dalda — önce ölçüldü, sonra düzeltildi.** Soru: "çok fazla dal olursa
+performans sorunu olur mu?" Sentetik depoda ölçüldü (macOS, sıcak önbellek, her
+dal AYRI commit'te — aynı commit'e işaret etselerdi sıralama bedava görünürdü;
+arayüz üretim derlemesi, Chromium, boyama hariç):
+
+| uzak dal | git, paketli ref | git, `fetch` sonrası | git, yalnızca yerel | bölümü açmak | aramada ilk harf |
+|---|---|---|---|---|---|
+| 2.000 | 32 ms | 66 ms | 15–19 ms | 62 ms | 49 ms |
+| 10.000 | 51 ms | 356 ms | 13–14 ms | 510 ms | 402 ms |
+| 50.000 | 634 ms | 8 sn | 29–56 ms | ölçülmedi | ölçülmedi |
+
+"`fetch` sonrası" = her ref ayrı dosya; `git gc` / `pack-refs` onları paketliyor.
+
+- **Çizim tavanı** (`SECTION_ROW_LIMIT` = 200). Darboğaz çizimdi: süzme 0,6 ms,
+  IPC ayrıştırma ~0; 10 bin dalda her ok tuşu 45 ms, 90 bin DOM öğesi. Bölüm en
+  fazla 200 dal çiziyor, kalanını "N dal daha — aramayı daraltın" satırı sayıyor;
+  başlıktaki sayı yine TAMAMI. Tavanla 10 bin dalda açmak 5 ms, ilk harf 6 ms, ok
+  tuşu 0,7 ms (50 bin: 6 / 10 / 0,8 ms).
+- **`git_branches` `async` + `spawn_blocking`.** Süreyi kısaltmıyor, ana iş
+  parçacığını bırakıyor: Tauri'nin makrosu `async` olmayan komutu IPC'yi işleyen
+  iş parçacığında satır içi koşuyor (kaynaktan doğrulandı).
+- **İki aşamalı yükleme** (`remotes: false`, `REMOTES_GRACE_MS` = 150 ms). Yerel
+  dallar uzak dal sayısından bağımsız okunuyor. Tam liste 150 ms içinde gelirse
+  tek seferde çiziliyor (çoğu depo; iki aşama orada yalnızca titreme olurdu);
+  gelmezse yerel dallar hemen, uzak başlığı "…" ile. Okunurken arama "Dal
+  bulunamadı" demiyor: henüz bilmiyoruz. Eski bir ikili `remotes`'u tanımayıp
+  her şeyi dönse de (arayüz HMR'la yenilenip Rust yeniden başlatılmadan) ilk aşama
+  yalnızca yerel dalları gösteriyor.
+
+Kazanç getirmediği ölçülenler: `--count` sıralamadan SONRA uygulanıyor;
+commit-graph `committerdate` sıralamasını hızlandırmadı. `git_fingerprint` ile
+önbellek de olmaz: yalnızca `HEAD` ve `index`'e bakıyor, `fetch` ikisine de
+dokunmuyor ve liste bayatlardı. Ölçülmeyenler: Windows ve Defender (ref dosyası
+okuma orada daha yavaş olabilir), soğuk önbellek, boyama.
+
+Testler: `lib/branches.test.ts` (tavan, bekleme hâli), `components/branchPicker.test.tsx`
+(DOM'daki satır sayısı, iki aşama sahte zamanlayıcıyla, düşen okuma, eski ikili),
+`git_tests.rs` (`yerel_okuma_uzak_dallari_getirmiyor`). Hepsi kaynak bozularak
+doğrulandı: 9 mutasyon, 9'u da yakalandı.
+
+### 1.19 Stash
+
+**İstek:** "bir de stash yapısı ekleyebilir miyiz? IntelliJ, WebStorm'daki gibi.
+Kişi istediklerini stash atsın, isimlendirebilsin, stash'ı açsın." Ardından üç
+düzeltme: "Değişiklikler default olarak hepsi kapalı gelsin", "Değişiklikler
+listesinde neler seçiliyse Stash'a bastığımda onlar seçili gelsin, kişi isterse
+değiştirsin; burada da dosya path'i gizli gelsin, checkbox ile isterse açsın" ve
+"farkta sağa kaydırınca zemin rengi bir yerde kesiliyor".
+
+**Eklenen:** Rust'ta `stashes`, `stash_files`, `stash_diff`, `stash_push`,
+`stash_apply`, `stash_drop`, `stash_count` ([`git.rs`](src-tauri/src/git.rs)); üç
+okuma komutu senkron, üç yazma komutu `async` + `spawn_blocking`. Arayüzde
+[`StashDialog.tsx`](src/components/StashDialog.tsx) (ad + dosya seçimi),
+[`StashSection.tsx`](src/components/StashSection.tsx) (liste, uygula, sil, içerik),
+[`StashDiff.tsx`](src/components/StashDiff.tsx) (salt okunur fark), saf kurallar
+[`lib/gitStash.ts`](src/lib/gitStash.ts); `useActiveGit` ve `useLabel` ortak
+olduğu için [`gitShared.tsx`](src/components/gitShared.tsx)e taşındı (aksi hâlde
+`GitChanges` ile stash bileşenleri birbirini içe aktarırdı). Kullanıcıya dönük
+anlatım README'de.
+
+Kararlar (gerekçelerin tamamı kodun yanında):
+
+- **Dördüncü sekme değil, Değişiklikler'in içinde bölüm.** İlk hâli sekmeydi;
+  gözle bakınca sekme şeridi (~326px) ile sağdaki üç simge (~96px) varsayılan
+  390px'te dört etiketi de kırpıyor, 260px'te kapatma çarpısını panelin dışına
+  itiyordu. Dört etiketi kırparak sığdırmak mümkündü ama okunmaz olurdu; sorun
+  kaynağında çözüldü: stash zaten değişikliklerle aynı konu ve "Stash'e at" düğmesi
+  de orada. (Ölçüm aynı zamanda eski bir hatayı gösterdi: üç sekmeyle bile panel
+  ~345px'in altına inince çarpı panelden taşıyordu. Şerit ve sekmeler artık
+  daralıyor, etiket `…` ile kısalıyor: `.panel-tab-label`, `min-width: 0`;
+  varsayılan 390px'te hiçbir şey kırpılmıyor.) Bölüm listenin
+  **en üstünde**, başlık depo varken **her zaman** görünüyor (temiz ağaçta stash
+  uygulamak en sık an ve o zaman liste "değişiklik yok"tan başka bir şey
+  göstermez), sayaç yalnızca stash varken, varsayılan **kapalı** (`ui.stashOpen`,
+  depoda: bileşen sekme değişince sökülüyor).
+- **Pencere listedeki seçimle açılıyor.** Listedeki kutu `git add` demek; seçim =
+  indekste bir şeyi olan dosyalar (`initialSelection`), kısmen eklenmiş (`MM`)
+  dâhil. Hiçbiri işaretli değilse seçim **boş** — "hepsini al" varsayılmıyor: ilk
+  Enter'la yanlışlıkla her şeyi kenara atmak, boş seçimin bir tık maliyetinden
+  pahalı. Pencere ondan sonra **kendi** seçimini taşıyor ve listedeki kutulara
+  dokunmuyor (ilk hâli hepsini seçili açıyordu; istek üzerine değişti).
+- **Klasör yolu gizli, kutu ortak ayara bağlı** (`ui.gitShowPaths`): listedeki
+  klasör düğmesiyle aynı ayar, yani bir yerde açılan öbüründe de açık.
+- **Takipsiz dosya seçilince `-u` kendiliğinden.** git onsuz tüm seçimi "pathspec
+  did not match" ile düşürüyor; ayrı bir kutu yalnızca "neden hata verdi"yi
+  sordururdu.
+- **Silmek her zaman sorar, uygulamak sormaz.** Silinen stash'in karması yalnızca
+  `git fsck` ile bulunur; uygulamada içerik silinmiyor, çalışma ağacına taşınıyor.
+  "Uyguladıktan sonra sil" ve "İndeksi geri yükle" kutuları varsayılan **kapalı**;
+  çakışmada git stash'i zaten silmiyor.
+- **Kutular başlıktaki ayar simgesinin küçük penceresinde** (istek: "Stash altında
+  2 checkbox var; sayacın soluna ayar ikonu koyalım, basınca küçük bir tooltip
+  içinde çıksın"). Önce açık bölümün üstünde duruyor ve her açılışta yer
+  kaplıyordu. Yapı: satır bir `div` (tıklamak açıp kapatıyor), gerçek düğme
+  `stash-toggle`, sonra simge, sonra sayaç. Satırın kendisi düğme olamaz çünkü
+  içinde ayar düğmesi var (iç içe düğme geçersiz ve tıklamalar karışıyor; aynı
+  sebeple `.git-head`); tıklama satıra kabarcıklanıyor, TEK işleyici orada, simge
+  ve pencere kabarcığı kesiyor. Pencere simgeye değil **satıra** göre
+  konumlanıyor (`position: absolute`, `max-width: calc(100% - 16px)`): simge
+  panelin sol yarısında, simgeye göre açılsa en dar panelde (260px) sağa
+  taşardı. Dışarı basınca ve `Esc` ile kapanıyor (`Esc` yakalanıyor, yoksa genel
+  kısayol başka bir örtüyü kapatırdı), odak simgeye dönüyor, açılırken ilk
+  kutuya geçiyor. **Kutular gizli olduğu için bir seçenek açıkken simge
+  vurgulu** (`icon-btn on`): "uyguladıktan sonra sil" geri dönüşü olmayan taraf,
+  sessizce etkin kalmamalı.
+- **Liste okunamazsa hata gösteriliyor, "Stash yok" denmiyor.** İlk hâli hatayı
+  yutup boş liste çiziyordu (bkz. §3, eski Rust ikilisi).
+- **Kimlik karma, işlem anında `stash@{n}`e çözülüyor.** `apply` ham karmayı kabul
+  ediyor ama `pop` ve `drop` etmiyor; sıra numarası başka bir stash eklenince
+  kayar, o yüzden karma → `stash list` ile işlemin hemen öncesinde çözülüyor.
+- **Sayaç süreç başlatmadan**: `logs/refs/stash` dosyasının satır sayısı (worktree'de
+  ortak dizin, `commondir` dosyası). Durum imzası (`fingerprint`) stash günlüğünü
+  de izliyor, yani terminalden atılan bir `git stash` panelde kendiliğinden
+  görünüyor.
+
+Ölçülen git davranışları, hepsi `git_tests.rs`te gerçek depoyla sınanıyor:
+
+- `git stash push` değişiklik yoksa **0 koduyla** çıkıyor ("No local changes to
+  save"); `refs/stash` öncesi/sonrası karşılaştırılıyor.
+- Takipsiz yol `--include-untracked` olmadan "pathspec did not match" ile düşüyor.
+- **Sahnelenmiş silme ve sahnelenmiş yeniden adlandırmanın eski adı indekste yok**:
+  `stash push -- yol` düşüyor → önce `reset -q --`, hata olursa
+  `rm --cached --ignore-unmatch` ile geri yükleniyor.
+- Çakışmada `apply`/`pop` 1 ile çıkıyor, dosyalar `UU`, stash **kalıyor**.
+- `--index` sahnelenmişi `MM` olarak geri getiriyor (yoksa ` M`).
+- Takipsiz dosyalar stash'in **üçüncü ebeveyninde** (`S^3`); yeniden adlandırma farkı
+  için iki yol da gerekiyor.
+- Git kendisi çok satırlı ileti günlüğünü tek satıra indiriyor.
+
+**Varsayılan kapalı liste (istek üzerine).** `ui.gitCollapsed` (kapalılar)
+`ui.gitExpanded`e (açılanlar) çevrildi. Kazanç: fark yalnızca açık satır için
+isteniyor, yani elli dosyalık değişiklik elli `git diff` ile başlamıyor. **Yan
+etki, bilinçli:** `+N -M` sayacı farkla birlikte çiziliyor; kapalı satır için
+fark istenmediğinden sayaç satır **açılana kadar görünmüyor**. Hepsi görünsün
+istenirse tek bir `git diff --numstat` yeter (§2.5).
+
+**Fark zemini hatası.** `.diff-line` blok olduğu için satır genişliği kaydırma
+alanının GÖRÜNEN genişliğiydi; sarmayan uzun metin kutunun dışına taşıyor ve
+eklenen/silinen zemin orada bitiyordu (ölçülen: 370px satır, 2019px kaydırma
+alanı). `.git-diff` tek sütunlu ızgaraya çevrildi: sütun en uzun satıra kadar
+genişliyor ve bütün satırlar aynı genişlikte (ölçülen: 2029 / 2029). `min-width:
+max-content` denenmedi: her satırı KENDİ boyuna getirir, zeminlerin sağ kenarı
+tırtıklı olur. Boşluk şeridi `contain: inline-size` taşıyor: kapsayan işlev adı
+(80 karaktere kadar) sütunu genişletip kod sığarken bile yatay kaydırma
+çıkarırdı. jsdom yerleşim hesaplamadığı için `styles/layout.test.ts` yalnızca bu
+KURALLARI bağlıyor; ölçüm tarayıcıda yapıldı.
+
+**Doğrulama.** Rust: gerçek depolar; ~50 stash testi, biri kullanıcının bildirdiği
+durumun birebir kopyası (`kullanici_senaryosu_…`: biri `M `, biri `A ` iki dosya
+seçili, başka dosyalar ellenmemiş, yol boşluklu ve klasörler iç içe, geri
+getirmede `--index`). Arayüz:
+`components/stashDialog.test.tsx`, `stashSection.test.tsx`, `stashOverlay.test.ts`,
+`lib/gitStash.test.ts`, `store/gitWrite.test.ts` (stash işlemleri de aynı yazma
+kuyruğunda), `components/GitChanges.test.tsx` (kapalı gelme, farkın yalnızca
+açılınca istenmesi). Her koruma kaynakta bozulup ilgili testin düştüğü görülerek
+doğrulandı; bu tur 28 mutasyon denendi ve biri ayakta kaldı: `stashOpen`
+**varsayılanı** (testler durumu açıkça kuruyordu, varsayılan hiç sınanmıyordu).
+Aynı sınıftan `gitExpanded` varsayılanı için de `getInitialState` testi eklendi ve
+mutasyonu doğrulandı. Gerçek arayüz sahte IPC'li tarayıcı harness'inde tıklanarak
+denendi: pencere açılışı ve seçimi, klasör yolu kutusu, stash'e atma, liste,
+içerik, uygulama + pop, silme onayı, çakışma hatası, kaydırılmış farkta zemin.
+Gözle iki yerleşim hatası bulundu: dört sekme (yukarıda) ve stash tarih metninin
+eylem simgelerinin üstüne binmesi (`.stash-meta` artık kırpılabiliyor; ad dar
+panelde bile en az 48px kalıyor).
+
+### 1.20 Dolgulu düğmelerde beyaz yazı
+
+**Bildirilen:** "Commit butonundaki text color yanlış gibi bakar mısın." Gerçek
+pencerenin commit kutusu bölge yakalamasıyla okundu: One Half Dark'ta etkin Commit
+açık mavi (`#61afef`) zeminde koyu lacivert (`#0b0f14`) yazı; devre dışıyken
+`opacity: 0.4` zemini ve koyu yazıyı birlikte solduruyor, yazı zemine karışıyor
+(2,5:1). Ortada bir hata yoktu: kural (`onColor`, karşıtlığı yüksek olan) tam bunu
+üretiyordu ve beyaz yazı bu zeminde 2,4:1 verirdi. "Yanlış"ın ne olduğu belli olmadığı
+için üç seçenek yan yana çizilip kullanıcıya bırakıldı (şimdiki / beyaz yazı /
+yalnızca devre dışı düzelsin); kullanıcı **2. seçeneği** seçti.
+
+**Yapılan:** [`filledColors()`](src/lib/contrast.ts): metin BEYAZ, zemin vurgunun
+beyaza 4,5:1 verecek kadar koyulaştırılmış hâli (`ensureContrast(vurgu, "#ffffff")`,
+ton korunuyor). Tema uygulanırken `--accent-solid`, `--accent-fg`, `--accent-chip`
+(ve yıkıcı için `--err-solid`, `--err-fg`) yazılıyor; `button.primary` zeminini
+`--accent-solid`den alıyor. One Half Dark: `#61afef` → `#447ba7`.
+
+Kararlar:
+
+- **`--accent` yüzeyde metin olarak açık kalıyor, dolgu için AYRI değişken.** Aynı renk
+  hem koyu yüzeyde okunacak kadar açık hem beyaz yazıya zemin olacak kadar koyu
+  olamaz. Açık temalarda vurgu zaten koyu: `--accent-solid` = `--accent`.
+- **Çamurlaşma sınırı:** koyulaşmış zeminin parlaklığı vurgunun en az %35'i olmalı;
+  değilse (sarı gibi çok açık renk) eski kurala düşülüyor (zemin aynen, yazı `onColor`).
+- **Hover/active zemini KOYULAŞIYOR** (siyaha karışım, %88 / %76). Açıklaştırmak beyaz
+  yazının karşıtlığını 4,5'in altına indirirdi: zemin zaten sınırda.
+- **Devre dışı: `opacity` yok**, soluk zemin (vurgunun %30'u, saydam) + açık gri yazı
+  (tema metninin %65'i). Ölçüm: en az 3:1 dört temada iki yüzeyde. %60 denendi,
+  Solarized Açık 2,999'da kaldı.
+- **Sayaç hapı yazının TERSİ renkten** (`--accent-chip`): beyaz yazıda koyu hap. Yazıyla
+  aynı tonda hap (önceki hâli) beyaz yazıda sayıyı 2,9:1'e düşürüyordu.
+- **Yıkıcı düğme de aynı kurala girdi** ("tüm dolgulu düğmeler değişir" seçeneği
+  gösterilmişti). Koyulaşan kırmızı One Half Dark'ta biraz mat.
+
+**Gözle bulunan hata:** devre dışı yıkıcı düğme soluk zeminde BEYAZ yazı taşıyordu (açık
+temada ~1,9:1): `button.primary.destructive` ile `button.primary:disabled` AYNI özgüllükte
+(0,2,1) ve yıkıcı kural dosyada SONRA geliyor, yani yazı rengini o veriyordu. Yazı rengi
+`destructive:disabled` kuralına da yazıldı (özgüllük 0,3,1) ve testle bağlandı.
+
+**Testler:** türetme artık tek yerde; `surfaceContrast.test.ts` `applyThemeToDocument`in
+hesabını elle yeniden yazıyordu (kopya, ayrışma riski), şimdi `filledColors`ı çağırıyor.
+`lib/filledColors.test.ts` renk uzayını tarıyor (her renkte yazı ≥ 4,5:1), jsdom'da
+tema uygulanınca değişkenlerin yazıldığını sınıyor. 22 mutasyon **scratchpad'deki
+kopyada** koşuldu (canlı Vite izlediği için; bkz. hafıza notu): dördü ayakta kaldı, biri
+mutasyon donanımının yanlış negatifiydi (toplama aşamasında düşen test dosyası "geçti"
+sayılıyordu; düzeltildi), üçü gerçek boşluktu (yıkıcı kuralın yapısı, hover şiddeti,
+hover/active ilişkisi) ve kapatıldı.
+
+**Yan bulgu (düzeltildi):** toplu kutunun hata kutusu bir sonraki basışta silinmiyordu
+(`commit` ve `push` siliyordu); başarılı bir seçimden sonra da "Dosya seçimi
+değiştirilemedi" ekranda kalıyordu. `toggleAll` başında `setError(null)`. Kaynağı §2.4'te.
+
+### 1.21 Komut çalışırken yanıt da kutuya yazılıyor
 
 **Bildirilen:** "`ng serve` dediğimde 'Would you like to use a different port?
 (Y/n)' geliyor; bu bilgiyi komut yazma kısmına yazamıyoruz, doğrudan mesajın
@@ -701,7 +1087,10 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   sayılıyor (`boxSelected`), yoksa tuş durdurma silahına dönerdi.
 - **Odak etkisi `stdin`e de bağlı.** Komut başlarken kutu açık kaldığı için
   `active` değişmiyor; komut kenar çubuğundaki bir düğmeden başlarsa odak
-  orada kalırdı.
+  orada kalırdı. Başka bir metin kutusuna yazılıyorsa bu etki de odağa
+  dokunmuyor (`typingElsewhere`, dizin seçici hatasının kuralı): birleştirmede
+  ortaya çıktı — dizin seçicinin gönderdiği `cd` kutuyu yanıt satırına
+  çeviriyor ve korumasız etki arama kutusunun odağını geri alırdı.
 - **Ölçü aynı.** Yanıt satırı komut satırıyla aynı yükseklikte (ölçüldü: ikisi
   de 32px, terminal 750px'te sabit) — komut başlarken terminal yeniden
   ölçülendirilmiyor, "flash" geri gelmiyor. `>_` yerine gelen nokta `2ch`
@@ -777,6 +1166,61 @@ karşılığı var.
 - `Build FE` sekmesinin dizini yanlış (`...WebAPI`); bu bir veri kalıntısı,
   sekmede bir kez `cd` yapmak yeterli.
 
+### 2.4 Değişiklikler paneli: commit ve push'un açık uçları
+
+§1.17'nin bilinçli olarak dışarıda bıraktıkları ve elle denenmemiş yerleri:
+
+- **Pull yok.** Uzak ilerideyse push reddedilir; panel bunu düğmeye basmadan
+  önce söylüyor ama çözümü (`git pull`) terminale bırakıyor. Panele pull
+  eklenirse birleştirme/çakışma durumu da paneli ilgilendirir; ayrı bir iş.
+- **Push için zaman aşımı yok.** Ağ takılırsa düğme "Gönderiliyor…"da kalır (Rust
+  tarafındaki süreç bitene kadar). Tüm yazma işleri tek kuyrukta olduğu için o
+  süre boyunca sonraki ekle/çıkar/commit işlemleri de bekler.
+- **Dosya bazında sahneleme; satır ya da blok bazında yok.** Kısmen eklenmiş bir
+  dosya (`MM`) kutuda "ara" görünüyor ama bölmek için terminal gerekiyor.
+- **Uzak tanımlı olmasa da "Yayınla" görünüyor.** Tıklamak "uzak depo tanımlı
+  değil" hatası veriyor. Uzağı bilmek her durum okumasına bir `git` süreci daha
+  eklerdi (bkz. `git.rs` baş yorumu: süreç bedava değil).
+- **Yayınlanmamış dalda kaç commit ileride olduğu bilinmiyor** (yalnızca "yayınla"
+  yazıyor): yukarı akış yokken `ahead` hesaplanamıyor.
+- **Gerçek Tauri penceresinde uçtan uca elle denenmedi.** Rust gerçek git'le, arayüz
+  sahte IPC'li harness'te sınandı; ikisini bağlayan IPC sözleşmesini
+  `lib/ipcContract.test.ts` denetliyor. Windows/CI'da Rust testleri de
+  koşulmadı (yalnızca macOS).
+- **YANLIŞ HATA: `git add` izlenen ama yok sayılan klasördeki dosyada `1` dönüyor.**
+  Gerçek örnek (yatas): `.gitignore` `js-storefront/yatas/.vscode`u yok sayıyor, içindeki
+  dosyalar ise izleniyor. `git add -- <izlenen dosya>` dosyayı EKLİYOR ama "The following
+  paths are ignored by one of your .gitignore files: …" yazıp çıkış kodu **1** veriyor
+  (scratch depoda üretildi). `stage` çıkış koduna bakıyor: toplu kutu "Dosya seçimi
+  değiştirilemedi" gösteriyor, oysa iş görülmüş. Önerilen düzeltme
+  ([`git.rs`](src-tauri/src/git.rs) `stage`): izlenenler için `add -u -- <yollar>` (yok sayma
+  denetimi yok), izlenmeyenler için `ls-files --others --exclude-standard -z -- <yollar>`
+  ile dosyaları bulup tek tek `add`. **`-f` kullanma:** dizin yolunda (porcelain
+  `?? dizin/` veriyor) yok sayılan dosyaları da ekler. Rust'a dokunacağı için
+  (`tauri dev` uygulamayı yeniden başlatır) kullanıcıya sorulmadan yapılmadı.
+
+### 2.5 Stash'in açık uçları
+
+§1.19'un bilinçli olarak dışarıda bıraktıkları:
+
+- **Kapalı satırlarda `+N -M` sayacı yok.** Sayaç farkla birlikte çiziliyor ve fark
+  yalnızca açık satır için isteniyor. Tek bir `git diff HEAD --numstat -z
+  --no-renames` bütün sayaçları verir (yeniden adlandırmada `--no-renames` şart:
+  satırın farkı yalnızca yeni yolu alıyor, yani tüm dosya "eklendi" görünüyor ve
+  sayaç onunla tutmalı); takipsiz dosyalar için satır sayısı ayrıca okunmalı.
+- **Stash'ten dal oluşturma yok** (IntelliJ'deki "Create Branch"), **`--keep-index`
+  yok**, **hepsini temizle (`stash clear`) yok**.
+- **Sayaç reflog dosyasına dayanıyor.** `reftable` arka ucunda (`git init
+  --ref-format=reftable`, git ≥ 2.45) `logs/refs/stash` yok: sayı hep 0 görünür ve
+  terminalden atılan `git stash` kendiliğinden görünmez. Bölüm başlığı yine durur
+  ve liste `git stash list`ten okunur; kendi işlemlerimiz durumu zaten tazeliyor.
+- **Dosya listesi 200'de kesiliyor** ("… ve N dosya daha"); tümünü görmek için
+  terminal gerekiyor.
+- **Zaman aşımı yok.** Takılan bir `git` süreci "atılıyor…"da kalır; tüm yazma
+  işleri tek kuyrukta olduğu için sonrakiler de bekler (push için de aynı, §2.4).
+- **Gerçek Tauri penceresinde elle denenmedi; Windows'ta Rust testleri koşulmadı.**
+  Rust gerçek git'le, arayüz sahte IPC'li harness'te sınandı.
+
 ---
 
 ## 3. Tekrar ısıracak tuzaklar
@@ -790,6 +1234,37 @@ belirtiler: bütün rozetler `?` (profiller boş), terminal ekranı boşalıyor,
 `workspace.json` boşalıyor. Gerçek bir hata sanıp kovalamadan önce **temiz
 yeniden başlat**. Rust ya da `TerminalSession` değiştiyse zaten yeniden
 başlatmak şart: canlı oturumlar eski sınıfla kalıyor.
+
+**Çalışan geliştirme uygulamasında Rust tarafı eski kalabilir.** Arayüz Vite ile
+canlı yenileniyor; Rust ise yalnızca uygulama YENİDEN başlatılınca yeni ikiliye
+geçiyor. Belirti: yeni bir komut çağrılınca `Command git_stash_push not found`
+(Tauri'nin "kayıtlı değil" iletisi) — oysa komut kaynakta kayıtlı, testler yeşil ve
+düğme ekranda. Gerçekten yaşandı: kullanıcı Stash'e bastı, açık uygulama saatler
+önce derlenmiş bir ikiliyle çalışıyordu. Kod hatası sanmadan önce üç şeye bak:
+`ps -o lstart= -p <pid>` (sürecin başlangıcı), `stat target/debug/nterminal`
+(derleme zamanı) ve `strings target/debug/nterminal | grep <komut>` (komut ikilide
+var mı). Çözüm uygulamayı kapatıp `npm start`. Uygulamayı BAŞKA bir süreç ya da
+oturum başlattıysa öldürme: içinde kullanıcının sekmeleri ve kabukları var.
+`cargo test` de `target/debug/nterminal`i yeniden üretiyor (`tests/` dizini
+olduğu için ikili de derleniyor); çalışan sürece dokunmuyor ama bir sonraki
+başlatma yeni ikiliyi alıyor.
+
+Yeniden başlatırken ikinci tuzak: `npm start` `Port 5273 is already in use` ile
+düşebiliyor (`vite.config.ts` `strictPort: true`, `tauri.conf.json` `devUrl`
+sabit). Portu çoğu zaman başka bir oturumun eskiden başlattığı Vite tutuyor ve o
+oturumun uygulaması da ona bağlı. Öldürmeden önce sahibine bak
+(`lsof -nP -iTCP:5273 -sTCP:LISTEN`, sonra `ps -o ppid=` zinciri ve
+`CLAUDE_CODE_SESSION_NAME`); kullanıcıya söyle. Uygulamanın eski kalmasının
+sebebi de çoğunlukla buydu: ikili `tauri dev` olmadan doğrudan çalıştırılmış,
+yani Rust'ı izleyip yeniden başlatan izleyici yoktu.
+
+Tersi: `tauri dev` çalışırken `src-tauri` altındaki HER dosya değişikliği
+(`*_tests.rs` ve düzenleyicinin `*.tmp.<pid>` geçici dosyaları dâhil) "File …
+changed. Rebuilding application…" ile uygulamayı yeniden derleyip yeniden
+başlatıyor; kullanıcı o sırada çalışıyorsa penceresi yenilenir, süren komutlar
+ölür (çalışma alanı geri yüklenir). Rust dosyasına dokunmadan önce
+`ps -ax | grep "tauri dev"` ile bak, dokunacaksan değişiklikleri tek seferde yap
+ve söyle. `cargo test` yalnızca `target/`a yazdığı için izleyiciyi tetiklemiyor.
 
 **Araç zinciri kaçış dizilerini yiyor.** Kabuk heredoc'u ya da Python
 üzerinden dosyaya `\n`, `\r\n`, `\ ` yazarken tek/çift ters bölü kolayca
@@ -838,6 +1313,22 @@ ya da tam genişlikte bir şey çizilecekse tampona yazmak yerine DOM katmanınd
 kullanılmalı. Üçünün de testi var ve düşen test "bir liste güncellenmedi"
 demek, "kod bozuk" değil.
 
+**Kuyruğa giden çağrıyı eşzamanlı `expect` göremez.** Git yazma işlemleri
+`gitWrite` kuyruğunda mikro-görev olarak `api`ye gidiyor. "Şu çağrılmadı" diyen
+bir test `fireEvent`ten hemen sonra `expect` yaparsa çağrıdan ÖNCE çalışır ve
+koruma kalksa bile geçer; `await act(async () => {})` ile bekle. Aynı sebeple
+"ikinci tetikleme yok sayılıyor" testi ilk işlem SÜRERKEN saymamalı: koruma
+kalkınca da ikinci işlem kuyrukta bekler ve sayı 1 görünür. İlkini bitirip
+kuyruğun boşalmasını bekle, SONRA say. İkisi de mutasyonla (koruma kaynakta
+bozulup testin düştüğünü görerek) yakalandı; test yazarken bu denetimi yap.
+
+**Modül düzeyindeki kuyruk testler arasında sızıyor.** `gitWrite` kuyruğu
+`useStore.ts` modülünün değişkeni; bir testin çözülmemiş bıraktığı söz sonraki
+her testin yazma işlemini sonsuza dek bekletiyor ve hata kırılan testte değil
+ilgisiz bir testte görünüyor. `gitCommit.test.tsx` bekleyen sözleri `afterEach`te
+çözüyor; elle çözülen yeni bir söz kuruyorsan aynı yardımcıyı (`bekleyen`)
+kullan.
+
 ---
 
 ## 4. Doğrulama
@@ -850,5 +1341,13 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Bu oturumun sonunda: **1042 arayüz testi**, **133 Rust testi**, tip denetimi
-temiz.
+Son ölçüm (Stash oturumunun sonu): **1645 arayüz testi** (102 dosya), **252 Rust
+birim + 9 entegrasyon testi**, tip denetimi temiz. (Önceki satır 1042 ve 133
+diyordu; gerçekle örtüşmüyordu, güncellendi.)
+
+Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
+`.claude/worktrees/` altındaki iç içe worktree'lerin test dosyalarını da topluyor
+(git onları yok sayıyor ama vitest saymıyor). Bu ölçümde 91 dosya daha geliyordu ve
+bir oturum bir süre 2889 test bildirdi. Gerçek sayı için yalnızca izlenen dosyaları
+içeren bir kopyada ya da `--exclude '.claude/**'` ile koştur; worktree'lerden biri
+yarım işteyse ana paket de onun yüzünden düşebilir.

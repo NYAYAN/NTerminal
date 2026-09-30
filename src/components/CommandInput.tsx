@@ -1,11 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { tokenizeCommand } from "../lib/cmdline";
+import { typingOutsideTerminal } from "../lib/focus";
 import { passThroughSequence, resolveInputMode, SIGINT, stdinKeyAction } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
 import { promptedTabs } from "../lib/promptSeen";
+import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
+
+/**
+ * Kullanıcı komut kutusundan BAŞKA bir metin kutusuna mı yazıyor?
+ *
+ * Kutunun iki odak etkisi de buna bakıyor (gerekçesi kip etkisinde). Kural
+ * `focusTerminal`dakinin aynısı (`lib/focus.ts`); yalnızca kutunun kendisi
+ * "başka bir kutu" sayılmıyor.
+ */
+function typingElsewhere(): boolean {
+  return typingOutsideTerminal() && !document.activeElement?.closest(".command-input");
+}
 
 /**
  * Komut satırı — terminalin ızgarasının DIŞINDA.
@@ -185,7 +198,23 @@ export function CommandInput() {
     const session = sessions.get(tabId);
     if (!session) return;
     session.setAppInput(active);
-    if (!active) session.focus();
+    /*
+     * Odak taşınıyor — kullanıcı BAŞKA bir metin kutusuna yazmıyorsa.
+     *
+     * BİLDİRİLEN HATA: "klasör dizini alanına tıklayıp klavyeden yön tuşları
+     * ile klasör seçip enter basınca o klasör dizinine gidiyor, sonrasında yön
+     * tuşları ile seçim yapmaya devam edemiyorum. Mouse ile tıklamak
+     * gerekiyor." Dizin seçici `cd`'yi gerçek bir komut olarak gönderiyor ve
+     * açık kalıyor; komut başlayınca kutu yanıt satırına dönüyor, istem
+     * dönünce yine komut satırı oluyor. Odak etkileri her geçişte odağı
+     * koşulsuz taşıyordu — seçicinin arama kutusundan, ok tuşları da kutuya
+     * gidiyordu. Aynı yoldan yan paneldeki arama kutusuna yazarken biten bir
+     * komut da odağı çekip alıyordu.
+     *
+     * Kural `typingElsewhere` üzerinde; aşağıdaki ikinci odak etkisi de ona
+     * uyuyor.
+     */
+    if (!active && !typingElsewhere()) session.focus();
 
     /*
      * Temizlik ŞART, süs değil.
@@ -206,9 +235,14 @@ export function CommandInput() {
    * koşmuyor. Komut kenar çubuğundaki bir düğmeden (geçmiş, favori)
    * başladıysa odak o düğmede kalır ve programın sorusuna yazılan hiçbir yere
    * gitmezdi.
+   *
+   * Başka bir metin kutusundaki odağa DOKUNMUYOR, yukarıdaki etkiyle aynı
+   * kural: dizin seçici `cd`yi komut olarak gönderdiğinde bu etki koşuyor
+   * (komut satırı → yanıt satırı) ve seçicinin arama kutusundaki odağı
+   * alırsa bildirilen hata yeni kipten geri gelirdi.
    */
   useEffect(() => {
-    if (active) ref.current?.focus();
+    if (active && !typingElsewhere()) ref.current?.focus();
   }, [active, stdin, tabId]);
 
   /*
@@ -576,6 +610,26 @@ export function CommandInput() {
     if (suggest?.kind === "recent" && e.ctrlKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
       store.openHistorySuggestions(suggest.scope === "all" ? "tab" : "all");
+      return;
+    }
+
+    /*
+     * Panel açıkken Shift+Delete: seçili komutu GEÇMİŞTEN siler — onay
+     * sorarak, panelin kapsamında (bkz. `deleteSuggestionAt`). Tuşun neden bu
+     * olduğu `DELETE_SUGGESTION_KEY` üzerinde.
+     *
+     * Kutuda seçim varsa dokunulmuyor: Windows'ta Shift+Delete "kes" demek ve
+     * yazarken gelen listede kutu dolu olabilir. Klasör önerileri geçmiş
+     * değil; orada tuş kendi işini yapıyor.
+     */
+    if (
+      suggest &&
+      suggest.kind !== "dirs" &&
+      !boxSelection &&
+      matchCombo(e.nativeEvent, DELETE_SUGGESTION_KEY)
+    ) {
+      e.preventDefault();
+      void store.deleteSuggestionAt(suggest.index);
       return;
     }
 

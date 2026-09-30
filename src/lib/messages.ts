@@ -192,6 +192,162 @@ export const MESSAGES = {
     "Uzak dal; seçilince aynı adla yerel izleme dalı oluşur",
     "Remote branch; picking it creates a local tracking branch of the same name",
   ],
+  // Dal seçicide uzak dallar ayrı, açılıp kapanan bir bölümde (bkz.
+  // `pickerRows`). Başlığın yanındaki sayı, açmadan "orada bir şey var mı"
+  // sorusunu yanıtlıyor.
+  "git.remoteBranches": ["Uzak dallar", "Remote branches"],
+  "git.remoteGroupHint": [
+    "Yalnızca uzakta olan dallar (git fetch ile gelenler)",
+    "Branches that exist only on the remote (the ones fetched with git fetch)",
+  ],
+  // Uzaklar arkadan okunurken başlığın sayısı "…" (bkz. `REMOTES_GRACE_MS`).
+  "git.remotesLoading": ["Uzak dallar okunuyor…", "Reading remote branches…"],
+  // Tavanın ötesindeki dallar (bkz. `SECTION_ROW_LIMIT`): sayı gerçek, satırlar
+  // çizilmiyor. Binlerce dalda aranan dala kaydırarak değil, arayarak varılıyor.
+  "git.moreBranches.one": ["{n} dal daha — aramayı daraltın", "{n} more branch — narrow the search"],
+  "git.moreBranches.other": [
+    "{n} dal daha — aramayı daraltın",
+    "{n} more branches — narrow the search",
+  ],
+  // Değişiklikler panelinde commit ve push. Satırdaki kutu dosyayı commit'e
+  // ekliyor (`git add`), kaldırınca çıkarıyor (`git reset`); kutu "kısmen"
+  // durumunda dosyanın yalnızca bir kısmı indekste.
+  "git.stage": ["Commit'e ekle", "Include in commit"],
+  "git.unstage": ["Commit'ten çıkar", "Exclude from commit"],
+  "git.stagePartial": [
+    "Commit'e yalnızca eklenen kısım girer; kalanını da eklemek için bas",
+    "Only the staged part goes into the commit; press to include the rest",
+  ],
+  "git.selectAll": ["Tüm dosyaları commit'e ekle", "Include all files in the commit"],
+  "git.deselectAll": ["Seçimi kaldır", "Clear the selection"],
+  "git.stageFailed": ["Dosya seçimi değiştirilemedi", "Could not change the file selection"],
+  "git.selectedCount.one": ["{n} dosya seçili", "{n} file selected"],
+  "git.selectedCount.other": ["{n} dosya seçili", "{n} files selected"],
+  // Alan hem etiket hem yer tutucu: ikisi aynı şeyi söylüyor.
+  "git.commitMessage": ["Commit iletisi", "Commit message"],
+  "git.commit": ["Commit", "Commit"],
+  "git.committing": ["Commit atılıyor…", "Committing…"],
+  "git.commitHint": [
+    "Seçili dosyaları commit'le ({keys})",
+    "Commit the selected files ({keys})",
+  ],
+  // Düğme kapalıyken NEDEN kapalı olduğunu ipucu söylüyor; sırayla "önce ne
+  // yapmalıyım" sorusunun cevabı: önce dosya, sonra ileti.
+  "git.commitNoFiles": ["Önce commit'e girecek dosyaları seç", "Select the files to commit first"],
+  "git.commitNoMessage": ["Commit iletisi yaz", "Write a commit message"],
+  "git.committed": ["Commit atıldı: {hash}", "Committed: {hash}"],
+  "git.commitFailed": ["Commit atılamadı", "Commit failed"],
+  // Gönder düğmesi. "Yayınla": dalın uzakta karşılığı yok (yeni dal ya da
+  // uzaktan silinmiş), gönderince uzakta oluşuyor ve izleme kuruluyor.
+  "git.push": ["Push", "Push"],
+  "git.publish": ["Yayınla", "Publish"],
+  "git.pushing": ["Gönderiliyor…", "Pushing…"],
+  "git.pushHint.one": [
+    "{n} commit gönderilecek → {upstream}",
+    "{n} commit will be pushed → {upstream}",
+  ],
+  "git.pushHint.other": [
+    "{n} commit gönderilecek → {upstream}",
+    "{n} commits will be pushed → {upstream}",
+  ],
+  "git.publishHint": [
+    "Dal uzakta yok; yayınlanacak ve izleme kurulacak",
+    "The branch is not on the remote; it will be published and tracking will be set up",
+  ],
+  "git.pushNothing": ["Gönderilecek commit yok", "Nothing to push"],
+  "git.pushDetached": [
+    "HEAD bir dala bağlı değil; gönderilemez",
+    "HEAD is not on a branch; nothing can be pushed",
+  ],
+  "git.pushed": ["Gönderildi: {target}", "Pushed: {target}"],
+  "git.pushFailed": ["Gönderilemedi", "Push failed"],
+  // Uzak bizden ilerideyse push reddedilir; bunu düğmeye basmadan söylemek
+  // reddedilme metnini okumaktan iyi.
+  "git.behindHint.one": [
+    "Uzakta {n} yeni commit var; push reddedilebilir",
+    "The remote has {n} new commit; the push may be rejected",
+  ],
+  "git.behindHint.other": [
+    "Uzakta {n} yeni commit var; push reddedilebilir",
+    "The remote has {n} new commits; the push may be rejected",
+  ],
+  // Değişiklik yokken commit kutusu yok, yalnızca "gönderilmemiş var" satırı.
+  "git.unpushed.one": ["{n} commit gönderilmedi", "{n} commit not pushed yet"],
+  "git.unpushed.other": ["{n} commit gönderilmedi", "{n} commits not pushed yet"],
+  "git.notPublished": ["Bu dal uzakta yok", "This branch is not on the remote"],
+  // Stash: değişiklikleri geçici olarak kenara alma. Bölüm başlığı, atma penceresi
+  // ve liste (bkz. `StashDialog`, `StashSection`). `app.stash` Değişiklikler
+  // listesindeki bölümün başlığı; `git.stash` commit kutusundaki düğme.
+  "app.stash": ["Stash", "Stash"],
+  "git.stash": ["Stash", "Stash"],
+  "git.stashHint": [
+    "Seçtiğin değişiklikleri geçici olarak kenara al (git stash)",
+    "Set the changes you pick aside temporarily (git stash)",
+  ],
+  "git.stashUnborn": [
+    "İlk commit atılmadan stash kullanılamaz",
+    "Stash needs at least one commit",
+  ],
+  "git.stashTitle": ["Değişiklikleri stash'e at", "Stash changes"],
+  "git.stashNameLabel": ["Ad", "Name"],
+  "git.stashNamePlaceholder": [
+    "İsteğe bağlı: ör. ayar penceresi denemesi",
+    "Optional: e.g. settings dialog experiment",
+  ],
+  "git.stashSelectAll": ["Tüm dosyaları seç", "Select all files"],
+  "git.stashUntrackedHint": [
+    "Takipsiz dosyalar da stash'e alınır (git stash -u)",
+    "Untracked files are stashed too (git stash -u)",
+  ],
+  "git.stashNoFiles": ["Önce en az bir dosya seç", "Select at least one file first"],
+  "git.stashConfirm": ["Stash'e at", "Stash"],
+  "git.stashing": ["Stash'e atılıyor…", "Stashing…"],
+  "git.stashDone": ["Stash'e atıldı: {name}", "Stashed: {name}"],
+  "git.stashDoneUnnamed": ["Stash'e atıldı", "Stashed"],
+  "git.stashFailed": ["Stash'e atılamadı", "Could not stash"],
+  "git.stashEmpty": ["Stash yok", "No stashes"],
+  "git.stashListFailed": ["Stash listesi okunamadı", "Could not read the stash list"],
+  "git.stashEmptyHint": [
+    "Değişiklikleri geçici olarak kenara almak için commit kutusundaki Stash düğmesini kullan.",
+    "Use the Stash button in the commit box to set changes aside temporarily.",
+  ],
+  // Başlıktaki ayar simgesinin ipucu; içindeki iki kutu uygula eyleminin nasıl
+  // çalışacağını belirliyor.
+  "git.stashOptions": ["Stash seçenekleri", "Stash options"],
+  "git.stashPop": ["Uyguladıktan sonra sil (pop)", "Delete after applying (pop)"],
+  "git.stashPopHint": [
+    "Açıksa uygulanan stash listeden silinir; çakışma olursa silinmez",
+    "When on, the applied stash is removed from the list; it stays if there is a conflict",
+  ],
+  "git.stashIndex": ["İndeksi geri yükle", "Reinstate index"],
+  "git.stashIndexHint": [
+    "Stash'e atılırken commit'e eklenmiş olanlar yine eklenmiş gelir (git stash --index)",
+    "Changes that were staged when stashed come back staged (git stash --index)",
+  ],
+  // Satır eylemleri. Uygula'nın ipucu açık olan seçeneğe göre değişiyor: aynı
+  // simge "koru" da diyebilir "sil" de, hangisinin olacağı basmadan okunmalı.
+  "git.stashApplyKeep": ["Uygula (stash listede kalır)", "Apply (the stash stays in the list)"],
+  "git.stashApplyPop": ["Uygula ve sil", "Apply and delete"],
+  "git.stashDrop": ["Stash'i sil", "Delete the stash"],
+  "git.stashApplied": ["Uygulandı: {name}", "Applied: {name}"],
+  "git.stashPopped": ["Uygulandı ve silindi: {name}", "Applied and deleted: {name}"],
+  "git.stashDropped": ["Silindi: {name}", "Deleted: {name}"],
+  "git.stashApplyFailed": ["Stash uygulanamadı", "Could not apply the stash"],
+  "git.stashDropFailed": ["Stash silinemedi", "Could not delete the stash"],
+  "git.stashUnnamed": ["Adsız", "Unnamed"],
+  "git.stashMoreFiles.one": ["… ve {n} dosya daha", "… and {n} more file"],
+  "git.stashMoreFiles.other": ["… ve {n} dosya daha", "… and {n} more files"],
+  "git.stashNoFilesInside": ["Bu stash'te dosya bulunamadı", "No files found in this stash"],
+  "confirm.dropStashTitle": ["Stash'i sil", "Delete stash"],
+  "confirm.dropStashMessage": [
+    "“{name}” stash'i silinsin mi?",
+    "Delete the stash “{name}”?",
+  ],
+  // Silmek geri ALINAMAZ; çıkış yolu da yazıyor: önce uygulanabilir.
+  "confirm.dropStashDetail": [
+    "Stash'teki değişiklikler geri getirilemez. Silmeden önce Uygula ile çalışma ağacına alabilirsin.",
+    "The changes in the stash cannot be recovered. You can apply it to the working tree before deleting.",
+  ],
   "node.version": ["Node sürümü ({manager})", "Node version ({manager})"],
   "node.pick": ["Kurulu sürümler arasında geç", "Switch between installed versions"],
   "node.noneInUse": ["Sürüm seçilmedi", "No version selected"],
@@ -255,6 +411,24 @@ export const MESSAGES = {
   "confirm.deleteHistory.other": [
     "{n} kayıt geçmişten silinecek.",
     "{n} records will be deleted from the history.",
+  ],
+  // Yukarı okun açtığı panelden komut silme. Kapsam metinde: panel o an "bu
+  // sekme"yi gösteriyorsa silme de yalnızca bu sekmenin kayıtlarını kapsıyor.
+  "confirm.forgetTabMessage": [
+    "\"{command}\" bu sekmenin geçmişinden silinecek.",
+    "\"{command}\" will be deleted from this tab's history.",
+  ],
+  "confirm.forgetTabDetail": [
+    "Komutun bu sekmedeki bütün kayıtları silinir; diğer sekmelerin geçmişi değişmez.",
+    "Every record of the command in this tab is deleted; other tabs' history does not change.",
+  ],
+  "confirm.forgetAllMessage": [
+    "\"{command}\" bütün sekmelerin geçmişinden silinecek.",
+    "\"{command}\" will be deleted from the history of every tab.",
+  ],
+  "confirm.forgetAllDetail": [
+    "Komutun bütün kayıtları silinir, hangi sekmede çalıştırılmış olursa olsun.",
+    "Every record of the command is deleted, whichever tab ran it.",
   ],
   "confirm.deleteProfileTitle": ["Profili sil", "Delete profile"],
   "confirm.deleteProfileMessage": [
@@ -956,6 +1130,12 @@ export const MESSAGES = {
   "suggest.hintNav": ["gez", "navigate"],
   "suggest.hintAccept": ["kabul et", "accept"],
   "suggest.hintDismiss": ["kapat", "dismiss"],
+  "suggest.hintDelete": ["sil", "delete"],
+  "suggest.deleteTitle": ["Geçmişten sil ({key})", "Delete from history ({key})"],
+  "suggest.deleteFailed": [
+    "Komut geçmişten silinemedi",
+    "Could not delete the command from the history",
+  ],
   "settings.appSuggestions": [
     "Uygulamanın kendi geçmişinden öneri (her kabukta)",
     "Suggest from the app's own history (in every shell)",

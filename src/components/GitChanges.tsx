@@ -9,9 +9,10 @@ import {
   type DiffLine,
 } from "../lib/diff";
 import { baseName, dirName } from "../lib/format";
+import { diffKind, stageState, unstagePaths } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
-import { sessions, useStore } from "../store/useStore";
+import { useStore } from "../store/useStore";
 import {
   ArrowIcon,
   ChevronIcon,
@@ -19,13 +20,11 @@ import {
   OpenFileIcon,
   RevertIcon,
   UnfoldIcon,
-  GitAddedIcon,
-  GitDeletedIcon,
-  GitModifiedIcon,
-  GitRenamedIcon,
-  GitUntrackedIcon,
 } from "./Icons";
 import type { GitChange } from "../types";
+import { GitCommitBox } from "./GitCommit";
+import { useActiveGit, useLabel } from "./gitShared";
+import { StashSection } from "./StashSection";
 
 /**
  * Değişen dosyalar — sağ panelin "Değişiklikler" sekmesi.
@@ -44,45 +43,31 @@ import type { GitChange } from "../types";
  * gerekiyordu ve çıktı terminale gidip listeyi ekrandan atıyordu. Oysa aranan
  * şey "şu dosyada ne değişti" sorusunun listeyi KAYBETMEDEN yanıtlanması.
  *
- * Satırlar AÇIK geliyor: aranan şey "neler değişmiş" ve onun yanıtı listenin
- * tamamı. Bedeli de bilinçli karşılandı — istekler dörtlü bir kuyruktan
- * geçiyor (`DIFF_LIMIT`), yoksa yüz dosyalık bir değişiklik yüz `git` süreci
- * demek.
+ * Satırlar KAPALI geliyor (istek: "Değişiklikler default olarak hepsi kapalı
+ * gelsin"): liste önce dosya adlarını gösteriyor, fark tıklayınca açılıyor.
+ * Önceki hâli tersiydi — "neler değişmiş" sorusunun yanıtı listenin tamamı diye
+ * satırlar açık geliyordu. Fark yalnızca AÇIK satır için isteniyor; yani elli
+ * dosyalık bir değişiklik elli `git diff` ile başlamıyor. "Hepsini aç" düğmesi
+ * ise hepsini birden istiyor ve dörtlü kuyruktan (`DIFF_LIMIT`) geçiyor.
  */
 /**
- * Etkin sekmenin git durumu.
+ * Toplu katlamanın yönü: hiçbiri açık değilse düğme AÇAR, yoksa DARALTIR.
  *
- * AYRI bir kanca çünkü iki yer aynı gerçeği görmek zorunda: liste burası ve
- * panel başlığındaki toplu aç/kapa düğmesi (`SidePanel`). Türetmeyi iki kez
- * yazmak, ikisinin farklı dosya listesine bakabileceği bir yol açardı —
- * düğme "hepsi kapalı" derken listede açık satır kalması gibi.
- */
-export function useActiveGit() {
-  const groups = useStore((s) => s.groups);
-  const activeGroupId = useStore((s) => s.activeGroupId);
-  const allGit = useStore((s) => s.gitInfo);
-
-  const group = groups.find((g) => g.id === activeGroupId);
-  const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
-  const cwd = tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
-  const git = cwd ? (allGit[cwd] ?? null) : null;
-  return { cwd, git, changes: git?.changes ?? [] };
-}
-
-/**
- * Toplu katlamanın yönü: hepsi kapalıysa düğme AÇAR, yoksa DARALTIR.
+ * Kısmen açıkken (biri açık, ötekiler kapalı) düğme DARALTIR: "listeyi topla"
+ * her durumda tek basış, ikinci basış hepsini açıyor. Boş listede "hepsi kapalı"
+ * saymıyoruz (`length > 0`): dosya yokken düğme zaten çizilmiyor, ama kural
+ * burada olunca çağıranın ayrıca denetlemesi gerekmiyor.
  *
- * Boş listede "hepsi kapalı" saymıyoruz (`length > 0`): dosya yokken düğme
- * zaten çizilmiyor, ama kural burada olunca çağıranın ayrıca denetlemesi
- * gerekmiyor.
+ * `expanded` listede artık olmayan yolları da taşıyabilir (bir dosya commit'lendi);
+ * yalnızca GÜNCEL satırlara bakıldığı için sayılmıyorlar.
  */
 export function allFilesCollapsed(
   changes: readonly GitChange[],
-  collapsed: readonly string[],
+  expanded: readonly string[],
 ): boolean {
   if (changes.length === 0) return false;
-  const set = new Set(collapsed);
-  return changes.every((change) => set.has(change.path));
+  const open = new Set(expanded);
+  return changes.every((change) => !open.has(change.path));
 }
 
 export function GitChanges() {
@@ -90,62 +75,77 @@ export function GitChanges() {
   const { cwd, git, changes } = useActiveGit();
 
   /*
-   * Satırlar AÇIK açılıyor; listede tutulan da KAPATILANLAR.
+   * Satırlar KAPALI açılıyor; listede tutulan da AÇILANLAR.
    *
-   * İki karar var ve ikisi de bilinçli.
+   * Küme boş başlıyor: liste dosya adlarıyla geliyor, farkı görmek isteyen
+   * satıra tıklıyor (ya da başlıktaki düğmeyle hepsini açıyor). Önceki hâli
+   * tersiydi ve akordeondan sonra gelmişti: satırlar açık geliyor, tutulan
+   * KAPATILANLAR oluyordu. İstek üzerine yön döndü; yeni beliren bir dosya da
+   * artık kapalı geliyor ve fark, satır açılana kadar istenmiyor.
    *
-   * 1. Varsayılan açık. Önceki hâli akordeondu: aynı anda tek bir dosya
-   *    açılıyor, ötekine geçmek öncekini kapatıyordu. "Neler değişmiş"
-   *    sorusunun yanıtı ise listenin TAMAMI — her dosyayı tek tek açmak
-   *    aynı soruyu dosya sayısı kadar sormak demekti.
-   *
-   * 2. Kümede açık olanlar değil KAPALI olanlar duruyor. Liste git
-   *    yoklamasıyla kendiliğinden değişiyor; "açıklar" kümesi tutulsaydı yeni
-   *    beliren bir dosya kapalı gelir ve tam da görülmesi gereken şey gizli
-   *    kalırdı. Bu yönde ise listeye ne girerse açık geliyor, kapalı kalan
-   *    yalnızca kullanıcının elle kapattığı.
-   *
-   * Küme DEPODA (`ui.gitCollapsed`), bileşenin yerel durumunda değil: toplu
+   * Küme DEPODA (`ui.gitExpanded`), bileşenin yerel durumunda değil: toplu
    * aç/kapa düğmesi panelin başlığında duruyor ve aynı gerçeği görmeli.
    */
-  const collapsed = useStore((s) => s.ui.gitCollapsed);
+  const expanded = useStore((s) => s.ui.gitExpanded);
   const showPaths = useStore((s) => s.ui.gitShowPaths);
   const setUi = useStore((s) => s.setUi);
 
   const toggle = (path: string) => {
-    const next = new Set(collapsed);
+    const next = new Set(expanded);
     if (!next.delete(path)) next.add(path);
-    setUi({ gitCollapsed: [...next] });
+    setUi({ gitExpanded: [...next] });
   };
 
-  const collapsedSet = useMemo(() => new Set(collapsed), [collapsed]);
+  const expandedSet = useMemo(() => new Set(expanded), [expanded]);
 
   return (
-    <div className="panel-list git-list">
+    <>
+      {/* Commit kutusu listenin DIŞINDA ve üstünde: liste kayarken ileti alanı
+          ve düğmeler yerinde kalıyor. Kutu kendi görünürlüğüne kendisi karar
+          veriyor (değişiklik yok ve gönderilecek bir şey yoksa hiçbir şey
+          çizmiyor). */}
+      {git && cwd && <GitCommitBox cwd={cwd} git={git} changes={changes} />}
+      <div className="panel-list git-list">
       {!git && <div className="pop-empty">{t("git.noRepo")}</div>}
+      {/* Stash bölümü listenin en üstünde ve depo varken HER ZAMAN: temiz bir
+          çalışma ağacında da stash'i uygulamak gerekiyor ve o zaman aşağıdaki
+          "değişiklik yok" yazısından başka bir şey görünmezdi. Kendi görünürlüğüne
+          kendisi karar veriyor (depo yoksa hiçbir şey çizmiyor). */}
+      <StashSection />
       {git && changes.length === 0 && <div className="pop-empty">{t("git.clean")}</div>}
 
       {changes.map((change) => (
         <ChangeRow
-          key={change.status + change.path}
+          /*
+           * Anahtar yalnızca YOL, durum değil.
+           *
+           * Önceki hâli `status + path` idi. Kutuya basmak durumu değiştiriyor
+           * (` M` → `M `), yani satır SÖKÜLÜP yeniden kuruluyordu: açılmış
+           * bağlam satırları kayboluyor, fark yeniden isteniyor ve — asıl kötüsü
+           * — klavyeyle Boşluk'a basan kişinin odağı yok oluyordu. Yol bir
+           * dosyayı tanımlıyor; durum onun bir özelliği.
+           */
+          key={change.path}
           change={change}
           cwd={cwd!}
           root={git?.root || cwd!}
-          open={!collapsedSet.has(change.path)}
+          open={expandedSet.has(change.path)}
           showPaths={showPaths}
           onToggle={() => toggle(change.path)}
         />
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 
 /**
  * Aynı anda koşan `git diff` sayısı.
  *
- * Sınır ARTIK GEREKLİ: akordeon hâlinde tek seferde tek satır açıktı, yani
- * istek de tek taneydi. Hepsi açık açılınca yüz dosyalık bir değişiklik yüz
- * `git` sürecini AYNI ANDA doğuruyor ve makine bunu hissediyor.
+ * Sınır GEREKLİ: akordeon hâlinde tek seferde tek satır açıktı, yani istek de
+ * tek taneydi. "Hepsini aç" düğmesi yüz dosyalık bir değişiklikte yüz `git`
+ * sürecini AYNI ANDA doğuruyor ve makine bunu hissediyor (satırlar artık kapalı
+ * geliyor, yani bu yalnızca o düğmeye basınca oluyor).
  *
  * Dört: bekleyen iş diskten okuma, çekirdek sayısını doldurmanın karşılığı
  * yok; kuyruk sıradan bir depoda zaten ilk karelerde eriyor.
@@ -200,51 +200,6 @@ function acquireDiffSlot(): Promise<() => void> {
   });
 }
 
-/**
- * Durum harflerinin okunabilir karşılığı.
- *
- * Porcelain iki karakter veriyor: ilki indeks, ikincisi çalışma ağacı. `??`
- * takip edilmeyen. Bileşik durumlarda (`AM`) İNDEKS harfi belirleyici, çünkü
- * commit'e girecek olan o.
- *
- * ## Renkler VS Code / GitHub yerleşiği
- *
- * Yeni, takip edilmeyen ve yeniden adlandırılan YEŞİL; değiştirilen SARI;
- * silinen KIRMIZI. Kullanıcının her gün baktığı kaynak denetimi listesi bu
- * dili konuşuyor ve iki yüzey arasında renk çevirmek zorunda kalmamalı.
- *
- * `git status`un KENDİ renkleri (sahnelenen yeşil, sahnelenmeyen her şey
- * kırmızı) bilinçli olarak alınmadı: o şema "ne tür değişiklik" değil
- * "sahnelendi mi" eksenli, yani takip edilmeyeni değiştirilenle aynı kırmızıya
- * indiriyor — bu listenin sorduğu soru o değil.
- *
- * ## Neden yazı değil simge
- *
- * Etiket ("DEĞİŞTİ", "YENİDEN ADLANDIRILDI") sabit 88px'lik bir sütun
- * tutuyordu ve o sütun dosya YOLUNDAN çalınmıştı: panel dar olduğunda asıl
- * aranan bilgi kırpılıyor, her satırda tekrarlanan aynı beş kelimeden biri
- * yerinde duruyordu. Durum listede zaten renkle kodlanmış; simge o rengi
- * taşıyor, tam metin ipucunda ve ekran okuyucuda kalıyor — yani hiçbir bilgi
- * kaybolmuyor, yalnızca yerini bırakıyor.
- */
-type StatusLook = {
-  text: string;
-  tone: string;
-  Icon: (props: { size?: number; className?: string }) => React.ReactElement;
-};
-
-function useLabel(status: string): StatusLook {
-  const t = useT();
-  const trimmed = status.trim();
-  if (trimmed === "??")
-    return { text: t("git.untracked"), tone: "untracked", Icon: GitUntrackedIcon };
-  const kod = trimmed[0] ?? "";
-  if (kod === "A") return { text: t("git.added"), tone: "new", Icon: GitAddedIcon };
-  if (kod === "D") return { text: t("git.deleted"), tone: "del", Icon: GitDeletedIcon };
-  if (kod === "R") return { text: t("git.renamed"), tone: "ren", Icon: GitRenamedIcon };
-  return { text: t("git.modified"), tone: "mod", Icon: GitModifiedIcon };
-}
-
 function ChangeRow({
   change,
   cwd,
@@ -265,6 +220,25 @@ function ChangeRow({
 }) {
   const t = useT();
   const { text, tone, Icon } = useLabel(change.status);
+  /** Dosyanın commit'e girme durumu: kutunun üç hâli. */
+  const stage = stageState(change.status);
+  /**
+   * Farkın nereden alınacağını belirleyen sınıf; sahnelemeden BAĞIMSIZ.
+   *
+   * Fark isteğinin anahtarı ve bağımlılığı ham durum değil bu: fark HEAD'e karşı
+   * alınıyor (bkz. `git.rs` `diff`), yani kutuya basmak içeriği değiştirmiyor ve
+   * her basışta `git diff` yeniden koşmamalı.
+   */
+  const kind = diffKind(change.status);
+  /**
+   * Kutuya az önce basıldı ve işlem sürüyor: kutu hedef durumu gösteriyor.
+   *
+   * `git add` + tazeleme yüzlerce milisaniye sürebiliyor; bu süre boyunca kutu
+   * eski durumunda kalırsa basış işlemedi sanılıyor ve ikinci kez basılıyor
+   * (ki bu ilkini geri alır). İşlem BİTİNCE (başarılı ya da değil) gerçek
+   * durum çiziliyor: hata olduysa kutu kendiliğinden eski hâline dönüyor.
+   */
+  const [pending, setPending] = useState<boolean | null>(null);
   const [lines, setLines] = useState<DiffLine[] | null>(null);
   /**
    * Dosyanın ÇALIŞMA AĞACINDAKİ satırları; okunamadıysa boş dizi.
@@ -339,12 +313,12 @@ function ChangeRow({
    */
   useEffect(() => {
     if (!open) return;
-    const key = `${root}|${cwd}|${change.path}|${change.status}`;
+    const key = `${root}|${cwd}|${change.path}|${kind}`;
     if (loadedKey.current === key) return;
     loadedKey.current = key;
 
     let cancelled = false;
-    const untracked = change.status.trim() === "??";
+    const untracked = kind === "untracked";
     void (async () => {
       const release = await acquireDiffSlot();
       try {
@@ -372,7 +346,7 @@ function ChangeRow({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, root, cwd, change.path, change.status]);
+  }, [open, root, cwd, change.path, kind]);
 
   /*
    * Çizilecek öğeler: fark satırları ve aradaki GİZLİ aralıklar.
@@ -414,6 +388,30 @@ function ChangeRow({
   const fullPath = `${root}/${change.path}`;
   /** Yolun klasör kısmı; kökteki dosyada `null` ve ön ek hiç çizilmiyor. */
   const dir = dirName(change.path);
+
+  /**
+   * Kutuya basmak: commit'e ekle ya da çıkar.
+   *
+   * `none` ve `partial` durumunda EKLİYOR: kısmen eklenmiş dosyada kutu
+   * "işaretli değil" sayılıyor ve basış geri kalan düzenlemeleri de dâhil
+   * ediyor. Yalnızca tam eklenmiş dosyada çıkarıyor. Hata bildirimde: satırın
+   * kendine ait bir hata alanı yok ve bir dosya eklenememesi nadir (kilitli
+   * indeks gibi), toplu kutudaki gibi kalıcı bir kutuyu hak etmiyor.
+   */
+  const toggleStage = async () => {
+    if (pending !== null) return;
+    const store = useStore.getState();
+    const include = stage !== "staged";
+    setPending(include);
+    try {
+      if (include) await store.stageFiles(cwd, [change.path]);
+      else await store.unstageFiles(cwd, unstagePaths([change]));
+    } catch (err) {
+      store.toast(String(err), "err");
+    } finally {
+      setPending(null);
+    }
+  };
 
   /*
    * Geri alma YIKICI, o yüzden her zaman soruyor.
@@ -457,6 +455,23 @@ function ChangeRow({
         kendiliğinden doğru hesaplanıyor.
       */}
       <div className="git-head">
+      {/* Commit'e ekle / çıkar.
+       *
+       * Satırın SOLUNDA ve katlama düğmesinin DIŞINDA: satırın kendisi bir
+       * düğme ve iç içe etkileşimli öge hem geçersiz işaretleme hem karışık
+       * tıklama (kutuya basmak satırı katlıyordu). Üç hâl: işaretli (tam
+       * eklendi), işaretsiz, ara (kısmen). Ara hâl yalnızca DOM özelliği. */}
+      <input
+        type="checkbox"
+        className="git-check"
+        checked={pending ?? stage === "staged"}
+        ref={(el) => {
+          if (el) el.indeterminate = pending === null && stage === "partial";
+        }}
+        onChange={() => void toggleStage()}
+        title={t(stage === "staged" ? "git.unstage" : stage === "partial" ? "git.stagePartial" : "git.stage")}
+        aria-label={t(stage === "staged" ? "git.unstage" : stage === "partial" ? "git.stagePartial" : "git.stage")}
+      />
       <button type="button" className="git-row" title={change.path} onClick={onToggle}>
         <span className="git-caret" aria-hidden="true">
           <ChevronIcon open={open} size={11} />

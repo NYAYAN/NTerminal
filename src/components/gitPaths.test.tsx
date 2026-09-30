@@ -65,9 +65,9 @@ function seed(changes: { status: string; path: string }[]) {
     groups: [group()],
     activeGroupId: "g1",
     gitInfo: {
-      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, changes, root: CWD },
+      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, upstream: "origin/main", unborn: false, staged: 0, stashCount: 0, changes, root: CWD },
     },
-    ui: { ...state.ui, historyOpen: true, panelMode: "git", gitCollapsed: [], gitShowPaths: false },
+    ui: { ...state.ui, historyOpen: true, panelMode: "git", gitExpanded: [], gitShowPaths: false },
   });
 }
 

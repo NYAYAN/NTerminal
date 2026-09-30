@@ -9,6 +9,7 @@ import type {
   FileText,
   GitBranch,
   GitInfo,
+  GitStash,
   Bootstrap,
   BundleInfo,
   ExportOptions,
@@ -30,6 +31,7 @@ import type {
   Settings,
   SpawnResult,
   SpawnSpec,
+  StashFiles,
   Workspace,
 } from "../types";
 
@@ -98,13 +100,70 @@ export const api = {
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
-  gitBranches: (path: string) => invoke<GitBranch[]>("git_branches", { path }),
+  /**
+   * Depodaki dallar, en son commit alan başta. `remotes: false` yalnızca yerel
+   * dallar: uzak dal sayısından bağımsız ve hızlı, seçici önce onu çiziyor.
+   */
+  gitBranches: (path: string, remotes: boolean) =>
+    invoke<GitBranch[]>("git_branches", { path, remotes }),
   /**
    * Bir dosyadaki değişiklikleri geri alır. YIKICI: takip edilen dosya HEAD'e
    * dönüyor, takipsiz dosya siliniyor. Onay çağıran tarafta soruluyor.
    */
   gitRevert: (path: string, file: string, untracked: boolean) =>
     invoke<void>("git_revert", { path, file, untracked }),
+  /**
+   * Yolları indekse ekler (`git add`). Yollar depo köküne göre; `[`, `*` gibi
+   * karakterler desen değil dosya adı sayılıyor (Rust tarafında ölçüldü).
+   */
+  gitStage: (path: string, files: string[]) => invoke<void>("git_stage", { path, files }),
+  /**
+   * Yolları indeksten çıkarır; dosyalara DOKUNMAZ. Yeniden adlandırmada eski ve
+   * yeni yol birlikte verilmeli.
+   */
+  gitUnstage: (path: string, files: string[]) => invoke<void>("git_unstage", { path, files }),
+  /**
+   * İndeksi commit'ler; başarıda KISA nesne kimliğini döner. Hata metni git'in
+   * kendi cümlesi (kanca çıktısı dâhil), olduğu gibi gösterilmeli.
+   */
+  gitCommit: (path: string, message: string) => invoke<string>("git_commit", { path, message }),
+  /**
+   * Geçerli dalı uzağa gönderir; başarıda hedefi (`origin/main`) döner. Etiket
+   * ve zorla itme YOK. Yukarı akışı olmayan dal yayınlanır (`-u`).
+   */
+  gitPush: (path: string) => invoke<string>("git_push", { path }),
+  /** Deponun stash'leri, en yeni başta; depo değilse boş liste. */
+  gitStashes: (path: string) => invoke<GitStash[]>("git_stashes", { path }),
+  /** Bir stash'in dosyaları (takipli + takipsiz) ve toplam dosya sayısı. */
+  gitStashFiles: (path: string, id: string) =>
+    invoke<StashFiles>("git_stash_files", { path, id }),
+  /**
+   * Stash'teki tek dosyanın farkı; okunamazsa `null`. Yeniden adlandırmada eski
+   * yol da verilmeli, yoksa git eşleşmeyi göremiyor.
+   */
+  gitStashDiff: (
+    path: string,
+    id: string,
+    file: string,
+    origPath: string | undefined,
+    untracked: boolean,
+  ) => invoke<string | null>("git_stash_diff", { path, id, file, origPath, untracked }),
+  /**
+   * Yolları stash'e atar; başarıda yeni stash'in kimliğini döner. Seçimde takipsiz
+   * dosya varsa `includeUntracked` şart (git onsuz yolu bulamıyor). Hiçbir şey
+   * stash'lenmediyse hata: git bu durumda çıkış kodu 0 veriyor, Rust tarafı
+   * `refs/stash`in değişip değişmediğine bakıyor.
+   */
+  gitStashPush: (path: string, message: string, files: string[], includeUntracked: boolean) =>
+    invoke<string>("git_stash_push", { path, message, files, includeUntracked }),
+  /**
+   * Bir stash'i uygular; `pop` başarıda siler. `index`: stash'e atılırken
+   * sahnelenmiş olanlar sahnelenmiş olarak geri gelsin (`--index`).
+   */
+  gitStashApply: (path: string, id: string, pop: boolean, index: boolean) =>
+    invoke<void>("git_stash_apply", { path, id, pop, index }),
+  /** Bir stash'i siler; geri alınamaz, onay çağıran tarafta soruluyor. */
+  gitStashDrop: (path: string, id: string) => invoke<void>("git_stash_drop", { path, id }),
   gitFingerprint: (path: string) => invoke<string | null>("git_fingerprint", { path }),
   /** nvm ile kurulu Node sürümleri; nvm yoksa `null`. Süreç başlatmıyor. */
   nodeEnv: () => invoke<NodeEnv | null>("node_env"),

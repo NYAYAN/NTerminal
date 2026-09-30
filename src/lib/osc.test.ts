@@ -262,6 +262,8 @@ describe("kısayollar", () => {
   it("bileşimi okunabilir yazar", () => {
     expect(prettyCombo("ctrl+shift+h")).toBe("Ctrl+Shift+H");
     expect(prettyCombo("Ctrl+Tab")).toBe("Ctrl+Tab");
+    // Öneri panelinin silme ipucu; küçük harfli "Shift+delete" yazıyordu.
+    expect(prettyCombo("Shift+Delete")).toBe("Shift+Del");
   });
 
   it("geçersiz bileşimi ayrıştırmaz", () => {

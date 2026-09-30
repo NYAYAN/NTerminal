@@ -17,6 +17,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const removeByCommand = vi.fn(async () => 1);
 const removeFavorites = vi.fn(async () => 1);
 const historyDelete = vi.fn(async () => 1);
+const historyQuery = vi.fn(async () => ({
+  entries: [] as { id: string; command: string; tabId: string }[],
+  total: 0,
+  grandTotal: 0,
+}));
 
 vi.mock("../lib/ipc", () => ({
   api: new Proxy(
@@ -27,7 +32,7 @@ vi.mock("../lib/ipc", () => ({
       favoritesList: async () => [],
       saveWorkspace: async () => {},
       scrollbackDelete: async () => {},
-      historyQuery: async () => ({ entries: [], total: 0, grandTotal: 0 }),
+      historyQuery: (...a: unknown[]) => historyQuery(...(a as [])),
       saveSettings: async () => {},
     } as Record<string, unknown>,
     {
@@ -98,6 +103,8 @@ beforeEach(() => {
   removeByCommand.mockClear();
   removeFavorites.mockClear();
   historyDelete.mockClear();
+  // `mockReset`: aşağıdaki bir testin verdiği kayıtlar sonrakine taşınmasın.
+  historyQuery.mockReset();
   useStore.setState({
     groups: [group("g1", "Yayın"), group("g2", "Geliştirme")],
     activeGroupId: "g1",
@@ -177,5 +184,40 @@ describe("favori silme", () => {
     stubConfirm(true);
     await useStore.getState().toggleFavorite("git status");
     expect(asked).toEqual([]);
+  });
+});
+
+describe("öneri panelinden geçmiş silme", () => {
+  // Panelin × düğmesi ve Shift+Delete buradan geçiyor. Liste yazarken gelen
+  // ön ek listesi: kapsamı bütün sekmeler, sekme kurmaya gerek yok.
+  beforeEach(() => {
+    const ui = useStore.getState().ui;
+    useStore.setState({
+      suggestHistory: [{ command: "npm test", cwd: null, tabId: "t1" }],
+      ui: { ...ui, suggest: { items: ["npm test"], index: 0, input: "np", kind: "history" } },
+    });
+    historyQuery.mockResolvedValue({
+      entries: [{ id: "h1", command: "npm test", tabId: "t1" }],
+      total: 1,
+      grandTotal: 1,
+    });
+  });
+
+  it("onay soruyor ve komutu soruda adıyla söylüyor", async () => {
+    stubConfirm(true);
+    await useStore.getState().deleteSuggestionAt(0);
+    expect(asked).toHaveLength(1);
+    expect(asked[0].message).toContain("npm test");
+    expect(historyDelete).toHaveBeenCalledWith(["h1"]);
+    expect(useStore.getState().suggestHistory).toEqual([]);
+  });
+
+  it("vazgeçince silmiyor, panel de olduğu gibi kalıyor", async () => {
+    stubConfirm(false);
+    await useStore.getState().deleteSuggestionAt(0);
+    expect(historyQuery, "vazgeçilmesine rağmen disk arandı").not.toHaveBeenCalled();
+    expect(historyDelete, "vazgeçilmesine rağmen silindi").not.toHaveBeenCalled();
+    expect(useStore.getState().suggestHistory).toHaveLength(1);
+    expect(useStore.getState().ui.suggest?.items).toEqual(["npm test"]);
   });
 });

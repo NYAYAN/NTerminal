@@ -4,7 +4,8 @@ import { useT } from "../lib/i18n";
 import type { MsgKey } from "../lib/messages";
 import { useStore, type SidePanelMode } from "../store/useStore";
 import { FavoritesPanel } from "./FavoritesPanel";
-import { GitChanges, allFilesCollapsed, useActiveGit } from "./GitChanges";
+import { GitChanges, allFilesCollapsed } from "./GitChanges";
+import { useActiveGit } from "./gitShared";
 import { HistoryPanel } from "./HistoryPanel";
 import { CollapseAllIcon, ExpandAllIcon, FolderIcon } from "./Icons";
 
@@ -34,8 +35,8 @@ export function SidePanel() {
 
   // Toplu katlama düğmesi için: liste ile AYNI türetme (bkz. `useActiveGit`).
   const { changes } = useActiveGit();
-  const gitCollapsed = useStore((s) => s.ui.gitCollapsed);
-  const allCollapsed = allFilesCollapsed(changes, gitCollapsed);
+  const gitExpanded = useStore((s) => s.ui.gitExpanded);
+  const allCollapsed = allFilesCollapsed(changes, gitExpanded);
   const showPaths = useStore((s) => s.ui.gitShowPaths);
 
   const [width, setWidth] = useState(storedWidth);
@@ -91,7 +92,7 @@ export function SidePanel() {
               className={mode === key ? "on" : ""}
               onClick={() => setUi({ panelMode: key })}
             >
-              {t(MODE_KEYS[key])}
+              <span className="panel-tab-label">{t(MODE_KEYS[key])}</span>
               {key === "favorites" && favoriteCount > 0 && (
                 <span className="pill-count">{favoriteCount}</span>
               )}
@@ -100,13 +101,12 @@ export function SidePanel() {
         </div>
         {/* Toplu aç/kapa — YALNIZCA "Değişiklikler" kipinde ve dosya varken.
          *
-         * Yeri kapatma çarpısının SOLU: dosyalar açık geldiği için ilk
-         * ihtiyaç "hepsini toplayıp listeye bakmak" ve o eylem panelin
-         * başlığına ait, satırlara değil. Boş listede çizilmiyor —
-         * yapacağı bir iş yokken duran düğme gürültü (favoriler panelinde
-         * de aynı kural).
+         * Yeri kapatma çarpısının SOLU: liste kapalı geliyor; "hepsine bir
+         * bakayım" ve bakıp bittikten sonra "hepsini topla" panelin başlığına
+         * ait eylemler, satırlara değil. Boş listede çizilmiyor — yapacağı bir
+         * iş yokken duran düğme gürültü (favoriler panelinde de aynı kural).
          *
-         * Simge yönü durumu söylüyor: hepsi kapalıysa açan simge, yoksa
+         * Simge yönü durumu söylüyor: hiçbiri açık değilse açan simge, yoksa
          * daraltan. Böylece düğme bir açma/kapama anahtarı gibi okunuyor. */}
         {mode === "git" && changes.length > 0 && (
           <>
@@ -129,7 +129,7 @@ export function SidePanel() {
               title={t(allCollapsed ? "git.expandAllFiles" : "git.collapseAllFiles")}
               aria-pressed={allCollapsed}
               onClick={() =>
-                setUi({ gitCollapsed: allCollapsed ? [] : changes.map((c) => c.path) })
+                setUi({ gitExpanded: allCollapsed ? changes.map((c) => c.path) : [] })
               }
             >
               {allCollapsed ? <ExpandAllIcon size={14} /> : <CollapseAllIcon size={14} />}

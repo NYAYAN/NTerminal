@@ -100,10 +100,13 @@ body {
  * Bir kutuda yalnizca BIR dolgulu dugme olmali - dolgu "burada devam et"
  * demek, ikisi olunca hicbiri demiyor.
  *
- * Dolgunun uzerindeki metin rengi `--accent-fg` / `--err-fg` degiskenlerinden
- * geliyor; bunlari tema uygulanirken karsitlik hesabiyla JS yaziyor. Onceki
- * hali `color-mix(accent 12%, #000)` idi - vurgu rengi koyu olan bir temada
- * koyu uzerine koyu cikiyordu.
+ * Dolgunun zemini `--accent-solid` / `--err-solid`, uzerindeki metin `--accent-fg` /
+ * `--err-fg`: bunlari tema uygulanirken karsitlik hesabiyla JS yaziyor (bkz.
+ * `filledColors`). Metin BEYAZ, zemin beyaza 4.5 karsitlik verecek kadar koyulastirilmis
+ * vurgu (istek: "Commit dugmesindeki metin rengi yanlis gibi"; onceki hali acik mavi
+ * zeminde koyu lacivert yaziydi). `--accent` / `--err` ise yuzeyde METIN ve gosterge
+ * olarak kaliyor. Onceki hali `color-mix(accent 12%, #000)` idi - vurgu rengi koyu olan
+ * bir temada koyu uzerine koyu cikiyordu.
  */
 button {
   font: inherit;
@@ -164,34 +167,57 @@ button:focus-visible {
 }
 
 button.primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-weight: 600;
 }
 
+/* Uzerine gelince ve basilinca zemin KOYULASIYOR (siyaha karisim). Aciklastirmak
+   beyaz yazinin karsitligini 4.5'in altina indirirdi: zemin zaten tam sinirda.
+   `filter: brightness()` metni de soluklastiriyordu; karisim yalnizca zemini
+   degistiriyor. */
 button.primary:hover:not(:disabled) {
-  /* `filter: brightness()` metni de soluklastiriyordu; karisim yalnizca
-     zemini degistiriyor. */
-  background: color-mix(in srgb, var(--accent) 86%, var(--text));
+  background: color-mix(in srgb, var(--accent-solid) 88%, #000);
 }
 
 button.primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 78%, var(--text));
+  background: color-mix(in srgb, var(--accent-solid) 76%, #000);
+}
+
+/* Devre disi dolgulu dugme: soluk zemin + acik gri yazi, `opacity` YOK.
+ *
+ * Onceki hali temel kuraldaki `opacity: 0.4` idi: zemin de yazi da yuzeye dogru
+ * soluyor, koyu yazi zemine karisiyordu (olculen 2.5:1, "yazi rengi yanlis"). Simdi
+ * zemin vurgunun %30'u (saydam: neyin ustundeyse ona uyuyor), yazi tema metninin %65'i
+ * - olculen en az 3:1 (Solarized Acik %60'ta 2.999'da kaldi), disabled oldugu belli ve
+ * yine okunuyor. */
+button.primary:disabled {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 65%, transparent);
 }
 
 /* Yikici birincil eylem: dolgulu ama kirmizi. Onay penceresinde "Kapat" /
    "Sil" bunu kullaniyor - eylem hem birincil hem geri donusu zor. */
 button.primary.destructive {
-  background: var(--err);
+  background: var(--err-solid);
   color: var(--err-fg);
 }
 
 button.primary.destructive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--err) 86%, var(--text));
+  background: color-mix(in srgb, var(--err-solid) 88%, #000);
 }
 
 button.primary.destructive:active:not(:disabled) {
-  background: color-mix(in srgb, var(--err) 78%, var(--text));
+  background: color-mix(in srgb, var(--err-solid) 76%, #000);
+}
+
+/* Yazi rengi de burada: `button.primary.destructive` (beyaz yazi) ile `button.primary:disabled`
+   AYNI ozgullukte ve yikici kural dosyada sonra geliyor; burada tekrarlanmazsa devre disi
+   yikici dugme soluk zeminde BEYAZ yazi tasirdi (acik temada ~1.9:1). */
+button.primary.destructive:disabled {
+  background: color-mix(in srgb, var(--err) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 65%, transparent);
 }
 
 button.outline {
@@ -1560,6 +1586,60 @@ html[data-platform="macos"] .titlebar {
   font-size: 0.8077rem;
 }
 
+/* Satir ve gecmisten silme dugmesi.
+ *
+ * Dugme satirin KARDESI (ic ice dugme olmasin diye) ama satirin USTUNDE,
+ * sag uctaki dolgunun icinde duruyor: satirin arka plani, sol cizgisi ve
+ * secili hali tek parca kaliyor. Dolgu yalnizca silinebilir satirlarda
+ * (klasor onerilerinde dugme yok) ve zaman damgasi carpinin altinda kalmasin
+ * diye var. */
+.suggest-item {
+  position: relative;
+}
+
+.suggest-row.deletable {
+  padding-right: 32px;
+}
+
+/* Carpi HER satirda duruyor, soluk; yalnizca uzerine gelince ETKIN.
+ *
+ * BILDIRILEN: "x iconu sabit, uzerine mouse ile gelince aktif hale gelsin,
+ * yoksa bosluk gorunuyor." Ilk hali carpiyi yalnizca secili satirda ve imlec
+ * ustundeyken ciziyordu; oteki satirlarda ona ayrilan yer (`.deletable`
+ * dolgusu) bos bir yarik gibi duruyordu. Degisiklikler panelindeki satir
+ * eylemleriyle ayni desen ve ayni olcu (bkz. `.git-actions`): hep gorunur,
+ * soluk, uzerine gelince tam parlaklikta. Soluklugun sebebi de orada: bes
+ * satirin bes carpisi tam parlaklikta listeyi bir silme tarlasina cevirirdi. */
+.suggest-del {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 6px;
+  margin: auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  /* Temel dugme kurali 26px'lik bir taban veriyor; satir da o kadar ve
+     carpi onu tam dolduracakti. */
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--text-dim);
+  opacity: 0.45;
+  transition:
+    opacity 90ms ease,
+    color 90ms ease,
+    background 90ms ease;
+}
+
+.suggest-del:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 16%, transparent);
+}
+
 .suggest-foot {
   display: flex;
   align-items: center;
@@ -2352,6 +2432,18 @@ html[data-platform="macos"] .titlebar {
 .git-diff {
   /* Satir numarasi sutununun genisligi; acici serit de bunu kullaniyor. */
   --diff-no-w: 44px;
+  /* IZGARA: her satir EN GENIS satirin genisligine geliyor.
+   *
+   * BILDIRILEN HATA: "sagdaki kismi kaydirinca zemin rengi bir yerde kesiliyor."
+   * Satirlar blok oldugu icin genislikleri kaydirma alaninin GORUNEN genisligi
+   * kadardi; sarmayan uzun metin kutunun disina tasiyor ve eklenen/silinen
+   * satirin zemini orada bitiyordu (olculen: 370px'lik satir, 2019px'lik
+   * kaydirma alani). Tek sutunlu izgara sutunu en uzun satira kadar genisletiyor
+   * ve butun satirlari o genislikte tutuyor: zemin metnin sonuna kadar uzaniyor
+   * ve kisa satirlarda da AYNI hizada bitiyor. `min-width: max-content` her
+   * satiri KENDI boyuna getirirdi; o zaman zeminlerin sag kenari tirtikli
+   * olurdu. */
+  display: grid;
   padding: 2px 0 6px;
   overflow-x: auto;
   font-family: var(--mono-font);
@@ -2441,6 +2533,12 @@ html[data-platform="macos"] .titlebar {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   white-space: nowrap;
   min-width: 0;
+  /* Serit izgara sutununun genisligini BELIRLEMESIN. Kapsayan islevin adi (80
+   * karaktere kadar) sutunu genisletir ve kod satirlari sigarken bile yatay
+   * kaydirma cikarirdi. `inline-size` kapsamasi seridi sutuna gore ayarlanan
+   * bir oge yapiyor: sutun yine en uzun KOD satiri kadar, islev adi yer yoksa
+   * uc nokta ile kisaliyor. */
+  contain: inline-size;
 }
 
 /* Dugme blogu: kendi zemini ve sag kenarligi var.
@@ -2649,6 +2747,326 @@ html[data-platform="macos"] .titlebar {
   color: var(--text-dim);
 }
 
+/* Commit kutusu: panelin basinda, listenin DISINDA (bkz. `GitCommitBox`).
+ *
+ * `flex: none`: liste kayarken ileti alani ve dugmeler yerinde kalmali; kayan
+ * `.panel-list` kalan yuksekligi kendisi aliyor. */
+.git-commit {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.git-commit-msg {
+  width: 100%;
+  min-height: 52px;
+  max-height: 200px;
+  /* Yalnizca DIKEY: yatay buyutmek paneli tasirirdi. */
+  resize: vertical;
+}
+
+/* Toplu kutu solda, dugmeler sagda; dar panelde dugmeler alt satira iniyor
+   (`wrap`) yerine tasip kirpilmiyor. */
+.git-commit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.git-commit-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.git-commit-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* Sayac DOLGULU dugmenin uzerinde: `.pill-count`in vurgu renkli zemini vurgu
+   renkli dolgunun icinde kayboluyordu. Zemin dugmenin YAZI renginin TERSINDEN
+   turetiliyor (`--accent-chip`): beyaz yazida koyu hap, aksi halde acik. Yazi rengiyle
+   ayni tonda bir hap (onceki hali) beyaz yazida sayiyi 2.9:1'e dusuruyordu. */
+.git-commit-btn .pill-count {
+  background: color-mix(in srgb, var(--accent-chip) 26%, transparent);
+  color: inherit;
+}
+
+/* Degisiklik yokken yalnizca "N commit gonderilmedi" satiri. */
+.git-commit.compact {
+  padding: 6px 9px;
+}
+
+.git-commit-status {
+  margin-right: auto;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+}
+
+.git-commit-hint {
+  color: var(--warn);
+  font-size: 0.7692rem;
+}
+
+/* Hata KALICI ve kutunun icinde: bildirim uc saniyede kayboluyor, bir commit
+ * kancasinin ya da reddedilen bir push'un metni uc saniyede okunmaz. */
+.git-commit-error {
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--err) 55%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+  font-size: 0.8462rem;
+}
+
+.git-commit-error-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--err);
+}
+
+/* Git'in metni oldugu gibi: satir sonlari anlam tasiyor (kanca ciktisi,
+   `hint:` satirlari). Uzun satir SARILIYOR, yatay kaydirma yok; kutu yuksekligi
+   sinirli ve icinde kayiyor ki uzun bir kanca ciktisi listeyi ekrandan itmesin. */
+.git-commit-error pre {
+  margin: 4px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono-font);
+  font-size: 0.7692rem;
+  /* Kopyalanabilmeli; genel kural bazi yuzeylerde secimi kapatiyor. */
+  user-select: text;
+}
+
+/* Satirdaki "commit'e ekle" kutusu: katlama dugmesinin DISINDA, solunda. */
+.git-check {
+  flex: none;
+  margin: 0 0 0 6px;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------- stash */
+
+/* Stash bolumu: "Degisiklikler" listesinin en ustunde acilip kapanan bir baslik.
+ *
+ * Dorduncu sekme olarak yazilmisti ve panelin basligina sigmadigi icin bolume
+ * cevrildi (bkz. `StashSection`). Altta bir cizgi: acikken stash satirlari ile
+ * degisen dosya satirlari birbirine karismasin. */
+.stash-section {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Baslik satiri acip kapatiyor AMA satirin KENDISI dugme degil: icinde ayar dugmesi var
+ * ve ic ice dugme gecersiz isaretleme (bkz. `.git-head`). Gercek dugme `.stash-toggle`;
+ * tiklama satira kabarciklaniyor, bos yere ya da sayaca basmak da acip kapatiyor.
+ *
+ * `position: relative`: ayar penceresi (`.stash-settings-pop`) satira gore konumlaniyor. */
+.stash-section-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.stash-section-head:hover {
+  background: var(--hover);
+}
+
+/* Bosluga kadar uzamiyor (`flex: 0 1 auto`): kalan yer satirin tiklanabilir bos kismi,
+   ayar simgesi ve sayac yaziya yapisik duruyor. */
+.stash-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 4px 4px 4px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.9231rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Ayar simgesi yaziyla sayacin ARASINDA. Kendisi statik: pencere satira gore
+   konumlaniyor, simgeye degil (dar panelde simgenin altindan tasardi). */
+.stash-settings {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Ayar penceresi: baslik satirinin hemen altinda, kucuk bir kutu. Icerigi kadar genis
+ * (`max-content`), panelden genis olamaz (`max-width`): dar panelde satir kirilir,
+ * pencere paneli tasirmaz. Satir `cursor: pointer` veriyor; pencere onu sifirliyor. */
+.stash-settings-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 0.8462rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  cursor: default;
+}
+
+.stash-settings-pop .check-row {
+  cursor: pointer;
+}
+
+/* Stash satirlari `Degisiklikler`in dosya satirlariyla AYNI siniflari kullaniyor
+   (`git-item`, `git-head`, `git-row`, `git-actions`): ayni duzen, ayni eylem
+   agirligi, ayni katlama oku. Buradakiler yalnizca stash'e ozgu parcalar. */
+
+/* Ad esneyip bosluğu alıyor, kalan yer dal ve zamanin: uzun bir ad zamanin
+   ustune binmiyor, sonundan kirpiliyor. */
+.stash-name {
+  flex: 1 1 0;
+  /* Dar panelde bile ad tamamen kaybolmasin: meta kirpilir, ad en az bu kadar kalir. */
+  min-width: 48px;
+}
+
+/* "Adsiz" rozeti: git'in kendi varsayilani (`karma konu`) bir insanin verdigi ad
+   degil; ad gibi okunmasin diye ayri bir isaret. */
+.stash-wip {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text-dim);
+  font-family: var(--ui-font);
+  font-size: 0.7308rem;
+}
+
+/* Dal ve zaman: adin sagi, soluk ve kirpilmaz. UI yazi tipi: `.git-row` eş aralikli
+   yazi tipini dosya YOLLARI icin kullaniyor, bir tarih icin degil. */
+.stash-meta {
+  /* KIRPILABILIR (`flex: 0 1 auto` + `min-width: 0`): `flex: none` iken dar panelde
+     metin kendi kutusundan tasip sagdaki eylem simgelerinin USTUNE biniyordu
+     ("feature/gecmis - 24 Eyl 22:41" ile cop kutusu cakisti). */
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  font-family: var(--ui-font);
+  font-size: 0.7692rem;
+  white-space: nowrap;
+}
+
+/* Acilan stash'in dosyalari: sol cizgi "bu stash'in icinde" diyor. */
+.stash-files {
+  margin: 0 0 4px 10px;
+  padding-left: 6px;
+  border-left: 2px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.stash-file + .stash-file {
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.stash-empty {
+  display: grid;
+  gap: 4px;
+  padding: 16px 12px;
+  text-align: center;
+}
+
+/* "Stash'e at" penceresi: dar bir form penceresi; dosya listesi kendi icinde
+   kayiyor, pencere dosya sayisiyla uzayip ekrandan tasmiyor. */
+.stash-dialog {
+  width: min(520px, 92vw);
+}
+
+.stash-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.stash-field label {
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+}
+
+.stash-field input {
+  width: 100%;
+}
+
+.stash-files-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 2px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8846rem;
+}
+
+/* "Klasor yollarini goster" kutusu satirin sag ucunda; dar pencerede alt satira
+   iniyor (`wrap`), toplu kutuyla sayacin ustune binmiyor. */
+.stash-paths {
+  margin-left: auto;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.stash-pick-list {
+  /* Sabit ust sinir: yuzlerce dosyada pencere uzamiyor, liste kayiyor. */
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.stash-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 4px;
+  border-radius: 5px;
+  font-family: var(--mono-font);
+  font-size: 0.9231rem;
+  cursor: pointer;
+}
+
+.stash-pick:hover {
+  background: var(--hover);
+}
+
+.stash-pick input {
+  flex: none;
+  margin: 0;
+}
+
 /* Acilir pencereler (dizin secici, dal secici).
  *
  * IKISI AYNI GOVDE. Ayri bicimlendirmek "bunlar farkli seyler" derdi; oysa
@@ -2761,6 +3179,75 @@ html[data-platform="macos"] .titlebar {
   text-transform: none;
   letter-spacing: 0;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* "Uzak dallar" bolumunun basligi (bkz. `pickerRows`).
+ *
+ * Yerel dallardan AYRI okunmali ama bir dal satiri gibi de gorunmemeli: soluk,
+ * kucuk ve tam genislikte. Basilabilir hali (`button`) dal satirlariyla AYNI
+ * secim gostergesini (`.on`) kullaniyor - fare ve klavye tek bir vurgu
+ * paylasiyor, `.pop-row.on` notundaki sebeple. */
+.pop-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  text-align: left;
+  min-width: 0;
+}
+
+button.pop-group {
+  cursor: pointer;
+}
+
+.pop-group.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.pop-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 12px;
+}
+
+.pop-group-name {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Duz etiket okun yerini bos birakiyor: metin, basilabilir baslikla ayni
+   sutundan baslasin (8px dolgu + 12px ok + 6px bosluk). */
+.pop-group.static {
+  padding-left: 26px;
+}
+
+/* Uzak dal satirlari basligin altinda girintili: hangi bolume ait olduklari
+   soldan okunuyor. */
+.pop-row.nested {
+  padding-left: 22px;
+}
+
+/* Tavanin otesindeki dallarin sayisi (bkz. `SECTION_ROW_LIMIT`). Bir dal
+   satiri degil ve oyle gorunmemeli: soluk, kucuk, isaretcisiz. Girintisi ait
+   oldugu bolumun satirlariyla ayni. */
+.pop-more {
+  padding: 5px 8px;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+}
+
+.pop-more.nested {
+  padding-left: 22px;
 }
 
 .pop-empty {
@@ -3807,10 +4294,17 @@ html[data-platform="macos"] .titlebar {
   border-bottom: 1px solid var(--border);
 }
 
+/* Sekme seridi DARALABILIR: `min-width: 0` yoksa flex ogesi icerigin asgarisinin
+ * altina inmiyor ve kapatma dugmesi (x) ile basliktaki oteki dugmeleri panelin
+ * DISINA itiyordu. Olculen: "Degisiklikler" sekmesinde uc simge varken panel
+ * ~345px'in altina inince (en dar 260px) x panelden tasiyordu. Sekmeler artik
+ * etiketlerini kirparak (`.panel-tab-label`) daraliyor, baslik dugmeleri yerinde
+ * kaliyor; varsayilan 390px'te hicbir sey kirpilmiyor. */
 .panel-tabs {
   display: flex;
   gap: 2px;
   flex: 1;
+  min-width: 0;
 }
 
 .panel-tabs button {
@@ -3820,6 +4314,19 @@ html[data-platform="macos"] .titlebar {
   padding: 6px 10px;
   font-size: 0.9231rem;
   margin-bottom: -1px;
+  /* Icerik kadar; yer daralinca ETIKET kirpilana kadar kuculuyor, rozet degil. */
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.panel-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-tabs .pill-count {
+  flex: none;
 }
 
 .panel-tabs button.on {

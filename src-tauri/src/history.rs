@@ -37,6 +37,13 @@ pub struct HistoryFilter {
     /// Serbest metin aramasi; komut ve dizin alanlarinda gecer.
     #[serde(default)]
     pub query: Option<String>,
+    /// Yalnizca komutu TAM OLARAK bu olan kayitlar (buyuk/kucuk harf dahil).
+    ///
+    /// `query`den ayri cunku sorusu baska: o "icinde gecen", bu "tam bu komut".
+    /// Oneri panelinden bir komutu silerken `query` kullanmak `ls` icin
+    /// `false`, `tools/...` ve dizininde `ls` gecen her kaydi getirirdi.
+    #[serde(default)]
+    pub command: Option<String>,
     /// true: sadece basarili (exit 0), false: sadece hatali, None: hepsi.
     #[serde(default)]
     pub only_succeeded: Option<bool>,
@@ -175,6 +182,11 @@ impl HistoryStore {
             .as_deref()
             .map(|q| q.trim().to_lowercase())
             .filter(|q| !q.is_empty());
+        let exact = filter
+            .command
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty());
 
         // En yeniden eskiye dogru dolas.
         let mut matched: Vec<&HistoryEntry> = Vec::new();
@@ -187,6 +199,11 @@ impl HistoryStore {
             }
             if let Some(group) = &filter.group_id {
                 if &entry.group_id != group {
+                    continue;
+                }
+            }
+            if let Some(command) = exact {
+                if entry.command.trim() != command {
                     continue;
                 }
             }
@@ -237,7 +254,13 @@ impl HistoryStore {
         if removed > 0 {
             inner.reindex();
             inner.append(&HistoryRecord::Del { ids: ids.to_vec() })?;
-            inner.maybe_compact()?;
+            // Gunluk HEMEN sikistiriliyor, sisince degil. `del` satiri kaydi
+            // yalnizca yeniden oynatirken gizliyor; komutun metni eski `add`
+            // satirinda diskte durmaya devam ediyordu. Kullanici "sil" dediyse
+            // verinin diskte kalmasini beklemiyor - gecmisten tek tek silinen
+            // komut cogu zaman yanlislikla yazilmis bir parola ya da anahtar.
+            // `del` once yaziliyor: sikistirma duserse silme yine kalici.
+            inner.compact()?;
         }
         Ok(removed)
     }
@@ -249,6 +272,7 @@ impl HistoryStore {
                 tab_id: filter.tab_id.clone(),
                 group_id: filter.group_id.clone(),
                 query: filter.query.clone(),
+                command: filter.command.clone(),
                 only_succeeded: filter.only_succeeded,
                 dedupe: false,
                 limit: Some(usize::MAX),
@@ -259,12 +283,8 @@ impl HistoryStore {
         if ids.is_empty() {
             return Ok(0);
         }
-        let removed = self.delete(&ids)?;
-        // Silmeden sonra gunlugu hemen sikistir: kullanici "temizle" dediyse
-        // verinin diskte kalmasini beklemiyor.
-        let mut inner = self.inner.lock();
-        inner.compact()?;
-        Ok(removed)
+        // Gunlugu `delete` sikistiriyor.
+        self.delete(&ids)
     }
 
     pub fn stats(&self) -> HistoryStats {

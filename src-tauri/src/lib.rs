@@ -624,16 +624,124 @@ fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<Str
     Ok(git::diff(&path, &file, untracked))
 }
 
-/// Depodaki yerel dallar; depo degilse bos liste.
 /// Bir dosyadaki degisiklikleri geri alir. Yikici; onay ARAYUZDE soruluyor.
 #[tauri::command]
 fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
     git::revert(&path, &file, untracked)
 }
 
+/// Depodaki yerel ve uzak dallar; depo degilse bos liste.
+///
+/// `async` + `spawn_blocking`: `for-each-ref` her ref'i okuyor ve suresi dal
+/// sayisiyla buyuyor. OLCULDU (macOS, sicak onbellek): 10 bin uzak dal
+/// paketliyken 51 ms, `git fetch` sonrasi her ref ayri dosyayken 356 ms; 50 bin
+/// dalda 634 ms / 8 sn. Es zamanli bir komut ana is parcaciginda kosuyor
+/// (asagidaki nota bakin) ve o sure boyunca pencere cevap vermezdi.
+///
+/// `remotes: false` yalnizca yerel dallar: secici once onlari ciziyor, uzaklari
+/// ikinci bir cagriyla arkadan bekliyor (bkz. `git::branches`).
 #[tauri::command]
-fn git_branches(path: String) -> CmdResult<Vec<git::GitBranch>> {
-    Ok(git::branches(&path))
+async fn git_branches(path: String, remotes: bool) -> CmdResult<Vec<git::GitBranch>> {
+    tauri::async_runtime::spawn_blocking(move || git::branches(&path, remotes))
+        .await
+        .map_err(fail)
+}
+
+// Asagidaki dort komut (stage / unstage / commit / push) hep `async` +
+// `spawn_blocking`. Es zamansiz olmayan bir komut Tauri'de ANA IS PARCACIGINDA
+// kosuyor (bkz. `update_check`): `push` bir ag istegi, `commit` kullanicinin
+// kancalarini (lint, test) kosturuyor, `add` buyuk bir klasorde saniyeler
+// suruyor. Hicbiri pencereyi dondurmamali.
+
+/// Verilen yollari indekse ekler (`git add`).
+#[tauri::command]
+async fn git_stage(path: String, files: Vec<String>) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || git::stage(&path, &files))
+        .await
+        .map_err(fail)?
+}
+
+/// Verilen yollari indeksten cikarir; dosyalara dokunmaz.
+#[tauri::command]
+async fn git_unstage(path: String, files: Vec<String>) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || git::unstage(&path, &files))
+        .await
+        .map_err(fail)?
+}
+
+/// Indeksi commit'ler; basarida kisa nesne kimligini doner.
+#[tauri::command]
+async fn git_commit(path: String, message: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || git::commit(&path, &message))
+        .await
+        .map_err(fail)?
+}
+
+/// Gecerli dali uzaga gonderir; basarida hedefi (`origin/main`) doner.
+#[tauri::command]
+async fn git_push(path: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || git::push(&path))
+        .await
+        .map_err(fail)?
+}
+
+/// Deponun stash'leri, en yeni basta; depo degilse bos liste.
+#[tauri::command]
+fn git_stashes(path: String) -> CmdResult<Vec<git::GitStash>> {
+    Ok(git::stashes(&path))
+}
+
+/// Bir stash'in dosyalari (takipli + takipsiz) ve toplam dosya sayisi.
+#[tauri::command]
+fn git_stash_files(path: String, id: String) -> CmdResult<git::StashFiles> {
+    git::stash_files(&path, &id)
+}
+
+/// Bir stash'teki tek dosyanin farki; okunamazsa `None`.
+#[tauri::command]
+fn git_stash_diff(
+    path: String,
+    id: String,
+    file: String,
+    orig_path: Option<String>,
+    untracked: bool,
+) -> CmdResult<Option<String>> {
+    Ok(git::stash_diff(&path, &id, &file, orig_path.as_deref(), untracked))
+}
+
+// Stash'in uc yazma komutu da `async` + `spawn_blocking` (bkz. yukaridaki not):
+// `stash push` ve `stash apply` calisma agacini ve indeksi yeniden yaziyor,
+// buyuk bir depoda saniyeler surebiliyor.
+
+/// Yollari stash'e atar; basarida yeni stash'in kimligini doner.
+#[tauri::command]
+async fn git_stash_push(
+    path: String,
+    message: String,
+    files: Vec<String>,
+    include_untracked: bool,
+) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::stash_push(&path, &message, &files, include_untracked)
+    })
+    .await
+    .map_err(fail)?
+}
+
+/// Bir stash'i uygular; `pop` ise basarida siler.
+#[tauri::command]
+async fn git_stash_apply(path: String, id: String, pop: bool, index: bool) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || git::stash_apply(&path, &id, pop, index))
+        .await
+        .map_err(fail)?
+}
+
+/// Bir stash'i siler.
+#[tauri::command]
+async fn git_stash_drop(path: String, id: String) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || git::stash_drop(&path, &id))
+        .await
+        .map_err(fail)?
 }
 
 /// nvm ile kurulu Node surumleri ve kullanilan surum; nvm yoksa `None`.
@@ -815,6 +923,16 @@ pub fn run() {
             git_branches,
             git_diff,
             git_revert,
+            git_stage,
+            git_unstage,
+            git_commit,
+            git_push,
+            git_stashes,
+            git_stash_files,
+            git_stash_diff,
+            git_stash_push,
+            git_stash_apply,
+            git_stash_drop,
             git_fingerprint,
             node_env,
             tray_labels,

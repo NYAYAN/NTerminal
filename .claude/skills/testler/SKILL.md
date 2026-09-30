@@ -71,6 +71,7 @@ Bunlar kırık değil, **elle tutulan bir listeyi güncellemedin** demek:
 | `hardcodedText.test.ts` | JSX'e doğrudan metin yazmışsın; `messages.ts`e taşı ve `t()` ile çağır. Ayrıntı için `arayuz-metni` skill'ine bak. |
 | `layout.test.ts` | CSS'te ölçülmüş bir karardan geri dönmüşsün. Testin başındaki açıklama hangi hatanın bir kez ödendiğini yazıyor — önce onu oku. |
 | `SettingsDialog.test.tsx` › "bölüm değiştirmek içeriği değiştiriyor" | Ayarlar penceresine `<h3>` başlığı eklemişsin; testteki beklenen başlık listesini güncelle. |
+| `ipcContract.test.ts` | Yeni bir Rust komutu eklemişsin ya da argümanını değiştirmişsin: komutu `lib.rs` içindeki `generate_handler!` listesine yaz; `ipc.ts`deki argüman anahtarları Rust parametrelerinin camelCase karşılığı olmalı (`file_path` ↔ `filePath`). Arayüz testleri IPC'yi taklit ettiği için komut adındaki yazım hatasını yalnızca bu test görüyor. |
 
 ## Yeni test yazarken
 

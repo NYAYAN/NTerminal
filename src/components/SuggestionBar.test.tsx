@@ -4,6 +4,7 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
+import { setPlatform } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import { SuggestionBar } from "./SuggestionBar";
 
@@ -183,8 +184,103 @@ describe("öneri çubuğu", () => {
     // Düz metin olarak yazıldığında hangi işaretin TUŞ olduğu okunmuyordu.
     setSuggest(["a1"], 0, "a");
     const { container } = render(<SuggestionBar />);
-    // Üç ok + Esc.
-    expect(container.querySelectorAll(".suggest-foot .keycap")).toHaveLength(4);
+    // Üç ok + Esc + silme.
+    expect(container.querySelectorAll(".suggest-foot .keycap")).toHaveLength(5);
     expect(container.querySelector(".keycap-word")!.textContent).toBe("Esc");
+  });
+});
+
+/*
+ * Geçmişten silme.
+ *
+ * BİLDİRİLEN İSTEK: "terminal geçmişini yukarı ok tuşuna basınca
+ * gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+ *
+ * Silmenin kendisi (kapsam, disk, onay) depoda test ediliyor
+ * (`store/deleteSuggestion.test.ts`); burada bağlanan şey panelin doğru
+ * satırı doğru yoldan istemesi ve yolun görünür olması.
+ */
+describe("öneri çubuğunda silme", () => {
+  const del = (row: Element) => row.parentElement!.querySelector<HTMLButtonElement>(".suggest-del");
+  const deleteSuggestionAt = vi.fn(async () => {});
+  const original = useStore.getState().deleteSuggestionAt;
+
+  beforeEach(() => {
+    setPlatform("windows");
+    deleteSuggestionAt.mockClear();
+    useStore.setState({ deleteSuggestionAt });
+  });
+
+  afterEach(() => {
+    useStore.setState({ deleteSuggestionAt: original });
+    setPlatform("windows");
+  });
+
+  it("geçmiş satırlarında silme düğmesi var", () => {
+    setSuggest(["a1", "a2"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+    expect(rows(container).map((row) => !!del(row))).toEqual([true, true]);
+  });
+
+  it("klasör önerilerinde silme düğmesi de ipucu da yok", () => {
+    // O satırlar diskteki klasörler, geçmiş değil: silinecek bir şey yok.
+    const ui = useStore.getState().ui;
+    useStore.setState({
+      ui: { ...ui, suggest: { items: ["cd src"], index: 0, input: "cd ", kind: "dirs" } },
+    });
+    const { container } = render(<SuggestionBar />);
+    expect(container.querySelector(".suggest-del")).toBe(null);
+    expect(container.querySelector(".suggest-foot")!.textContent).not.toContain("sil");
+  });
+
+  it("düğme TIKLANAN satırı siliyor ve onu kabul etmiyor", async () => {
+    // Seçili olan değil, tıklanan satır gitmeli — kabul etmedeki kuralın
+    // aynısı. Tıklama satıra da ulaşsaydı komut kutuya yazılırdı.
+    const accept = vi.fn();
+    const spy = vi
+      .spyOn(useStore.getState(), "activeSession")
+      .mockReturnValue({ acceptSuggestion: accept, focus: () => {} } as never);
+    setSuggest(["a1", "a2", "a3"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+
+    await act(async () => {
+      fireEvent.click(del(rows(container)[2])!);
+    });
+
+    expect(deleteSuggestionAt).toHaveBeenCalledWith(2);
+    expect(accept, "silme düğmesi satırı kabul etti").not.toHaveBeenCalled();
+    expect(useStore.getState().ui.suggest, "panel kapanmamalı").not.toBe(null);
+    spy.mockRestore();
+  });
+
+  it("düğmeye basmak odağı kutudan almıyor", () => {
+    // Onay kapandığında kullanıcı kaldığı yerden yazmaya devam etmeli.
+    setSuggest(["a1"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+    const olay = fireEvent.mouseDown(del(rows(container)[0])!);
+    expect(olay, "mousedown varsayılanı engellenmedi").toBe(false);
+  });
+
+  it("düğmenin ipucu tuşu da söylüyor", () => {
+    setSuggest(["a1"], 0, "a");
+    const { container } = render(<SuggestionBar />);
+    expect(del(rows(container)[0])!.title).toBe("Geçmişten sil (Shift+Del)");
+  });
+
+  it("alt satırda silme tuşu platformun yazımıyla", () => {
+    // mac'te kısayollar simgeyle yazılıyor (bkz. `prettyCombo`); "Shift+Del"
+    // orada başka bir sistemin diliyle konuşmak olurdu.
+    setSuggest(["a1"], 0, "a");
+    const { container, unmount } = render(<SuggestionBar />);
+    const last = () => [...container.querySelectorAll(".suggest-foot .keycap")].at(-1)!.textContent;
+    expect(last()).toBe("Shift+Del");
+    expect(container.querySelector(".suggest-foot")!.textContent).toContain("sil");
+    unmount();
+
+    setPlatform("macos");
+    const mac = render(<SuggestionBar />);
+    expect([...mac.container.querySelectorAll(".suggest-foot .keycap")].at(-1)!.textContent).toBe(
+      "⇧⌦",
+    );
   });
 });

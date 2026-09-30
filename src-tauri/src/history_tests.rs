@@ -93,6 +93,66 @@ fn arama_komut_ve_dizinde_gecer() {
 }
 
 #[test]
+fn komut_suzgeci_tam_eslesir() {
+    // Oneri panelinden `ls` silinirken `ls -la`, `false` ya da `LS` gitmemeli;
+    // `query` (icinde gecen) bu yuzden bu isin araci degil.
+    let store = HistoryStore::load(temp_paths("exact"), 1000);
+    store.add(req("ls", "t1")).unwrap();
+    store.add(req("ls -la", "t1")).unwrap();
+    store.add(req("false", "t1")).unwrap();
+    store.add(req("LS", "t1")).unwrap();
+    store.add(req("ls", "t2")).unwrap();
+
+    let all = store.query(&HistoryFilter { command: Some("ls".into()), ..Default::default() });
+    assert_eq!(all.total, 2, "yalnizca tam `ls` kayitlari gelmeli");
+    assert!(all.entries.iter().all(|e| e.command == "ls"));
+
+    let tab = store.query(&HistoryFilter {
+        command: Some("ls".into()),
+        tab_id: Some("t1".into()),
+        ..Default::default()
+    });
+    assert_eq!(tab.total, 1, "sekme suzgeciyle birlikte calismali");
+
+    // Bas/son bosluk komutun parcasi degil (kayit da kirpilarak yaziliyor).
+    let padded = store.query(&HistoryFilter { command: Some("  ls ".into()), ..Default::default() });
+    assert_eq!(padded.total, 2);
+}
+
+#[test]
+fn komutla_temizleme_yalnizca_o_komutu_siler() {
+    // `clear` suzgeci alan alan yeniden kuruyor; `command` orada unutulursa
+    // "bu komutu sil" istegi sekmenin BUTUN gecmisini silerdi.
+    let store = HistoryStore::load(temp_paths("clear-exact"), 1000);
+    store.add(req("npm test", "t1")).unwrap();
+    store.add(req("npm test -- --watch", "t1")).unwrap();
+    store.add(req("npm test", "t2")).unwrap();
+
+    let removed = store
+        .clear(&HistoryFilter {
+            command: Some("npm test".into()),
+            tab_id: Some("t1".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(removed, 1);
+
+    let left: Vec<(String, String)> = store
+        .query(&HistoryFilter::default())
+        .entries
+        .into_iter()
+        .map(|e| (e.command, e.tab_id))
+        .collect();
+    assert_eq!(
+        left,
+        vec![
+            ("npm test".to_string(), "t2".to_string()),
+            ("npm test -- --watch".to_string(), "t1".to_string()),
+        ]
+    );
+}
+
+#[test]
 fn basari_filtresi_bitmemis_kayitlari_dislar() {
     let store = HistoryStore::load(temp_paths("outcome"), 1000);
     let ok = store.add(req("ok", "t1")).unwrap();
@@ -184,6 +244,26 @@ fn silme_diske_de_yansir() {
     let page = reopened.query(&HistoryFilter::default());
     assert_eq!(page.total, 1);
     assert_eq!(page.entries[0].command, "b");
+}
+
+#[test]
+fn silinen_komutun_metni_diskte_kalmaz() {
+    // `del` satiri kaydi yalnizca yeniden oynatirken gizliyordu; metin eski
+    // `add` satirinda duruyordu. Tek tek silinen komut cogu zaman yanlislikla
+    // yazilmis bir parola - "sildim" demek dosyadan da gitti demek olmali.
+    let paths = temp_paths("delete-purge");
+    let store = HistoryStore::load(paths.clone(), 1000);
+    let secret = store.add(req("mysql -p hunter2", "t1")).unwrap();
+    store.add(req("git status", "t1")).unwrap();
+
+    assert_eq!(store.delete(&[secret.id]).unwrap(), 1);
+
+    let disk = std::fs::read_to_string(paths.history_file()).unwrap();
+    assert!(!disk.contains("hunter2"), "silinen komut gunlukte duruyor:\n{disk}");
+    assert!(disk.contains("git status"), "kalan kayit da gitmis");
+
+    let reopened = HistoryStore::load(paths, 1000);
+    assert_eq!(reopened.query(&HistoryFilter::default()).total, 1);
 }
 
 #[test]

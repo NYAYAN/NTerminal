@@ -568,6 +568,45 @@ describe("komut satırı kutusu", () => {
     host.remove();
   });
 
+  it("komut başlayınca odak yanıt satırında kalıyor, bitince yine kutuda", () => {
+    /*
+     * Olağan akış. Kutunun odak etkisi artık başka bir metin kutusundaki
+     * odağa dokunmuyor (dizin seçicinin arama kutusu — `dirPicker.test.tsx`);
+     * o istisna bu akışı bozmamalı: çalışan komut tuşları almalı, istem
+     * dönünce de yeni komut kutuya yazılabilmeli.
+     *
+     * Çalışan komutun tuşları alan yer de KUTU: komut çalışırken kutu o
+     * komutun yanıt satırı (`inputMode.ts`, `stdin`). Bu testin ilk hâli
+     * odağın terminale geçmesini bekliyordu; o, ayar kapalıyken geçerli
+     * (bir alttaki test).
+     */
+    const { container } = render(<CommandInput />);
+    const shell = (atPrompt: boolean, running: boolean) => {
+      const signals = { atPrompt, altScreen: false, integration: true };
+      inputSignals.mockReturnValue(signals);
+      useStore.setState({ inputSignals: { [TAB]: signals }, running: { [TAB]: running } });
+    };
+    focus.mockClear();
+
+    act(() => shell(false, true));
+    expect(document.activeElement, "komut çalışırken odak yanıt satırında değil").toBe(
+      field(container),
+    );
+    expect(focus, "odak terminale alındı: yanıt kutuya yazılamaz").not.toHaveBeenCalled();
+
+    act(() => shell(true, false));
+    expect(document.activeElement, "istem dönünce odak kutuya gelmedi").toBe(field(container));
+  });
+
+  it("ayar kapalıyken komut başlayınca odak terminale geçiyor", () => {
+    // Klasik terminal: kutu yok, çalışan komutun tuşları ızgaraya gitmeli.
+    seedRunning();
+    appInputOff();
+    focus.mockClear();
+    render(<CommandInput />);
+    expect(focus, "komut çalışırken odak terminale geçmedi").toHaveBeenCalled();
+  });
+
   it("kutu kapanınca terminalin stdin'i geri açılıyor", () => {
     // Bölme kipinde görünür bir kilitlenmeydi: yan bölmeye tıklıyorsunuz,
     // kutu ona ait değil, yazdığınız da hiçbir yere gitmiyor.
@@ -916,6 +955,101 @@ describe("komut satırı kutusu", () => {
 
     expect(field(container)!.value).toBe("git push --force");
     expect(sendKeys, "komut kabuğa gitmiş").not.toHaveBeenCalled();
+  });
+
+  /*
+   * Panelden geçmiş silme: Shift+Delete.
+   *
+   * BİLDİRİLEN İSTEK: "terminal geçmişini yukarı ok tuşuna basınca
+   * gösteriyoruz, istemediklerimizi oradan kaldırabilmeliyiz."
+   *
+   * Silmenin kendisi (onay, kapsam, disk) depoda test ediliyor
+   * (`store/deleteSuggestion.test.ts`). Burada bağlanan şey tuşun SEÇİLİ
+   * satırı istemesi ve metin düzenlemeyi ele geçirmemesi: yazarken gelen
+   * listede kutu dolu, Delete de Windows'taki Shift+Delete (kes) de orada
+   * kendi işini yapmalı.
+   */
+  describe("Shift+Delete", () => {
+    const deleteSuggestionAt = vi.fn(async () => {});
+    const original = useStore.getState().deleteSuggestionAt;
+
+    beforeEach(() => {
+      deleteSuggestionAt.mockClear();
+      useStore.setState({
+        deleteSuggestionAt,
+        suggestHistory: [
+          { command: "npm test", cwd: null, tabId: TAB },
+          { command: "gti status", cwd: null, tabId: TAB },
+        ],
+      });
+    });
+
+    afterEach(() => {
+      useStore.setState({ deleteSuggestionAt: original });
+    });
+
+    it("panelde SEÇİLİ komutu silmeye gönderiyor", () => {
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      fireEvent.keyDown(el, { key: "ArrowUp" });
+      act(() => {
+        fireEvent.keyDown(el, { key: "ArrowUp" });
+      });
+      expect(useStore.getState().ui.suggest!.index).toBe(1);
+
+      let olay = true;
+      act(() => {
+        olay = fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).toHaveBeenCalledWith(1);
+      expect(olay, "varsayılan engellenmedi").toBe(false);
+    });
+
+    it("yalnız Delete geçmişe dokunmuyor", () => {
+      // Kazara basılabilecek tek tuş; onay sorsa bile her seferinde bir
+      // pencere açmak panelde gezinmeyi bozardı.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      fireEvent.keyDown(el, { key: "ArrowUp" });
+      act(() => {
+        fireEvent.keyDown(el, { key: "Delete" });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+    });
+
+    it("kutuda seçim varken kesmeye kalıyor", () => {
+      // Windows'ta Shift+Delete "kes"; yazarken gelen listede kutu dolu.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      act(() => {
+        fireEvent.change(el, { target: { value: "npm" } });
+      });
+      expect(useStore.getState().ui.suggest?.kind, "ön ek listesi açılmadı").toBe("history");
+      el.setSelectionRange(0, 3);
+
+      let olay = false;
+      act(() => {
+        olay = fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+      expect(olay, "kesme engellendi").toBe(true);
+    });
+
+    it("klasör önerilerinde geçmişe dokunmuyor", () => {
+      // O satırlar diskteki klasörler, geçmiş değil.
+      const { container } = render(<CommandInput />);
+      const el = field(container)!;
+      act(() => {
+        const ui = useStore.getState().ui;
+        useStore.setState({
+          ui: { ...ui, suggest: { items: ["cd src"], index: 0, input: "", kind: "dirs" } },
+        });
+      });
+      act(() => {
+        fireEvent.keyDown(el, { key: "Delete", shiftKey: true });
+      });
+      expect(deleteSuggestionAt).not.toHaveBeenCalled();
+    });
   });
 
   /*

@@ -174,6 +174,11 @@ export function TransferDialog() {
       const result = await api.configImportApply(preview.path, importOptions);
       setImportResult(result);
       await store().loadFavorites();
+      // Yukarı ok ve yazarken gelen öneriler geçmişin bellekteki kopyasından
+      // okuyor; içe alma ise diske ekledi ya da ("Üzerine yaz") diskten sildi.
+      // `bootstrap()` da bu kopyayı yüklüyor ama beklemeden — içe alma
+      // bittiğinde listenin diskle aynı olması o yan etkiye kalmasın.
+      if (importOptions.history !== "skip") await store().loadSuggestHistory();
       if (changesWorkspace) {
         await store().reloadWorkspace();
       } else {

@@ -20,6 +20,7 @@ import { StatusBar } from "./components/StatusBar";
 import { SuggestionBar } from "./components/SuggestionBar";
 import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
+import { StashDialog } from "./components/StashDialog";
 import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
@@ -27,6 +28,7 @@ import { useT, useLang } from "./lib/i18n";
 import { api } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
+import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
 import { flushAllState, useStore } from "./store/useStore";
 
 export function App() {
@@ -53,7 +55,7 @@ export function App() {
    * çiziminde `suggest` HİÇ kullanılmıyor.
    *
    * Aşağıdaki alanlar App'in gerçekten okuduğu alanlar. Artık `suggest`,
-   * `confirm`, `findOpen`, `panelMode`, `viewerPath`, `gitCollapsed`,
+   * `confirm`, `findOpen`, `panelMode`, `viewerPath`, `gitExpanded`,
    * `gitShowPaths`, `renamingTabId`, `editingGroupId` ve `settingsSection`
    * değişimleri App'i uyandırmıyor; onları okuyan bileşenler kendileri abone.
    *
@@ -69,6 +71,7 @@ export function App() {
   const branchPicker = useStore((s) => s.ui.branchPicker);
   const settingsOpen = useStore((s) => s.ui.settingsOpen);
   const transferOpen = useStore((s) => s.ui.transferOpen);
+  const stashDialog = useStore((s) => s.ui.stashDialog);
   const nodePicker = useStore((s) => s.ui.nodePicker);
   const toast = useStore((s) => s.ui.toast);
   const appVersion = useStore((s) => s.appVersion);
@@ -255,12 +258,14 @@ export function App() {
         store.ui.paletteOpen ||
         store.ui.filePaletteOpen ||
         store.ui.searchOpen ||
+        store.ui.stashDialog !== null ||
         store.ui.confirm !== null;
 
       // Örtüler açıkken Esc kapatsın, gerisi örtünün kendi işi.
       if (event.key === "Escape") {
-        // Onay penceresi Esc'yi kendisi ele aliyor (capture fazinda).
-        if (store.ui.confirm) return;
+        // Onay penceresi Esc'yi kendisi ele aliyor (capture fazinda). Stash
+        // penceresi de: o, is surerken Esc'yi bilerek yok sayiyor.
+        if (store.ui.confirm || store.ui.stashDialog) return;
         if (store.ui.suggest) return store.closeSuggestions();
         if (store.ui.findOpen) return store.setUi({ findOpen: false });
         if (store.ui.paletteOpen) return store.setUi({ paletteOpen: false });
@@ -418,6 +423,11 @@ export function App() {
         if (event.key === "ArrowUp") return run(() => store.moveSuggestion(1));
         if (event.key === "ArrowDown") return run(() => store.moveSuggestion(-1));
         if (event.key === "ArrowRight") return run(() => store.acceptSuggestion());
+        // Kutudaki karşılığıyla aynı tuş (bkz. `CommandInput`); klasör
+        // önerileri geçmiş değil, orada tuş kabuğa gidiyor.
+        if (suggest.kind !== "dirs" && matchCombo(event, DELETE_SUGGESTION_KEY)) {
+          return run(() => void store.deleteSuggestionAt(suggest.index));
+        }
         if (event.key === "Enter" || event.key === "Tab") {
           store.closeSuggestions();
           // preventDefault YOK: tuş kabuğa gitmeye devam etsin.
@@ -674,6 +684,7 @@ export function App() {
       )}
       {settingsOpen && <SettingsDialog />}
       {transferOpen && <TransferDialog />}
+      {stashDialog && <StashDialog cwd={stashDialog.cwd} />}
 
       <ConfirmDialog />
 

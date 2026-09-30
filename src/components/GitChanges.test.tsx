@@ -66,8 +66,19 @@ function seed(changes: { status: string; path: string }[], root = CWD) {
     groups: [group()],
     activeGroupId: "g1",
     gitInfo: {
-      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, changes, root },
+      [CWD]: { branch: "main", detached: false, ahead: 0, behind: 0, upstream: "origin/main", unborn: false, staged: 0, stashCount: 0, changes, root },
     },
+    // Satırlar KAPALI geliyor. Açık satırlar depoda tutulduğu için bir önceki
+    // testin açtığı yol (aynı adlar tekrar tekrar kullanılıyor) buraya sızmasın.
+    ui: { ...useStore.getState().ui, gitExpanded: [] },
+  });
+}
+
+/** Bütün satırlar AÇIK: farkı ve sayacı görmek isteyen testler için. */
+function seedOpen(changes: { status: string; path: string }[], root = CWD) {
+  seed(changes, root);
+  useStore.setState({
+    ui: { ...useStore.getState().ui, gitExpanded: changes.map((c) => c.path) },
   });
 }
 
@@ -76,7 +87,12 @@ beforeEach(() => {
   setPlatform("windows");
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Casus (`spyOn`) çağrı sayıları testler arasında BİRİKİYORDU: "kapalı satır için
+  // fark istenmiyor" gibi "hiç çağrılmadı" denetimleri önceki testin çağrısını görürdü.
+  vi.restoreAllMocks();
+});
 
 describe("durum göstergesi", () => {
   it("metin etiketi yerine simge çiziliyor", () => {
@@ -227,8 +243,8 @@ describe("satır eylemleri", () => {
 
   it("sayaç dosya adının YANINDA, eylemlerden önce", async () => {
     // İSTEK: "+15 -1 dosya isminin yanına gelsin, eylemler onun yerine."
-    seed([{ status: " M", path: "src/app.ts" }]);
-    // Sayaç ancak fark gelince çiziliyor.
+    // Sayaç ancak fark gelince çiziliyor, fark da satır AÇILINCA isteniyor.
+    seedOpen([{ status: " M", path: "src/app.ts" }]);
     vi.spyOn(api, "gitDiff").mockResolvedValue(
       ["@@ -1,1 +1,2 @@", " bir", "+iki"].join("\n"),
     );
@@ -320,12 +336,13 @@ describe("satır eylemleri", () => {
 /**
  * Katlama.
  *
- * ÖNCEKİ HÂLİ akordeondu: satırlar kapalı geliyor, biri açılınca öteki
- * kapanıyordu. "Neler değişmiş" sorusunun yanıtı ise listenin TAMAMI — her
- * dosyayı tek tek açmak aynı soruyu dosya sayısı kadar sormak demekti.
+ * Satırlar KAPALI geliyor (istek: "Değişiklikler default olarak hepsi kapalı
+ * gelsin"). Önceki hâli tersiydi ve ondan da önce akordeondu: biri açılınca
+ * öteki kapanıyordu.
  *
- * Testlerin asıl konusu iki şey: varsayılanın AÇIK olması ve kapatmanın
- * yalnızca kendi satırını etkilemesi (akordeonun geri gelmemesi).
+ * Testlerin asıl konusu üç şey: varsayılanın KAPALI olması, kapalı satır için
+ * fark İSTENMEMESİ (kapalı gelmenin asıl kazancı bu) ve açmanın yalnızca kendi
+ * satırını etkilemesi (akordeonun geri gelmemesi).
  */
 describe("katlama", () => {
   beforeEach(() => {
@@ -334,36 +351,106 @@ describe("katlama", () => {
     vi.spyOn(api, "gitDiff").mockResolvedValue("");
   });
 
-  it("satırlar AÇIK geliyor", () => {
+  it("açık satır kümesi BOŞ başlıyor", () => {
+    // `seed` kümeyi açıkça sıfırlıyor; varsayılanın kendisi burada sınanıyor.
+    expect(useStore.getInitialState().ui.gitExpanded).toEqual([]);
+  });
+
+  it("satırlar KAPALI geliyor", () => {
     seed([
       { status: " M", path: "a.ts" },
       { status: " M", path: "b.ts" },
     ]);
     const { container } = render(<GitChanges />);
-    expect(container.querySelectorAll(".git-item.open")).toHaveLength(2);
+    expect(container.querySelectorAll(".git-item")).toHaveLength(2);
+    expect(container.querySelectorAll(".git-item.open"), "satırlar açık geliyor").toHaveLength(0);
+    expect(container.querySelector(".git-diff"), "kapalı satırın farkı çizilmiş").toBe(null);
   });
 
-  it("tıklamak yalnızca o satırı kapatıyor", () => {
-    // Akordeonun geri gelmemesi: ikinciyi kapatmak birinciyi açık bırakmalı.
+  it("kapalı satır için fark İSTENMİYOR", async () => {
+    // Kapalı gelmenin asıl kazancı: elli dosyalık değişiklik elli `git diff` ile
+    // başlamıyor. Fark yalnızca satır açılınca isteniyor.
+    const gitDiff = vi.spyOn(api, "gitDiff").mockResolvedValue("");
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: " M", path: "b.ts" },
+    ]);
+    render(<GitChanges />);
+    await act(async () => {});
+    expect(gitDiff, "kapalı satırlar için fark istendi").not.toHaveBeenCalled();
+  });
+
+  it("satırı açınca farkı istiyor", async () => {
+    const gitDiff = vi.spyOn(api, "gitDiff").mockResolvedValue("");
     seed([
       { status: " M", path: "a.ts" },
       { status: " M", path: "b.ts" },
     ]);
     const { container } = render(<GitChanges />);
     fireEvent.click(container.querySelectorAll(".git-row")[1]);
+    await act(async () => {});
 
-    const items = [...container.querySelectorAll(".git-item")];
-    expect(items[0].className, "ilk satır da kapandı").toContain("open");
-    expect(items[1].className, "ikinci satır kapanmadı").not.toContain("open");
+    expect(gitDiff).toHaveBeenCalledTimes(1);
+    expect(gitDiff).toHaveBeenCalledWith(CWD, "b.ts", false);
   });
 
-  it("kapatılan satır yeniden açılabiliyor", () => {
+  it("tıklamak yalnızca o satırı açıyor", () => {
+    // Akordeonun geri gelmemesi: ikinciyi açmak birinciyi etkilememeli, üçüncüyü
+    // de açmamalı.
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: " M", path: "b.ts" },
+      { status: " M", path: "c.ts" },
+    ]);
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-row")[1]);
+
+    const items = [...container.querySelectorAll(".git-item")];
+    expect(items[0].className, "ilk satır açıldı").not.toContain("open");
+    expect(items[1].className, "ikinci satır açılmadı").toContain("open");
+    expect(items[2].className, "üçüncü satır açıldı").not.toContain("open");
+  });
+
+  it("iki satır aynı anda açık kalabiliyor", () => {
+    // Akordeon olsaydı ikincisini açmak birincisini kapatırdı.
+    seed([
+      { status: " M", path: "a.ts" },
+      { status: " M", path: "b.ts" },
+    ]);
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-row")[0]);
+    fireEvent.click(container.querySelectorAll(".git-row")[1]);
+    expect(container.querySelectorAll(".git-item.open")).toHaveLength(2);
+  });
+
+  it("açılan satır yeniden kapanabiliyor", () => {
     seed([{ status: " M", path: "a.ts" }]);
     const { container } = render(<GitChanges />);
     const row = container.querySelector(".git-row")!;
     fireEvent.click(row);
-    fireEvent.click(row);
     expect(container.querySelector(".git-item")!.className).toContain("open");
+    fireEvent.click(row);
+    expect(container.querySelector(".git-item")!.className).not.toContain("open");
+  });
+
+  it("listeye sonradan giren dosya da kapalı geliyor", () => {
+    // Liste git yoklamasıyla kendiliğinden değişiyor: yeni beliren dosya, başka
+    // bir satır açıkken bile kapalı gelmeli.
+    seed([{ status: " M", path: "a.ts" }]);
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelector(".git-row")!);
+
+    act(() => {
+      const info = useStore.getState().gitInfo[CWD]!;
+      useStore.setState({
+        gitInfo: { [CWD]: { ...info, changes: [...info.changes, { status: "??", path: "yeni.ts" }] } },
+      });
+    });
+
+    const items = [...container.querySelectorAll(".git-item")];
+    expect(items).toHaveLength(2);
+    expect(items[0].className).toContain("open");
+    expect(items[1].className, "yeni dosya açık geldi").not.toContain("open");
   });
 });
 
@@ -430,7 +517,7 @@ describe("bağlam açıcıları", () => {
   const DOSYA = Array.from({ length: 200 }, (_, i) => `satir${i + 1}`).join("\n");
 
   async function ciz() {
-    seed([{ status: " M", path: "a.ts" }]);
+    seedOpen([{ status: " M", path: "a.ts" }]);
     vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
     vi.spyOn(api, "readTextFile").mockResolvedValue({
       text: DOSYA,
@@ -531,7 +618,7 @@ describe("bağlam açıcıları", () => {
     // Hiç düğme çizmemek "burada açacak bir şey yok" diye okunuyordu; oysa
     // var — okunamayan bir dosya var. İkisi ayrı şey ve ipucu hangisi
     // olduğunu söylüyor.
-    seed([{ status: " M", path: "a.ts" }]);
+    seedOpen([{ status: " M", path: "a.ts" }]);
     vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
     vi.spyOn(api, "readTextFile").mockResolvedValue(null);
     const { container } = render(<GitChanges />);
@@ -563,7 +650,7 @@ describe("bağlam açıcıları", () => {
      * React yeniden çizmeye fırsat bulamadan geliyordu. Bu test okumayı bir
      * sonraki döngüye atarak gerçek sırayı kuruyor.
      */
-    seed([{ status: " M", path: "a.ts" }]);
+    seedOpen([{ status: " M", path: "a.ts" }]);
     vi.spyOn(api, "gitDiff").mockResolvedValue(DIFF);
     vi.spyOn(api, "readTextFile").mockImplementation(
       () =>

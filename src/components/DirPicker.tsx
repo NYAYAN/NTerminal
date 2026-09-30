@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { filterDirs, joinDir, parentDir } from "../lib/dirs";
+import { typingOutsideTerminal } from "../lib/focus";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { anchorAbove } from "../lib/popover";
@@ -36,6 +37,23 @@ export function DirPicker({ cwd, onClose }: { cwd: string; onClose: () => void }
 
   useEffect(() => {
     inputRef.current?.focus();
+    /*
+     * Kapanınca odak KOMUT SATIRINA dönüyor.
+     *
+     * Seçici baştan sona klavyeyle gezilebiliyor ve Escape ile kapanıyor;
+     * kapanırken arama kutusu yok oluyor ve odak boşa düşüyordu — bir sonraki
+     * komutu yazmak için yine fareyle kutuya tıklamak gerekirdi. Komut
+     * çalışırken de kutu var (çalışan komutun yanıt satırı); yalnızca kutu
+     * hiç yoksa (tam ekran program, ayar kapalı) odak terminale. Kullanıcı bu arada başka bir
+     * metin kutusuna geçtiyse (kaplamaya tıklayıp yan paneldeki aramaya)
+     * dokunulmuyor — kural `lib/focus.ts` içinde.
+     */
+    return () => {
+      if (typingOutsideTerminal()) return;
+      const box = document.querySelector<HTMLTextAreaElement>(".command-input-field");
+      if (box) box.focus();
+      else useStore.getState().activeSession()?.focus();
+    };
   }, []);
 
   useEffect(() => {

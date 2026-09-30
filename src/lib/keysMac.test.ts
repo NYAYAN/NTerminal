@@ -137,6 +137,8 @@ describe("kısayol yazımı", () => {
     expect(prettyCombo("Cmd+Enter")).toBe("⌘↩");
     expect(prettyCombo("Ctrl+Tab")).toBe("⌃⇥");
     expect(prettyCombo("Cmd+Backspace")).toBe("⌘⌫");
+    // İleri silme: mac klavyesinde Fn+⌫, menülerde ⌦ diye yazılıyor.
+    expect(prettyCombo("Shift+Delete")).toBe("⇧⌦");
   });
 
   it("Windows'ta metin yazımı sürüyor", () => {
