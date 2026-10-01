@@ -44,6 +44,8 @@ export const api = {
   detectProfiles: () => invoke<Profile[]>("profiles_detect"),
 
   saveWorkspace: (workspace: Workspace) => invoke<void>("workspace_save", { workspace }),
+  /** Oturum sonu için istenen son kayıt bitti (bkz. `onSessionEnd`). */
+  sessionEndFlushed: () => invoke<void>("session_end_flushed"),
 
   ptySpawn: (spec: SpawnSpec) => invoke<SpawnResult>("pty_spawn", { spec }),
   ptyWrite: (id: string, data: string) => invoke<void>("pty_write", { id, data }),
@@ -244,5 +246,27 @@ export function onPtyExit(
 ): Promise<UnlistenFn> {
   return listen<PtyExitEvent>(`pty:exit:${id}`, (event) => {
     handler(event.payload.code);
+  });
+}
+
+/** Rust'taki `session_end::EVENT` ile aynı; `sessionEnd.test.ts` ikisini bağlıyor. */
+export const SESSION_END_EVENT = "app:session-end";
+
+/**
+ * Oturum sonu: Windows Installer (Restart Manager), oturum kapatma ya da
+ * yeniden başlatma uygulamayı kapatıyor.
+ *
+ * Rust tarafı olayı kapanış sorulduğunda (`WM_QUERYENDSESSION`) gönderiyor,
+ * kapanışta (`WM_ENDSESSION`) onayı bekliyor (süre sınırlı) ve süreci kendisi
+ * bitiriyor; bkz. `session_end.rs`.
+ * Kapatma düğmesinden farklı olarak burada karar yok: sistem kapatıyor,
+ * "arka planda kal" geçerli değil.
+ *
+ * Kayıt düşse de haber veriliyor: Rust boşuna süre sonuna kadar beklemesin.
+ */
+export function onSessionEnd(flush: () => Promise<void>): Promise<UnlistenFn> {
+  return listen(SESSION_END_EVENT, async () => {
+    await flush().catch(() => {});
+    await api.sessionEndFlushed().catch(() => {});
   });
 }

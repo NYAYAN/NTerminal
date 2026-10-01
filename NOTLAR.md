@@ -1150,7 +1150,7 @@ duruyor), şablon CLI'dekinden kaymamış. Hata geri konunca ikincisi ve
   kısayolunu onarması düşünüldü, kullanıcının dosyalarına kendiliğinden
   dokunmak olduğu için yapılmadı.
 
-**Yan bulgu (açık, §2.6).** Aynı kurulumda eski sürüm, Windows Installer'ın
+**Yan bulgu (§2.6, çözüldü).** Aynı kurulumda eski sürüm, Windows Installer'ın
 kapatma isteğinde çöktü.
 
 ---
@@ -1265,25 +1265,98 @@ karşılığı var.
   yanıt kutusuyla birleştirmeden sonra Windows'ta koşuldu — 264 + 13, stash
   testleri dahil geçti.)
 
-### 2.6 Windows Installer'ın kapatma isteğinde çökme
+### 2.6 Windows Installer'ın kapatma isteğinde çökme — ÇÖZÜLDÜ
 
 **Gözlenen (30 Eylül, Windows olay günlüğü).** MSI kurulurken Restart Manager
 açık N-Terminal'e (09:23'ten beri çalışan, pid 16988) kapanmasını söyledi;
 süreç iki saniye sonra `0xc0000409` ile düştü (Application Error 1000, ardından
-WER `BEX64`). Rust'ta bu kod çoğunlukla panik → abort demek; örneğin pencere
-yordamında çıkıp FFI sınırını geçemeyen bir panik.
+WER `BEX64`). Düzgün kapanışın işleri (çalışma alanı, ekran çıktıları)
+yapılmadı. Aynı yol Windows güncellemesinden sonra yeniden başlatmada ve oturum
+kapatmada da işliyor.
 
-**Sonuçları.** Çöken süreç tepsi simgesini kaldıramıyor (hayalet simge fare
-üstüne gelene kadar duruyor) ve düzgün kapanışın işleri (çalışma alanı, ekran
-çıktıları) yapılmıyor. Aynı yol büyük olasılıkla Windows güncellemesinden sonra
-yeniden başlatmada ve oturum kapatmada da işliyor.
+**Yakalandı** (kurulu uygulamaya dokunmadan, yalıtılmış örnekte). Geliştirme
+yapısına Restart Manager'ın GUI uygulamaya gönderdiği iletiler
+(`WM_QUERYENDSESSION`, ardından `WM_ENDSESSION` + `ENDSESSION_CLOSEAPP`):
 
-**Nasıl yakalanır.** Kullanıcının uygulamasına dokunmadan: yalıtılmış bir
-geliştirme örneği (`NTERMINAL_DATA_DIR`, ayrı WebView2 klasörü) açıp penceresine
-`WM_QUERYENDSESSION` + `WM_ENDSESSION` (`ENDSESSION_CLOSEAPP`) göndermek ya da
-Restart Manager API'siyle (`RmStartSession` → `RmRegisterResources(exe)` →
-`RmShutdown`) aynı isteği üretmek. Geliştirme yapısı paniğin iletisini ve
-yerini yazar.
+```
+panicked at …\tao-0.35.3\src\platform_impl\windows\event_loop\runner.rs:371:25:
+cannot move state from Destroyed
+```
+
+Düzeltmesiz sürüm yapısına gerçek `RmShutdown`: aynı panik, `RmShutdown` 2018
+ms, Application Error 1000 `0xc0000409`, WER `BEX64` (P9 = 7,
+`FAST_FAIL_FATAL_APP_EXIT`, yani Rust'ın abort'u). Olay günlüğündeki imzanın
+aynısı.
+
+**Kök neden tao'da.** tao `WM_ENDSESSION`ı kendi gizli ileti penceresinde
+(`Tao Thread Event Target`) karşılıyor: olay döngüsünü `Destroyed` yapıyor ve
+`0` dönüyor. Oturum kapanırken Windows süreci ardından kendisi sonlandırıyor;
+Restart Manager ise sonlandırmıyor, uygulamanın kendisinin çıkmasını bekliyor.
+İleti döngüsü dönmeye devam ediyor ve gelen ilk Tauri iletisi (IPC yanıtı, PTY
+çıktısı) `Destroyed`dan çıkmaya çalışıp panikliyor. Sürüm profilinde
+`panic = "abort"`: panik doğrudan `0xc0000409`.
+
+**Çözüm** ([`session_end.rs`](src-tauri/src/session_end.rs)). tao'nun
+penceresine tao'dan sonra bir alt sınıf takılıyor; comctl32 son takılanı önce
+çağırdığı için `WM_ENDSESSION(TRUE)` tao'ya hiç ulaşmıyor. Yerine düzgün
+kapanış:
+
+1. `WM_QUERYENDSESSION`: arayüze `app:session-end` gidiyor ve `flushAllState`
+   (kapatma düğmesinin kaydının aynısı) başlıyor. Yanıt yine "evet".
+2. `WM_ENDSESSION(TRUE)`: kaydın bitmesi bekleniyor, en fazla 3 sn. Kayıt
+   komutları ana iş parçacığında koştuğu için bekleme iletileri kendisi işliyor.
+3. `kill_all`, `cleanup_before_exit` (tepsi simgesi kalkıyor), çıkış.
+
+"Arka planda kal" burada geçerli değil: kapatan sistem.
+
+Kararlar:
+
+- **Kayıt soru aşamasında başlıyor.** Oturum kapanırken WebView2 süreçleri de
+  `WM_ENDSESSION` alıyor ve bizden önce kapanabilir; soru aşamasında herkes
+  ayakta. İptal edilen bir kapanışın (`WM_ENDSESSION(FALSE)`) bedeli fazladan
+  bir kayıt.
+- **Süreç `WM_ENDSESSION`ın içinde bitiyor** (tao 0.37'nin yaptığı da bu).
+  Dönüp Tauri'nin çıkışını beklemek, oturum kapanırken Windows'un süreci o arada
+  kesmesine açık kalırdı.
+- **tao güncellenmedi.** 0.37.0 aynı iletide süreci hemen bitiriyor ve Tauri
+  2.12 istiyor: çökme giderdi ama son kayıt yine yapılmazdı, olay işleyicisi
+  çalışırken gelen `WM_ENDSESSION` da orada hâlâ panik
+  ([tao#1345](https://github.com/tauri-apps/tao/issues/1345)). Alt sınıf
+  tao'nun sürümünden bağımsız önce çalışıyor; Tauri güncellendiğinde de kalmalı.
+
+**Ölçüldü** (yalıtılmış örnek, kurulu uygulama açıkken):
+
+| | Düzeltmeden önce | Sonra |
+|---|---|---|
+| Sürüm yapısı, gerçek `RmShutdown` | `0xc0000409`, 2018 ms | rc=0, 46–87 ms |
+| Arayüz kaydı | yapılmadı | 5–14 ms; `workspace.json` ve ekran çıktısı istekle aynı anda |
+
+Pencere gizliyken ("arka planda kal") sonuç aynı; kabuk, conhost ve WebView2
+süreçlerinin hepsi kapandı, arkada süreç kalmadı.
+
+Tepsi simgesi süreç içinden ölçüldü (yalnızca karalama kopyasında): tepsinin
+penceresi `cleanup_before_exit`te yok ediliyor ve tray-icon'un `Drop`u ondan
+önce `NIM_DELETE` yapıyor, hata yazmadı. Dışarıdan ölçmek işe yaramadı:
+`Shell_NotifyIconGetRect` zorla sonlandırılmış, kesin hayalet bırakan süreçte de
+"yok" diyor, UI Automation da taşma panelini kapalıyken görmüyor. Bu yüzden
+eski yapıdaki hayalet simge yeniden ölçülemedi; kodda tao çökmeden önce
+Tauri'nin çıkış temizliğini de çalıştırıyor, 0.2.1'de simge o yolda da kalkıyor
+olabilir.
+
+**Testler.** [`session_end_tests.rs`](src-tauri/src/session_end_tests.rs)
+gerçek tao döngüsüyle koşuyor (`tauri_runtime_wry::tao`, Tauri'nin kullandığı
+sürüm; Windows'a özel sınama bağımlılığı). İstek başka iş parçacığından,
+Restart Manager gibi yanıt beklenerek gidiyor (soru → iptal → son), ardından
+bir kullanıcı olayı. Yakalama kaldırılınca iki test üretimdeki iletiyle, aynı
+satırda düşüyor (denendi). Diğer ikisi beklemenin süre sınırını tutuyor: yanıt
+vermeyen sayfa ve hiç boşalmayan kuyruk. [`lib/sessionEnd.test.ts`](src/lib/sessionEnd.test.ts):
+olay adı iki tarafta aynı, onay kayıttan sonra gidiyor (sıra ters çevrilince
+düşüyor, denendi), kayıt düşse de onay gidiyor.
+
+**Elle tekrar:** [`calistir/oturum-sonu.ps1`](.claude/skills/calistir/oturum-sonu.ps1),
+kullanımı `calistir` skill'inde. Geliştirme yapısı konsol alt sistemli ve
+Restart Manager onu `Console` sayıp ileti göndermiyor; orada `-Mode ileti`.
+Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 
 ---
 
@@ -1311,7 +1384,10 @@ var mı). Çözüm uygulamayı kapatıp `npm start`. Uygulamayı BAŞKA bir sür
 oturum başlattıysa öldürme: içinde kullanıcının sekmeleri ve kabukları var.
 `cargo test` de `target/debug/nterminal`i yeniden üretiyor (`tests/` dizini
 olduğu için ikili de derleniyor); çalışan sürece dokunmuyor ama bir sonraki
-başlatma yeni ikiliyi alıyor.
+başlatma yeni ikiliyi alıyor. Tersi de ısırıyor: `cargo test --lib <süzgeç>`
+ikiliyi ÜRETMİYOR. Rust'ı değiştirip yalnızca `--lib` koşan biri elle denemede
+eski ikiliyi çalıştırır (§2.6'da oldu: diskte düzeltmenin önceki hâli
+kalmıştı); elle denemeden önce `cargo build`.
 
 Yeniden başlatırken ikinci tuzak: `npm start` `Port 5273 is already in use` ile
 düşebiliyor (`vite.config.ts` `strictPort: true`, `tauri.conf.json` `devUrl`
@@ -1405,9 +1481,10 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Son ölçüm (Stash oturumunun sonu): **1645 arayüz testi** (102 dosya), **252 Rust
-birim + 9 entegrasyon testi**, tip denetimi temiz. (Önceki satır 1042 ve 133
-diyordu; gerçekle örtüşmüyordu, güncellendi.)
+Son ölçüm (30 Eylül, oturum sonu düzeltmesi, Windows): **1710 arayüz testi**
+(104 dosya), **268 Rust birim + 13 entegrasyon testi** (bir yardımcı test
+bilinçli `ignore`), tip denetimi temiz. (Stash oturumunun sonunda 1645 / 102
+dosya ve 252 + 9 idi.)
 
 Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
 `.claude/worktrees/` altındaki iç içe worktree'lerin test dosyalarını da topluyor

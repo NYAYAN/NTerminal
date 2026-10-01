@@ -11,6 +11,7 @@ mod osinfo;
 mod paths;
 mod platform;
 pub mod pty;
+mod session_end;
 mod shellint;
 mod shells;
 mod store;
@@ -171,6 +172,16 @@ fn workspace_save(state: State<AppState>, workspace: Workspace) -> CmdResult<()>
     store::save_workspace(&state.paths, &workspace).map_err(fail)?;
     *state.workspace.lock() = workspace;
     Ok(())
+}
+
+/// Arayuz, oturum sonu icin istenen son kaydi bitirdi.
+///
+/// Rust tarafi `WM_ENDSESSION`in icinde bunu bekliyor, sonra sureci bitiriyor
+/// (bkz. session_end.rs). Es zamanli olmasi bilincli: bekleyen dongu ana is
+/// parcaciginda, yanit da orada islenmeli.
+#[tauri::command]
+fn session_end_flushed() {
+    session_end::mark_flushed();
 }
 
 // ------------------------------------------------------------------ pty
@@ -874,6 +885,9 @@ pub fn run() {
             // Uygulama yeniden acildiginda gelen haber (bkz. instance.rs).
             let handle = app.handle().clone();
             instance.on_activate(move || tray::show_main(&handle));
+            // Windows Installer / oturum kapatma istegi: tao'ya ulasmadan
+            // yakalaniyor ve duzgun kapaniliyor (bkz. session_end.rs).
+            session_end::install(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -883,6 +897,7 @@ pub fn run() {
             settings_reset,
             profiles_detect,
             workspace_save,
+            session_end_flushed,
             pty_spawn,
             pty_write,
             pty_write_bytes,

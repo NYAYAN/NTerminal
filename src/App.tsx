@@ -25,7 +25,7 @@ import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
-import { api } from "./lib/ipc";
+import { api, onSessionEnd } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
@@ -183,6 +183,27 @@ export function App() {
         if (disposed) fn();
         else unlisten = fn;
       });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  /*
+   * Oturum sonu (Windows Installer, oturum kapatma): yalnızca son kaydı yaz.
+   *
+   * Kapatma kararı burada DEĞİL ve olamaz: sistem uygulamayı kapatıyor. Rust
+   * tarafı isteği yakalıyor, bu kaydı bekliyor ve süreci kendisi bitiriyor;
+   * ayrıntısı `onSessionEnd` ve `session_end.rs` içinde. Dinleyici kapatma
+   * dinleyicisiyle aynı nedenle bir kez kuruluyor.
+   */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void onSessionEnd(flushAllState).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
     return () => {
       disposed = true;
       unlisten?.();

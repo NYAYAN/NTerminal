@@ -180,6 +180,36 @@ python -c "import json,os;print(json.dumps(json.load(open(os.path.expandvars(r'%
   `win-env.ps1` bulunamaz — o zaman yanlış toolset seçilip yukarıdaki
   `LNK1104` hatası geri gelir.
 
+## Windows Installer / oturum sonu isteğini dene
+
+MSI kurulurken Restart Manager açık uygulamaya kapanmasını söylüyor; oturum
+kapanırken Windows da aynısını (NOTLAR.md §2.6, `session_end.rs`). Kurulu
+uygulamaya dokunmadan denemek için yalıtılmış örneği (yukarıda) stderr'i bir
+dosyaya giderek aç — panik iletisi ve yeri oraya düşüyor:
+
+```powershell
+Start-Process cmd.exe -ArgumentList "/c `"`"<depo>\src-tauri\target\debug\nterminal.exe`" > `"$env:TEMP\nt-oturum.log`" 2>&1`"" -WindowStyle Hidden -WorkingDirectory "<depo>\src-tauri"
+.\.claude\skills\calistir\oturum-sonu.ps1 -Exe "<depo>\src-tauri\target\debug\nterminal.exe" -Mode ileti
+```
+
+- `-Mode ileti`: Restart Manager'ın GUI uygulamaya gönderdiği iletiler.
+  Geliştirme yapısı konsol alt sistemli; Restart Manager onu `Console` sayıyor
+  ve pencere iletisi hiç göndermiyor, gerçek API orada bir şey sınamıyor.
+- `-Mode api`: gerçek `RmShutdown`. `win-env.ps1` ortamında `cargo build
+  --release` ile üretilen `target\release\nterminal.exe` gerekiyor:
+  custom-protocol olmadığı için ön yüz yine Vite'tan geliyor, ama GUI alt
+  sistemi ve `panic = "abort"` kurulu yapınınki.
+
+Betik yalnızca `-Exe` yolundaki süreci hedefliyor; o yolu çalıştıran tam bir
+süreç yoksa ya da Restart Manager listesinde başka bir süreç görünürse hiçbir
+şey göndermeden çıkıyor. Beklenen: günlükte `[nterminal] oturum sonu: arayuz
+kaydi tamam (… ms)`, `workspace.json` o anda yazılmış, süreç ve kabukları
+kapanmış.
+
+Tepsi simgesini dışarıdan doğrulamaya uğraşma: `Shell_NotifyIconGetRect` ölmüş
+sürecin hayalet simgesini de "yok" diye bildiriyor, UI Automation taşma panelini
+kapalıyken görmüyor (ölçüldü).
+
 ## Ön plan yokken: uygulamayı CDP ile sür
 
 Kullanıcı uzak masaüstündeyse (RDP) ve pencere küçültülmüş ya da arkadaysa

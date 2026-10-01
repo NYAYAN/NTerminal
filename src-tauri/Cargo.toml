@@ -33,3 +33,9 @@ uuid = { version = "1.20.0", features = ["v4", "serde"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+# session_end_tests.rs: oturum sonu yakalamasi Tauri'nin GERCEK tao dongusuyle
+# sinaniyor (`tauri_runtime_wry::tao`). Surum Tauri'ninkiyle ayni cozuluyor;
+# ozellikler kapali, uretim yapisina bir sey eklemiyor.
+[target.'cfg(windows)'.dev-dependencies]
+tauri-runtime-wry = { version = "2", default-features = false }
