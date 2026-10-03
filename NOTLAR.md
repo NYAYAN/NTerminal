@@ -1586,12 +1586,12 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Son ölçüm (3 Ekim, fark penceresi ve yayın iş akışı, macOS, `--exclude
-'.claude/**'`): **1775 arayüz testi** (109 dosya), **265 Rust birim + 13
-entegrasyon testi**, tip denetimi temiz. Düşen tek test `tauriConfig.test.ts` ›
-"şablon kurulu Tauri CLI'nin şablonundan kaymamış": macOS'ta kurulu CLI'nin
-darwin ikilisinde WiX şablonu yok (`wix-template.mjs` "bulunamadı" diyor) —
-değişiklikten bağımsız, Windows'a özgü bir denetim mac'te koşuyor. (30 Eylül,
+Son ölçüm (3 Ekim, fark penceresi, yayın iş akışı ve WiX düzeltmesi, macOS,
+`--exclude '.claude/**'`): **1775 arayüz testi** (109 dosya; 1774 geçti, 1
+atlandı), **265 Rust birim + 13 entegrasyon testi**, tip denetimi temiz. Atlanan
+`tauriConfig.test.ts` › "şablon kurulu Tauri CLI'nin şablonundan kaymamış": WiX
+şablonu yalnızca CLI'nin Windows derlemesinde var, mac'te ve CI'ın ubuntu işinde
+"uygulanamaz"; denetim CI'da Windows paket işinin ayrı adımı. (30 Eylül,
 Windows: 1710 / 104 dosya, 268 + 13.)
 
 Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
