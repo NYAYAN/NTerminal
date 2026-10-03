@@ -316,6 +316,19 @@ export interface FileText {
   size: number;
 }
 
+/**
+ * Fark penceresinin iki tarafı (bkz. `git.rs` `DiffSides`).
+ *
+ * Bir taraf `null` olabilir: dosya HEAD'de yoksa (yeni / takipsiz) sol, çalışma
+ * ağacında yoksa (silinmiş) sağ taraf. Pencere o zaman tek taraf çiziyor.
+ */
+export interface DiffSides {
+  base: FileText | null;
+  current: FileText | null;
+  /** HEAD'in kısa kimliği (sekiz hane); hiç commit yoksa `null`. */
+  head: string | null;
+}
+
 // ------------------------------------------------------------- güncelleme
 
 /**

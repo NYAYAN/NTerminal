@@ -1,0 +1,712 @@
+/* ================================================================ fark penceresi
+ *
+ * IntelliJ / WebStorm'un ayrı pencerede açılan "Side-by-side viewer"ı (2026.2,
+ * yeni arayüz). Ölçüler JetBrains belgesindeki ekran görüntüsünden piksel
+ * piksel, renkler IntelliJ Community'nin renk şemalarından alındı:
+ *
+ *   - Fark renkleri Darcula / IntelliJ Light'ınkiler. Yeni arayüzün koyu
+ *     temaları (Dark, Islands Dark) bunları DEĞİŞTİRMİYOR, Darcula'nınkini
+ *     kullanıyor; açık temada yalnızca "değişti" mavisi farklı (c2d8f2).
+ *   - Sözcük farkı olan satırın zemini YUMUŞAK: fark rengi ile editör zemininin
+ *     %40/%60 karışımı (IntelliJ `getIgnoredColor` = `mix(renk, zemin, 0.6)`).
+ *     Değişen sözcükler tam renkte. Ölçüldü: 385570 + 191a1c → 25323e.
+ *   - Kaydırma şeridindeki işaretler ayrı, daha canlı renkler (error stripe).
+ *
+ * Fark renkleri temanın paletinden TÜRETİLMİYOR, IntelliJ'inkiler: istek
+ * "IntelliJ'deki gibi birebir" ve bu renkler gözün yıllardır alıştığı dil.
+ * Yalnızca koyu/açık ton seçimi uygulamanın temasından geliyor.
+ */
+
+.dw {
+  --dw-ins: #294436;
+  --dw-del: #484a4a;
+  --dw-mod: #385570;
+  --dw-ins-stripe: #447152;
+  --dw-del-stripe: #656e76;
+  --dw-mod-stripe: #43698d;
+  /* Katlamanın dalgası: `DIFF_SEPARATOR_WAVE` (Darcula 555555). */
+  --dw-wave: #555555;
+  --dw-bg: var(--term-bg);
+  --dw-ins-soft: color-mix(in srgb, var(--dw-ins) 40%, var(--dw-bg));
+  --dw-del-soft: color-mix(in srgb, var(--dw-del) 40%, var(--dw-bg));
+  --dw-mod-soft: color-mix(in srgb, var(--dw-mod) 40%, var(--dw-bg));
+  /* Oluk ile metin arasındaki ince ayırıcı (ölçülen: koyu 323438, açık ebecf0). */
+  --dw-rule: color-mix(in srgb, var(--text) 12%, var(--dw-bg));
+  --dw-line-no: color-mix(in srgb, var(--text-dim) 75%, var(--dw-bg));
+  --dw-caret-row: color-mix(in srgb, var(--text) 4%, transparent);
+  --dw-divider-w: 24px;
+  /* Editör yazı tipi: IntelliJ'in kendi yazı tipi JetBrains Mono (uygulamayla
+     birlikte geliyor); ölçü ve satır yüksekliği bileşenden. */
+  --dw-font: "JetBrains Mono", var(--mono-font);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-tone="light"] .dw {
+  --dw-ins: #bee6be;
+  --dw-del: #d6d6d6;
+  --dw-mod: #c2d8f2;
+  --dw-ins-stripe: #aadeaa;
+  --dw-del-stripe: #c8c8c8;
+  --dw-mod-stripe: #b6d2f2;
+  --dw-wave: #d0d0d0;
+}
+
+/* ------------------------------------------------------------- araç çubuğu
+ *
+ * Yeni arayüzün "ada" görünümü: pencere kenarlarından içeri çekilmiş, köşeleri
+ * yuvarlak bir şerit (ölçülen: 38px yükseklik). Sırası IntelliJ'in
+ * `getNavigationActions`ı: ↑ ↓ | ✎ | ← sayaç → | daralt … durum, görünüm, dişli. */
+.dw-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 38px;
+  margin: 6px 6px 0;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+}
+
+.dw-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dw-tool {
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.dw-tool:hover:not(:disabled),
+.dw-tool.on {
+  background: var(--hover-strong);
+}
+
+.dw-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dw-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.dw-files-anchor,
+.dw-gear-anchor {
+  position: relative;
+}
+
+/* Sayaç bir BAĞLANTI (IntelliJ: `AnActionLink`): tek dosyada kapalı ve soluk. */
+.dw-files {
+  min-height: 0;
+  padding: 2px 6px;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.dw-files:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.dw-status {
+  margin-left: auto;
+  padding: 0 8px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+/* Görünüm seçici: iki düğmelik bölümlü kutu; seçili olanın zemini dolu. */
+.dw-viewer {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dw-viewer button {
+  justify-content: center;
+  width: 34px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+}
+
+.dw-viewer button + button {
+  border-left: 1px solid var(--border);
+}
+
+.dw-viewer button.on {
+  background: var(--hover-strong);
+}
+
+.dw-viewer button:hover:not(.on) {
+  background: var(--hover);
+}
+
+/* ------------------------------------------------------------------ menüler */
+
+.dw-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 240px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Dişli pencerenin sağ kenarında: alt menü SOLA açılıyor, yoksa ekrandan taşar. */
+.dw-submenu {
+  top: -5px;
+  right: calc(100% + 2px);
+}
+
+.dw-menu-sub {
+  position: relative;
+}
+
+.dw-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dw-menu-item:hover,
+.dw-menu-item.on {
+  background: var(--hover-strong);
+}
+
+.dw-check {
+  display: inline-flex;
+  justify-content: center;
+  width: 14px;
+  flex: none;
+}
+
+.dw-menu-arrow {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--text-dim);
+}
+
+.dw-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.dw-files-menu {
+  left: 0;
+  right: auto;
+  min-width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.dw-file-name {
+  flex: none;
+}
+
+.dw-file-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- başlıklar
+ *
+ * Editörlerin üstündeki satır: solda kilit, HEAD'in kısa kimliği ve soluk yol;
+ * sağda "Güncel sürüm". Islands temalarında başlık kutusunun iç payı 6px ve
+ * altındaki çizgi ayırıcının üstünden de geçiyor. */
+.dw-titles {
+  flex: none;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--dw-bg);
+}
+
+.dw-titles.two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--dw-divider-w) minmax(0, 1fr);
+}
+
+.dw-titles.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.dw-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 6px;
+  white-space: nowrap;
+}
+
+.dw-lock {
+  display: inline-flex;
+  margin-right: 4px;
+  color: var(--text-dim);
+}
+
+.dw-rev {
+  flex: none;
+}
+
+/* Yolla sürüm arası 8px (IntelliJ `ipadx = scale(8)`), yol soluk. */
+.dw-path {
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
+/* Satır ayırıcıları iki tarafta farklıysa: LF mavi, CRLF kırmızı. */
+.dw-sep-label {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 0.85rem;
+}
+
+.dw-sep-label.lf {
+  color: var(--accent);
+}
+
+.dw-sep-label.crlf {
+  color: var(--err);
+}
+
+/* Bilgi bandı: "İçerikler aynı" ve benzerleri, "Gizle" bağlantısıyla. */
+.dw-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.dw-link {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.dw-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- editörler */
+
+.dw-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Satır da SABİT (`minmax(0, 1fr)`): örtük `auto` satır içeriğe göre büyüyor,
+   bölmeler tuvalin boyunu alıyor ve kaydırıcı hiç kaymıyordu. ÖLÇÜLDÜ: tuval
+   "görünen yükseklik kadar sanal boşluk" bıraktığı için ölçüm kendini
+   besledi ve kaydırıcı 8.2 milyon piksel boyunda çıktı. */
+.dw-sbs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--dw-divider-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.dw-unified {
+  height: 100%;
+}
+
+.dw-pane {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  background: var(--dw-bg);
+  font-family: var(--dw-font);
+  font-size: var(--dw-font-size);
+  line-height: var(--dw-line-height);
+}
+
+/* Metin alanı: dikey çubuğu gizli (yerine işaretli şerit), yatay çubuğu ince. */
+.dw-scroll {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.dw-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 8px;
+}
+
+.dw-scroll::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.dw-scroll::-webkit-scrollbar-track,
+.dw-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.dw-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.dw-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--dw-line-height);
+  padding-left: 6px;
+  white-space: pre;
+  tab-size: 4;
+  cursor: text;
+  user-select: text;
+}
+
+/* İmlecin satırı: değişen satırların zemini bunun ÜSTÜNDE (sıra önemli). */
+.dw-line.caret {
+  background: var(--dw-caret-row);
+}
+
+.dw-line.ins {
+  background: var(--dw-ins);
+}
+
+.dw-line.del {
+  background: var(--dw-del);
+}
+
+.dw-line.mod {
+  background: var(--dw-mod);
+}
+
+.dw-line.ins.soft {
+  background: var(--dw-ins-soft);
+}
+
+.dw-line.del.soft {
+  background: var(--dw-del-soft);
+}
+
+.dw-line.mod.soft {
+  background: var(--dw-mod-soft);
+}
+
+/* Satırın içindeki değişen parça: kendi türünün tam rengi. */
+.dw-frag.ins {
+  background: var(--dw-ins);
+}
+
+.dw-frag.del {
+  background: var(--dw-del);
+}
+
+.dw-frag.mod {
+  background: var(--dw-mod);
+}
+
+/* Karşı tarafta olup burada olmayan sözcük: 2px'lik dikey çizgi. Metni
+   itmesin diye eksi paylı. */
+.dw-frag.empty {
+  display: inline-block;
+  width: 2px;
+  height: var(--dw-line-height);
+  margin: 0 -1px;
+  vertical-align: top;
+}
+
+/* Bu tarafta satırı olmayan blok: iki satırın arasında 2px'lik çizgi. */
+.dw-gap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 2px;
+  pointer-events: none;
+}
+
+.dw-gap.ins {
+  background: var(--dw-ins);
+}
+
+.dw-gap.del {
+  background: var(--dw-del);
+}
+
+.dw-gap.mod {
+  background: var(--dw-mod);
+}
+
+/* Katlanmış değişmemiş aralık: yazı YOK, editör, oluk ve ayırıcı boyunca
+ * dalgalı ince bir çizgi (IntelliJ `DiffLineSeparatorRenderer`; yarı yükseklik
+ * 3px, üstüne gelince kalınlaşıyor). Tıklayınca bir kademe açılıyor. */
+.dw-line.fold,
+.dw-gutter-row.fold {
+  cursor: pointer;
+  user-select: none;
+}
+
+.dw-line.fold::before,
+.dw-gutter-row.fold::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 8px;
+  transform: translateY(-50%);
+  background: var(--dw-wave);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 4 C2 1 4 1 6 4 S10 7 12 4' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E")
+    repeat-x 0 50% / 12px 8px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 4 C2 1 4 1 6 4 S10 7 12 4' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E")
+    repeat-x 0 50% / 12px 8px;
+}
+
+.dw-line.fold:hover::before,
+.dw-gutter-row.fold:hover::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 4 C2 1 4 1 6 4 S10 7 12 4' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 4 C2 1 4 1 6 4 S10 7 12 4' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------------------------------------------- oluk
+ *
+ * Hücreler: 21px simge alanı (`»`), numara(lar), 17px kenar boşluğu — ekran
+ * görüntüsünde ölçülen. Sol editörde aynalı: simge metnin yanında, boşluk
+ * ayırıcının yanında; numaralar da METNE yaslı (solda sola, sağda sağa). */
+.dw-gutter {
+  --dw-icon-w: 21px;
+  --dw-edge-w: 17px;
+  position: relative;
+  flex: none;
+  width: calc(var(--dw-icon-w) + var(--dw-num-cols) * (var(--dw-num-w) + 8px) + var(--dw-edge-w));
+  height: 100%;
+  overflow: hidden;
+  background: var(--dw-bg);
+  user-select: none;
+}
+
+.dw-pane:not(.mirror) .dw-gutter {
+  border-right: 1px solid var(--dw-rule);
+}
+
+.dw-pane.mirror .dw-gutter {
+  border-left: 1px solid var(--dw-rule);
+}
+
+.dw-gutter-inner {
+  position: absolute;
+  inset: 0;
+}
+
+.dw-gutter-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  height: var(--dw-line-height);
+}
+
+.dw-gutter-row.ins {
+  background: var(--dw-ins);
+}
+
+.dw-gutter-row.del {
+  background: var(--dw-del);
+}
+
+.dw-gutter-row.mod {
+  background: var(--dw-mod);
+}
+
+.dw-num {
+  flex: none;
+  width: calc(var(--dw-num-w) + 8px);
+  padding: 0 4px;
+  text-align: right;
+  color: var(--dw-line-no);
+  font-variant-numeric: tabular-nums;
+}
+
+.dw-pane.mirror .dw-num {
+  text-align: left;
+}
+
+.dw-gutter-row.caret .dw-num {
+  color: var(--text);
+}
+
+.dw-arrow-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--dw-icon-w);
+}
+
+.dw-fold-cell {
+  flex: none;
+  width: var(--dw-edge-w);
+}
+
+.dw-arrow {
+  justify-content: center;
+  width: 18px;
+  height: calc(var(--dw-line-height) - 2px);
+  min-height: 0;
+  padding: 0;
+  border-radius: 3px;
+  color: color-mix(in srgb, var(--text) 75%, transparent);
+}
+
+.dw-arrow:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* ------------------------------------------------------------------ şerit
+ *
+ * Kaydırma çubuğu + değişiklik işaretleri. Sol editörün şeridi pencerenin
+ * SOL kenarında (IntelliJ `VERTICAL_SCROLLBAR_LEFT`). */
+.dw-stripe {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 100%;
+  background: var(--dw-bg);
+}
+
+.dw-mark {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+}
+
+.dw-mark.ins {
+  background: var(--dw-ins-stripe);
+}
+
+.dw-mark.del {
+  background: var(--dw-del-stripe);
+}
+
+.dw-mark.mod {
+  background: var(--dw-mod-stripe);
+}
+
+.dw-thumb {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.dw-stripe:hover .dw-thumb {
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* ---------------------------------------------------------------- ayırıcı
+ *
+ * Zemin sol oluğunki; şekiller tam renkte (değiştirilmiş blokta bile — satırın
+ * yumuşak zemini değil, IntelliJ'de de öyle). */
+.dw-divider {
+  display: block;
+  width: var(--dw-divider-w);
+  background: var(--dw-bg);
+}
+
+.dw-divider path.ins {
+  fill: var(--dw-ins);
+}
+
+.dw-divider path.del {
+  fill: var(--dw-del);
+}
+
+.dw-divider path.mod {
+  fill: var(--dw-mod);
+}
+
+.dw-divider path.fold {
+  fill: none;
+  stroke: var(--dw-wave);
+  stroke-width: 1;
+}
+
+/* ----------------------------------------------------------- iletiler */
+
+.dw-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 24px;
+  color: var(--text-dim);
+  background: var(--dw-bg);
+  text-align: center;
+}
+
+/* Son farkta F7: "Sonraki dosyaya geçmek için yeniden basın" — kalın bir bilgi
+   balonu (IntelliJ `notifyMessage`). Herhangi bir tuş, tıklama ya da
+   kaydırmada kayboluyor. */
+.dw-hint {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  z-index: 60;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  font-weight: 600;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

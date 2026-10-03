@@ -442,6 +442,135 @@ const NUL_DEVICE: &str = "NUL";
 #[cfg(not(windows))]
 const NUL_DEVICE: &str = "/dev/null";
 
+// --------------------------------------------------------- fark penceresi
+//
+// Degisiklikler panelindeki fark birlesik (`git diff`) ve yalnizca degisen
+// satirlarin cevresini tasiyor. Fark penceresi IntelliJ'deki gibi iki dosyanin
+// TAMAMINI yan yana gosteriyor: solda HEAD, sagda calisma agaci. Iki tarafin
+// karsilastirmasi arayuzde (`textDiff.ts`); burasi yalnizca iki metni getiriyor
+// ve `»` ile geri alinan blogu dosyaya yaziyor.
+
+/// Fark penceresinin tek tarafta tasidigi en fazla bayt.
+///
+/// Dosya goruntuleyicisinin yarim megabaytindan BUYUK: orada dosyanin basini
+/// okumak yetiyor, fark ise iki tarafin TAMAMINI istiyor - kesilmis bir dosyanin
+/// sonu "silindi" gibi gorunurdu. Dort megabayt bir kaynak dosyasi icin
+/// fazlasiyla yeterli; daha buyugu kesiliyor ve arayuz bunu soyluyor.
+const SIDE_LIMIT: usize = 4 * 1024 * 1024;
+
+/// Fark penceresinin iki tarafi.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffSides {
+    /// Dosyanin HEAD'deki hali. HEAD'de yoksa (yeni ya da takipsiz dosya,
+    /// hic commit'i olmayan depo) `None`: pencere o zaman tek taraf ciziyor.
+    pub base: Option<crate::files::FileText>,
+    /// Calisma agacindaki hali; dosya silinmisse `None`.
+    pub current: Option<crate::files::FileText>,
+    /// HEAD'in kisa kimligi (sekiz hane) - sol basliktaki etiket. IntelliJ de
+    /// yerel degisiklik farkinda sol tarafi commit'in kisa kimligiyle anar.
+    pub head: Option<String>,
+}
+
+/// Bir dosyanin HEAD'deki ve calisma agacindaki hali.
+///
+/// Yeniden adlandirmada HEAD'deki hal ESKI yoldan okunuyor (`orig`); yoksa sol
+/// taraf bos gelir ve dosya bastan yazilmis gibi gorunurdu.
+///
+/// `git cat-file blob` HAM icerigi veriyor: satir sonu donusumu (`autocrlf`) ve
+/// filtreler uygulanmiyor. Satir sonlari arayuzde zaten ayni sayiliyor
+/// (`\r\n` = `\n`); filtreyi (ornegin git-lfs) calistirmak ise farki acmak icin
+/// ag istegi yapmak olabilirdi.
+pub fn diff_sides(
+    path: &str,
+    file: &str,
+    orig: Option<&str>,
+    untracked: bool,
+) -> Result<DiffSides, String> {
+    let root = repo_root(path).ok_or_else(|| "depo koku bulunamadi".to_string())?;
+    let dir = root.to_string_lossy().to_string();
+
+    let head = git_at(&dir)
+        .args(["rev-parse", "-q", "--verify", "--short=8", "HEAD"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let base = if untracked || head.is_none() {
+        None
+    } else {
+        let spec = format!("HEAD:{}", orig.unwrap_or(file));
+        git_at(&dir)
+            .args(["cat-file", "blob", &spec])
+            .output()
+            .ok()
+            // Yol HEAD'de yoksa (yeni eklenmis dosya) git 128 ile cikiyor;
+            // bu bir hata degil, "sol taraf yok" demek.
+            .filter(|out| out.status.success())
+            .map(|out| {
+                let size = out.stdout.len() as u64;
+                crate::files::text_from_bytes(&out.stdout, size, SIDE_LIMIT)
+            })
+    };
+
+    let target = root.join(file);
+    let current = if target.is_file() {
+        let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
+        let size = bytes.len() as u64;
+        Some(crate::files::text_from_bytes(&bytes, size, SIDE_LIMIT))
+    } else {
+        None
+    };
+
+    Ok(DiffSides { base, current, head })
+}
+
+/// `write_worktree_file` reddettiginde donen, arayuzun cevirdigi kodlar.
+pub const WRITE_CHANGED: &str = "changed";
+pub const WRITE_NOT_TEXT: &str = "not-text";
+
+/// Fark penceresinin `»` dugmesi: calisma agacindaki dosyayi yeni icerikle yazar.
+///
+/// ## Neden `expected`
+///
+/// Arayuz yeni icerigi, farkini ALDIGI hale gore kurdu. Dosya o arada bir
+/// duzenleyicide degistiyse (kaydet, bicimlendir) korkusuzca yazmak o
+/// degisikligi sessizce silerdi. Dosyanin su anki hali farkin alindigi hal degilse
+/// hicbir sey yazilmiyor ve `changed` donuyor; arayuz farki tazeliyor.
+///
+/// UTF-8 olmayan dosya da reddediliyor: arayuz onu `from_utf8_lossy` ile
+/// okudu, yani elindeki metin dosyanin kendisi degil ve geri yazmak gecersiz
+/// baytlari U+FFFD ile degistirirdi.
+///
+/// ## Sinirlar
+///
+/// Yalnizca depo kokunun ALTINDAKI, VAR OLAN, sembolik baglanti olmayan bir dosya.
+/// Yol porcelain'den geliyor ama denetim burada: `..` ya da baglanti uzerinden
+/// deponun disina yazmak bu komutun isi degil.
+pub fn write_worktree_file(path: &str, file: &str, expected: &str, text: &str) -> Result<(), String> {
+    use std::path::Component;
+
+    let root = repo_root(path).ok_or_else(|| "depo koku bulunamadi".to_string())?;
+    let rel = std::path::Path::new(file);
+    if rel.components().any(|c| !matches!(c, Component::Normal(_))) {
+        return Err(format!("gecersiz yol: {file}"));
+    }
+    let target = root.join(rel);
+    let meta = std::fs::symlink_metadata(&target).map_err(|e| e.to_string())?;
+    if !meta.file_type().is_file() {
+        return Err(format!("duz bir dosya degil: {file}"));
+    }
+
+    let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
+    let current = String::from_utf8(bytes).map_err(|_| WRITE_NOT_TEXT.to_string())?;
+    if current != expected {
+        return Err(WRITE_CHANGED.to_string());
+    }
+    std::fs::write(&target, text).map_err(|e| e.to_string())
+}
+
 /// Deponun `.git` klasoru; bulunamazsa `None`.
 ///
 /// Yukari dogru yuruyor cunku kabuk alt bir klasorde olabilir. `.git` bir

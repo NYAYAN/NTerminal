@@ -25,7 +25,7 @@ import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
-import { api, onSessionEnd } from "./lib/ipc";
+import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
@@ -201,6 +201,26 @@ export function App() {
     let unlisten: (() => void) | undefined;
     let disposed = false;
     void onSessionEnd(flushAllState).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  /*
+   * Fark penceresindeki "Jump to Source" dosyayı BURADA açtırıyor.
+   *
+   * Görüntüleyicinin durumu bu pencerenin deposunda; fark penceresi ayrı bir
+   * sayfa ve ona dokunamıyor. Rust ana pencereyi öne getirip olayı gönderiyor,
+   * burası yalnızca dosyayı açıyor (bkz. `mainWindowOpenFile`).
+   */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void onOpenFile((path) => useStore.getState().openFile(path)).then((fn) => {
       if (disposed) fn();
       else unlisten = fn;
     });

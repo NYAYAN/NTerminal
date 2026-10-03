@@ -2270,3 +2270,148 @@ fn hicbir_sey_stashlenmediyse_de_sahnelenmis_silme_yerinde_kaliyor() {
     assert_eq!(durum_of(&root, "a.txt").as_deref(), Some("D "), "dokunulmamis silme bozuldu");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ---- Fark penceresi: iki taraf ve `»` ile yazma ----
+
+#[test]
+fn fark_penceresi_head_ve_calisma_agacini_getiriyor() {
+    let root = repo_bir_commitli("sides-mod");
+    yaz(&root, "a.txt", "degisti\n");
+
+    let sides = diff_sides(&yol_of(&root), "a.txt", None, false).unwrap();
+
+    assert_eq!(sides.base.map(|b| b.text).as_deref(), Some("ilk\n"));
+    assert_eq!(sides.current.map(|c| c.text).as_deref(), Some("degisti\n"));
+    let head = sides.head.expect("HEAD kimligi yok");
+    assert_eq!(head.len(), 8, "kisa kimlik sekiz hane olmali: {head}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fark_penceresi_alt_klasorden_koke_gore_okuyor() {
+    // Kabuk alt klasorde; yol porcelain'in verdigi gibi KOKE gore. Komutlar
+    // kabugun dizininden kossaydi `HEAD:src/a.txt` yanlis yeri arardi.
+    let root = temp_repo("sides-subdir");
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    yaz(&root, "src/a.txt", "ilk\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+    yaz(&root, "src/a.txt", "ikinci\n");
+
+    let alt = root.join("src").to_string_lossy().to_string();
+    let sides = diff_sides(&alt, "src/a.txt", None, false).unwrap();
+
+    assert_eq!(sides.base.map(|b| b.text).as_deref(), Some("ilk\n"));
+    assert_eq!(sides.current.map(|c| c.text).as_deref(), Some("ikinci\n"));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fark_penceresi_yeni_ve_silinen_dosyada_tek_taraf() {
+    let root = repo_bir_commitli("sides-new-del");
+    yaz(&root, "yeni.txt", "x\n");
+    git(&root, &["add", "yeni.txt"]);
+    std::fs::remove_file(root.join("a.txt")).unwrap();
+
+    let yeni = diff_sides(&yol_of(&root), "yeni.txt", None, false).unwrap();
+    assert!(yeni.base.is_none(), "HEAD'de olmayan dosyanin sol tarafi var");
+    assert_eq!(yeni.current.map(|c| c.text).as_deref(), Some("x\n"));
+
+    let silinen = diff_sides(&yol_of(&root), "a.txt", None, false).unwrap();
+    assert_eq!(silinen.base.map(|b| b.text).as_deref(), Some("ilk\n"));
+    assert!(silinen.current.is_none(), "silinen dosyanin sag tarafi var");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fark_penceresi_yeniden_adlandirmada_eski_yoldan_okuyor() {
+    let root = repo_bir_commitli("sides-rename");
+    git(&root, &["mv", "a.txt", "b.txt"]);
+    yaz(&root, "b.txt", "ilk\nek\n");
+
+    let sides = diff_sides(&yol_of(&root), "b.txt", Some("a.txt"), false).unwrap();
+
+    assert_eq!(sides.base.map(|b| b.text).as_deref(), Some("ilk\n"));
+    assert_eq!(sides.current.map(|c| c.text).as_deref(), Some("ilk\nek\n"));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fark_penceresi_commitsiz_depoda_sol_taraf_yok() {
+    let root = temp_repo("sides-unborn");
+    yaz(&root, "a.txt", "ilk\n");
+    git(&root, &["add", "a.txt"]);
+
+    let sides = diff_sides(&yol_of(&root), "a.txt", None, false).unwrap();
+
+    assert!(sides.head.is_none());
+    assert!(sides.base.is_none());
+    assert_eq!(sides.current.map(|c| c.text).as_deref(), Some("ilk\n"));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn blok_yazma_beklenen_icerikte_yaziyor() {
+    let root = repo_bir_commitli("write-ok");
+    yaz(&root, "a.txt", "degisti\n");
+
+    write_worktree_file(&yol_of(&root), "a.txt", "degisti\n", "ilk\n").unwrap();
+
+    assert_eq!(oku(&root, "a.txt"), "ilk\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn blok_yazma_dosya_arada_degistiyse_hicbir_sey_yazmiyor() {
+    // Fark alindiktan sonra dosya bir duzenleyicide kaydedildi: korkusuzca yazmak
+    // o kaydi silerdi.
+    let root = repo_bir_commitli("write-changed");
+    yaz(&root, "a.txt", "duzenleyicide kaydedildi\n");
+
+    let hata = write_worktree_file(&yol_of(&root), "a.txt", "degisti\n", "ilk\n").unwrap_err();
+
+    assert_eq!(hata, WRITE_CHANGED);
+    assert_eq!(oku(&root, "a.txt"), "duzenleyicide kaydedildi\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn blok_yazma_utf8_olmayan_dosyayi_bozmuyor() {
+    let root = repo_bir_commitli("write-latin1");
+    std::fs::write(root.join("a.txt"), [0x61u8, 0xe7, 0x0a]).unwrap();
+
+    let hata = write_worktree_file(&yol_of(&root), "a.txt", "a\u{fffd}\n", "x\n").unwrap_err();
+
+    assert_eq!(hata, WRITE_NOT_TEXT);
+    assert_eq!(std::fs::read(root.join("a.txt")).unwrap(), vec![0x61u8, 0xe7, 0x0a]);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn blok_yazma_depo_disina_cikmiyor() {
+    let root = repo_bir_commitli("write-escape");
+    let disarisi = root.with_extension("disari.txt");
+    std::fs::write(&disarisi, "dokunma\n").unwrap();
+    let ad = format!("../{}", disarisi.file_name().unwrap().to_string_lossy());
+
+    assert!(write_worktree_file(&yol_of(&root), &ad, "dokunma\n", "bozuldu\n").is_err());
+    assert_eq!(std::fs::read_to_string(&disarisi).unwrap(), "dokunma\n");
+
+    let _ = std::fs::remove_file(&disarisi);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[cfg(unix)]
+#[test]
+fn blok_yazma_sembolik_baglantiyi_izlemiyor() {
+    let root = repo_bir_commitli("write-symlink");
+    let disarisi = root.with_extension("hedef.txt");
+    std::fs::write(&disarisi, "dokunma\n").unwrap();
+    std::os::unix::fs::symlink(&disarisi, root.join("bag.txt")).unwrap();
+
+    assert!(write_worktree_file(&yol_of(&root), "bag.txt", "dokunma\n", "bozuldu\n").is_err());
+    assert_eq!(std::fs::read_to_string(&disarisi).unwrap(), "dokunma\n");
+
+    let _ = std::fs::remove_file(&disarisi);
+    let _ = std::fs::remove_dir_all(&root);
+}

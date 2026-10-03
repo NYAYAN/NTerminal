@@ -8,6 +8,7 @@ import {
   splitGap,
   type DiffLine,
 } from "../lib/diff";
+import { openDiffWindow } from "../lib/diffWindow";
 import { baseName, dirName } from "../lib/format";
 import { diffKind, stageState, unstagePaths } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
@@ -17,6 +18,7 @@ import {
   ArrowIcon,
   ChevronIcon,
   CopyIcon,
+  DiffWindowIcon,
   OpenFileIcon,
   RevertIcon,
   UnfoldIcon,
@@ -507,7 +509,7 @@ function ChangeRow({
        * karışıyor.
        *
        * HER ZAMAN görünüyorlar. Önceki hâlleri imleç satıra gelince beliriyordu
-       * ve gizli bir eylem, bir kez keşfedilene kadar yok demek. Üçünün her
+       * ve gizli bir eylem, bir kez keşfedilene kadar yok demek. Dördünün her
        * satırda bir araç çubuğu tarlası oluşturmaması için ağırlık düşürüldü:
        * soluk duruyorlar, satırın üstündeyken tam parlaklığa çıkıyorlar. */}
       <div className="git-actions">
@@ -539,6 +541,23 @@ function ChangeRow({
           onClick={() => useStore.getState().openFile(fullPath)}
         >
           <OpenFileIcon size={14} />
+        </button>
+        {/* Farkı ayrı bir pencerede, IntelliJ'deki gibi iki dosyanın TAMAMI yan
+            yana. Satırın kendi farkı panelde açılıyor ama dar panelde yalnızca
+            değişen satırların çevresi sığıyor; uzun bir dosyayı okumak, kaydırmak
+            ve blok blok geri almak için pencere gerekiyor. "Dosyayı aç"ın
+            yanında: ikisi de dosyayı panelin dışında açan eylemler. */}
+        <button
+          type="button"
+          className="icon-btn"
+          title={t("git.openDiffWindow")}
+          onClick={() => {
+            void openDiffWindow({ root, path: change.path }, change.origPath).catch((err) =>
+              useStore.getState().toast(String(err), "err"),
+            );
+          }}
+        >
+          <DiffWindowIcon size={14} />
         </button>
       </div>
       </div>

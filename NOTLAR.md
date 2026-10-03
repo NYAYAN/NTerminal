@@ -1153,6 +1153,78 @@ duruyor), şablon CLI'dekinden kaymamış. Hata geri konunca ikincisi ve
 **Yan bulgu (§2.6, çözüldü).** Aynı kurulumda eski sürüm, Windows Installer'ın
 kapatma isteğinde çöktü.
 
+### 1.23 Fark penceresi — IntelliJ / WebStorm'daki gibi
+
+**İstek:** "Git diff ekranında yeni pencerede göster dediğimde IntelliJ /
+WebStorm'daki gibi yeni bir pencere açılmalı; solda eskisi, sağda yenisi.
+IntelliJ'de nasılsa birebir aynı şekilde."
+
+**Kaynak.** Tahminle değil ölçerek: JetBrains belgesindeki 2026.2 ekran
+görüntüleri (koyu ve açık) piksel piksel okundu, metinler ve sabitler IntelliJ
+Community kaynağından alındı. Bulunanlar ve karşılıkları:
+
+- Düzen: sol editörün oluğu SAĞINDA (aynalı, `isMirrored`), kaydırma şeridi en
+  solda; iki tarafın numaraları ortada yan yana; aradaki ayırıcı 24 px
+  (`diff.divider.width`), bağlayıcılar kübik eğri, kontrol noktaları 0.3 / 0.7.
+- Renkler Darcula / IntelliJ Light'ınki (yeni arayüzün koyu temaları bunları
+  değiştirmiyor): eklenen `294436` / `bee6be`, silinen `484a4a` / `d6d6d6`,
+  değişen `385570` / `c2d8f2`. Sözcük farkı olan satır YUMUŞAK: fark rengi ile
+  zeminin %40/%60 karışımı (`getIgnoredColor`); ölçülen `25323e` tam bu.
+  Satırı olmayan taraf 2 px çizgi.
+- Başlıklar: solda kilit + HEAD'in sekiz haneli kimliği + soluk yol, sağda
+  "Current version" ("Güncel sürüm"); dal adı yok. Pencere başlığı
+  `ad (klasör)`, yeniden adlandırmada `eski -> yeni (…)`.
+- Eş zamanlı kaydırmanın çapası görünen alanın üstten üçte biri; değişen bloğun
+  içinde satır satır, karşı bloğun sonunda duruyor (`transferLine`). F7 de
+  bloğu oraya getiriyor; son farkta "Sonraki dosyaya geçmek için yeniden
+  basın", ikinci basışta sonraki dosya.
+- Katlama ayrı pencerede varsayılan KAPALI; bağlam 4 satır, tıklayınca 8, 16,
+  sonra tümü. Yer tutucuda yazı yok, editör + oluk + ayırıcı boyunca dalgalı
+  çizgi.
+- `»` yalnızca sol olukta (sağ taraf yazılabilir): bloğu HEAD'e döndürüyor,
+  Ctrl basılıyken değiştirilmiş blokta "Append". `Esc` pencereyi kapatıyor.
+  Kısayollar IntelliJ'in iki tuş haritasından (`keymap()`).
+
+**Yapı.** Pencere Rust'tan açılıyor (`diff_window_open`, etiket `diff-<n>`,
+boyut ana pencerenin %90'ı) ve uygulamanın kendi sayfasını
+`index.html?view=diff&root=…&path=…` ile yüklüyor. `main.tsx` iki kökü de
+DİNAMİK içe aktarıyor: fark penceresi depoyu, kabuk başlatmayı ve xterm'i hiç
+yüklemiyor (`diffWindowRules.test.ts` içe aktarma ağacını yürüyerek bağlıyor;
+`useLabel` bu yüzden `gitLabel.tsx`e taşındı). İki taraf `git_diff_sides`ten
+(`git cat-file blob HEAD:<yol>` + diskteki dosya, taraf başına 4 MB sınır),
+fark arayüzde: Myers (GNU diff'in doğrusal bellekli biçimi, "çok pahalı"
+sınırıyla) + git'in girinti sezgisi — `git diff --no-index` ile aynı blokları
+verdiği ölçüldü. Ayarlar ana pencere kaydettikçe `app:settings` olayıyla,
+"Kaynağa git" `app:open-file` ile ana pencereye gidiyor.
+
+**Asıl tehlike Rust'taki kapanış kancasıydı.** `on_window_event`'teki
+`Destroyed` HER pencerede koşuyor ve `kill_all()` çağırıyordu: bir fark
+penceresini kapatmak bütün sekmelerin kabuklarını öldürürdü. Artık yalnızca
+`main`; ana pencere giderken açık fark pencereleri de yok ediliyor (yoksa süreç
+onlarla yaşamaya devam ederdi). Gerçek uygulamada doğrulandı: fark penceresi
+kapandıktan sonra sekmenin `zsh`'i yaşıyor.
+
+**`»` dosyaya yazıyor**, o yüzden `git_write_file` iki şey denetliyor: dosyanın
+şimdiki hâli farkın alındığı hâl mi (değilse `changed`, hiçbir şey yazılmıyor;
+arada bir düzenleyicide kaydedilmiş olabilir) ve dosya UTF-8 mi (değilse
+`not-text`: elimizdeki metin `from_utf8_lossy` çıktısı, geri yazmak baytları
+bozardı). Yol depo kökünün altında, var olan, bağlantı olmayan bir dosya
+olmalı. Satır sonları (`\r\n`) ve dosya sonundaki satır sonu korunuyor
+(`applyChange` ham metinde çalışıyor). Geri alma yığını yalnızca başarılı
+yazmada ilerliyor.
+
+**Bilinçli olarak YAPILMAYANLAR:** sağ editörde yazmak (IntelliJ'de yazılabilir;
+burada yalnızca blok blok), sözdizimi renklendirmesi (bkz. `FileViewer`
+gerekçesi), "Align Changes in Side-by-Side Diff". Ayrıntı §2.7.
+
+**Doğrulama.** Motor: rastgele girdide en kısa fark (LCS ile karşılaştırma),
+bütün bloklar uygulanınca sol metnin çıkması, git'le aynı kayma. Pencere: sahte
+IPC'li jsdom testleri. On mutasyonun onu yakalandı (ilk turda girinti sezgisi
+kaçtı: örnek onu sınamıyordu, git'le ölçülen yeni örnek eklendi). Gözle:
+scratchpad'deki Vite düzeneğinde koyu ve açık tema; gerçek uygulamada
+(ayrı veri klasörüyle) pencerenin açılması, IPC izinleri, "Kaynağa git" ve
+kapanışta kabukların yaşaması erişilebilirlik ağacından okunarak.
+
 ---
 
 ## 2. Açık işler
@@ -1358,6 +1430,27 @@ kullanımı `calistir` skill'inde. Geliştirme yapısı konsol alt sistemli ve
 Restart Manager onu `Console` sayıp ileti göndermiyor; orada `-Mode ileti`.
 Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 
+### 2.7 Fark penceresinin açık uçları
+
+§1.23'ün bilinçli olarak dışarıda bıraktıkları, IntelliJ'den farklar:
+
+- **Sağ taraf yazılamıyor.** IntelliJ'de sağ editör dosyanın kendisi; burada
+  yalnızca `»` / Append ve geri al. Tam bir düzenleyici (imleç, seçim, IME,
+  geri al) ayrı bir iş.
+- **Sözdizimi renklendirmesi yok** — IntelliJ'de var. Hafif bir sözcükçü
+  (yorum, dize, sayı, anahtar sözcük; renkler terminal paletinden) en makul yol;
+  `FileViewer`'daki "renklendirici yok" kararıyla birlikte tartışılmalı.
+- **"Align Changes in Side-by-Side Diff" yok** (dişli menüsünde): karşılıklı
+  satırları boş dolguyla hizalayan kip. Satır modeli (`buildRows`) dolgu
+  satırını taşıyabilecek biçimde, eklenmesi orada.
+- **Canlı değil, odakta tazeleniyor.** IntelliJ farkı her tuşta yeniliyor;
+  burada pencereye dönünce ve `»`/geri al sonrası.
+- **Stash farkları pencerede açılmıyor**; yalnızca çalışma ağacı değişiklikleri.
+- **Pencere boyu hatırlanmıyor** (ana pencerenin %90'ı); IntelliJ boyutu saklıyor.
+- **Ana pencere kapanınca fark pencerelerinin kapanması gerçek uygulamada
+  denenmedi** (kod yolu `on_window_event`, yalnızca kaynak kuralı testli).
+  Windows'ta (WebView2) pencere hiç denenmedi; macOS'ta denendi.
+
 ---
 
 ## 3. Tekrar ısıracak tuzaklar
@@ -1481,10 +1574,13 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Son ölçüm (30 Eylül, oturum sonu düzeltmesi, Windows): **1710 arayüz testi**
-(104 dosya), **268 Rust birim + 13 entegrasyon testi** (bir yardımcı test
-bilinçli `ignore`), tip denetimi temiz. (Stash oturumunun sonunda 1645 / 102
-dosya ve 252 + 9 idi.)
+Son ölçüm (3 Ekim, fark penceresi, macOS, `--exclude '.claude/**'`): **1772
+arayüz testi** (108 dosya), **265 Rust birim + 13 entegrasyon testi**, tip
+denetimi temiz. Düşen tek test `tauriConfig.test.ts` › "şablon kurulu Tauri
+CLI'nin şablonundan kaymamış": macOS'ta kurulu CLI'nin darwin ikilisinde WiX
+şablonu yok (`wix-template.mjs` "bulunamadı" diyor) — değişiklikten bağımsız,
+Windows'a özgü bir denetim mac'te koşuyor. (30 Eylül, Windows: 1710 / 104 dosya,
+268 + 13.)
 
 Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
 `.claude/worktrees/` altındaki iç içe worktree'lerin test dosyalarını da topluyor

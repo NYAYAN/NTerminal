@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "NTerminal ana pencere izinleri",
+  "description": "NTerminal ana pencere ve fark pencereleri izinleri",
   "windows": [
-    "main"
+    "main",
+    "diff-*"
   ],
   "permissions": [
     "core:default",

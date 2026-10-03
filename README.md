@@ -216,6 +216,26 @@ push'un çıktısı üç saniyelik bir bildirimde okunmaz. Kancalar atlanmaz
 Fark artık `HEAD`e karşı alınıyor: eskiden çalışma ağacını indeksle
 karşılaştırıyordu ve bir dosya eklenince satırın farkı boş çıkıyordu.
 
+**Farkı yeni pencerede göster.** Satırın sağındaki bölünmüş pencere simgesi
+farkı IntelliJ / WebStorm'daki gibi ayrı bir pencerede açar: solda `HEAD`
+(salt okunur, başlıkta commit'in kısa kimliği ve dosyanın yolu), sağda
+dosyanın güncel hâli; iki dosyanın tamamı yan yana, satır numaraları ortada,
+değişen bloklar ortadaki eğri bağlayıcılarla birbirine bağlı. Renkler
+IntelliJ'inkiler: eklenen yeşil, silinen gri, değişen mavi; değişen satırın
+içinde değişen sözcükler koyu. İki taraf birlikte kayar. `F7` / `Shift+F7`
+sonraki / önceki farka gider; son farkta bir kez daha basınca sıradaki
+değişen dosyaya geçer. Dosyalar arasında araç çubuğundaki oklar (mac'te
+`⌃⇧←/→`, Windows'ta `Alt+Shift+←/→`) ya da "2/5 dosya" sayacı ile gezilir;
+`Esc` pencereyi kapatır. Sol oluktaki `»` o bloğu `HEAD`deki hâline geri alır
+(dosyaya yazar; `Ctrl+Z` / `Cmd+Z` geri getirir). Dosya fark alındıktan sonra
+bir düzenleyicide kaydedildiyse hiçbir şey yazılmaz, fark tazelenir. Araç
+çubuğundan birleşik görünüme geçilir, değişmemiş parçalar daraltılır
+(dalgalı çizgiye tıklamak kademe kademe açar); dişli menüsünde eş zamanlı
+kaydırma, boşlukları yok sayma ve vurgulama (sözcük / satır / karakter)
+seçenekleri var. Kalem simgesi dosyayı ana penceredeki görüntüleyicide açar.
+Yeni ve takip edilmeyen dosyada tek editör görünür, bütün satırlar eklenmiş
+renginde.
+
 **Stash.** Değişiklikleri commit'lemeden kenara almak için commit kutusundaki
 **Stash** düğmesi bir pencere açar: hangi dosyaların gideceğini seçersiniz,
 isterseniz bir ad verirsiniz (IntelliJ / WebStorm'daki gibi). Pencere

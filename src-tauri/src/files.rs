@@ -104,21 +104,31 @@ pub fn read_text(path: &Path) -> Option<FileText> {
     let size = meta.len();
 
     let bytes = std::fs::read(path).ok()?;
+    Some(text_from_bytes(&bytes, size, MAX_READ))
+}
+
+/// Baytlari goruntulenecek metne cevirir: ikili sezgisi ve sinir burada.
+///
+/// Ayri cunku fark penceresi de ayni karari veriyor - hem diskten okunan
+/// calisma agaci dosyasi hem `git cat-file` ile gelen HEAD hali icin. Iki ayri
+/// sezgi, ayni dosyanin bir tarafta "ikili" ote tarafta metin gorunmesine yol
+/// acabilirdi.
+pub fn text_from_bytes(bytes: &[u8], size: u64, limit: usize) -> FileText {
     let ikili = bytes.iter().take(SNIFF).any(|b| *b == 0);
     if ikili {
-        return Some(FileText { text: String::new(), truncated: false, binary: true, size });
+        return FileText { text: String::new(), truncated: false, binary: true, size };
     }
 
-    let truncated = bytes.len() > MAX_READ;
-    let dilim = if truncated { &bytes[..MAX_READ] } else { &bytes[..] };
+    let truncated = bytes.len() > limit;
+    let dilim = if truncated { &bytes[..limit] } else { bytes };
     // `from_utf8_lossy`: gecersiz baytlar U+FFFD oluyor. Hata dondurmek yerine
     // gostermek dogru - dosyanin cogu okunabilirse kullanici onu gormeli.
-    Some(FileText {
+    FileText {
         text: String::from_utf8_lossy(dilim).to_string(),
         truncated,
         binary: false,
         size,
-    })
+    }
 }
 
 /// Yuruyuse girmeyen klasorler.

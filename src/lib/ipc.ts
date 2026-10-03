@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  DiffSides,
   DirEntry,
   FileText,
   GitBranch,
@@ -172,6 +173,28 @@ export const api = {
   gitDiff: (path: string, file: string, untracked: boolean) =>
     invoke<string | null>("git_diff", { path, file, untracked }),
   /**
+   * Fark penceresinin iki tarafı: dosyanın HEAD'deki ve çalışma ağacındaki
+   * hâli. Taraf yoksa (yeni ya da silinmiş dosya) `null`. Yeniden adlandırmada
+   * HEAD'deki hâl eski yoldan okunuyor.
+   */
+  gitDiffSides: (path: string, file: string, origPath: string | undefined, untracked: boolean) =>
+    invoke<DiffSides>("git_diff_sides", { path, file, origPath, untracked }),
+  /**
+   * Fark penceresindeki `»`: çalışma ağacındaki dosyayı yeni içerikle yazar.
+   * Dosya `expected`ten ayrılmışsa (arada kaydedildi) yazmaz ve `"changed"`
+   * hatası döner; UTF-8 olmayan dosyada `"not-text"`.
+   */
+  gitWriteFile: (path: string, file: string, expected: string, text: string) =>
+    invoke<void>("git_write_file", { path, file, expected, text }),
+  /**
+   * Fark penceresini ayrı bir işletim sistemi penceresi olarak açar. `query`
+   * pencerenin sayfa sorgusu (`index.html?…`), `dark` başlık çubuğunun tonu.
+   */
+  diffWindowOpen: (query: string, title: string, dark: boolean) =>
+    invoke<void>("diff_window_open", { query, title, dark }),
+  /** Ana pencereyi öne getirip dosyayı görüntüleyicide açar ("Jump to Source"). */
+  mainWindowOpenFile: (path: string) => invoke<void>("main_window_open_file", { path }),
+  /**
    * Menü çubuğu / bildirim alanı simgesinin menü metinleri.
    *
    * Menüyü işletim sistemi çiziyor, yani sözlüğe erişimi yok; dil değişince
@@ -247,6 +270,25 @@ export function onPtyExit(
   return listen<PtyExitEvent>(`pty:exit:${id}`, (event) => {
     handler(event.payload.code);
   });
+}
+
+/** Rust'taki `OPEN_FILE_EVENT` ile aynı: fark penceresi ana pencereye dosya açtırıyor. */
+export const OPEN_FILE_EVENT = "app:open-file";
+
+/** Ana pencere bir dosyanın görüntüleyicide açılmasını dinler (bkz. `mainWindowOpenFile`). */
+export function onOpenFile(handler: (path: string) => void): Promise<UnlistenFn> {
+  return listen<string>(OPEN_FILE_EVENT, (event) => handler(event.payload));
+}
+
+/** Rust'taki `SETTINGS_EVENT` ile aynı: kaydedilen ayarlar açık pencerelere yayılıyor. */
+export const SETTINGS_EVENT = "app:settings";
+
+/**
+ * Ayarlar değişti (ana pencere kaydetti). Fark pencereleri tema, dil ve yazı
+ * tipini buradan alıyor; ana pencerenin deposunu paylaşmıyorlar.
+ */
+export function onSettingsChanged(handler: (settings: Settings) => void): Promise<UnlistenFn> {
+  return listen<Settings>(SETTINGS_EVENT, (event) => handler(event.payload));
 }
 
 /** Rust'taki `session_end::EVENT` ile aynı; `sessionEnd.test.ts` ikisini bağlıyor. */

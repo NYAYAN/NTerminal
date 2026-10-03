@@ -129,6 +129,87 @@ export const MESSAGES = {
     "Untracked — not added to git yet",
   ],
   "git.copyPath": ["Dosya yolunu kopyala", "Copy file path"],
+  // IntelliJ / WebStorm'daki gibi ayrı pencere: solda HEAD, sağda çalışma ağacı.
+  "git.openDiffWindow": ["Farkı yeni pencerede göster", "Show diff in a new window"],
+
+  // ------------------------------------------------------------ fark penceresi
+  //
+  // İngilizce metinler IntelliJ'in KENDİ metinleri (DiffBundle, ActionsBundle,
+  // VcsBundle) — pencere IntelliJ'in birebir karşılığı olsun diye; eylem adları
+  // bu yüzden onun yazımıyla (başlık biçimi). Türkçesi cümle biçiminde.
+  "diff.prevDifference": ["Önceki fark", "Previous Difference"],
+  "diff.nextDifference": ["Sonraki fark", "Next Difference"],
+  "diff.openInEditor": ["Kaynağa git", "Jump to Source"],
+  "diff.prevFile": ["Önceki dosyayı karşılaştır", "Compare Previous File"],
+  "diff.nextFile": ["Sonraki dosyayı karşılaştır", "Compare Next File"],
+  "diff.goToFile": ["Değişen dosyaya git…", "Go to Changed File…"],
+  // Araç çubuğundaki sayaç: tek dosyada soluk "1 dosya", birden fazlasında "2/5 dosya".
+  "diff.oneFile": ["1 dosya", "1 file"],
+  "diff.fileOf": ["{i}/{n} dosya", "{i}/{n} files"],
+  "diff.collapse": ["Değişmemiş parçaları daralt", "Collapse Unchanged Fragments"],
+  "diff.sideBySide": ["Yan yana görünüm", "Side-by-side viewer"],
+  "diff.unified": ["Birleşik görünüm", "Unified viewer"],
+  "diff.settings": ["Ayarlar", "Settings"],
+  "diff.syncScroll": ["Eş zamanlı kaydır", "Synchronize Scrolling"],
+  "diff.ignore": ["Yok sayılan farklar", "Ignore Differences"],
+  "diff.ignore.none": ["Hiçbiri", "None"],
+  "diff.ignore.trim": ["Baştaki ve sondaki boşluklar", "Trim whitespaces"],
+  "diff.ignore.whitespace": ["Bütün boşluklar", "Ignore whitespaces"],
+  "diff.ignore.blankLines": ["Boşluklar ve boş satırlar", "Ignore whitespaces and empty lines"],
+  "diff.highlight": ["Farkları vurgulama", "Highlighting Differences"],
+  "diff.highlight.words": ["Sözcükler", "Words"],
+  "diff.highlight.lines": ["Satırlar", "Lines"],
+  "diff.highlight.split": ["Bölünmüş değişiklikler", "Split changes"],
+  "diff.highlight.chars": ["Karakterler", "Characters"],
+  "diff.highlight.none": ["Hiçbiri", "None"],
+  // Sağ üstteki durum: IntelliJ'in `diff.count.differences.status.text`i.
+  "diff.count.one": ["1 fark", "1 difference"],
+  "diff.count.other": ["{n} fark", "{n} differences"],
+  "diff.noDifferences": ["Fark yok", "No differences"],
+  // Metinler farklı ama seçilen boşluk kipinde hepsi yok sayıldı.
+  "diff.ignored": ["Farklar yok sayıldı", "Differences ignored"],
+  "diff.highlightOff": ["Fark vurgulama kapalı", "Differences highlighting is off"],
+  // Yerel değişiklikte sağ başlık: IntelliJ'in `merge.version.title.current`i.
+  "diff.currentVersion": ["Güncel sürüm", "Current version"],
+  "diff.readOnly": ["Salt okunur", "Read-only"],
+  "diff.identical": ["İçerikler aynı", "Contents are identical"],
+  "diff.onlySeparators": [
+    "İçerikler yalnızca satır sonlarında farklı",
+    "Contents have differences only in line separators",
+  ],
+  "diff.tooLarge": [
+    "Dosya çok büyük. Yalnızca önizleme yüklendi.",
+    "File is too large. Only preview is loaded.",
+  ],
+  "diff.hide": ["Gizle", "Hide"],
+  "diff.binaryDifferent": ["Dosya içerikleri farklı", "Files contents are different"],
+  "diff.contentAdded": ["İçerik eklendi", "Content added"],
+  "diff.contentRemoved": ["İçerik silindi", "Content removed"],
+  "diff.missing": [
+    "Dosya ne HEAD'de ne de çalışma ağacında var",
+    "The file exists neither in HEAD nor in the working tree",
+  ],
+  "diff.loadFailed": ["Fark hesaplanamadı", "Unable to calculate diff"],
+  // `»`: yerel değişiklikte IntelliJ'in ipucu "Revert"; Ctrl ile "Append".
+  "diff.revert": ["Geri al", "Revert"],
+  "diff.append": ["Arkasına ekle", "Append"],
+  // Son farkta F7: IntelliJ'in `DiffRequestProcessor.notifyMessage`ı.
+  "diff.pressAgainNext": [
+    "Sonraki dosyaya geçmek için yeniden basın",
+    "Press again to go to the next file",
+  ],
+  "diff.pressAgainPrev": [
+    "Önceki dosyaya geçmek için yeniden basın",
+    "Press again to go to the previous file",
+  ],
+  "diff.fileChanged": [
+    "Dosya bu arada değişti; fark yenilendi, yeniden deneyin",
+    "The file changed in the meantime; the diff was refreshed, try again",
+  ],
+  "diff.notText": [
+    "Dosya UTF-8 değil; değişiklik uygulanmadı",
+    "The file is not UTF-8; the change was not applied",
+  ],
   "git.openFile": ["Dosyayı aç", "Open the file"],
   "git.revert": ["Değişiklikleri geri al", "Discard changes"],
   // Panel başlığındaki toplu katlama düğmesi. Dosyalar açık geldiği için

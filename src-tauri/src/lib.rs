@@ -127,9 +127,14 @@ fn paths_get(state: State<AppState>) -> PathsInfo {
 // -------------------------------------------------------------- ayarlar
 
 #[tauri::command]
-fn settings_save(state: State<AppState>, settings: Settings) -> CmdResult<()> {
+fn settings_save(app: tauri::AppHandle, state: State<AppState>, settings: Settings) -> CmdResult<()> {
+    use tauri::Emitter;
     state.history.set_limit(settings.behavior.history_limit);
     store::save_settings(&state.paths, &settings).map_err(fail)?;
+    // Acik fark pencereleri temayi, dili ve yazi tipini ana pencereyle ayni
+    // tutsun. Gonderilemezse ayar yine kaydedildi; pencereler bir sonraki
+    // acilista dogru temayla gelir.
+    let _ = app.emit(SETTINGS_EVENT, &settings);
     *state.settings.lock() = settings;
     Ok(())
 }
@@ -641,6 +646,117 @@ fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
     git::revert(&path, &file, untracked)
 }
 
+/// Fark penceresinin iki tarafi: dosyanin HEAD'deki ve calisma agacindaki hali.
+///
+/// `async` + `spawn_blocking`: iki `git` sureci ve dort megabayta kadar okuma;
+/// ana is parcaciginda kossa pencereler o sure donardi (bkz. `update_check`).
+#[tauri::command]
+async fn git_diff_sides(
+    path: String,
+    file: String,
+    orig_path: Option<String>,
+    untracked: bool,
+) -> CmdResult<git::DiffSides> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::diff_sides(&path, &file, orig_path.as_deref(), untracked)
+    })
+    .await
+    .map_err(fail)?
+}
+
+/// Fark penceresindeki `»`: calisma agacindaki dosyayi yeni icerikle yazar.
+///
+/// Dosya farkin alindigi halden ayrilmissa yazmiyor; gerekcesi
+/// `git::write_worktree_file` icinde.
+#[tauri::command]
+async fn git_write_file(
+    path: String,
+    file: String,
+    expected: String,
+    text: String,
+) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::write_worktree_file(&path, &file, &expected, &text)
+    })
+    .await
+    .map_err(fail)?
+}
+
+/// Fark pencerelerinin sirasi; her pencere `diff-<n>` etiketini aliyor.
+static DIFF_WINDOW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// Fark penceresini acar - IntelliJ'deki gibi ayri bir isletim sistemi penceresi.
+///
+/// `query` arayuzun kurdugu sorgu dizesi (`URLSearchParams`); pencere
+/// uygulamanin KENDI sayfasini (`index.html`) bu sorguyla aciyor ve `main.tsx`
+/// sorguya bakip ana arayuz yerine fark gorunumunu ciziyor. Karakterler beyaz
+/// listeden geciyor: yol ayiricisi ya da `#` sayfa adresini degistirebilirdi,
+/// `URLSearchParams` ise bunlari zaten `%2F` / `%23` olarak yaziyor.
+///
+/// `async`: Tauri'de pencere yaratan es zamanli bir komut Windows'ta kilitleniyor
+/// (Tauri belgesindeki uyari); es zamansiz komut olay dongusunu bekletmiyor.
+///
+/// Boyut ana pencereden: ekranina sigan bir pencere zaten var ve fark onun
+/// biraz kucugu olarak acilinca hicbir ekranda tasmiyor. Sabit bir olcu kucuk
+/// ekranda pencereyi ekranin disina tasirdi.
+#[tauri::command]
+async fn diff_window_open(
+    app: tauri::AppHandle,
+    query: String,
+    title: String,
+    dark: bool,
+) -> CmdResult<()> {
+    let ok = query
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "%=&._-*+~".contains(c));
+    if !ok {
+        return Err("gecersiz pencere sorgusu".into());
+    }
+
+    let (width, height) = app
+        .get_webview_window("main")
+        .and_then(|main| {
+            let scale = main.scale_factor().ok()?;
+            let size = main.inner_size().ok()?.to_logical::<f64>(scale);
+            Some((size.width * 0.9, size.height * 0.9))
+        })
+        .unwrap_or((1200.0, 780.0));
+
+    let label = format!(
+        "diff-{}",
+        DIFF_WINDOW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let url = tauri::WebviewUrl::App(format!("index.html?{query}").into());
+    tauri::WebviewWindowBuilder::new(&app, label, url)
+        .title(title)
+        .inner_size(width.max(640.0), height.max(420.0))
+        .min_inner_size(640.0, 420.0)
+        .center()
+        .disable_drag_drop_handler()
+        .theme(Some(if dark { tauri::Theme::Dark } else { tauri::Theme::Light }))
+        .build()
+        .map_err(fail)?;
+    Ok(())
+}
+
+/// Fark penceresindeki "Jump to Source": dosyayi ana pencerenin goruntuleyicisinde acar.
+///
+/// Ana pencere one geliyor (gizliyse gorunur oluyor); hangi dosyanin acilacagini
+/// ona bir olayla soyluyoruz - goruntuleyicinin durumu ana pencerenin
+/// deposunda ve baska bir pencereden ona dokunulamiyor.
+#[tauri::command]
+fn main_window_open_file(app: tauri::AppHandle, path: String) -> CmdResult<()> {
+    use tauri::Emitter;
+    tray::show_main(&app);
+    app.emit_to("main", OPEN_FILE_EVENT, path).map_err(fail)
+}
+
+/// Ana pencerenin dinledigi "su dosyayi ac" olayi; `ipc.ts` ile ayni ad.
+const OPEN_FILE_EVENT: &str = "app:open-file";
+
+/// Ayarlar degisti; acik fark pencereleri temayi ve yazi tipini buradan aliyor.
+pub const SETTINGS_EVENT: &str = "app:settings";
+
 /// Depodaki yerel ve uzak dallar; depo degilse bos liste.
 ///
 /// `async` + `spawn_blocking`: `for-each-ref` her ref'i okuyor ve suresi dal
@@ -937,6 +1053,10 @@ pub fn run() {
             git_info,
             git_branches,
             git_diff,
+            git_diff_sides,
+            git_write_file,
+            diff_window_open,
+            main_window_open_file,
             git_revert,
             git_stage,
             git_unstage,
@@ -962,9 +1082,25 @@ pub fn run() {
             // Burada yalnizca yikim sonrasi temizlik var: pencere yok olurken
             // kabuk sureclerini birakmiyoruz, aksi halde arkada sahipsiz
             // conhost/powershell surecleri kalir.
+            //
+            // YALNIZCA ana pencere. Fark pencereleri de bu kancaya dusuyor ve
+            // etiket denetimi olmadan bir fark penceresini kapatmak butun
+            // sekmelerin kabuklarini oldururdu.
             if let tauri::WindowEvent::Destroyed = event {
+                if window.label() != "main" {
+                    return;
+                }
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
                     state.pty.kill_all();
+                }
+                // Ana pencere gitti (tamamen cikis): acik fark pencereleri de
+                // kapanmali. Kalsalar surec onlarla birlikte yasamaya devam eder
+                // - kabuklari olmus, simgesi duran ama ana penceresi olmayan bir
+                // uygulama.
+                for (label, other) in window.app_handle().webview_windows() {
+                    if label != "main" {
+                        let _ = other.destroy();
+                    }
                 }
             }
         })

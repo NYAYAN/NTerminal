@@ -258,6 +258,23 @@ export function ArrowIcon({ dir, ...props }: IconProps & { dir: "up" | "down" | 
 }
 
 /**
+ * Fark penceresi — ortadan bölünmüş bir pencere: solda eski, sağda yeni.
+ *
+ * Değişiklikler satırındaki "Farkı yeni pencerede göster" düğmesinde. Açılan
+ * pencerenin kendisini çiziyor: kullanıcı simgeye basınca neyin açılacağını
+ * simgeden okuyabilmeli. (Fark penceresinin araç çubuğundaki "Side-by-side
+ * viewer" düğmesi de aynı resmi kullanıyor; o, IntelliJ'in simgesinin karşılığı.)
+ */
+export function DiffWindowIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="3" width="12" height="10" rx="1.6" />
+      <path d="M8 3 V13" />
+    </Svg>
+  );
+}
+
+/**
  * Aç — oklar birbirinden UZAKLAŞIYOR.
  *
  * Fark görünümündeki bağlam açıcısında, kalan gizli satırların tek basışta

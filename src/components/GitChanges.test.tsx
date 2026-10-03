@@ -9,7 +9,7 @@ import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
 import { useStore } from "../store/useStore";
-import type { Group, TabState } from "../types";
+import type { GitChange, Group, TabState } from "../types";
 import { GitChanges } from "./GitChanges";
 
 /**
@@ -212,7 +212,8 @@ describe("durum göstergesi", () => {
 });
 
 /**
- * Satır eylemleri: yolu kopyala, değişiklikleri geri al, dosyayı aç.
+ * Satır eylemleri: yolu kopyala, değişiklikleri geri al, dosyayı aç, farkı yeni
+ * pencerede göster.
  *
  * Geri alma YIKICI ve iki farklı iş yapıyor: takip edilen dosya son
  * commit'teki hâline dönüyor (geri getirilebilir), takipsiz dosya SİLİNİYOR
@@ -221,13 +222,40 @@ describe("durum göstergesi", () => {
  * olduğundan masum gösterirdi.
  */
 describe("satır eylemleri", () => {
-  it("üç eylem de satırda duruyor", () => {
+  it("dört eylem de satırda duruyor", () => {
     seed([{ status: " M", path: "src/app.ts" }]);
     const { container } = render(<GitChanges />);
     const titles = [...container.querySelectorAll(".git-actions button")].map((b) =>
       b.getAttribute("title"),
     );
-    expect(titles).toEqual(["Dosya yolunu kopyala", "Değişiklikleri geri al", "Dosyayı aç"]);
+    expect(titles).toEqual([
+      "Dosya yolunu kopyala",
+      "Değişiklikleri geri al",
+      "Dosyayı aç",
+      "Farkı yeni pencerede göster",
+    ]);
+  });
+
+  it("yeni pencere deponun kökünü ve dosyanın KÖKE göre yolunu taşıyor", async () => {
+    // İSTEK: "yeni pencerede göster dediğimde IntelliJ / WebStorm'daki gibi yeni
+    // bir pencere açılmalı." Pencere ayrı bir sayfa; neyi göstereceğini YALNIZCA
+    // bu sorgudan öğreniyor. Kabuğun dizini (alt klasör olabilir) taşınsaydı
+    // pencere `HEAD:src/app.ts`i yanlış yerde arardı.
+    seed([{ status: "R ", path: "src/yeni.ts", origPath: "src/eski.ts" } as GitChange], "C:/depo");
+    const open = vi.spyOn(api, "diffWindowOpen").mockResolvedValue(undefined);
+
+    const { container } = render(<GitChanges />);
+    fireEvent.click(container.querySelectorAll(".git-actions button")[3]);
+    await act(async () => {});
+
+    expect(open).toHaveBeenCalledTimes(1);
+    const [query, title] = open.mock.calls[0];
+    const params = new URLSearchParams(query);
+    expect(params.get("view")).toBe("diff");
+    expect(params.get("root")).toBe("C:/depo");
+    expect(params.get("path")).toBe("src/yeni.ts");
+    // IntelliJ'in pencere başlığı: ad (yeniden adlandırmada iki ad) ve klasör.
+    expect(title).toBe("eski.ts -> yeni.ts (C:/depo/src)");
   });
 
   it("eylemler HER ZAMAN görünüyor", () => {
