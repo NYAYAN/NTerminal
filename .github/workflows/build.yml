@@ -20,16 +20,24 @@ name: Derleme
 on:
   push:
     branches: ["**"]
-    # Etiket itmek YAYIN demek: asagidaki `yayin` isi paketleri GitHub
-    # Release'ine baglıyor ve uygulamanin surum denetimi oradan okuyor.
+    # Yayın etiketi artık Actions'ta oluşuyor (aşağıdaki `yayin` işi, main'e
+    # itmede). Elle itilen `v*` etiketi de hâlâ yayın yapıyor — sürümle
+    # eşleşmesi şartıyla.
     tags: ["v*"]
+  # Elle tetiklemek ("Run workflow", main seçili) de yayın yolundan geçiyor:
+  # yeni bir commit gerektirmeden, sürümün etiketi yoksa yayınlanıyor.
   workflow_dispatch:
 
 # Aynı dala yeni bir itme gelirse eski koşu iptal edilir: macOS runner'ı pahalı
 # ve geçilmiş bir commit'in sonucunun değeri yok.
+#
+# main HARİÇ: main'deki koşu sonunda yayın yapabiliyor ve `gh release create`
+# yarıda kesilirse etiket var ama paketleri eksik bir Release kalır — sonraki
+# koşu etiketi görüp yayını atlar, bozuk Release öyle kalırdı. main'de koşular
+# sıraya giriyor; yeni koşu, öncekinin oluşturduğu etiketi görüp yayını atlıyor.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -133,40 +141,85 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Yalnizca ETIKET itildiginde: paketleri GitHub Release'ine bagliyor.
+  # Yayın: etiketi ve GitHub Release'i Actions oluşturuyor.
   #
-  # Neden gerekli: uygulamanin surum denetimi `releases/latest` uctan okuyor
-  # (bkz. src-tauri/src/update.rs). Kosu ciktilari (`upload-artifact`) o uca
-  # girmiyor ve 14 gunde siliniyor, yani yayin olmadan bildirim hic calismiyor.
+  # Neden gerekli: uygulamanın sürüm denetimi `releases/latest` ucundan okuyor
+  # (bkz. src-tauri/src/update.rs). Koşu çıktıları (`upload-artifact`) o uca
+  # girmiyor ve 14 günde siliniyor, yani yayın olmadan bildirim hiç çalışmıyor.
   #
-  # `gh` CLI runner'da kurulu; ucuncu bir eylem eklemeye gerek yok.
-  # `--generate-notes` notlari commit'lerden uretiyor, `--verify-tag` da
-  # yanlislikla var olmayan bir etikete yayin acilmasini engelliyor.
+  # ## Etiket neden burada oluşuyor
+  #
+  # Eskiden yayın yalnızca elle itilen `v*` etiketiyle başlıyordu ve etiketi
+  # itmek unutuluyordu: 0.2.1 sürüm numarası 2 Eylül'de yazıldı, bir ay
+  # boyunca etiketi hiç oluşmadı ve Release çıkmadı. Şimdi kural tek: main'deki
+  # sürümün (`package.json`) etiketi yoksa, testler ve iki platformun paketleri
+  # geçtikten SONRA bu iş etiketi o commit'te oluşturup paketleri ona bağlıyor.
+  # Yeni bir yayın = sürüm numarasını yükseltip main'e itmek. Etiket zaten
+  # varsa (sürüm yükseltilmedi) iş hiçbir şey yayınlamıyor.
+  #
+  # Sürüm üç dosyada (Cargo.toml, package.json, tauri.conf.json) ve aynı olmak
+  # zorunda: uygulama kendi sürümünü Cargo'dan okuyup Release etiketiyle
+  # karşılaştırıyor, ayrışırsa her açılışta "yeni sürüm var" der. Bunu
+  # `releaseVersion.test.ts` bağlıyor; o test arayüz işinde, yani yayından önce.
+  #
+  # Etiketi `gh release create --target` oluşturuyor (API üzerinden, `git push`
+  # yok). İş akışının kendi jetonuyla oluşan etiket YENİ bir koşu tetiklemiyor
+  # (GitHub kuralı), yani aynı sürüm iki kez yayınlanmıyor.
+  #
+  # Elle itilen `v*` etiketi de çalışıyor; ama etiket sürümle eşleşmiyorsa iş
+  # DURUYOR: `v0.3.0` etiketine 0.2.1 paketleri bağlamak uygulamanın sürüm
+  # denetimini bozardı (paket kendini hep eski sanır).
   yayin:
     name: Yayın
     needs: paket
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Varsayilan `contents: read`; Release olusturmak yazma izni istiyor.
+    # Varsayılan `contents: read`; etiket ve Release oluşturmak yazma izni istiyor.
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
 
+      - name: Sürüm ve etiket
+        id: surum
+        run: |
+          surum=$(node -p "require('./package.json').version")
+          etiket="v$surum"
+          echo "etiket=$etiket" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [[ "$GITHUB_REF_NAME" != "$etiket" ]]; then
+              echo "::error::Etiket $GITHUB_REF_NAME ama uygulamanın sürümü $surum — yayın yapılmadı."
+              exit 1
+            fi
+            echo "yayinla=evet" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/$etiket" > /dev/null; then
+            echo "::notice::$etiket zaten var — sürüm yükseltilmediği için yayın yok."
+            echo "yayinla=hayir" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$etiket yok — bu commit'te oluşturulup yayınlanacak."
+            echo "yayinla=evet" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Paketleri indir
+        if: steps.surum.outputs.yayinla == 'evet'
         uses: actions/download-artifact@v7
         with:
           pattern: nterminal-*
           path: paketler
           merge-multiple: true
 
-      - name: Release oluştur
+      # `--target`: etiket yoksa bu commit'te oluşturuluyor; elle itilmiş
+      # etikette zaten var ve aynı commit'i gösteriyor. `--generate-notes`
+      # notları bir önceki etiketten bu yana gelen commit'lerden üretiyor.
+      - name: Etiket ve Release oluştur
+        if: steps.surum.outputs.yayinla == 'evet'
         env:
           GH_TOKEN: ${{ github.token }}
+          ETIKET: ${{ steps.surum.outputs.etiket }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
+          gh release create "$ETIKET" \
+            --target "$GITHUB_SHA" \
+            --title "$ETIKET" \
             --generate-notes \
-            --verify-tag \
             paketler/*

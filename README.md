@@ -1237,6 +1237,19 @@ görünüyor.
   söylemiyor. Kabuğunu bulamayan testler kendini atlıyor (macOS'ta
   `powershell.exe`, `cmd.exe` ve Git Bash yok).
 
+- **Yayın** (ubuntu, yalnızca `main`'de ve `v*` etiketinde) — yayın etiketini
+  Actions oluşturuyor. `package.json`daki sürümün `v<sürüm>` etiketi henüz
+  yoksa, testler ve iki platformun paketleri geçtikten sonra etiket o commit'te
+  açılıyor ve paketler bir GitHub Release'ine bağlanıyor (notlar commit'lerden).
+  Etiket zaten varsa yayın yok. Yani **yeni bir sürüm çıkarmak için sürüm
+  numarasını üç dosyada — `src-tauri/Cargo.toml`, `package.json` (ve kilidi),
+  `src-tauri/tauri.conf.json` — yükseltip main'e itmek yeterli**; elle etiket
+  gerekmiyor. Üçünün aynı olduğunu bir test denetliyor: uygulama kendi sürümünü
+  Release etiketiyle karşılaştırıyor ve ayrışırlarsa her açılışta "yeni sürüm
+  var" derdi. Yeni commit olmadan yayınlamak için Actions'ta "Run workflow"
+  (main). Elle itilen `v*` etiketi de çalışıyor, ama sürümle eşleşmeyen etiket
+  yayın yapmıyor.
+
 Çıktılar koşunun **Artifacts** bölümünde, 14 gün: Windows için NSIS kurucusu
 ve MSI, macOS için DMG. İkisi de **imzasız** — depoda ne Windows sertifikası
 ne Apple kimliği var. Windows'ta SmartScreen uyarısı çıkıyor; macOS'ta uyarı

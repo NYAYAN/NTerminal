@@ -426,9 +426,21 @@ ayar KENDİLİĞİNDEN yapılan denetimi kapatıyor, düğmeye basmak isteğin k
 Testler: `src-tauri/src/update_tests.rs` (sürüm karşılaştırması ve yanıt
 ayrıştırma), `store/updateCheck.test.ts`, `components/updateBadge.test.tsx`.
 
-**Açık uç:** depoda henüz yayın yok, yani rozet hiç çıkmıyor. İlk GitHub
-Release yayımlandığında çalışmaya başlıyor; CI şu an paketleri yalnızca koşu
-çıktısı olarak yüklüyor, Release oluşturmuyor.
+**Yayın etiketi Actions'ta oluşuyor (3 Ekim).** Release'i CI'ın `yayin` işi
+açıyor; eskiden yalnızca elle itilen `v*` etiketiyle başlıyordu ve etiket
+unutuluyordu: 0.2.1 numarası 2 Eylül'de yazıldı, bir ay etiketsiz kaldı, yani
+kurulu 0.2.0'lar hiçbir şey duymadı. Şimdi main'e itmede (ya da elle "Run
+workflow") `package.json` sürümünün `v<sürüm>` etiketi yoksa, testler ve iki
+platformun paketleri geçtikten sonra iş etiketi o commit'te oluşturup paketleri
+bağlıyor; etiket varsa hiçbir şey yayınlamıyor. **Yeni yayın = sürümü üç
+dosyada (Cargo.toml, package.json, tauri.conf.json) yükseltip main'e itmek.**
+Üçünün aynı kalmasını `releaseVersion.test.ts` bağlıyor (ayrışırsa paket kendini
+hep eski sanıp her açılışta "yeni sürüm var" derdi). Elle itilen etiket hâlâ
+çalışıyor ama sürümle eşleşmezse iş duruyor. main'deki koşular artık
+birbirini iptal etmiyor: yarıda kesilen bir `gh release create` paketsiz bir
+Release bırakır ve sonraki koşu etiketi görüp onu düzeltmezdi. Koşu sonucu bu
+makineden okunamıyor (`gh` yok, depo özel); yayının çıktığını Releases
+sayfasından ya da uygulamanın rozetinden görmek gerekiyor.
 
 ### 1.12 Komut kutusunda Ctrl+C: karar tek yere indi
 
@@ -1574,13 +1586,13 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Son ölçüm (3 Ekim, fark penceresi, macOS, `--exclude '.claude/**'`): **1772
-arayüz testi** (108 dosya), **265 Rust birim + 13 entegrasyon testi**, tip
-denetimi temiz. Düşen tek test `tauriConfig.test.ts` › "şablon kurulu Tauri
-CLI'nin şablonundan kaymamış": macOS'ta kurulu CLI'nin darwin ikilisinde WiX
-şablonu yok (`wix-template.mjs` "bulunamadı" diyor) — değişiklikten bağımsız,
-Windows'a özgü bir denetim mac'te koşuyor. (30 Eylül, Windows: 1710 / 104 dosya,
-268 + 13.)
+Son ölçüm (3 Ekim, fark penceresi ve yayın iş akışı, macOS, `--exclude
+'.claude/**'`): **1775 arayüz testi** (109 dosya), **265 Rust birim + 13
+entegrasyon testi**, tip denetimi temiz. Düşen tek test `tauriConfig.test.ts` ›
+"şablon kurulu Tauri CLI'nin şablonundan kaymamış": macOS'ta kurulu CLI'nin
+darwin ikilisinde WiX şablonu yok (`wix-template.mjs` "bulunamadı" diyor) —
+değişiklikten bağımsız, Windows'a özgü bir denetim mac'te koşuyor. (30 Eylül,
+Windows: 1710 / 104 dosya, 268 + 13.)
 
 Sayıyı depo DIŞINDAKİ testler şişirebiliyor: `npx vitest run` ana checkout'ta
 `.claude/worktrees/` altındaki iç içe worktree'lerin test dosyalarını da topluyor
