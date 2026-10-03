@@ -107,6 +107,9 @@ describe("MSI kısayolları", () => {
   // platformda farklı adla geliyor.
   const cliKurulu =
     existsSync(scope) && readdirSync(scope).some((name) => name.startsWith("cli-"));
+  // `wix-template.mjs`in "kurulu CLI Windows derlemesi değil" çıkışı
+  // (betikte `NOT_APPLICABLE`); kaymanın kodu 1.
+  const UYGULANAMAZ = 3;
 
   it("yapılandırma projenin WiX şablonunu kullanıyor", () => {
     expect(CONFIG.bundle.windows?.wix?.template, "şablon bağlanmamış").toBe("wix/main.wxs");
@@ -123,13 +126,24 @@ describe("MSI kısayolları", () => {
     expect(element, "AppUserModelID kaybolmuş").toContain('Key="System.AppUserModel.ID"');
   });
 
-  it.skipIf(!cliKurulu)("şablon kurulu Tauri CLI'nin şablonundan kaymamış", () => {
+  it.skipIf(!cliKurulu)("şablon kurulu Tauri CLI'nin şablonundan kaymamış", (ctx) => {
     // Elle kopyalanmış şablon Tauri güncellenince sessizce eskir. Düşerse:
     // `node scripts/wix-template.mjs` şablonu yeniden üretiyor.
     const run = spawnSync(process.execPath, ["scripts/wix-template.mjs", "--check"], {
       cwd: process.cwd(),
       encoding: "utf8",
     });
+    // WiX şablonu yalnızca CLI'nin Windows derlemesinde var. macOS'ta bu test
+    // her koşuda düşüyordu (Linux'ta da düşer; CI'daki vitest işi orada):
+    // betik şablonu mac ikilisinde arayıp "biçim değişmiş olabilir" diyordu —
+    // yanlış alarm, şablon orada hiç yok (gerekçe betikte, `isWindowsBuild`).
+    // Artık kaymadan ayrı bir kodla "uygulanamaz" diyor ve test atlanıyor.
+    //
+    // Windows'ta bu yanıt KABUL EDİLMİYOR: npm orada hep `cli-win32-*`
+    // kuruyor. Betik yine de "uygulanamaz" diyorsa Windows derlemesini
+    // tanıyamıyor demektir (ör. paket adı değişmiş); atlamak, denetimi tam
+    // çalışması gereken yerde sessizce kapatırdı.
+    ctx.skip(run.status === UYGULANAMAZ && process.platform !== "win32", run.stderr.trim());
     expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
   });
 });

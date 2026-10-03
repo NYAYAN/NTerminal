@@ -15,13 +15,21 @@
 // Kullanim:
 //   node scripts/wix-template.mjs           sablonu yeniden uret
 //   node scripts/wix-template.mjs --check   kayitli dosya guncel mi (degilse cikis 1)
+//
+// Ikisi de CLI'nin Windows derlemesini istiyor; mac/Linux'ta "uygulanamaz"
+// deyip 3 ile cikiyor (bkz. isWindowsBuild).
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "src-tauri", "wix", "main.wxs");
+
+// Kurulu CLI Windows derlemesi degil: burada ne denetlenebiliyor ne
+// uretilebiliyor. Kaymanin (1) kodu olamaz - o "sablon eskidi" demek, bu
+// "bakilamadi". tauriConfig.test.ts mac/Linux'ta bu koda bakip atliyor.
+const NOT_APPLICABLE = 3;
 
 // ASCII: WiX derleyicisi dosyayi bildirim satiri olmadan okuyor; kodlamaya
 // bel baglamamak icin yorum da depodaki Rust/PowerShell yorumlari gibi ASCII.
@@ -52,17 +60,34 @@ const HEADER = `<!--
 -->
 `;
 
-/** Kurulu Tauri CLI'nin yerel ikilisi (paket adi platforma gore degisiyor). */
+/**
+ * Kurulu Tauri CLI'nin yerel ikilisi (paket adi platforma gore degisiyor).
+ * Birden fazla kuruluysa Windows derlemesi: sablon yalnizca onda.
+ */
 export function findCliBinary(root = ROOT) {
   const scope = join(root, "node_modules", "@tauri-apps");
   if (!existsSync(scope)) return null;
+  const found = [];
   for (const name of readdirSync(scope)) {
     if (!name.startsWith("cli-")) continue;
     const dir = join(scope, name);
     const file = readdirSync(dir).find((f) => f.endsWith(".node"));
-    if (file) return join(dir, file);
+    if (file) found.push(join(dir, file));
   }
-  return null;
+  return found.find(isWindowsBuild) ?? found[0] ?? null;
+}
+
+/**
+ * Ikili CLI'nin Windows derlemesi mi. WiX sablonu YALNIZCA onda: Tauri'nin
+ * paketleyicisi MSI kodunu `#[cfg(target_os = "windows")]` altinda derliyor
+ * (NSIS kodunu her platformda). Betik mac'te sablonu mac ikilisinde arayip
+ * "bicim degismis olabilir" diye dusuyordu - yanlis alarm, sablon o ikilide
+ * hic yok (olculdu: cli-darwin-arm64 2.11.4'te NSIS sablonu var, WiX yok).
+ * Paket adindaki platform `process.platform` degeri; Windows paketleri
+ * `cli-win32-*`.
+ */
+export function isWindowsBuild(binary) {
+  return basename(dirname(binary)).startsWith("cli-win32-");
 }
 
 /** CLI ikilisine gomulu WiX sablonunu cikarir (satir sonlari LF). */
@@ -111,6 +136,13 @@ function main() {
   if (!binary) {
     console.error("Tauri CLI ikilisi bulunamadi (node_modules/@tauri-apps/cli-*). Once npm install.");
     process.exit(2);
+  }
+  if (!isWindowsBuild(binary)) {
+    console.error(
+      `uygulanamaz: kurulu Tauri CLI (${basename(dirname(binary))}) Windows derlemesi degil; ` +
+        "WiX sablonu yalnizca cli-win32-* paketlerinde var. Sablon Windows'ta uretilip denetleniyor.",
+    );
+    process.exit(NOT_APPLICABLE);
   }
   const wanted = patchTemplate(extractTemplate(binary));
 

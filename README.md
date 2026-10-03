@@ -535,7 +535,9 @@ node scripts/wix-template.mjs
 ```
 
 Tauri güncellendiğinde bu komut yeniden koşulmalı; unutulursa `npm test`
-şablonun CLI'dekinden kaydığını söylüyor.
+şablonun CLI'dekinden kaydığını söylüyor. İkisi de yalnızca Windows'ta iş
+görüyor: WiX şablonu CLI'nin Windows derlemesinde var, macOS'takinde yok.
+macOS'ta komut "uygulanamaz" diyor, test de atlanıyor.
 
 ### macOS: "hasarlı" uyarısı ve açma yolu
 
