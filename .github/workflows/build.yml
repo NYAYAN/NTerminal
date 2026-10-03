@@ -114,6 +114,16 @@ jobs:
       - name: Bağımlılıklar
         run: npm ci
 
+      # MSI, Tauri'nin şablonundan değil projenin src-tauri/wix/main.wxs
+      # dosyasından üretiliyor; Tauri güncellenip dosya yeniden üretilmezse
+      # yeni sürümün şablon düzeltmeleri MSI'a girmez. Aynı denetim vitest'te
+      # var ama yukarıdaki arayüz işinde atlanıyor: o iş Linux'ta, WiX
+      # şablonu ise yalnızca CLI'nin Windows derlemesinde. Saniyeler sürüyor;
+      # uzun Rust adımlarından önce.
+      - name: MSI şablonu güncel mi
+        if: runner.os == 'Windows'
+        run: node scripts/wix-template.mjs --check
+
       # PTY, kabuk entegrasyonu ve git okuması platforma bağlı; testler bu
       # yüzden paketlemeden ÖNCE ve her iki platformda koşuyor. Entegrasyon
       # testleri gerçek kabuk süreci başlattığı için sıralı. Kabuğunu

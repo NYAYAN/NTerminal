@@ -138,6 +138,7 @@ describe("MSI kısayolları", () => {
     // betik şablonu mac ikilisinde arayıp "biçim değişmiş olabilir" diyordu —
     // yanlış alarm, şablon orada hiç yok (gerekçe betikte, `isWindowsBuild`).
     // Artık kaymadan ayrı bir kodla "uygulanamaz" diyor ve test atlanıyor.
+    // CI'da denetim Windows paket işinin ayrı adımı (build.yml).
     //
     // Windows'ta bu yanıt KABUL EDİLMİYOR: npm orada hep `cli-win32-*`
     // kuruyor. Betik yine de "uygulanamaz" diyorsa Windows derlemesini
