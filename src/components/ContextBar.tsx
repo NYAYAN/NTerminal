@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { shortenPath } from "../lib/format";
+import { changeTotal } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
@@ -171,7 +172,7 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
           <button
             type="button"
             className="ctx-chip changes"
-            data-empty={git.changes.length === 0 ? "1" : undefined}
+            data-empty={changeTotal(git) === 0 ? "1" : undefined}
             title={
               git.ahead > 0
                 ? `${t("git.viewChanges")}
@@ -180,7 +181,7 @@ ${tp("git.unpushed", git.ahead)}`
             }
             onClick={() => setUi({ historyOpen: true, panelMode: "git" })}
           >
-            {`± ${git.changes.length}`}
+            {`± ${changeTotal(git)}`}
           </button>
         </>
       )}

@@ -10,7 +10,7 @@ import {
 } from "../lib/diff";
 import { openDiffWindow } from "../lib/diffWindow";
 import { baseName, dirName } from "../lib/format";
-import { diffKind, stagePaths, stageState, stageSummary, unstagePaths } from "../lib/gitStage";
+import { changeTotal, diffKind, stagePaths, stageState, stageSummary, unstagePaths } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
@@ -212,7 +212,7 @@ function ChangesHeader({
           onChange={() => void toggleAll()}
         />
         <span className="git-table-col">{t("git.colFile")}</span>
-        <span className="git-table-count">{tp("git.selectedCount", git.staged)}</span>
+        <span className="git-table-count">{tp("git.selectedOf", git.staged, { total: changeTotal(git) })}</span>
       </div>
       {error && (
         <div className="git-commit-error" role="alert">

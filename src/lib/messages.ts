@@ -321,6 +321,9 @@ export const MESSAGES = {
   "git.colFile": ["Dosya", "File"],
   "git.selectedCount.one": ["{n} dosya seçili", "{n} file selected"],
   "git.selectedCount.other": ["{n} dosya seçili", "{n} files selected"],
+  // Değişiklikler başlığı: seçili / listedeki toplam (İSTEK: "toplamda kaç dosya var onu da yazalım").
+  "git.selectedOf.one": ["{n}/{total} dosya seçili", "{n}/{total} file selected"],
+  "git.selectedOf.other": ["{n}/{total} dosya seçili", "{n}/{total} files selected"],
   // Alan hem etiket hem yer tutucu: ikisi aynı şeyi söylüyor.
   "git.commitMessage": ["Commit iletisi", "Commit message"],
   "git.commit": ["Commit", "Commit"],

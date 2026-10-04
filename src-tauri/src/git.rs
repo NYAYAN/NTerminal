@@ -75,6 +75,11 @@ pub struct GitInfo {
     /// kalir, liste `git stash list` ile okundugu icin dogru.
     pub stash_count: u32,
     pub changes: Vec<GitChange>,
+    /// Degisen dosyalarin KESILMEMIS sayisi (`changes` `MAX_CHANGES`te kesiliyor).
+    ///
+    /// Sekme rozeti ("± N") ve Degisiklikler basligindaki "seçili / toplam"
+    /// bunu gosteriyor: gorunen listenin uzunlugu degil, gercek sayi.
+    pub change_count: u32,
     /// Calisma agacinin KOKU (mutlak yol).
     ///
     /// Arayuze gerekiyor cunku `changes` icindeki yollar koke gore
@@ -148,6 +153,7 @@ pub fn parse_porcelain(text: &str) -> GitInfo {
      * listede GOSTERILEN dosyalarin kumesini de durumla degistirirdi.
      */
     info.changes.sort_by(|a, b| a.path.cmp(&b.path));
+    info.change_count = info.changes.len() as u32;
     info.changes.truncate(MAX_CHANGES);
 
     info
@@ -250,10 +256,21 @@ pub fn read(path: &str) -> Option<GitInfo> {
             "status",
             "--porcelain=v1",
             "-b",
-            // `normal`: takip edilmeyen bir KLASOR tek satirda bildiriliyor.
-            // `all` icindeki her dosyayi tek tek listeliyor ve `node_modules`
-            // gibi bir klasorde bu on binlerce satir demek.
-            "--untracked-files=normal",
+            /*
+             * `all`: takip edilmeyen bir klasorun ICINDEKI dosyalar tek tek.
+             *
+             * BILDIRILEN: "0/26 yaziyor, hepsini sec basinca 30/30 oluyor;
+             * dosyalar listede gorunmuyor, hepsini sec yapinca gorunuyor; komut
+             * kutusunun ustunde 26." `normal` klasoru TEK satir veriyordu,
+             * `git add` ise icindeki her dosyayi ayri ekliyor: liste, sayac ve
+             * sekme rozeti farkli seyler sayiyordu. IntelliJ de dosyalari tek
+             * tek gosteriyor.
+             *
+             * Bedeli: yok SAYILMAYAN dev bir klasor (`.gitignore`suz bir
+             * `node_modules`) cok satir uretir. Yok sayilanlar listelenmiyor ve
+             * liste `MAX_CHANGES`te kesiliyor; toplam `change_count`ta.
+             */
+            "--untracked-files=all",
         ])
         .output()
         .ok()?;

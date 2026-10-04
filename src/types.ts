@@ -420,6 +420,12 @@ export interface GitInfo {
   stashCount: number;
   changes: GitChange[];
   /**
+   * Değişen dosyaların KESİLMEMİŞ sayısı (`changes` 200'de kesiliyor). Sekme
+   * rozeti ve "seçili / toplam" bunu gösteriyor. Eski bir Rust derlemesinde
+   * yok; o zaman listenin uzunluğu (`changeTotal`).
+   */
+  changeCount?: number;
+  /**
    * Çalışma ağacının kökü (mutlak yol).
    *
    * `changes` içindeki yollar KÖKE göre; "dosyayı aç" tam yol istiyor. Kabuğun

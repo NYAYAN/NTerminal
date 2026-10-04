@@ -447,16 +447,22 @@ describe("toplu kutu", () => {
     expect(tableHead(container)).toBe(null);
   });
 
-  it("kaç dosyanın commit'e gireceğini yazıyor", () => {
+  it("kaç dosyanın commit'e gireceğini ve listede toplam kaç dosya olduğunu yazıyor", () => {
     seed(repo([c("M ", "a"), c(" M", "b"), c("A ", "c")]));
     const { container } = render(<GitChanges />);
-    expect(container.querySelector(".git-table-count")!.textContent).toBe("2 dosya seçili");
+    expect(container.querySelector(".git-table-count")!.textContent).toBe("2/3 dosya seçili");
+  });
+
+  it("toplam Rust'ın kesilmemiş sayısı (liste 200'de kesiliyor)", () => {
+    seed({ ...repo([c("M ", "a"), c(" M", "b")]), changeCount: 250 });
+    const { container } = render(<GitChanges />);
+    expect(container.querySelector(".git-table-count")!.textContent).toBe("1/250 dosya seçili");
   });
 
   it("tekil sayıda çoğul eki yok", () => {
     seed(repo([c("M ", "a")], { staged: 1 }));
     const { container } = render(<GitChanges />);
-    expect(container.querySelector(".git-table-count")!.textContent).toBe("1 dosya seçili");
+    expect(container.querySelector(".git-table-count")!.textContent).toBe("1/1 dosya seçili");
   });
 
   it("hepsi seçili değilken basmak seçilmemiş OLANLARI ekliyor", async () => {

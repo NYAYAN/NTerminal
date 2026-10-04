@@ -147,3 +147,13 @@ export function pushPlan(git: GitInfo): PushPlan {
   }
   return { kind: "none" };
 }
+
+/**
+ * Değişen dosyaların gerçek sayısı: Rust'ın kesilmemiş sayısı, yoksa (eski
+ * derleme) listenin uzunluğu. Sekme rozeti ve "seçili / toplam" aynı sayıyı
+ * göstersin diye tek yerde. BİLDİRİLEN: "0/30 göründü ama komut yazın üstünde
+ * değişiklik sayısı 26."
+ */
+export function changeTotal(git: Pick<GitInfo, "changes" | "changeCount">): number {
+  return git.changeCount ?? git.changes.length;
+}

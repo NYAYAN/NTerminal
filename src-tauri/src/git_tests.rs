@@ -844,9 +844,7 @@ fn alt_klasorden_sahnelenip_cikarilabiliyor() {
     // Yollar porcelain'den KOKE gore geliyor; kabuk alt klasordeyken `-C alt`
     // yanlis dosyayi ararm (bkz. `work_dir`).
     let root = repo_bir_commitli("stage-subdir");
-    // `src/` TAKIPLI olmali: takipsiz bir klasor porcelain'de `?? src/` diye TEK
-    // satir olarak gorunur (`--untracked-files=normal`), icindeki dosya ayri
-    // satir olmaz ve asagidaki `??` denetimi hic bir sey bulamazdi.
+    // `src/` takipli: alt klasordeki bir kabugun koke gore yolu bulmasi sinaniyor.
     std::fs::create_dir_all(root.join("src")).unwrap();
     yaz(&root, "src/var.txt", "x\n");
     git(&root, &["add", "src/var.txt"]);
@@ -2767,5 +2765,24 @@ fn ilk_commit_ve_ayrik_head_geri_alinmiyor() {
     git(&root, &["checkout", "--quiet", "--detach"]);
     assert!(undo_last_commit(&yol_of(&root), &ikinci).is_err());
     assert_eq!(git_out(&root, &["rev-parse", "HEAD"]), ikinci);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn takipsiz_klasorun_dosyalari_tek_tek_listeleniyor() {
+    // "dosyalar listede gorunmuyor, hepsini sec yapinca gorunuyor": klasor tek
+    // satir degil, icindeki her dosya; yok sayilan haric. Toplam kesilmeden.
+    let root = repo_bir_commitli("untracked-all");
+    std::fs::create_dir_all(root.join("yeni/alt")).unwrap();
+    yaz(&root, "yeni/a.txt", "x\n");
+    yaz(&root, "yeni/alt/b.txt", "x\n");
+    yaz(&root, "yeni/alt/c.log", "x\n");
+    yaz(&root, ".gitignore", "*.log\n");
+
+    let info = read(&yol_of(&root)).unwrap();
+    let yollar: Vec<&str> = info.changes.iter().map(|c| c.path.as_str()).collect();
+    assert_eq!(yollar, vec![".gitignore", "yeni/a.txt", "yeni/alt/b.txt"]);
+    assert!(info.changes.iter().all(|c| c.status == "??"));
+    assert_eq!(info.change_count, 3);
     let _ = std::fs::remove_dir_all(&root);
 }
