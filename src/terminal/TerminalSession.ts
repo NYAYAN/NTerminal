@@ -17,6 +17,7 @@ import { looksLikeSecretPrompt, resolveCtrlC, type CtrlCAction } from "../lib/in
 import { typingOutsideTerminal } from "../lib/focus";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
+import { shouldResize } from "../lib/ptySize";
 import { getTheme } from "../lib/themes";
 import {
   MAX_WEBGL,
@@ -1460,9 +1461,10 @@ export class TerminalSession {
     // Sekme henüz düzenlenmemişse (0 boyut) fit hesabı NaN üretir.
     if (this.container.clientWidth < 2 || this.container.clientHeight < 2) return;
     try {
-      const dims = this.fit.proposeDimensions();
-      if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
-      if (dims.cols === this.term.cols && dims.rows === this.term.rows) return;
+      // PTY'nin alt sınırının altına İNMİYORUZ: xterm 2, kabuk 10 sütun
+      // sanınca istem ikişer harflik parçalara bölünüp ekranda kalıyordu
+      // (gerekçesi `lib/ptySize.ts` başında).
+      if (!shouldResize(this.fit.proposeDimensions(), this.term)) return;
       this.fit.fit();
       if (!this.exited && this.spawned) {
         void api.ptyResize(this.tabId, this.term.cols, this.term.rows).catch(() => {});
