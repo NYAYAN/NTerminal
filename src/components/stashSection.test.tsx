@@ -579,6 +579,26 @@ describe("içerik", () => {
     expect(adlar).toEqual(["a.ts", "yeni.md", "notlar.md"]);
   });
 
+  /*
+   * İSTEK: "Klasör yollarını göster etkisi Stash'te de olmalı." Değişiklikler
+   * listesiyle aynı ayar (`ui.gitShowPaths`); varsayılan gizli.
+   */
+  it("klasör ön eki 'Klasör yollarını göster' ayarına uyuyor", async () => {
+    vi.spyOn(api, "gitStashFiles").mockResolvedValue({
+      files: [{ status: "M ", path: "src/lib/a.ts", untracked: false }],
+      total: 1,
+    });
+    useStore.setState({ ui: { ...useStore.getState().ui, gitShowPaths: false } });
+    const { container } = await ac();
+    fireEvent.click(baslik(satirlar(container)[0]));
+    await flush();
+    expect(container.querySelector(".stash-file .git-dir"), "kapalıyken çizilmiş").toBe(null);
+    expect(container.querySelector(".stash-file .git-path")!.textContent).toBe("a.ts");
+
+    act(() => useStore.getState().setUi({ gitShowPaths: true }));
+    expect(container.querySelector(".stash-file .git-dir")!.textContent).toBe("src/lib/");
+  });
+
   it("her dosya durum simgesini taşıyor", async () => {
     vi.spyOn(api, "gitStashFiles").mockResolvedValue({ files: DOSYALAR, total: 3 });
     const { container } = await ac();

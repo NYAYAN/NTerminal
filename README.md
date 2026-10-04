@@ -252,7 +252,8 @@ Stash'ler listenin en üstündeki **Stash** başlığının altında. Başlık d
 varken her zaman görünür (temiz bir çalışma ağacında da stash uygulanabilsin
 diye), stash varsa sayısı yanında yazar ve varsayılan olarak **kapalı**. Açınca
 her stash'in adı, dalı ve zamanı görünür; satıra tıklamak dosyalarını, dosyaya
-tıklamak farkını açar (yalnızca okunur). Uygula simgesinin ne yapacağını iki kutu
+tıklamak farkını açar (yalnızca okunur). Stash'teki dosyaların klasör yolu da
+aynı **Klasör yollarını göster** ayarına uyar (varsayılan gizli). Uygula simgesinin ne yapacağını iki kutu
 belirler: **Uyguladıktan sonra sil (pop)** ve **İndeksi geri yükle** (`--index`);
 ikisi de varsayılan olarak kapalı. Kutular başlıkta sayacın solundaki **ayar
 simgesine** basınca açılan küçük pencerede; dışarı basınca ya da `Esc` ile kapanır.

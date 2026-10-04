@@ -480,6 +480,12 @@ function StashFileRow({ cwd, id, file }: { cwd: string; id: string; file: StashF
     };
   }, [open, diff, cwd, id, file.path, file.origPath, file.untracked]);
 
+  /*
+   * Klasör ön eki Değişiklikler listesiyle AYNI ayardan (`ui.gitShowPaths`,
+   * panel başlığındaki klasör düğmesi). İSTEK: "Klasör yollarını göster
+   * etkisi Stash'te de olmalı" — burada her zaman çiziliyordu.
+   */
+  const showPaths = useStore((s) => s.ui.gitShowPaths);
   const dir = dirName(file.path);
   return (
     <div className={open ? "stash-file open" : "stash-file"}>
@@ -496,7 +502,7 @@ function StashFileRow({ cwd, id, file }: { cwd: string; id: string; file: StashF
         <span className={`git-icon ${tone}`} title={text} role="img" aria-label={text}>
           <Icon size={13} />
         </span>
-        {dir && <span className="git-dir">{dir}</span>}
+        {showPaths && dir && <span className="git-dir">{dir}</span>}
         <span className="git-path">{baseName(file.path)}</span>
       </button>
       {open && diff === undefined && <div className="pop-empty">{t("common.loading")}</div>}
