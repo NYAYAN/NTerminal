@@ -26,7 +26,6 @@ import {
 import type { GitChange, GitInfo } from "../types";
 import { GitCommitBox } from "./GitCommit";
 import { useActiveGit, useLabel } from "./gitShared";
-import { OutgoingSection } from "./OutgoingSection";
 import { StashSection } from "./StashSection";
 
 /**
@@ -116,9 +115,6 @@ export function GitChanges() {
           çalışma ağacında da stash'i uygulamak gerekiyor ve o zaman aşağıdaki
           "değişiklik yok" yazısından başka bir şey görünmezdi. Kendi görünürlüğüne
           kendisi karar veriyor (depo yoksa hiçbir şey çizmiyor). */}
-      {/* Gönderilecek commit'ler stash'in ÜSTÜNDE: commit'ten sonra bakılan
-          şey bu ("ne gidecek"), ve yalnızca gönderilecek bir şey varken var. */}
-      <OutgoingSection />
       <StashSection />
       {git && changes.length === 0 && <div className="pop-empty">{t("git.clean")}</div>}
       {git && cwd && changes.length > 0 && <ChangesHeader cwd={cwd} git={git} changes={changes} />}

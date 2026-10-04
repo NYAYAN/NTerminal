@@ -166,8 +166,8 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
 
               Sıfırken NÖTR (`data-empty`): vurgu rengi "bakılacak değişiklik
               var" diye okunurdu. Gönderilmemiş commit sayısı dal rozetinde
-              (`↑N`) ve ipucunda; o durumda tıklamak gönderilecek commit'ler
-              bölümünü de açıyor — panele tam da push için geliniyor. */}
+              (`↑N`) ve ipucunda; neyin gideceği panelde Push'un onay panelinde
+              (bkz. `PushReview`). */}
           <button
             type="button"
             className="ctx-chip changes"
@@ -178,13 +178,7 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
 ${tp("git.unpushed", git.ahead)}`
                 : t("git.viewChanges")
             }
-            onClick={() =>
-              setUi(
-                git.changes.length === 0 && git.ahead > 0
-                  ? { historyOpen: true, panelMode: "git", outgoingOpen: true }
-                  : { historyOpen: true, panelMode: "git" },
-              )
-            }
+            onClick={() => setUi({ historyOpen: true, panelMode: "git" })}
           >
             {`± ${git.changes.length}`}
           </button>

@@ -130,6 +130,14 @@ const box = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-commit");
 const area = (v: HTMLElement) => v.querySelector<HTMLTextAreaElement>(".git-commit-msg")!;
 const commitBtn = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".git-commit-btn")!;
 const pushBtn = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".git-push")!;
+/**
+ * Push iki adım: düğme onay panelini açıyor, gönderen paneldeki düğme (bkz.
+ * `PushReview`; panelin kendi davranışı `pushReview.test.tsx`te).
+ */
+const pushla = (v: HTMLElement) => {
+  fireEvent.click(pushBtn(v));
+  fireEvent.click(v.querySelector<HTMLButtonElement>(".push-review-go")!);
+};
 /** Toplu kutu: dosya listesinin tablo başlığında (bkz. `ChangesHeader`). */
 const master = (v: HTMLElement) => v.querySelector<HTMLInputElement>(".git-table-head input")!;
 const tableHead = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-table-head");
@@ -834,7 +842,7 @@ describe("push", () => {
     const push = vi.spyOn(api, "gitPush").mockResolvedValue("origin/main");
     const { container } = render(<GitChanges />);
 
-    fireEvent.click(pushBtn(container));
+    pushla(container);
     await flush();
 
     expect(push).toHaveBeenCalledWith(CWD);
@@ -856,7 +864,7 @@ describe("push", () => {
     const { container } = render(<GitChanges />);
     expect(pushBtn(container).title).toContain("yayınlanacak");
 
-    fireEvent.click(pushBtn(container));
+    pushla(container);
     await flush();
 
     expect(push).toHaveBeenCalledWith(CWD);
@@ -886,7 +894,7 @@ describe("push", () => {
     vi.spyOn(api, "gitPush").mockRejectedValue(metin);
     const { container } = render(<GitChanges />);
 
-    fireEvent.click(pushBtn(container));
+    pushla(container);
     await flush();
 
     expect(errorBox(container)!.textContent).toContain("Gönderilemedi");
@@ -902,7 +910,7 @@ describe("push", () => {
     vi.spyOn(api, "gitPush").mockImplementation(() => is.soz);
     const { container } = render(<GitChanges />);
 
-    fireEvent.click(pushBtn(container));
+    pushla(container);
     await flush();
 
     expect(pushBtn(container).disabled).toBe(true);

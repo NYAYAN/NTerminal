@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { commitBlock, pushPlan } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
@@ -6,6 +6,7 @@ import { modKey } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import type { GitChange, GitInfo } from "../types";
 import { ArrowIcon, BranchIcon, StashIcon } from "./Icons";
+import { PushReview } from "./PushReview";
 
 /**
  * Değişiklikler panelinin başındaki commit kutusu: ileti, commit, push.
@@ -52,13 +53,18 @@ export function GitCommitBox({
   const message = useStore((s) => s.ui.gitDrafts[key] ?? "");
   const [busy, setBusy] = useState<"commit" | "push" | null>(null);
   const [error, setError] = useState<{ title: string; text: string } | null>(null);
+  /** Push'un onay paneli açık mı (bkz. `PushReview`). */
+  const [review, setReview] = useState(false);
+  const pushRef = useRef<HTMLButtonElement | null>(null);
+  const closeReview = useCallback(() => setReview(false), []);
 
   const plan = pushPlan(git);
   const hasChanges = changes.length > 0;
 
-  // Başka bir depoya geçildi: öncekinin hatası burada anlamsız.
+  // Başka bir depoya geçildi: öncekinin hatası ve açık onay paneli burada anlamsız.
   useEffect(() => {
     setError(null);
+    setReview(false);
   }, [key]);
 
   if (!hasChanges && plan.kind !== "push" && plan.kind !== "publish") return null;
@@ -129,13 +135,23 @@ export function GitCommitBox({
           ? t("git.pushDetached")
           : t("git.pushNothing");
 
+  const canPush = plan.kind === "push" || plan.kind === "publish";
+
+  /*
+   * Push düğmesi GÖNDERMİYOR, onay panelini açıp kapatıyor; gönderen paneldeki
+   * düğme. İSTEK: gönderilecek commit'ler Push düğmesinin üzerinde olsun —
+   * ne gittiğini görmeden göndermek mümkün olmasın (gerekçesi `PushReview`).
+   */
   const pushButton = (
     <button
+      ref={pushRef}
       type="button"
-      className="outline git-push"
-      disabled={busy !== null || plan.kind === "none" || plan.kind === "detached"}
+      className={review ? "outline git-push on" : "outline git-push"}
+      disabled={busy !== null || !canPush}
       title={pushTitle}
-      onClick={() => void push()}
+      aria-haspopup="dialog"
+      aria-expanded={review && canPush}
+      onClick={() => setReview(!review)}
     >
       <ArrowIcon dir="up" size={12} />
       <span>
@@ -143,6 +159,22 @@ export function GitCommitBox({
       </span>
       {plan.kind === "push" && <span className="pill-count">{plan.ahead}</span>}
     </button>
+  );
+
+  // Gönderilecek bir şey kalmadıysa (terminalden itildi) panel kendiliğinden kalkıyor.
+  const reviewPanel = review && canPush && (
+    <PushReview
+      cwd={cwd}
+      git={git}
+      publish={plan.kind === "publish"}
+      title={pushTitle}
+      anchor={pushRef}
+      onCancel={closeReview}
+      onConfirm={() => {
+        setReview(false);
+        void push();
+      }}
+    />
   );
 
   const errorBox = error && (
@@ -196,6 +228,7 @@ export function GitCommitBox({
           </span>
           <div className="git-commit-buttons">{pushButton}</div>
         </div>
+        {reviewPanel}
         {behindHint}
         {errorBox}
       </div>
@@ -252,6 +285,7 @@ export function GitCommitBox({
           {pushButton}
         </div>
       </div>
+      {reviewPanel}
       {behindHint}
       {errorBox}
     </div>

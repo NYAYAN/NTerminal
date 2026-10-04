@@ -211,14 +211,16 @@ panelde "N commit gönderilmedi" satırı ve Push görünür — commit'leri itm
 değişiklik olması gerekmez. Panele giden rozet de kaybolmaz: komut satırının
 üstündeki şeritte git deposundayken her zaman `± N` durur — değişiklik yoksa
 soluk renkte `± 0`. Tıklamak paneli açar; gönderilmemiş commit varsa ipucu
-sayısını söyler ve gönderilecek commit'ler bölümü açılır.
+sayısını söyler.
 
-Neyin gideceği Push'a basmadan görünür: listenin başındaki **Gönderilecek
-commit'ler** bölümü, Push'un göndereceği commit'leri (yukarı akışın önündekiler;
-yayınlanacak dalda hiçbir uzakta olmayanlar) en yeni başta sıralar — ileti,
-altında kısa karma, yazar ve zaman. Commit'e tıklamak dosyalarını, dosyaya
-tıklamak farkını açar (birleştirme commit'i ilk ebeveynine göre). Bölüm yalnızca
-gönderilecek bir şey varken görünür ve varsayılan olarak açıktır.
+Neyin gideceği göndermeden önce görünür: **Push** (ya da **Yayınla**) hemen
+göndermez, düğmenin altında bir onay paneli açar. Panel Push'un göndereceği
+commit'leri (yukarı akışın önündekiler; yayınlanacak dalda hiçbir uzakta
+olmayanlar) en yeni başta sıralar — ileti, altında kısa karma, yazar ve zaman.
+Commit'e tıklamak dosyalarını, dosyaya tıklamak farkını açar (birleştirme
+commit'i ilk ebeveynine göre). Paneldeki **Push** gönderir (odak oradadır,
+`Enter` yeter); **Vazgeç**, `Esc` ya da panelin dışına tıklamak göndermeden
+kapatır.
 
 Hata **kalıcı** ve kutunun içinde: git'in kendi metni satır sonlarıyla, olduğu
 gibi gösterilir. Bir commit kancasının (lint, test) ya da reddedilen bir

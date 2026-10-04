@@ -366,8 +366,7 @@ export const MESSAGES = {
   "git.unpushed.one": ["{n} commit gönderilmedi", "{n} commit not pushed yet"],
   "git.unpushed.other": ["{n} commit gönderilmedi", "{n} commits not pushed yet"],
   "git.notPublished": ["Bu dal uzakta yok", "This branch is not on the remote"],
-  // Gönderilecek commit'ler: Değişiklikler listesinin başındaki bölüm (bkz.
-  // `OutgoingSection`).
+  // Gönderilecek commit'ler: Push'un onay paneli (bkz. `PushReview`).
   "git.outgoing": ["Gönderilecek commit'ler", "Commits to push"],
   "git.outgoingFailed": ["Gönderilecek commit'ler okunamadı", "Could not read the commits to push"],
   "git.outgoingNone": ["Gönderilecek yeni commit yok", "No new commits to push"],

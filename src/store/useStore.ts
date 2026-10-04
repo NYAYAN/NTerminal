@@ -253,15 +253,6 @@ export interface UiState {
    */
   stashOpen: boolean;
   /**
-   * Değişiklikler sekmesindeki "Gönderilecek commit'ler" bölümü açık mı.
-   *
-   * Varsayılan AÇIK, stash'in tersine: bölüm yalnızca gönderilecek bir şey
-   * varken görünüyor ve tam o anda aranan şey "ne gidecek" (BİLDİRİLEN: "push
-   * edeceğim içeriği de görmem gerekmez mi?"). Depoda, `stashOpen` ile aynı
-   * sebeple; geçici arayüz durumu.
-   */
-  outgoingOpen: boolean;
-  /**
    * Stash uygulanınca SİLİNSİN mi (`git stash pop`).
    *
    * Varsayılan KAPALI: uygula ve koru. Silmek geri dönüşü olmayan taraf (stash'in
@@ -910,7 +901,6 @@ export const useStore = create<Store>((set, get) => ({
     branchRemotesOpen: false,
     stashDialog: null,
     stashOpen: false,
-    outgoingOpen: true,
     stashPop: false,
     stashIndex: false,
     nodePicker: false,

@@ -11,22 +11,24 @@ import { ContextBar } from "./ContextBar";
 import { GitChanges } from "./GitChanges";
 
 /**
- * Gönderilecek commit'ler ve Değişiklikler paneline commit'ten sonraki giriş.
+ * Push'un onay paneli ve Değişiklikler paneline commit'ten sonraki giriş.
  *
  * BİLDİRİLEN: "Commit ettikten sonra ilgili terminal sekmesinde değişiklikleri
  * görebileceğim bir buton yok, push etmek istiyorum ama değişiklikler kısmını
  * açamadığım için push edemiyorum. Birde push edeceğim içeriği de görmem
  * gerekmez mi? hangi commitler var diye."
  *
- * İki ayrı eksik: (1) bağlam şeridindeki rozet yalnızca `± N` iken çiziliyordu,
- * commit listeyi boşaltınca panelin tek girişi de gidiyordu; (2) panel "N commit
- * gönderilmedi" diyor ama hangileri olduğunu göstermiyordu.
+ * İlk çözümde liste Değişiklikler'in başında ayrı bir bölümdü. İSTEK:
+ * "Gönderilecek commitler push butonu üzerinde yer alması daha iyi olmaz mı?" —
+ * IntelliJ'in Push penceresi gibi bir onay seçildi: Push'a basmak paneli açıyor,
+ * gönderen paneldeki düğme.
  *
  * Git'in kendisi (hangi commit'ler gidecek, birleştirmenin hangi ebeveyne göre
  * anlatıldığı) Rust testlerinde gerçek depolarla sınanıyor. Burada bağlanan
- * arayüzün payı: bölümün yalnızca gönderilecek bir şey varken çizilmesi,
- * dosyaların ve farkın YALNIZCA açılınca istenmesi, hatanın "commit yok" diye
- * yutulmaması ve rozetin commit'ten sonra kaybolmaması.
+ * arayüzün payı: Push düğmesinin GÖNDERMEDEN paneli açması, vazgeçmenin (düğme,
+ * Esc, dışarı basmak) göndermemesi, dosyaların ve farkın YALNIZCA açılınca
+ * istenmesi, hatanın "commit yok" diye yutulmaması ve rozetin commit'ten sonra
+ * kaybolmaması.
  */
 
 const CWD = "/depo";
@@ -95,7 +97,7 @@ const C2: GitCommitSummary = {
   subject: "Stash: klasör yolu ayara uyuyor",
 };
 
-function seed(info: GitInfo | null = repo(), open = true) {
+function seed(info: GitInfo | null = repo()) {
   useStore.setState({
     ready: true,
     groups: [group()],
@@ -104,7 +106,6 @@ function seed(info: GitInfo | null = repo(), open = true) {
     gitInfo: { [CWD]: info },
     ui: {
       ...useStore.getState().ui,
-      outgoingOpen: open,
       stashOpen: false,
       historyOpen: false,
       panelMode: "history",
@@ -114,6 +115,7 @@ function seed(info: GitInfo | null = repo(), open = true) {
 }
 
 let outgoing: ReturnType<typeof vi.fn>;
+let push: ReturnType<typeof vi.fn>;
 
 function listeSoyle(data: GitOutgoing) {
   outgoing = vi.spyOn(api, "gitOutgoing").mockResolvedValue(data) as unknown as ReturnType<typeof vi.fn>;
@@ -123,8 +125,12 @@ beforeEach(() => {
   setLanguage("tr");
   setPlatform("windows");
   listeSoyle({ commits: [C1, C2], total: 2 });
+  push = vi.spyOn(api, "gitPush").mockResolvedValue("origin/main") as unknown as ReturnType<typeof vi.fn>;
+  vi.spyOn(api, "gitInfo").mockResolvedValue(repo({ ahead: 0 }));
+  vi.spyOn(api, "gitFingerprint").mockResolvedValue("imza");
   // Bağlam şeridinin kendi tazelemeleri bu testin konusu değil.
   useStore.setState({
+    toast: vi.fn(),
     refreshGit: vi.fn(async () => {}),
     pollGit: vi.fn(async () => {}),
     refreshNode: vi.fn(async () => {}),
@@ -139,59 +145,132 @@ afterEach(async () => {
 
 const flush = () => act(async () => {});
 
-async function panel(info: GitInfo | null = repo(), open = true) {
-  seed(info, open);
+async function kutu(info: GitInfo | null = repo()) {
+  seed(info);
   const view = render(<GitChanges />);
   await flush();
   return view;
 }
 
-const bolum = (v: HTMLElement) => v.querySelector<HTMLElement>(".outgoing-section");
-const satirlar = (v: HTMLElement) =>
-  [...v.querySelectorAll<HTMLElement>(".outgoing-section .git-item")];
+const pushBtn = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".git-push")!;
+const onay = (v: HTMLElement) => v.querySelector<HTMLElement>(".push-review");
+const gonder = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".push-review-go")!;
+const satirlar = (v: HTMLElement) => [...v.querySelectorAll<HTMLElement>(".push-review .git-item")];
 const baslik = (satir: HTMLElement) => satir.querySelector<HTMLButtonElement>(".git-head .git-row")!;
 
-describe("gönderilecek commit'ler", () => {
-  it("karma, ileti, yazar ve zamanla listeleniyor", async () => {
-    const { container } = await panel();
+/** Push düğmesine bas ve paneli bekle. */
+async function ac(v: HTMLElement) {
+  fireEvent.click(pushBtn(v));
+  await flush();
+}
 
+describe("Push'un onay paneli", () => {
+  it("Push düğmesi GÖNDERMİYOR, paneli açıyor; panelde commit'ler", async () => {
+    const { container } = await kutu();
+    expect(onay(container)).toBe(null);
+    expect(outgoing, "panel açılmadan liste istendi").not.toHaveBeenCalled();
+
+    await ac(container);
+
+    expect(push, "onaysız gönderdi").not.toHaveBeenCalled();
+    expect(onay(container)).not.toBe(null);
+    expect(pushBtn(container).getAttribute("aria-expanded")).toBe("true");
     expect(outgoing).toHaveBeenCalledWith(CWD);
     const l = satirlar(container);
     expect(l).toHaveLength(2);
     expect(l[0].querySelector(".outgoing-hash")!.textContent).toBe("aaaaaaa");
     expect(l[0].querySelector(".outgoing-subject")!.textContent).toBe(C1.subject);
     expect(l[0].querySelector(".outgoing-meta")!.textContent).toContain("Nurullah YAYAN");
-    // Başlıktaki sayı Push düğmesindekiyle aynı kaynaktan (`ahead`).
-    expect(container.querySelector(".outgoing-section-head .pill-count")!.textContent).toBe("2");
+    // Başlık Push'un ipucuyla aynı: kaç commit nereye.
+    expect(onay(container)!.querySelector(".push-review-head")!.textContent).toBe(
+      "2 commit gönderilecek → origin/main",
+    );
+    // Odak paneldeki Push'ta: klavyeyle Enter göndermek demek.
+    expect(document.activeElement).toBe(gonder(container));
   });
 
-  it("gönderilecek bir şey yoksa bölüm yok ve liste istenmiyor", async () => {
-    const { container } = await panel(repo({ ahead: 0 }));
-    expect(bolum(container)).toBe(null);
-    expect(outgoing).not.toHaveBeenCalled();
-  });
+  it("paneldeki Push gönderiyor ve paneli kapatıyor", async () => {
+    const { container } = await kutu();
+    await ac(container);
 
-  it("ayrık HEAD'de bölüm yok", async () => {
-    const { container } = await panel(repo({ detached: true, upstream: null, branch: "HEAD" }));
-    expect(bolum(container)).toBe(null);
-  });
-
-  it("dal uzakta yoksa (yayınla) bölüm var, sayaç yok", async () => {
-    // `ahead` yukarı akışa göre; yayınlanacak dalda anlamı yok — sayı listeden.
-    const { container } = await panel(repo({ upstream: null, ahead: 0 }));
-    expect(bolum(container)).not.toBe(null);
-    expect(container.querySelector(".outgoing-section-head .pill-count")).toBe(null);
-    expect(satirlar(container)).toHaveLength(2);
-  });
-
-  it("başlık açıp kapatıyor; kapalıyken liste istenmiyor", async () => {
-    const { container } = await panel(repo(), false);
-    expect(outgoing).not.toHaveBeenCalled();
-    expect(satirlar(container)).toHaveLength(0);
-
-    fireEvent.click(container.querySelector(".outgoing-toggle")!);
+    fireEvent.click(gonder(container));
     await flush();
-    expect(useStore.getState().ui.outgoingOpen).toBe(true);
+
+    expect(push).toHaveBeenCalledWith(CWD);
+    expect(onay(container)).toBe(null);
+  });
+
+  it("Vazgeç göndermeden kapatıyor", async () => {
+    const { container } = await kutu();
+    await ac(container);
+    const vazgec = [...onay(container)!.querySelectorAll("button")].find(
+      (b) => b.textContent === "Vazgeç",
+    )!;
+
+    fireEvent.click(vazgec);
+    await flush();
+
+    expect(onay(container)).toBe(null);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("Esc göndermeden kapatıyor, odak Push düğmesine dönüyor", async () => {
+    const { container } = await kutu();
+    await ac(container);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await flush();
+
+    expect(onay(container)).toBe(null);
+    expect(push).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(pushBtn(container));
+  });
+
+  it("dışarı basmak kapatıyor; Push düğmesi aç/kapa", async () => {
+    const { container } = await kutu();
+    await ac(container);
+    fireEvent.mouseDown(document.body);
+    await flush();
+    expect(onay(container)).toBe(null);
+
+    await ac(container);
+    // Düğmeye basmak "dışarı" sayılmıyor: mousedown kapatıp click yeniden
+    // açsaydı panel hiç kapanmazdı.
+    fireEvent.mouseDown(pushBtn(container));
+    fireEvent.click(pushBtn(container));
+    await flush();
+    expect(onay(container)).toBe(null);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("panelin içine basmak kapatmıyor", async () => {
+    const { container } = await kutu();
+    await ac(container);
+    fireEvent.mouseDown(satirlar(container)[0]);
+    await flush();
+    expect(onay(container)).not.toBe(null);
+  });
+
+  it("Değişiklikler listesinde ayrı bir bölüm YOK", async () => {
+    // İlk hâlinde liste orada açılıp kapanan bir bölümdü; artık yalnızca panelde.
+    const { container } = await kutu(repo({ changes: [{ status: " M", path: "a.ts" }] }));
+    expect(container.querySelector(".outgoing-section")).toBe(null);
+    expect(container.querySelector(".git-list .git-item .outgoing-subject")).toBe(null);
+  });
+
+  it("gönderilecek bir şey yoksa düğme kapalı, panel açılmıyor", async () => {
+    const { container } = await kutu(repo({ ahead: 0, changes: [{ status: " M", path: "a.ts" }] }));
+    expect(pushBtn(container).disabled).toBe(true);
+    expect(onay(container)).toBe(null);
+  });
+
+  it("dal uzakta yoksa (yayınla) başlık ve düğme ona göre", async () => {
+    const { container } = await kutu(repo({ upstream: null, ahead: 0 }));
+    await ac(container);
+    expect(onay(container)!.querySelector(".push-review-head")!.textContent).toContain(
+      "yayınlanacak",
+    );
+    expect(gonder(container).textContent).toBe("Yayınla");
     expect(satirlar(container)).toHaveLength(2);
   });
 
@@ -203,7 +282,8 @@ describe("gönderilecek commit'ler", () => {
     const diff = vi
       .spyOn(api, "gitCommitDiff")
       .mockResolvedValue("diff --git a/a.txt b/b.txt\n--- a/a.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-eski\n+yeni\n");
-    const { container } = await panel();
+    const { container } = await kutu();
+    await ac(container);
     expect(files).not.toHaveBeenCalled();
 
     fireEvent.click(baslik(satirlar(container)[0]));
@@ -211,7 +291,7 @@ describe("gönderilecek commit'ler", () => {
     expect(files).toHaveBeenCalledWith(CWD, C1.id);
     expect(diff).not.toHaveBeenCalled();
 
-    const dosya = container.querySelector<HTMLButtonElement>(".stash-file .git-row")!;
+    const dosya = container.querySelector<HTMLButtonElement>(".push-review .stash-file .git-row")!;
     expect(dosya.textContent).toContain("b.txt");
     fireEvent.click(dosya);
     await flush();
@@ -222,7 +302,8 @@ describe("gönderilecek commit'ler", () => {
 
   it("dosyasız commit bunu söylüyor", async () => {
     vi.spyOn(api, "gitCommitFiles").mockResolvedValue({ files: [], total: 0 });
-    const { container } = await panel();
+    const { container } = await kutu();
+    await ac(container);
     fireEvent.click(baslik(satirlar(container)[0]));
     await flush();
     expect(container.textContent).toContain("Bu commit'te dosya değişikliği yok");
@@ -230,10 +311,11 @@ describe("gönderilecek commit'ler", () => {
 
   it("okuma hatası 'commit yok' diye yutulmuyor", async () => {
     // Eski bir Rust derlemesi: komut yok. Boş liste "gönderilecek bir şey yok"
-    // derdi ve kullanıcı Push'un boşa olduğunu sanardı.
+    // derdi ve kullanıcı ne gönderdiğini bilmeden onaylardı.
     vi.spyOn(api, "gitOutgoing").mockRejectedValue("Command git_outgoing not found");
-    const { container } = await panel();
-    const hata = container.querySelector(".outgoing-section .git-commit-error")!;
+    const { container } = await kutu();
+    await ac(container);
+    const hata = onay(container)!.querySelector(".git-commit-error")!;
     expect(hata.textContent).toContain("Gönderilecek commit'ler okunamadı");
     expect(hata.textContent).toContain("git_outgoing not found");
     expect(container.textContent).not.toContain("Gönderilecek yeni commit yok");
@@ -241,31 +323,42 @@ describe("gönderilecek commit'ler", () => {
 
   it("kesilen liste kalanını söylüyor", async () => {
     listeSoyle({ commits: [C1], total: 3 });
-    const { container } = await panel(repo({ ahead: 3 }));
-    expect(container.textContent).toContain("… ve 2 commit daha");
+    const { container } = await kutu(repo({ ahead: 3 }));
+    await ac(container);
+    expect(onay(container)!.textContent).toContain("… ve 2 commit daha");
   });
 
   it("yayınlanacak dalda yeni commit yoksa bunu söylüyor", async () => {
     listeSoyle({ commits: [], total: 0 });
-    const { container } = await panel(repo({ upstream: null, ahead: 0 }));
-    expect(container.textContent).toContain("Gönderilecek yeni commit yok");
+    const { container } = await kutu(repo({ upstream: null, ahead: 0 }));
+    await ac(container);
+    expect(onay(container)!.textContent).toContain("Gönderilecek yeni commit yok");
   });
 
-  it("git durumu tazelenince liste yeniden okunuyor", async () => {
-    // Commit atınca, push edince ya da terminalden `--amend` yapınca durum
-    // tazeleniyor; liste ayrı bir yoklama olmadan onu izliyor.
-    await panel();
+  it("panel açıkken git durumu tazelenince liste yeniden okunuyor", async () => {
+    // Terminalden `git commit --amend` ya da yeni bir commit: panel güncel kalmalı.
+    const { container } = await kutu();
+    await ac(container);
     expect(outgoing).toHaveBeenCalledTimes(1);
     await act(async () => {
       useStore.setState({ gitInfo: { [CWD]: repo({ ahead: 3 }) } });
     });
     expect(outgoing).toHaveBeenCalledTimes(2);
   });
+
+  it("gönderilecek bir şey kalmayınca (terminalden itildi) panel kalkıyor", async () => {
+    const { container } = await kutu(repo({ changes: [{ status: " M", path: "a.ts" }] }));
+    await ac(container);
+    await act(async () => {
+      useStore.setState({ gitInfo: { [CWD]: repo({ ahead: 0, changes: [{ status: " M", path: "a.ts" }] }) } });
+    });
+    expect(onay(container)).toBe(null);
+  });
 });
 
 describe("bağlam şeridindeki rozet", () => {
   async function serit(info: GitInfo | null) {
-    seed(info, false);
+    seed(info);
     const view = render(<ContextBar />);
     await flush();
     return view;
@@ -286,7 +379,7 @@ describe("bağlam şeridindeki rozet", () => {
     expect(ui.panelMode).toBe("git");
   });
 
-  it("commit'ten sonra gönderilmemiş commit varken ± 0, ipucu söylüyor, bölümü açıyor", async () => {
+  it("commit'ten sonra gönderilmemiş commit varken ± 0, ipucu söylüyor, paneli açıyor", async () => {
     const { container } = await serit(repo({ ahead: 2, changes: [] }));
     const r = rozet(container)!;
     expect(r.textContent).toBe("± 0");
@@ -296,8 +389,6 @@ describe("bağlam şeridindeki rozet", () => {
     const ui = useStore.getState().ui;
     expect(ui.historyOpen).toBe(true);
     expect(ui.panelMode).toBe("git");
-    // Kullanıcı bölümü kapatmış olsa da açılıyor: panele push için gelindi.
-    expect(ui.outgoingOpen).toBe(true);
   });
 
   it("değişiklik varken ± N, vurgulu", async () => {

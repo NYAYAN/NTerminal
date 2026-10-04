@@ -1,67 +1,98 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { formatWhen } from "../lib/format";
-import { pushPlan } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
-import { useStore } from "../store/useStore";
 import type { GitCommitSummary, GitInfo, GitOutgoing } from "../types";
-import { useActiveGit } from "./gitShared";
 import { ArrowIcon, ChevronIcon } from "./Icons";
 import { RevisionFiles } from "./RevisionFiles";
 
 /**
- * "Gönderilecek commit'ler": Push'a basmadan önce neyin gideceği.
+ * Push'un onay paneli: neyin gideceği, göndermeden önce.
  *
  * BİLDİRİLEN: "push edeceğim içeriği de görmem gerekmez mi? hangi commitler var
- * diye." Commit kutusu yalnızca "N commit gönderilmedi" diyordu; hangileri
- * olduğunu görmek için terminale `git log` yazmak gerekiyordu.
+ * diye." İlk çözüm Değişiklikler listesinin başında açılıp kapanan bir bölümdü.
+ * İSTEK: "Gönderilecek commitler push butonu üzerinde yer alması daha iyi olmaz
+ * mı?" — sorulunca IntelliJ'in Push penceresi gibi bir onay seçildi: Push'a
+ * basmak paneli açıyor, gönderen paneldeki düğme. Liste kararın verildiği yerde
+ * ve ne gittiğini görmeden göndermek mümkün değil; bedeli Push'un iki tık olması.
+ * Commit'lenmemiş değişikliklerle çalışırken listenin başında yer kaplayan bölüm
+ * de böylece kalktı.
  *
- * IntelliJ'in Push penceresindeki gibi: commit'lerin listesi (karma, ileti,
- * yazar, zaman), commit'e tıklayınca dosyaları, dosyaya tıklayınca farkı.
- * Ayrı bir pencere yok; stash bölümü gibi Değişiklikler listesinin başında
- * açılıp kapanan bir bölüm.
+ * Panel DÜĞMENİN ALTINDA açılıyor, üstünde değil: commit kutusu panelin en
+ * üstünde, yukarıda yer yok ve uzun bir liste pencereden taşardı. Esc ve
+ * dışarıya basmak kapatıyor (stash ayar penceresiyle aynı düzenek); Push düğmesi
+ * de aç/kapa — ona basmak "dışarı" sayılmıyor, yoksa kapatıp hemen yeniden
+ * açardı. Açılınca odak paneldeki Push'ta: klavyeyle Enter göndermek demek.
  *
- * YALNIZCA gönderilecek bir şey varken çiziliyor — Push düğmesinin açık olduğu
- * iki durum (`pushPlan`): yukarı akışın önünde commit var (`push`) ya da dal
- * uzakta yok (`publish`). Liste Rust'ta Push'un yaptığı ayrımla okunuyor (bkz.
- * `git.rs` `outgoing`): neyin gideceğini göstermek, gidecek olanla aynı soruyu
- * sormalı.
- *
- * Liste bölüm AÇIKKEN ve `git` durumu her tazelendiğinde yeniden okunuyor
- * (stash listesiyle aynı yol): commit atınca, push edince ya da terminalden
- * `git commit --amend` yapınca liste kendiliğinden güncelleniyor.
+ * Liste Rust'ta Push'un yaptığı ayrımla okunuyor (bkz. `git.rs` `outgoing`):
+ * neyin gideceğini göstermek, gidecek olanla aynı soruyu sormalı. Panel açıkken
+ * `git` durumu tazelenirse liste de tazeleniyor.
  */
-export function OutgoingSection() {
+export function PushReview({
+  cwd,
+  git,
+  publish,
+  title,
+  anchor,
+  onCancel,
+  onConfirm,
+}: {
+  cwd: string;
+  git: GitInfo;
+  /** Dal uzakta yok: düğme "Yayınla". */
+  publish: boolean;
+  /** Başlık: kaç commit nereye, ya da yayınlanacağı. */
+  title: string;
+  /** Paneli açan düğme: ona basmak dışarı sayılmıyor. */
+  anchor: RefObject<HTMLElement | null>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   const t = useT();
-  const { cwd, git } = useActiveGit();
-  const open = useStore((s) => s.ui.outgoingOpen);
-  const setUi = useStore((s) => s.setUi);
+  const panel = useRef<HTMLDivElement | null>(null);
 
-  if (!cwd || !git) return null;
-  const plan = pushPlan(git);
-  if (plan.kind !== "push" && plan.kind !== "publish") return null;
+  useEffect(() => {
+    panel.current?.querySelector<HTMLButtonElement>(".push-review-go")?.focus();
+  }, []);
 
-  const title =
-    plan.kind === "push"
-      ? tp("git.pushHint", plan.ahead, { upstream: plan.upstream })
-      : t("git.publishHint");
+  useEffect(() => {
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (panel.current?.contains(target) || anchor.current?.contains(target)) return;
+      onCancel();
+    };
+    // Yakalama fazında: uygulamanın genel Esc'i başka bir örtüyü kapatmasın.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+      anchor.current?.focus();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey, { capture: true });
+    };
+  }, [anchor, onCancel]);
 
   return (
-    <div className="outgoing-section">
-      {/* Başlık stash bölümününkiyle aynı yapıda (bkz. `StashSection`): satıra
-          basmak da açıp kapatıyor, gerçek düğme `outgoing-toggle`. */}
-      <div className="outgoing-section-head" title={title} onClick={() => setUi({ outgoingOpen: !open })}>
-        <button type="button" className="outgoing-toggle" aria-expanded={open}>
-          <span className="git-caret" aria-hidden="true">
-            <ChevronIcon open={open} size={11} />
-          </span>
-          <ArrowIcon dir="up" size={12} />
-          <span>{t("git.outgoing")}</span>
-        </button>
-        {plan.kind === "push" && <span className="pill-count">{plan.ahead}</span>}
+    <div ref={panel} className="push-review" role="dialog" aria-label={t("git.outgoing")}>
+      <div className="push-review-head">{title}</div>
+      <div className="push-review-list">
+        <OutgoingList cwd={cwd} git={git} />
       </div>
-      {open && <OutgoingList cwd={cwd} git={git} />}
+      <div className="push-review-foot">
+        <button type="button" className="outline" onClick={onCancel}>
+          {t("common.cancel")}
+        </button>
+        <button type="button" className="primary push-review-go" onClick={onConfirm}>
+          <ArrowIcon dir="up" size={12} />
+          <span>{t(publish ? "git.publish" : "git.push")}</span>
+        </button>
+      </div>
     </div>
   );
 }

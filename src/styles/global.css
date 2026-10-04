@@ -2888,12 +2888,72 @@ html[data-platform="macos"] .titlebar {
  * `flex: none`: liste kayarken ileti alani ve dugmeler yerinde kalmali; kayan
  * `.panel-list` kalan yuksekligi kendisi aliyor. */
 .git-commit {
+  /* Push'un onay paneli (`.push-review`) kutuya gore konumlaniyor. */
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 8px 9px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Push'un onay paneli: neyin gidecegi, gondermeden once (bkz. `PushReview`).
+ *
+ * Kutunun ALTINDA, listenin ustune biniyor: kutu panelin en ustunde, yukarida
+ * yer yok. Yuksekligi sinirli, commit listesi kendi icinde kayiyor; baslik ve
+ * dugmeler yerinde kaliyor. Stash ayar penceresinin gorunusu (zemin, cerceve,
+ * golge). */
+.push-review {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: min(60vh, 520px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-alt);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.push-review-head {
+  flex: none;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+}
+
+.push-review-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.push-review-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* Panel acikken Push dugmesi basili gorunuyor: panelin ona ait oldugu belli olsun. */
+.git-push.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.push-review-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .git-commit-msg {
@@ -3059,7 +3119,6 @@ html[data-platform="macos"] .titlebar {
  * Dorduncu sekme olarak yazilmisti ve panelin basligina sigmadigi icin bolume
  * cevrildi (bkz. `StashSection`). Altta bir cizgi: acikken stash satirlari ile
  * degisen dosya satirlari birbirine karismasin. */
-.outgoing-section,
 .stash-section {
   margin-bottom: 4px;
   padding-bottom: 4px;
@@ -3071,7 +3130,6 @@ html[data-platform="macos"] .titlebar {
  * tiklama satira kabarciklaniyor, bos yere ya da sayaca basmak da acip kapatiyor.
  *
  * `position: relative`: ayar penceresi (`.stash-settings-pop`) satira gore konumlaniyor. */
-.outgoing-section-head,
 .stash-section-head {
   position: relative;
   display: flex;
@@ -3082,14 +3140,12 @@ html[data-platform="macos"] .titlebar {
   cursor: pointer;
 }
 
-.outgoing-section-head:hover,
 .stash-section-head:hover {
   background: var(--hover);
 }
 
 /* Bosluga kadar uzamiyor (`flex: 0 1 auto`): kalan yer satirin tiklanabilir bos kismi,
    ayar simgesi ve sayac yaziya yapisik duruyor. */
-.outgoing-toggle,
 .stash-toggle {
   display: flex;
   align-items: center;
