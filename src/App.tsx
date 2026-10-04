@@ -26,6 +26,7 @@ import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
+import { isNativeCopyKey, pageSelectionText } from "./lib/focus";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
@@ -352,6 +353,36 @@ export function App() {
         event.stopPropagation();
         fn();
       };
+
+      /*
+       * Sayfada SEÇİLİ METİN varken kopyalama o metnindir.
+       *
+       * BİLDİRİLEN: Değişiklikler panelindeki git hata kutusunun metnini seçip
+       * Cmd+C yapınca kopyalanmıyordu. Aşağıdaki `keys.copy` dalı tuşu HER
+       * YERDE yakalayıp terminalin seçimini kopyalıyor ve `preventDefault`
+       * veriyordu: sayfadaki seçim panoya hiç gitmiyordu. Daha tehlikelisi,
+       * sekmede komut çalışırken aynı Cmd+C durdurmayı silahlandırıyordu —
+       * "kopyalama kazanır" kararı (`copyWins`) yalnızca terminale ve komut
+       * kutusuna bakıyor.
+       *
+       * Durdurma dalından ÖNCE: seçim varken basılan kopyalama tuşu bir
+       * kopyalama isteği. Tarayıcının kendi tuşunda (mac'te Cmd+C, diğerlerinde
+       * Ctrl+C) yoldan çekiliyoruz, tarayıcı kopyalıyor. Ayarlanmış kısayol
+       * başka bir tuşsa (Windows'ta Ctrl+Shift+C, tarayıcıda karşılığı yok)
+       * seçimi biz yazıyoruz. Terminal ve komut kutusu bu kuralın dışında
+       * (bkz. `pageSelectionText`).
+       */
+      const pageText = !inTerminal && !inCommandInput ? pageSelectionText() : "";
+      if (pageText) {
+        if (isNativeCopyKey(event, isMac())) return;
+        if (matchCombo(event, keys.copy)) {
+          return run(() => {
+            void navigator.clipboard
+              ?.writeText(pageText)
+              .catch(() => store.toast(t("common.clipboardFailed"), "err"));
+          });
+        }
+      }
 
       // Ctrl+C terminalde iki isi de yapmak zorunda: secim varsa kopyalar,
       // yoksa kabuga SIGINT olarak gecer. Karar SENKRON veriliyor

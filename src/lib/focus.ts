@@ -24,3 +24,40 @@ export function typingOutsideTerminal(): boolean {
     active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT";
   return isFormField && !active.closest(".xterm");
 }
+
+/**
+ * Sayfada — terminalin ve komut kutusunun DIŞINDA — seçili metin; yoksa boş.
+ *
+ * BİLDİRİLEN: Değişiklikler panelindeki git hata kutusunun metni seçilip
+ * Cmd+C yapılınca kopyalanmıyordu. Uygulamanın genel kısayolu kopyalamayı
+ * her yerde TERMİNALİN seçimine yönlendiriyordu; sayfadaki seçim panoya hiç
+ * gitmiyordu (bkz. `App` kısayol işleyicisi).
+ *
+ * Terminal ve komut kutusu hariç: ikisinin kendi kopyalama kararı var
+ * (xterm'in seçimi DOM seçimi değil; kutu `CommandInput.onKeyDown`'da). Metin
+ * kutularındaki seçim de burada sayılmıyor — işleyici odak bir metin
+ * kutusundayken zaten hiç çalışmıyor ve tarayıcı kendisi kopyalıyor.
+ */
+export function pageSelectionText(): string {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return "";
+  const node = selection.anchorNode;
+  const element = node instanceof Element ? node : (node?.parentElement ?? null);
+  if (element?.closest(".xterm, .command-input")) return "";
+  return selection.toString();
+}
+
+/**
+ * Tarayıcının KENDİ kopyalama tuşu mu: mac'te Cmd+C, diğerlerinde Ctrl+C.
+ *
+ * Ayarlanabilir kopyalama kısayolundan (`keys.copy`) ayrı bir soru: Windows'ta
+ * o Ctrl+Shift+C ve tarayıcıda karşılığı yok — o tuşta seçimi uygulama
+ * kendisi yazmalı, bu tuşta yoldan çekilmesi yeterli.
+ */
+export function isNativeCopyKey(
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+  mac: boolean,
+): boolean {
+  if (event.key.toLowerCase() !== "c" || event.shiftKey || event.altKey) return false;
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}

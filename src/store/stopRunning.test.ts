@@ -106,6 +106,17 @@ describe("kaynaktaki kural", () => {
     expect(APP).toContain("store.armStop(");
   });
 
+  it("sayfada seçim varken kopyalama tuşu tarayıcıya kalıyor ve durdurmayı silahlandırmıyor", () => {
+    // BİLDİRİLEN: panelde seçilen hata metni Cmd+C ile kopyalanmıyordu; aynı
+    // tuş komut çalışırken durdurmayı da silahlandırabiliyordu. Seçim dalı
+    // durdurma dalından ÖNCE olmalı ve tarayıcının tuşunda `run` (yani
+    // `preventDefault`) çağırmadan dönmeli.
+    const secim = APP.indexOf("pageSelectionText()");
+    expect(secim, "sayfa seçimi okunmuyor").toBeGreaterThan(-1);
+    expect(secim, "seçim dalı durdurma dalından sonra").toBeLessThan(APP.indexOf("const stopKey"));
+    expect(APP).toMatch(/if \(isNativeCopyKey\(event, isMac\(\)\)\) return;/);
+  });
+
   it("kopyalanacak bir şey varken kopyalama kazanıyor — kutudaki seçim de", () => {
     // mac'te komut çalışırken kutuda seçilen metni Cmd+C ile kopyalamak
     // isteyenin tuşu, yalnızca ızgaraya bakılsaydı durdurma silahına dönerdi.
