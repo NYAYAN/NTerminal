@@ -791,8 +791,64 @@ fn failure_text(out: &std::process::Output) -> String {
 ///
 /// Silinmis bir dosyanin yolu verilirse silme indekse eklenir (`D `); takipsiz
 /// bir klasor verilirse icindeki her sey.
+///
+/// ## Izlenen dosyalar `add -u` ile
+///
+/// BILDIRILEN: "Dosyalarin tumunu sec dedigimde" panel "Dosya secimi
+/// degistirilemedi — The following paths are ignored by one of your .gitignore
+/// files: js-storefront/yatas/.vscode" diyordu. `.vscode` bir `.gitignore`'da
+/// ama icindeki dosyalar daha once commit'lenmis; degisen `settings.json`
+/// listede ` M`.
+///
+/// OLCULDU (git 2.50): yok sayilan bir klasorun altindaki IZLENEN dosyayi yolla
+/// vermek (`git add -- sub/.vscode/settings.json`) dosyayi SAHNELIYOR ama uyari
+/// basip 1 ile cikiyor; `advice.addIgnoredFile=false` yalnizca ipucunu
+/// susturuyor, kod yine 1. Islem olmus, arayuz basarisiz sanip hata
+/// gosteriyordu. `git add -u` (yalnizca izlenenleri guncelle) ayni isi uyarisiz
+/// ve 0 ile yapiyor; silmeyi ve cakisma cozumunu de kapsiyor. Ama takipsiz yolu
+/// SESSIZCE atliyor — o yuzden yollar ikiye ayriliyor: indekste olanlar
+/// `add -u`, olmayanlar (takipsiz dosya ve klasorler) duz `add`.
+///
+/// `-f` (zorla) DEGIL: takipsiz bir klasor yolu verildiginde icindeki yok
+/// sayilan her seyi (`node_modules`) de eklerdi.
 pub fn stage(path: &str, files: &[String]) -> Result<(), String> {
-    index_op(path, &["add", "--"], files)
+    if files.is_empty() {
+        return Ok(());
+    }
+    let _sira = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = work_dir(path);
+    let indekste = tracked_paths(&dir, files)?;
+    let (izlenen, takipsiz): (Vec<String>, Vec<String>) =
+        files.iter().cloned().partition(|f| indekste.contains(f.as_str()));
+    if !izlenen.is_empty() {
+        run_index(&dir, &["add", "-u", "--"], &izlenen)?;
+    }
+    if !takipsiz.is_empty() {
+        run_index(&dir, &["add", "--"], &takipsiz)?;
+    }
+    Ok(())
+}
+
+/// Verilen yollardan INDEKSTE olanlar (`git ls-files`), depo kokune gore.
+///
+/// Takipsiz bir klasor yolu (`yeni/`) listede yer almiyor: `ls-files` onun
+/// altindaki izlenen dosyalari verir (yoksa hicbir sey), klasorun kendisini
+/// degil — yani klasor dogru tarafa, duz `add`e dusuyor.
+fn tracked_paths(dir: &str, files: &[String]) -> Result<std::collections::HashSet<String>, String> {
+    let out = git_at(dir)
+        .arg("--literal-pathspecs")
+        .args(["ls-files", "-z", "--"])
+        .args(files)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(failure_text(&out));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 /// Verilen yollari indeksten cikarir; calisma agacindaki dosyalara DOKUNMAZ.
@@ -812,8 +868,12 @@ fn index_op(path: &str, verb: &[&str], files: &[String]) -> Result<(), String> {
         return Ok(());
     }
     let _sira = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let dir = work_dir(path);
-    let out = git_at(&dir)
+    run_index(&work_dir(path), verb, files)
+}
+
+/// Indeksi degistiren git komutu; kilidi CAGIRAN tutuyor.
+fn run_index(dir: &str, verb: &[&str], files: &[String]) -> Result<(), String> {
+    let out = git_at(dir)
         .arg("--literal-pathspecs")
         .args(verb)
         .args(files)

@@ -2618,3 +2618,66 @@ fn commit_kimligi_dogrulaniyor() {
     assert_eq!(commit_diff(&yol_of(&root), "--stat", "a.txt", None), None);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ------------------------------------------------- yok sayilan klasorde izlenen
+
+/// `.vscode` yok sayiliyor ama icindeki dosyalar daha once commit'lenmis
+/// (bildirilen depodaki durum: `.gitignore:123 .vscode`).
+fn repo_yok_sayilan_klasorlu(name: &str) -> std::path::PathBuf {
+    let root = temp_repo(name);
+    std::fs::create_dir_all(root.join("alt/.vscode")).unwrap();
+    yaz(&root, "alt/.vscode/settings.json", "ilk\n");
+    yaz(&root, "alt/.vscode/launch.json", "ilk\n");
+    yaz(&root, "a.txt", "ilk\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ilk"]);
+    yaz(&root, "alt/.gitignore", ".vscode\n");
+    git(&root, &["add", "alt/.gitignore"]);
+    git(&root, &["commit", "--quiet", "-m", "yok say"]);
+    root
+}
+
+#[test]
+fn yok_sayilan_klasordeki_izlenen_dosya_hatasiz_sahneleniyor() {
+    /*
+     * OLCULDU: duz `git add -- alt/.vscode/settings.json` dosyayi sahneleyip
+     * "The following paths are ignored" ile 1 donuyordu; panel "Dosya secimi
+     * degistirilemedi" diyordu. Toplu kutunun gonderdigi liste aynen bu: izlenen,
+     * silinen, siradan ve takipsiz yollar bir arada.
+     */
+    let root = repo_yok_sayilan_klasorlu("stage-yok-sayilan");
+    yaz(&root, "alt/.vscode/settings.json", "degisti\n");
+    std::fs::remove_file(root.join("alt/.vscode/launch.json")).unwrap();
+    yaz(&root, "a.txt", "degisti\n");
+    yaz(&root, "yeni.txt", "yeni\n");
+    assert_eq!(durum_of(&root, "alt/.vscode/settings.json").as_deref(), Some(" M"));
+
+    stage(&yol_of(&root), &liste(&["alt/.vscode/settings.json", "alt/.vscode/launch.json", "a.txt", "yeni.txt"]))
+        .expect("izlenen dosya yok sayilan klasorde diye hata dondu");
+
+    assert_eq!(durum_of(&root, "alt/.vscode/settings.json").as_deref(), Some("M "));
+    assert_eq!(durum_of(&root, "alt/.vscode/launch.json").as_deref(), Some("D "));
+    assert_eq!(durum_of(&root, "a.txt").as_deref(), Some("M "));
+    assert_eq!(durum_of(&root, "yeni.txt").as_deref(), Some("A "));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn takipsiz_klasordeki_yok_sayilan_dosya_eklenmiyor() {
+    // `-f` kullanilmadiginin kaniti: takipsiz klasor yolu verilince icindeki
+    // yok sayilan dosya (`node_modules` gibi) indekse girmemeli.
+    let root = repo_bir_commitli("stage-takipsiz-klasor");
+    yaz(&root, ".gitignore", "*.log\n");
+    git(&root, &["add", ".gitignore"]);
+    git(&root, &["commit", "--quiet", "-m", "yok say"]);
+    std::fs::create_dir_all(root.join("yeni")).unwrap();
+    yaz(&root, "yeni/a.txt", "a\n");
+    yaz(&root, "yeni/hata.log", "log\n");
+
+    stage(&yol_of(&root), &liste(&["yeni/"])).unwrap();
+
+    let indeks = git_out(&root, &["ls-files"]);
+    assert!(indeks.contains("yeni/a.txt"), "{indeks}");
+    assert!(!indeks.contains("hata.log"), "yok sayilan dosya eklendi: {indeks}");
+    let _ = std::fs::remove_dir_all(&root);
+}
