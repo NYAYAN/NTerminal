@@ -114,9 +114,6 @@ pub fn parse_porcelain(text: &str) -> GitInfo {
         if is_staged(status) {
             info.staged += 1;
         }
-        if info.changes.len() >= MAX_CHANGES {
-            continue;
-        }
         let rest = rest.trim_start();
         // Yeniden adlandirma ve kopyalama `eski -> yeni` veriyor. Ilgilendigimiz
         // yeni ad; eskisi indeksten cikarmak icin lazim (bkz. `orig_path`).
@@ -136,6 +133,22 @@ pub fn parse_porcelain(text: &str) -> GitInfo {
             orig_path,
         });
     }
+
+    /*
+     * Sira YOLA gore, git'in sirasina gore DEGIL; kesme siralamadan SONRA.
+     *
+     * BILDIRILEN: "dosyalari toplu sectirince dosyalar kendi arasinda yer
+     * degistiriyor." OLCULDU: porcelain once izlenen degisiklikleri yola gore,
+     * EN SONDA takipsizleri (`??`) veriyor. Sahnelenen yeni dosya `??`ten `A `ya
+     * gecince listenin sonundan ortasina atliyordu (`a c e b d/` ->
+     * `a b c d/x e`). Yol bir dosyanin kimligi, durum onun bir ozelligi
+     * (satirin anahtari da yol, bkz. `GitChanges`); sira da durumla oynamamali.
+     *
+     * Kesme siralamadan sonra: once kesip sonra siralamak, iki yuzu asan bir
+     * listede GOSTERILEN dosyalarin kumesini de durumla degistirirdi.
+     */
+    info.changes.sort_by(|a, b| a.path.cmp(&b.path));
+    info.changes.truncate(MAX_CHANGES);
 
     info
 }

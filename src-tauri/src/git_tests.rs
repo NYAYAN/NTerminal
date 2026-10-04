@@ -104,6 +104,31 @@ fn liste_sinirlaniyor() {
 }
 
 #[test]
+fn sira_yola_gore_durumdan_bagimsiz() {
+    // OLCULDU: porcelain takipsizleri (`??`) EN SONA koyuyor; sahnelenince
+    // ayni dosya listenin ortasina atliyordu.
+    let once = parse_porcelain("## main\n M a.txt\n M c.txt\n M e.txt\n?? b.txt\n?? d/\n");
+    let sonra = parse_porcelain("## main\nM  a.txt\nA  b.txt\nM  c.txt\nA  d/x.txt\nM  e.txt\n");
+    let yollar = |i: &GitInfo| i.changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>();
+    assert_eq!(yollar(&once), ["a.txt", "b.txt", "c.txt", "d/", "e.txt"]);
+    assert_eq!(yollar(&sonra), ["a.txt", "b.txt", "c.txt", "d/x.txt", "e.txt"]);
+}
+
+#[test]
+fn kesme_siralamadan_sonra() {
+    // Gosterilen iki yuz dosya, takipsiz olup olmamalarina gore degismemeli:
+    // `??` satirlari sonda geliyor ama adlari once gelen dosyalar listede kalmali.
+    let mut text = String::from("## main\n");
+    for i in 0..300 {
+        text.push_str(&format!(" M z{i:03}.txt\n"));
+    }
+    text.push_str("?? a-yeni.txt\n");
+    let info = parse_porcelain(&text);
+    assert_eq!(info.changes.len(), MAX_CHANGES);
+    assert_eq!(info.changes[0].path, "a-yeni.txt");
+}
+
+#[test]
 fn bos_cikti_cokmuyor() {
     let info = parse_porcelain("");
     assert_eq!(info.branch, "");
