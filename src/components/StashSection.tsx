@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
-import { baseName, dirName, formatWhen } from "../lib/format";
-import { hiddenFileCount } from "../lib/gitStash";
-import { tp, useT } from "../lib/i18n";
+import { formatWhen } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
-import type { GitInfo, GitStash, StashFile, StashFiles } from "../types";
-import { useActiveGit, useLabel } from "./gitShared";
+import type { GitInfo, GitStash } from "../types";
+import { useActiveGit } from "./gitShared";
 import { ChevronIcon, GearIcon, StashIcon, TrashIcon, UnstashIcon } from "./Icons";
-import { StashDiff } from "./StashDiff";
+import { RevisionFiles } from "./RevisionFiles";
 
 /**
  * Stash bölümü: "Değişiklikler" sekmesinin listesinin en üstünde açılıp kapanan
@@ -397,119 +396,16 @@ function StashRow({
         </div>
       </div>
 
-      {open && <StashContents cwd={cwd} stash={stash} />}
-    </div>
-  );
-}
-
-/**
- * Açılan stash'in dosyaları.
- *
- * Dosya listesi ve toplam sayı Rust'tan geliyor; liste 200'de kesiliyor ve
- * kesildiği "… ve N dosya daha" satırıyla söyleniyor (sessizce kesmek "dosyam
- * nerede" diye sordururdu).
- */
-function StashContents({ cwd, stash }: { cwd: string; stash: GitStash }) {
-  const t = useT();
-  const [data, setData] = useState<StashFiles | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(null);
-    setFailed(null);
-    api
-      .gitStashFiles(cwd, stash.id)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch((err) => {
-        if (!cancelled) setFailed(String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cwd, stash.id]);
-
-  // Hata git'in kendi metni: stash artık yoksa ("liste değişmiş olabilir") bunu
-  // söylüyor ve liste zaten tazelenince satır kayboluyor.
-  if (failed) return <div className="pop-empty">{failed}</div>;
-  if (!data) return <div className="pop-empty">{t("common.loading")}</div>;
-  if (data.files.length === 0) {
-    return <div className="pop-empty">{t("git.stashNoFilesInside")}</div>;
-  }
-
-  const hidden = hiddenFileCount(data.total, data.files.length);
-  return (
-    <div className="stash-files">
-      {data.files.map((file) => (
-        <StashFileRow key={file.path} cwd={cwd} id={stash.id} file={file} />
-      ))}
-      {hidden > 0 && <div className="pop-empty">{tp("git.stashMoreFiles", hidden)}</div>}
-    </div>
-  );
-}
-
-/**
- * Stash içindeki tek dosya: satıra tıklayınca farkı açılıyor.
- *
- * Fark yalnızca AÇILINCA isteniyor: yüz dosyalık bir stash'te hepsini önden
- * istemek yüz `git` süreci demek (bkz. `DIFF_LIMIT` `GitChanges`te). Gelen sonuç
- * saklanıyor; satırı kapatıp açmak yeni istek üretmiyor.
- */
-function StashFileRow({ cwd, id, file }: { cwd: string; id: string; file: StashFile }) {
-  const t = useT();
-  const { text, tone, Icon } = useLabel(file.status);
-  const [open, setOpen] = useState(false);
-  /** `undefined` = henüz istenmedi, `null` = okunamadı. */
-  const [diff, setDiff] = useState<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (!open || diff !== undefined) return;
-    let cancelled = false;
-    api
-      .gitStashDiff(cwd, id, file.path, file.origPath, file.untracked)
-      .then((d) => {
-        if (!cancelled) setDiff(d);
-      })
-      .catch(() => {
-        if (!cancelled) setDiff(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, diff, cwd, id, file.path, file.origPath, file.untracked]);
-
-  /*
-   * Klasör ön eki Değişiklikler listesiyle AYNI ayardan (`ui.gitShowPaths`,
-   * panel başlığındaki klasör düğmesi). İSTEK: "Klasör yollarını göster
-   * etkisi Stash'te de olmalı" — burada her zaman çiziliyordu.
-   */
-  const showPaths = useStore((s) => s.ui.gitShowPaths);
-  const dir = dirName(file.path);
-  return (
-    <div className={open ? "stash-file open" : "stash-file"}>
-      <button
-        type="button"
-        className="git-row"
-        title={file.origPath ? `${file.origPath} → ${file.path}` : file.path}
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <span className="git-caret" aria-hidden="true">
-          <ChevronIcon open={open} size={11} />
-        </span>
-        <span className={`git-icon ${tone}`} title={text} role="img" aria-label={text}>
-          <Icon size={13} />
-        </span>
-        {showPaths && dir && <span className="git-dir">{dir}</span>}
-        <span className="git-path">{baseName(file.path)}</span>
-      </button>
-      {open && diff === undefined && <div className="pop-empty">{t("common.loading")}</div>}
-      {open && diff !== undefined && (diff === null || diff === "") && (
-        <div className="pop-empty">{t("git.noDiff")}</div>
+      {open && (
+        <RevisionFiles
+          depKey={`${cwd}\0${stash.id}`}
+          loadFiles={() => api.gitStashFiles(cwd, stash.id)}
+          loadDiff={(file) =>
+            api.gitStashDiff(cwd, stash.id, file.path, file.origPath, file.untracked)
+          }
+          emptyText={t("git.stashNoFilesInside")}
+        />
       )}
-      {open && diff && <StashDiff text={diff} />}
     </div>
   );
 }

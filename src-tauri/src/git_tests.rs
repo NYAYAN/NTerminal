@@ -2417,3 +2417,204 @@ fn blok_yazma_sembolik_baglantiyi_izlemiyor() {
     let _ = std::fs::remove_file(&disarisi);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ---------------------------------------------------------------- outgoing
+
+fn log_satiri(id: &str, kisa: &str, yazar: &str, zaman: &str, konu: &str) -> String {
+    format!("{id}{US}{kisa}{US}{yazar}{US}{zaman}{US}{konu}\n")
+}
+
+#[test]
+fn commit_gunlugu_cozuluyor() {
+    let text = format!(
+        "{}{}",
+        log_satiri("a".repeat(40).as_str(), "aaaaaaa", "Nurullah Yayan", "1700000000", "ilk: ayar"),
+        log_satiri("b".repeat(40).as_str(), "bbbbbbb", "Biri", "5", ""),
+    );
+    let liste = parse_commit_log(&text);
+    assert_eq!(liste.len(), 2);
+    assert_eq!(liste[0].short, "aaaaaaa");
+    assert_eq!(liste[0].author, "Nurullah Yayan");
+    assert_eq!(liste[0].time, 1_700_000_000);
+    assert_eq!(liste[0].subject, "ilk: ayar");
+    // Bos konu (`--allow-empty-message`) satiri dusurmuyor.
+    assert_eq!(liste[1].subject, "");
+}
+
+#[test]
+fn commit_gunlugu_bozuk_satirlari_atiyor() {
+    assert!(parse_commit_log("").is_empty());
+    assert!(parse_commit_log("yarim\u{1f}satir\n").is_empty());
+    // Windows satir sonu konuya karismiyor.
+    let text = log_satiri("c".repeat(40).as_str(), "ccccccc", "X", "1", "konu").replace('\n', "\r\n");
+    assert_eq!(parse_commit_log(&text)[0].subject, "konu");
+}
+
+#[test]
+fn gonderilecek_json_alanlari_arayuzun_bekledigi_adlarda() {
+    let liste = parse_commit_log(&log_satiri("abcdef1", "abcdef1", "Y", "7", "k"));
+    let json = serde_json::to_value(GitOutgoing { commits: liste, total: 1 }).unwrap();
+    assert_eq!(json["total"], 1);
+    assert_eq!(json["commits"][0]["id"], "abcdef1");
+    assert_eq!(json["commits"][0]["short"], "abcdef1");
+    assert_eq!(json["commits"][0]["author"], "Y");
+    assert_eq!(json["commits"][0]["time"], 7);
+    assert_eq!(json["commits"][0]["subject"], "k");
+}
+
+fn konular(o: &GitOutgoing) -> Vec<String> {
+    o.commits.iter().map(|c| c.subject.clone()).collect()
+}
+
+#[test]
+fn yukari_akis_varken_onde_olan_commitler_listeleniyor() {
+    let (root, uzak) = repo_ve_uzak("outgoing-upstream");
+    push(&yol_of(&root)).unwrap();
+    assert_eq!(outgoing(&yol_of(&root)).unwrap(), GitOutgoing::default(), "itildikten sonra liste bos degil");
+
+    yeni_commit(&root, "ikinci\n");
+    yeni_commit(&root, "ucuncu\n");
+    let o = outgoing(&yol_of(&root)).unwrap();
+
+    // En yeni basta (git'in sirasi) ve `read`in `ahead`i ile ayni sayi.
+    assert_eq!(konular(&o), ["ucuncu", "ikinci"]);
+    assert_eq!(o.total, 2);
+    assert_eq!(read(&yol_of(&root)).unwrap().ahead, 2);
+    assert_eq!(o.commits[0].id, git_out(&root, &["rev-parse", "HEAD"]));
+    assert_eq!(o.commits[0].author, "NTerminal Test");
+
+    push(&yol_of(&root)).unwrap();
+    assert_eq!(outgoing(&yol_of(&root)).unwrap().total, 0);
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&uzak);
+}
+
+#[test]
+fn yukari_akis_yokken_hicbir_uzakta_olmayanlar_listeleniyor() {
+    // "Yayinla" yolu: `push` dali `-u` ile gonderecek. Uzakta zaten olan
+    // commit'ler (ana dal) listede olmamali.
+    let (root, uzak) = repo_ve_uzak("outgoing-publish");
+    push(&yol_of(&root)).unwrap();
+    git(&root, &["checkout", "--quiet", "-b", "yeni-dal"]);
+    yeni_commit(&root, "dalda\n");
+
+    let o = outgoing(&yol_of(&root)).unwrap();
+
+    assert_eq!(read(&yol_of(&root)).unwrap().upstream, None);
+    assert_eq!(konular(&o), ["dalda"]);
+    assert_eq!(o.total, 1);
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&uzak);
+}
+
+#[test]
+fn uzagi_olmayan_depoda_butun_gecmis_sayiliyor_ama_liste_kesiliyor() {
+    let root = repo_bir_commitli("outgoing-uzaksiz");
+    for i in 0..(MAX_OUTGOING + 4) {
+        git(&root, &["commit", "--quiet", "--allow-empty", "-m", &format!("c{i}")]);
+    }
+
+    let o = outgoing(&yol_of(&root)).unwrap();
+
+    assert_eq!(o.total as usize, MAX_OUTGOING + 5);
+    assert_eq!(o.commits.len(), MAX_OUTGOING);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn ayrik_head_ve_bos_depoda_gonderilecek_yok() {
+    let bos = temp_repo("outgoing-bos");
+    assert_eq!(outgoing(&yol_of(&bos)).unwrap(), GitOutgoing::default());
+
+    let root = repo_bir_commitli("outgoing-ayrik");
+    yeni_commit(&root, "ikinci\n");
+    git(&root, &["checkout", "--quiet", "--detach", "HEAD~1"]);
+    assert_eq!(outgoing(&yol_of(&root)).unwrap(), GitOutgoing::default());
+    let _ = std::fs::remove_dir_all(&bos);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+fn dosya_listesi(root: &std::path::Path, rev: &str) -> Vec<(String, String, Option<String>)> {
+    let id = git_out(root, &["rev-parse", rev]);
+    commit_files(&yol_of(root), &id)
+        .unwrap()
+        .files
+        .into_iter()
+        .map(|f| (f.status, f.path, f.orig_path))
+        .collect()
+}
+
+#[test]
+fn commit_dosyalari_kok_degisiklik_ve_yeniden_adlandirma() {
+    let root = repo_bir_commitli("commit-dosyalari");
+    // Kok commit bos agaca gore: dosya eklendi.
+    assert_eq!(dosya_listesi(&root, "HEAD"), [("A ".into(), "a.txt".into(), None)]);
+
+    yaz(&root, "bir dosya.txt", "x\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ekle"]);
+    yeni_commit(&root, "degisti\n");
+    assert_eq!(dosya_listesi(&root, "HEAD"), [("M ".into(), "a.txt".into(), None)]);
+    assert_eq!(dosya_listesi(&root, "HEAD~1"), [("A ".into(), "bir dosya.txt".into(), None)]);
+
+    git(&root, &["mv", "a.txt", "b.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "adlandir"]);
+    assert_eq!(
+        dosya_listesi(&root, "HEAD"),
+        [("R ".into(), "b.txt".into(), Some("a.txt".into()))]
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn birlestirme_commiti_ilk_ebeveynine_gore_anlatiliyor() {
+    /*
+     * OLCULDU: `diff-tree -m --first-parent` git 2.50'de IKI ebeveyne gore de
+     * fark veriyordu (ana daldaki dosya da "eklendi" gorunuyordu). Ilk ebeveyn
+     * acikca veriliyor: birlestirmeyle dala yalnizca yan daldaki dosya geldi.
+     */
+    let root = repo_bir_commitli("commit-birlestirme");
+    let ana = dal_of(&root);
+    git(&root, &["checkout", "--quiet", "-b", "yan"]);
+    yaz(&root, "yan.txt", "y\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "yan"]);
+    git(&root, &["checkout", "--quiet", &ana]);
+    yaz(&root, "ana.txt", "a\n");
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "ana"]);
+    git(&root, &["merge", "--quiet", "--no-ff", "yan", "-m", "birlestir"]);
+
+    assert_eq!(dosya_listesi(&root, "HEAD"), [("A ".into(), "yan.txt".into(), None)]);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn commit_farki_tek_dosyayi_ve_yeniden_adlandirmayi_veriyor() {
+    let root = repo_bir_commitli("commit-farki");
+    let kok = git_out(&root, &["rev-parse", "HEAD"]);
+    assert!(commit_diff(&yol_of(&root), &kok, "a.txt", None).unwrap().contains("+ilk"));
+
+    yaz(&root, "b.txt", "baska\n");
+    git(&root, &["add", "."]);
+    yeni_commit(&root, "degisti\n");
+    let id = git_out(&root, &["rev-parse", "HEAD"]);
+    let fark = commit_diff(&yol_of(&root), &id, "a.txt", None).unwrap();
+    assert!(fark.contains("-ilk") && fark.contains("+degisti"), "{fark}");
+    assert!(!fark.contains("b.txt"), "baska dosyanin farki karisti: {fark}");
+
+    git(&root, &["mv", "a.txt", "c.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "adlandir"]);
+    let id = git_out(&root, &["rev-parse", "HEAD"]);
+    let fark = commit_diff(&yol_of(&root), &id, "c.txt", Some("a.txt")).unwrap();
+    assert!(fark.contains("rename from a.txt") && fark.contains("rename to c.txt"), "{fark}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn commit_kimligi_dogrulaniyor() {
+    let root = repo_bir_commitli("commit-kimlik");
+    assert!(commit_files(&yol_of(&root), "--output=x").is_err());
+    assert_eq!(commit_diff(&yol_of(&root), "--stat", "a.txt", None), None);
+    let _ = std::fs::remove_dir_all(&root);
+}

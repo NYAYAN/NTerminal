@@ -206,7 +206,17 @@ açık olsa bile. Dalın yukarı akışı yoksa (yeni dal ya da uzaktan silinmi�
 **Yayınla** der: dalı uzakta oluşturur ve izlemeyi kurar. Uzak sizden ilerideyse
 düğmeye basmadan önce uyarır. Değişiklik yokken bile gönderilmemiş commit varsa
 panelde "N commit gönderilmedi" satırı ve Push görünür — commit'leri itmek için
-değişiklik olması gerekmez.
+değişiklik olması gerekmez. Panele giden rozet de kaybolmaz: komut satırının
+üstündeki şeritte git deposundayken her zaman `± N` durur — değişiklik yoksa
+soluk renkte `± 0`. Tıklamak paneli açar; gönderilmemiş commit varsa ipucu
+sayısını söyler ve gönderilecek commit'ler bölümü açılır.
+
+Neyin gideceği Push'a basmadan görünür: listenin başındaki **Gönderilecek
+commit'ler** bölümü, Push'un göndereceği commit'leri (yukarı akışın önündekiler;
+yayınlanacak dalda hiçbir uzakta olmayanlar) en yeni başta sıralar — ileti,
+altında kısa karma, yazar ve zaman. Commit'e tıklamak dosyalarını, dosyaya
+tıklamak farkını açar (birleştirme commit'i ilk ebeveynine göre). Bölüm yalnızca
+gönderilecek bir şey varken görünür ve varsayılan olarak açıktır.
 
 Hata **kalıcı** ve kutunun içinde: git'in kendi metni satır sonlarıyla, olduğu
 gibi gösterilir. Bir commit kancasının (lint, test) ya da reddedilen bir

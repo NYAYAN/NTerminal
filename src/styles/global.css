@@ -3002,6 +3002,7 @@ html[data-platform="macos"] .titlebar {
  * Dorduncu sekme olarak yazilmisti ve panelin basligina sigmadigi icin bolume
  * cevrildi (bkz. `StashSection`). Altta bir cizgi: acikken stash satirlari ile
  * degisen dosya satirlari birbirine karismasin. */
+.outgoing-section,
 .stash-section {
   margin-bottom: 4px;
   padding-bottom: 4px;
@@ -3013,6 +3014,7 @@ html[data-platform="macos"] .titlebar {
  * tiklama satira kabarciklaniyor, bos yere ya da sayaca basmak da acip kapatiyor.
  *
  * `position: relative`: ayar penceresi (`.stash-settings-pop`) satira gore konumlaniyor. */
+.outgoing-section-head,
 .stash-section-head {
   position: relative;
   display: flex;
@@ -3023,12 +3025,14 @@ html[data-platform="macos"] .titlebar {
   cursor: pointer;
 }
 
+.outgoing-section-head:hover,
 .stash-section-head:hover {
   background: var(--hover);
 }
 
 /* Bosluga kadar uzamiyor (`flex: 0 1 auto`): kalan yer satirin tiklanabilir bos kismi,
    ayar simgesi ve sayac yaziya yapisik duruyor. */
+.outgoing-toggle,
 .stash-toggle {
   display: flex;
   align-items: center;
@@ -3115,6 +3119,38 @@ html[data-platform="macos"] .titlebar {
   font-family: var(--ui-font);
   font-size: 0.7692rem;
   white-space: nowrap;
+}
+
+/* Gonderilecek commit satiri IKI satir: ileti ustte, karma · yazar · zaman altta.
+ *
+ * Stash satiri gibi tek satirdayken varsayilan 390px panelde ileti ~20 harfte
+ * kirpiliyordu ("Fark penceresinde v…"): yazar ve zaman yerini aliyordu. Commit'i
+ * taniyan sey ileti; satirin butun genisligi onun. */
+.outgoing-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.outgoing-subject,
+.outgoing-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* UI yazi tipi: `.git-row` es aralikli yaziyi dosya YOLLARI icin kullaniyor,
+   bir ad ve zaman icin degil (bkz. `.stash-meta`). Karma yine es aralikli. */
+.outgoing-meta {
+  color: var(--text-dim);
+  font-family: var(--ui-font);
+  font-size: 0.7692rem;
+}
+
+.outgoing-hash {
+  font-family: var(--mono-font);
 }
 
 /* Acilan stash'in dosyalari: sol cizgi "bu stash'in icinde" diyor. */
@@ -3491,6 +3527,18 @@ button.pop-group {
 
 .ctx-chip.changes:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Degisiklik yokken (`± 0`) rozet duruyor ama notr: panele giden yol her zaman
+   acik, vurgu rengi ise yalnizca bakilacak bir sey varken. */
+.ctx-chip.changes[data-empty] {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.ctx-chip.changes[data-empty]:hover {
+  background: transparent;
+  color: var(--text);
 }
 
 /* Node rozeti: dizinle ayni notr govde, altigen simge ayirt ediyor.

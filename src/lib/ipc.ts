@@ -10,6 +10,7 @@ import type {
   FileText,
   GitBranch,
   GitInfo,
+  GitOutgoing,
   GitStash,
   Bootstrap,
   BundleInfo,
@@ -151,6 +152,17 @@ export const api = {
     origPath: string | undefined,
     untracked: boolean,
   ) => invoke<string | null>("git_stash_diff", { path, id, file, origPath, untracked }),
+  /**
+   * Push'un göndereceği commit'ler: yukarı akış varsa `@{upstream}..HEAD`, yoksa
+   * hiçbir uzakta olmayanlar ("yayınla"). Ayrık HEAD'de ve boş depoda boş.
+   */
+  gitOutgoing: (path: string) => invoke<GitOutgoing>("git_outgoing", { path }),
+  /** Bir commit'in dosyaları (birleştirmede ilk ebeveynine göre) ve toplam sayı. */
+  gitCommitFiles: (path: string, id: string) =>
+    invoke<StashFiles>("git_commit_files", { path, id }),
+  /** Commit'teki tek dosyanın farkı; okunamazsa `null`. */
+  gitCommitDiff: (path: string, id: string, file: string, origPath: string | undefined) =>
+    invoke<string | null>("git_commit_diff", { path, id, file, origPath }),
   /**
    * Yolları stash'e atar; başarıda yeni stash'in kimliğini döner. Seçimde takipsiz
    * dosya varsa `includeUntracked` şart (git onsuz yolu bulamıyor). Hiçbir şey

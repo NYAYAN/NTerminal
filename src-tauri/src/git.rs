@@ -970,6 +970,193 @@ pub fn choose_remote(names: &[String]) -> Result<String, String> {
     }
 }
 
+// ---------------------------------------------------------------- outgoing
+//
+// Gonderilecek commit'ler: Push'a basmadan once neyin gidecegi.
+//
+// BILDIRILEN: "push edecegim icerigi de gormem gerekmez mi? hangi commitler
+// var diye." Panel yalnizca "N commit gonderilmedi" diyordu.
+//
+// Liste `push`in gonderecegi seyle AYNI ayrimi yapiyor: yukari akis varsa
+// `@{upstream}..HEAD`, yoksa ("yayinla" yolu, silinmis uzak dahil) hicbir
+// uzakta olmayan commit'ler (`HEAD --not --remotes`). Uclari de salt okunur.
+
+/// Gonderilecek listedeki tek commit.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitSummary {
+    /// TAM karma; dosya listesi ve fark bununla isteniyor.
+    pub id: String,
+    /// Git'in kisalttigi karma (depoya gore 7+ hane).
+    pub short: String,
+    pub author: String,
+    /// Unix saniyesi (commit zamani).
+    pub time: i64,
+    /// Iletinin ilk satiri.
+    pub subject: String,
+}
+
+/// Gonderilecek commit'ler, en yeni basta, ve TOPLAM sayi.
+///
+/// Liste `MAX_OUTGOING`te kesiliyor, `total` kesilmiyor: hic uzagi olmayan bir
+/// depoyu "yayinla" demek butun gecmisi gondermek ve on binlerce satiri arayuze
+/// tasimak bos maliyet. Arayuz kesildigini "… ve N commit daha" ile soyluyor.
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOutgoing {
+    pub commits: Vec<GitCommitSummary>,
+    pub total: u32,
+}
+
+const MAX_OUTGOING: usize = 100;
+
+/// `git log --format=%H%x1f%h%x1f%an%x1f%ct%x1f%s` ciktisini cozer.
+///
+/// Saf: bicim burada testleniyor. `%s` tek satir; konu bos olabilir (`commit
+/// --allow-empty-message`), o yuzden alan sayisi 5'ten azsa satir atiliyor ama
+/// bos konu kabul ediliyor.
+pub fn parse_commit_log(text: &str) -> Vec<GitCommitSummary> {
+    text.lines()
+        .filter_map(|line| {
+            let mut parts = line.trim_end_matches('\r').splitn(5, '\u{1f}');
+            let id = parts.next()?.trim();
+            let short = parts.next()?.trim();
+            let author = parts.next()?;
+            let time = parts.next()?.trim().parse::<i64>().unwrap_or(0);
+            let subject = parts.next()?;
+            if id.is_empty() {
+                return None;
+            }
+            Some(GitCommitSummary {
+                id: id.to_string(),
+                short: short.to_string(),
+                author: author.to_string(),
+                time,
+                subject: subject.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// `push`in gonderecegi commit'ler.
+///
+/// Ayrik HEAD'de ya da ilk commit'ten onceki depoda bos: orada gonderilecek dal
+/// yok (bkz. `push`).
+pub fn outgoing(path: &str) -> Result<GitOutgoing, String> {
+    let dir = work_dir(path);
+    let ok = |args: &[&str]| -> Result<bool, String> {
+        Ok(git_at(&dir).args(args).output().map_err(|e| e.to_string())?.status.success())
+    };
+    if !ok(&["symbolic-ref", "-q", "HEAD"])? || !ok(&["rev-parse", "--verify", "-q", "HEAD"])? {
+        return Ok(GitOutgoing::default());
+    }
+
+    let range: &[&str] = if ok(&["rev-parse", "--verify", "-q", "@{upstream}"])? {
+        &["@{upstream}..HEAD"]
+    } else {
+        &["HEAD", "--not", "--remotes"]
+    };
+
+    let count = git_at(&dir)
+        .args(["rev-list", "--count"])
+        .args(range)
+        .arg("--")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !count.status.success() {
+        return Err(failure_text(&count));
+    }
+    let total = String::from_utf8_lossy(&count.stdout).trim().parse::<u32>().unwrap_or(0);
+    if total == 0 {
+        return Ok(GitOutgoing::default());
+    }
+
+    // `--no-show-signature`: `log.showSignature` acik bir makinede imza satirlari
+    // bicimin arasina karisirdi.
+    let log = git_at(&dir)
+        .args(["log", "--no-color", "--no-show-signature", "-n"])
+        .arg(MAX_OUTGOING.to_string())
+        .arg("--format=%H%x1f%h%x1f%an%x1f%ct%x1f%s")
+        .args(range)
+        .arg("--")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !log.status.success() {
+        return Err(failure_text(&log));
+    }
+    Ok(GitOutgoing {
+        commits: parse_commit_log(&String::from_utf8_lossy(&log.stdout)),
+        total,
+    })
+}
+
+/// Commit'in ILK ebeveyni (`kimlik^1`); kok commit'te `None`.
+///
+/// Birlestirme commit'i ilk ebeveynine gore anlatiliyor: dala ne GELDIGI
+/// (`git log --first-parent` ve IntelliJ'in varsayilani). Ikinci ebeveyne gore
+/// fark, birlestirilen dalin zaten bilinen commit'lerini yeniden listelerdi.
+fn first_parent(dir: &str, id: &str) -> Option<String> {
+    let parent = format!("{id}^1");
+    git_at(dir)
+        .args(["rev-parse", "-q", "--verify", &parent])
+        .output()
+        .ok()?
+        .status
+        .success()
+        .then_some(parent)
+}
+
+/// Bir commit'in degistirdigi dosyalar ve toplam dosya sayisi.
+///
+/// Bicim stash'in dosya listesiyle ayni (`StashFiles`): ikisi de "bir revizyonun
+/// dosyalari" ve arayuz ayni satirla ciziyor. Kok commit bos agaca gore
+/// (`--root`).
+pub fn commit_files(path: &str, id: &str) -> Result<StashFiles, String> {
+    if !valid_id(id) {
+        return Err("gecersiz commit kimligi".into());
+    }
+    let dir = work_dir(path);
+    let mut cmd = git_at(&dir);
+    cmd.args(["diff-tree", "-r", "-z", "-M", "--name-status", "--no-commit-id"]);
+    match first_parent(&dir, id) {
+        Some(parent) => cmd.arg(parent).arg(id),
+        None => cmd.arg("--root").arg(id),
+    };
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(failure_text(&out));
+    }
+    let mut files = parse_name_status_z(&String::from_utf8_lossy(&out.stdout));
+    let total = files.len() as u32;
+    files.truncate(MAX_STASH_FILES);
+    Ok(StashFiles { files, total })
+}
+
+/// Bir commit'teki tek dosyanin farki (birlesik bicim, renksiz); okunamazsa `None`.
+///
+/// Yeniden adlandirmada ESKI yol da pathspec'e giriyor (bkz. `stash_diff`).
+pub fn commit_diff(path: &str, id: &str, file: &str, orig: Option<&str>) -> Option<String> {
+    if !valid_id(id) {
+        return None;
+    }
+    let dir = work_dir(path);
+    let mut cmd = git_at(&dir);
+    cmd.arg("--literal-pathspecs")
+        .args(["diff-tree", "-p", "-M", "--no-color", "--no-commit-id"]);
+    match first_parent(&dir, id) {
+        Some(parent) => cmd.arg(parent).arg(id),
+        None => cmd.arg("--root").arg(id),
+    };
+    cmd.args(["--", file]);
+    if let Some(orig) = orig {
+        cmd.arg(orig);
+    }
+    let out = cmd.output().ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).to_string())
+}
+
 // ------------------------------------------------------------------- stash
 //
 // Stash listesi, icerigi ve uc yazma islemi (`stash_push`, `stash_apply`,

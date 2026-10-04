@@ -469,6 +469,31 @@ export interface StashFiles {
   total: number;
 }
 
+/** Gönderilecek (henüz uzakta olmayan) tek commit. */
+export interface GitCommitSummary {
+  /** TAM karma; dosya listesi ve fark bununla isteniyor. */
+  id: string;
+  /** Git'in kısalttığı karma (7+ hane). */
+  short: string;
+  author: string;
+  /** Unix saniyesi (commit zamanı). */
+  time: number;
+  /** İletinin ilk satırı. */
+  subject: string;
+}
+
+/**
+ * Push'un göndereceği commit'ler, en yeni başta, ve TOPLAM sayı.
+ *
+ * Liste 100'de kesiliyor, `total` kesilmiyor (uzağı olmayan bir depoyu
+ * yayınlamak bütün geçmişi göndermek demek). Commit'in dosyaları stash'inkiyle
+ * aynı biçimde geliyor (`StashFiles`).
+ */
+export interface GitOutgoing {
+  commits: GitCommitSummary[];
+  total: number;
+}
+
 // ------------------------------------------------------------------ geçmiş
 
 export interface HistoryEntry {

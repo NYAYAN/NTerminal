@@ -364,6 +364,14 @@ export const MESSAGES = {
   "git.unpushed.one": ["{n} commit gönderilmedi", "{n} commit not pushed yet"],
   "git.unpushed.other": ["{n} commit gönderilmedi", "{n} commits not pushed yet"],
   "git.notPublished": ["Bu dal uzakta yok", "This branch is not on the remote"],
+  // Gönderilecek commit'ler: Değişiklikler listesinin başındaki bölüm (bkz.
+  // `OutgoingSection`).
+  "git.outgoing": ["Gönderilecek commit'ler", "Commits to push"],
+  "git.outgoingFailed": ["Gönderilecek commit'ler okunamadı", "Could not read the commits to push"],
+  "git.outgoingNone": ["Gönderilecek yeni commit yok", "No new commits to push"],
+  "git.outgoingMore.one": ["… ve {n} commit daha", "… and {n} more commit"],
+  "git.outgoingMore.other": ["… ve {n} commit daha", "… and {n} more commits"],
+  "git.commitNoFilesInside": ["Bu commit'te dosya değişikliği yok", "No file changes in this commit"],
   // Stash: değişiklikleri geçici olarak kenara alma. Bölüm başlığı, atma penceresi
   // ve liste (bkz. `StashDialog`, `StashSection`). `app.stash` Değişiklikler
   // listesindeki bölümün başlığı; `git.stash` commit kutusundaki düğme.
@@ -424,8 +432,9 @@ export const MESSAGES = {
   "git.stashApplyFailed": ["Stash uygulanamadı", "Could not apply the stash"],
   "git.stashDropFailed": ["Stash silinemedi", "Could not delete the stash"],
   "git.stashUnnamed": ["Adsız", "Unnamed"],
-  "git.stashMoreFiles.one": ["… ve {n} dosya daha", "… and {n} more file"],
-  "git.stashMoreFiles.other": ["… ve {n} dosya daha", "… and {n} more files"],
+  // Bir revizyonun (stash ya da commit) kesilmiş dosya listesinin sonu.
+  "git.moreFiles.one": ["… ve {n} dosya daha", "… and {n} more file"],
+  "git.moreFiles.other": ["… ve {n} dosya daha", "… and {n} more files"],
   "git.stashNoFilesInside": ["Bu stash'te dosya bulunamadı", "No files found in this stash"],
   "confirm.dropStashTitle": ["Stash'i sil", "Delete stash"],
   "confirm.dropStashMessage": [

@@ -113,6 +113,10 @@ beforeEach(() => {
   // Fark istekleri bu dosyanın konusu değil.
   vi.spyOn(api, "gitDiff").mockResolvedValue("");
   vi.spyOn(api, "readTextFile").mockResolvedValue(null);
+  // Gönderilecek commit'ler bölümü de (commit'ten sonra `ahead` > 0); konusu
+  // `outgoingSection.test.tsx`. Taklit edilmezse jsdom'da IPC düşüyor ve
+  // bölümün kendi hata kutusu commit kutusunun hatası sanılıyor.
+  vi.spyOn(api, "gitOutgoing").mockResolvedValue({ commits: [], total: 0 });
 });
 
 afterEach(async () => {

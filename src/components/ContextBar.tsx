@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { shortenPath } from "../lib/format";
-import { useT } from "../lib/i18n";
+import { tp, useT } from "../lib/i18n";
 import { isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
 import { BranchIcon, FolderIcon, NodeIcon } from "./Icons";
@@ -144,16 +144,39 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
             {git.behind > 0 && <span className="ctx-num">{`↓${git.behind}`}</span>}
           </button>
 
-          {git.changes.length > 0 && (
-            <button
-              type="button"
-              className="ctx-chip changes"
-              title={t("git.viewChanges")}
-              onClick={() => setUi({ historyOpen: true, panelMode: "git" })}
-            >
-              {`± ${git.changes.length}`}
-            </button>
-          )}
+          {/* Değişiklikler panelinin bu sekmedeki girişi: depoda HER ZAMAN.
+
+              BİLDİRİLEN: "commit ettikten sonra değişiklikleri görebileceğim bir
+              buton yok, push etmek istiyorum ama değişiklikler kısmını
+              açamadığım için push edemiyorum." Rozet yalnızca değişiklik varken
+              çiziliyordu; commit listeyi boşaltınca panele giden yol da
+              gidiyordu. İSTEK: "değişikliğim yoksa da 0 yazsın, tıklayınca
+              değişiklikler kısmını açabileyim."
+
+              Sıfırken NÖTR (`data-empty`): vurgu rengi "bakılacak değişiklik
+              var" diye okunurdu. Gönderilmemiş commit sayısı dal rozetinde
+              (`↑N`) ve ipucunda; o durumda tıklamak gönderilecek commit'ler
+              bölümünü de açıyor — panele tam da push için geliniyor. */}
+          <button
+            type="button"
+            className="ctx-chip changes"
+            data-empty={git.changes.length === 0 ? "1" : undefined}
+            title={
+              git.ahead > 0
+                ? `${t("git.viewChanges")}
+${tp("git.unpushed", git.ahead)}`
+                : t("git.viewChanges")
+            }
+            onClick={() =>
+              setUi(
+                git.changes.length === 0 && git.ahead > 0
+                  ? { historyOpen: true, panelMode: "git", outgoingOpen: true }
+                  : { historyOpen: true, panelMode: "git" },
+              )
+            }
+          >
+            {`± ${git.changes.length}`}
+          </button>
         </>
       )}
 

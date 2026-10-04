@@ -888,6 +888,40 @@ async fn git_push(path: String) -> CmdResult<String> {
         .map_err(fail)?
 }
 
+/// Gonderilecek commit'ler (bkz. `git::outgoing`).
+///
+/// Bu uc okuma `async` + `spawn_blocking`: uzagi olmayan bir depoda "yayinla"
+/// listesi butun gecmisi sayiyor, buyuk bir commit'in farki da buyuk.
+#[tauri::command]
+async fn git_outgoing(path: String) -> CmdResult<git::GitOutgoing> {
+    tauri::async_runtime::spawn_blocking(move || git::outgoing(&path))
+        .await
+        .map_err(fail)?
+}
+
+/// Bir commit'in dosyalari ve toplam dosya sayisi.
+#[tauri::command]
+async fn git_commit_files(path: String, id: String) -> CmdResult<git::StashFiles> {
+    tauri::async_runtime::spawn_blocking(move || git::commit_files(&path, &id))
+        .await
+        .map_err(fail)?
+}
+
+/// Bir commit'teki tek dosyanin farki; okunamazsa `None`.
+#[tauri::command]
+async fn git_commit_diff(
+    path: String,
+    id: String,
+    file: String,
+    orig_path: Option<String>,
+) -> CmdResult<Option<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::commit_diff(&path, &id, &file, orig_path.as_deref())
+    })
+    .await
+    .map_err(fail)
+}
+
 /// Deponun stash'leri, en yeni basta; depo degilse bos liste.
 #[tauri::command]
 fn git_stashes(path: String) -> CmdResult<Vec<git::GitStash>> {
@@ -1140,6 +1174,9 @@ pub fn run() {
             git_unstage,
             git_commit,
             git_push,
+            git_outgoing,
+            git_commit_files,
+            git_commit_diff,
             git_stashes,
             git_stash_files,
             git_stash_diff,
