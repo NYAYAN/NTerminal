@@ -1189,8 +1189,15 @@ Community kaynağından alındı. Bulunanlar ve karşılıkları:
 - Eş zamanlı kaydırmanın çapası görünen alanın üstten üçte biri; değişen bloğun
   içinde satır satır, karşı bloğun sonunda duruyor (`transferLine`). F7 de
   bloğu oraya getiriyor; son farkta doğrudan sonraki dosya.
-- Katlama ayrı pencerede varsayılan KAPALI; bağlam 4 satır, tıklayınca 8, 16,
-  sonra tümü. Yer tutucuda yazı yok, editör + oluk + ayırıcı boyunca dalgalı
+- Katlama varsayılan AÇIK (İSTEK: "Default daraltılmış gelmeli"; IntelliJ'in
+  ayrı pencere varsayılanı tersi) ve KALICI DEĞİL: pencerenin durumu, her
+  açılış ve ana pencereden gelen her yeni hedef daraltılmış. Önceki hâli
+  tarayıcı deposundaydı; bir kez açan kullanıcının sonraki pencereleri hep açık
+  geliyordu. Düğmenin simgesi ve ipucu basınca ne olacağını söylüyor (BİLDİRİLEN:
+  "tıklayınca icon değişmiyor"). Katlama değişince okuma noktasındaki satır
+  yerinde kalıyor — ÖLÇÜLDÜ: 200 satırda daraltınca içerik ~22 satıra iniyor,
+  kaydırma eski yerinde (453px) kalıp görünen alan boşluğa düşüyordu (BİLDİRİLEN:
+  "doğru çalışmıyor"). Bağlam 4 satır, tıklayınca 8, 16, sonra tümü. Yer tutucuda yazı yok, editör + oluk + ayırıcı boyunca dalgalı
   çizgi.
 - `»` yalnızca sol olukta (sağ taraf yazılabilir): bloğu HEAD'e döndürüyor,
   Ctrl basılıyken değiştirilmiş blokta "Append". `Esc` pencereyi kapatıyor.

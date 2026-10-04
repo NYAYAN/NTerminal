@@ -435,15 +435,137 @@ describe("görünüm", () => {
     files = ["uzun.ts"];
     const { container } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
     await settle();
-    expect(container.querySelector(".dw-line.fold"), "varsayılan KAPALI olmalı").toBe(null);
-    fireEvent.click(container.querySelector('button[title="Değişmemiş parçaları daralt"]')!);
-    await settle();
     const folds = () => [...container.querySelectorAll(".dw-pane.mirror .dw-line.fold")];
     expect(folds().map((f) => f.getAttribute("title"))).toEqual(["16 değişmemiş satır", "15 değişmemiş satır"]);
     expect(folds()[0].textContent, "IntelliJ'de katlamada yazı yok").toBe("");
     fireEvent.mouseDown(folds()[0], { button: 0 });
     await settle();
     expect(folds().map((f) => f.getAttribute("title"))).toEqual(["12 değişmemiş satır", "15 değişmemiş satır"]);
+  });
+
+  /*
+   * BİLDİRİLEN: "Değişmemiş parçaları daralt doğru bir şekilde çalışmıyor.
+   * Birde tıklayınca icon değişmiyor. Default daraltılmış gelmeli."
+   */
+  const collapseBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-tool="collapse"]')!;
+  const foldCount = (c: HTMLElement) => c.querySelectorAll(".dw-pane.mirror .dw-line.fold").length;
+
+  it("varsayılan DARALTILMIŞ; düğme açıp kapatıyor, simgesi ve ipucu değişiyor", async () => {
+    files = ["uzun.ts"];
+    const { container } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
+    await settle();
+    expect(foldCount(container), "varsayılan daraltılmış değil").toBe(2);
+    // Simge ve ipucu basınca ne olacağını söylüyor; durum aria-pressed'de.
+    expect(collapseBtn(container).title).toBe("Değişmemiş parçaları aç");
+    expect(collapseBtn(container).getAttribute("aria-pressed")).toBe("true");
+    const daraltilmis = collapseBtn(container).innerHTML;
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(foldCount(container)).toBe(0);
+    expect(collapseBtn(container).title).toBe("Değişmemiş parçaları daralt");
+    expect(collapseBtn(container).getAttribute("aria-pressed")).toBe("false");
+    expect(collapseBtn(container).innerHTML, "tıklayınca simge değişmedi").not.toBe(daraltilmis);
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(foldCount(container)).toBe(2);
+    expect(collapseBtn(container).innerHTML).toBe(daraltilmis);
+  });
+
+  it("eski kalıcı tercih (açık) varsayılanı ezmiyor", async () => {
+    // Seçim tarayıcı deposunda kalıcıydı: bir kez açan kullanıcının sonraki
+    // bütün pencereleri açık geliyordu. Depoda kalan eski değer artık okunmuyor.
+    window.localStorage.setItem(
+      "nterminal.diffWindow",
+      JSON.stringify({ viewer: "side", ignore: "none", highlight: "words", collapse: false }),
+    );
+    files = ["uzun.ts"];
+    const { container } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
+    await settle();
+    expect(foldCount(container)).toBe(2);
+  });
+
+  it("ana pencereden gelen yeni dosya yeniden daraltılmış açılıyor", async () => {
+    files = ["uzun.ts", "a.ts"];
+    const { container } = render(<DiffWindow target={{ root: ROOT, path: "a.ts" }} />);
+    await settle();
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(collapseBtn(container).getAttribute("aria-pressed")).toBe("false");
+
+    await act(async () =>
+      h.listeners.get(DIFF_TARGET_EVENT)?.({ payload: diffQuery({ root: ROOT, path: "uzun.ts" }) }),
+    );
+    await settle();
+    expect(foldCount(container), "yeni açılış daraltılmış değil").toBe(2);
+  });
+
+  /** Satır yüksekliği (px): pencerenin kendi CSS değişkeni. */
+  const lineHeightOf = (c: HTMLElement) =>
+    parseInt(
+      c.querySelector<HTMLElement>('[style*="--dw-line-height"]')!.style.getPropertyValue("--dw-line-height"),
+      10,
+    );
+
+  /**
+   * Okuma noktası (bkz. `anchorOf`): görünümün üçte biri, en az iki satır.
+   * jsdom görünümü ölçemiyor; bölmeler 600px varsayıyor → 200px.
+   */
+  const anchorPx = (lh: number) => Math.max(2 * lh, 200);
+
+  it("katlama değişince okunan satır yerinde kalıyor (yan yana)", async () => {
+    /*
+     * ÖLÇÜLDÜ (200 satır): katlamaya basınca içerik ~22 satıra indi ama kaydırma
+     * konumu eski yerinde kaldı; görünen alan içeriğin sonundaki boşluğa düştü.
+     * Kural: okuma noktasındaki satır katlamadan sonra da okuma noktasında.
+     * Gidiş-dönüş: açıp yeniden daraltınca aynı konuma dönülüyor. Yalnızca
+     * imlecin bölmesi ölçülüyor: karşı bölmeyi `follow` hizalıyor ve jsdom'da
+     * `scrollHeight` 0 olduğu için orada sıfıra kırpılıyor.
+     */
+    files = ["uzun.ts"];
+    const { container } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
+    await settle();
+    const lh = lineHeightOf(container);
+    const a = anchorPx(lh);
+    const pane = () => container.querySelectorAll<HTMLElement>(".dw-sbs .dw-scroll")[1];
+    // Daraltılmış sıralar: katlama (0-15), 16-19, fark (20), 21-24, katlama (25-39).
+    // Okuma noktası son katlamaya (10. sıra) gelsin.
+    pane().scrollTop = 10 * lh - a;
+    fireEvent.scroll(pane());
+    await settle();
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(pane().scrollTop, "açınca okunan satır kaydı").toBe(25 * lh - a);
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(pane().scrollTop, "daraltınca okunan satır kaydı").toBe(10 * lh - a);
+  });
+
+  it("katlama değişince okunan satır yerinde kalıyor (birleşik görünüm)", async () => {
+    files = ["uzun.ts"];
+    const { container, getByTitle } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
+    await settle();
+    fireEvent.click(getByTitle("Birleşik görünüm"));
+    await settle();
+    const lh = lineHeightOf(container);
+    const a = anchorPx(lh);
+    const pane = () => container.querySelector<HTMLElement>(".dw-scroll")!;
+    // Daraltılmış sıralar: katlama, 16-19, eski 20, yeni 20, 21-24, katlama (25-39) → 11.
+    pane().scrollTop = 11 * lh - a;
+    fireEvent.scroll(pane());
+    await settle();
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    // Açık: 0-19, eski 20, yeni 20, 21… → 25. satır 26. sırada.
+    expect(pane().scrollTop, "açınca okunan satır kaydı").toBe(26 * lh - a);
+
+    fireEvent.click(collapseBtn(container));
+    await settle();
+    expect(pane().scrollTop, "daraltınca okunan satır kaydı").toBe(11 * lh - a);
   });
 
   it("aynı içerikte bilgi bandı ve 'Gizle'", async () => {
@@ -981,7 +1103,8 @@ describe("sağ tarafta yazmak", () => {
       files = ["uzun.ts"];
       const { container, getByTitle } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
       await settle();
-      fireEvent.click(getByTitle("Değişmemiş parçaları daralt"));
+      // Varsayılan zaten daraltılmış.
+      expect(container.querySelector(".dw-line.fold")).not.toBe(null);
       fireEvent.click(getByTitle("Birleşik görünüm"));
       await settle();
       expect(editor(container)).toBe(null);

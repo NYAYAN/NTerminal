@@ -69,18 +69,17 @@ type Viewer = "side" | "unified";
  * Görünüm tercihleri — tarayıcı deposunda, pencereler arasında ortak.
  *
  * Eş zamanlı kaydırma burada YOK: IntelliJ'de de kalıcı değil (`@Transient`),
- * her pencere açık başlıyor. Katlama varsayılan olarak KAPALI: ayrı pencerede
- * IntelliJ'in varsayılanı "hepsi açık" (`EXPAND_BY_DEFAULT`).
+ * her pencere açık başlıyor. Katlama da YOK — pencerenin durumu, her açılış
+ * DARALTILMIŞ (bkz. `collapse`).
  */
 interface Prefs {
   viewer: Viewer;
   ignore: IgnorePolicy;
   highlight: HighlightPolicy;
-  collapse: boolean;
 }
 
 const PREFS_KEY = "nterminal.diffWindow";
-const DEFAULT_PREFS: Prefs = { viewer: "side", ignore: "none", highlight: "words", collapse: false };
+const DEFAULT_PREFS: Prefs = { viewer: "side", ignore: "none", highlight: "words" };
 
 function loadPrefs(): Prefs {
   try {
@@ -95,7 +94,6 @@ function loadPrefs(): Prefs {
       highlight: (["words", "lines", "split", "chars", "none"] as const).includes(parsed.highlight as HighlightPolicy)
         ? (parsed.highlight as HighlightPolicy)
         : "words",
-      collapse: parsed.collapse === true,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -210,6 +208,17 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
   const [sync, setSync] = useState(true);
   const [caret, setCaret] = useState<Caret>({ side: 2, line: 0 });
   const [levels, setLevels] = useState<Map<string, number>>(() => new Map());
+  /**
+   * "Değişmemiş parçaları daralt" — varsayılan AÇIK.
+   *
+   * İSTEK: "Default daraltılmış gelmeli." Önceki hâli IntelliJ'in ayrı pencere
+   * varsayılanını (hepsi açık) izliyordu ve seçim tarayıcı deposunda
+   * KALICIYDI: bir kez açan kullanıcının sonraki bütün pencereleri açık
+   * geliyordu. Artık pencerenin durumu: her açılış (ana pencereden gelen her
+   * yeni hedef dahil, bkz. `retarget`) daraltılmış; pencere içinde dosyadan
+   * dosyaya geçerken kullanıcının seçimi kalıyor.
+   */
+  const [collapse, setCollapse] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<"settings" | "files" | null>(null);
   const [banner, setBanner] = useState(true);
@@ -547,7 +556,7 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
   const { folds, foldGaps } = useMemo(() => {
     const out: Fold[] = [];
     const from: Gap[] = [];
-    if (prefs.collapse && visible > 0) {
+    if (collapse && visible > 0) {
       for (const gap of gaps) {
         const level = levels.get(gapKey(gap)) ?? 0;
         if (level >= FOLD_LEVELS) continue;
@@ -559,7 +568,7 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
       }
     }
     return { folds: out, foldGaps: from };
-  }, [gaps, levels, prefs.collapse, visible]);
+  }, [gaps, levels, collapse, visible]);
 
   const expandFold = (k: number) => {
     const gap = foldGaps[k];
@@ -643,6 +652,8 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
   retarget.current = (query) => {
     const next = query ? parseDiffQuery(query) : null;
     if (!next || (next.root === root && next.path === path)) return;
+    // Ana pencereden gelen yeni hedef yeni bir açılış: varsayılana dön.
+    setCollapse(true);
     if (next.root !== root) {
       setRoot(next.root);
       setFiles([]);
@@ -817,7 +828,7 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
     setEditMode(true);
     const line = caret.side === 2 ? caret.line : Math.floor(transferLine(changes, caret.line, true));
     if (mode === "two" && prefs.viewer !== "side") update({ viewer: "side" });
-    if (folds.length > 0) update({ collapse: false });
+    if (folds.length > 0) setCollapse(false);
     focusRequest.current = line;
     setFocusTick((n) => n + 1);
   };
@@ -1188,16 +1199,24 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
             </ToolButton>
           )}
           <span className="dw-sep" />
+          {/* Simge ve ipucu BASINCA NE OLACAĞINI söylüyor: daraltılmışken açan
+              oklar ("…aç"), açıkken daraltan oklar ("…daralt"). BİLDİRİLEN:
+              "tıklayınca icon değişmiyor" — önceki hâli tek bir simgeydi ve
+              durum yalnızca zeminin tonundaydı. Değişiklikler panelinin toplu
+              aç/kapa düğmesiyle aynı kural; durum `aria-pressed`de. */}
           <ToolButton
-            title={t("diff.collapse")}
-            pressed={prefs.collapse}
+            name="collapse"
+            title={t(collapse ? "diff.expandUnchanged" : "diff.collapse")}
+            toggled={collapse}
             disabled={mode !== "two"}
             onClick={() => {
               setLevels(new Map());
-              update({ collapse: !prefs.collapse });
+              setCollapse(!collapse);
             }}
           >
-            <ToolIcon d="M4 3 L8 6.5 L12 3 M4 13 L8 9.5 L12 13" />
+            <ToolIcon
+              d={collapse ? "M4 6.5 L8 3 L12 6.5 M4 9.5 L8 13 L12 9.5" : "M4 3 L8 6.5 L12 3 M4 13 L8 9.5 L12 13"}
+            />
           </ToolButton>
         </div>
 
@@ -1345,6 +1364,12 @@ function ToolButton(props: {
   title: string;
   disabled?: boolean;
   pressed?: boolean;
+  /**
+   * Aç/kapa durumu YALNIZCA erişilebilirliğe (`aria-pressed`), zemin vurgusu
+   * olmadan: simgesi durumla değişen düğmeler için (katlama) — ikisi birden
+   * iki ayrı sinyal olurdu.
+   */
+  toggled?: boolean;
   /** Basılıyken vurgu renginde (bir KİP açık: düzenleme). */
   accent?: boolean;
   /** Testlerin ve ekran okuyucunun değişmeyen adı (başlık duruma göre değişiyor). */
@@ -1359,7 +1384,7 @@ function ToolButton(props: {
       className={`dw-tool${props.pressed ? " on" : ""}${props.pressed && props.accent ? " accent" : ""}`}
       title={props.title}
       aria-label={props.title}
-      aria-pressed={props.pressed}
+      aria-pressed={props.pressed ?? props.toggled}
       disabled={props.disabled}
       onClick={props.onClick}
     >

@@ -160,6 +160,7 @@ export const MESSAGES = {
   "diff.oneFile": ["1 dosya", "1 file"],
   "diff.fileOf": ["{i}/{n} dosya", "{i}/{n} files"],
   "diff.collapse": ["Değişmemiş parçaları daralt", "Collapse Unchanged Fragments"],
+  "diff.expandUnchanged": ["Değişmemiş parçaları aç", "Expand Unchanged Fragments"],
   "diff.sideBySide": ["Yan yana görünüm", "Side-by-side viewer"],
   "diff.unified": ["Birleşik görünüm", "Unified viewer"],
   "diff.settings": ["Ayarlar", "Settings"],

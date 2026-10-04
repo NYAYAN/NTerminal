@@ -600,6 +600,41 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
     setScroll({ top1: el1.current?.scrollTop ?? 0, top2: el2.current?.scrollTop ?? 0 });
   };
 
+  /*
+   * Katlama değişince OKUMA NOKTASINDAKİ satır yerinde kalıyor.
+   *
+   * BİLDİRİLEN: "Değişmemiş parçaları daralt doğru çalışmıyor." ÖLÇÜLDÜ: 200
+   * satırlık dosyada katlamaya basınca içerik ~22 satıra indi ama kaydırma
+   * konumu eski yerinde kaldı (scrollTop 453px); görünen alan içeriğin
+   * sonundaki boşluğa düştü, bölmeler neredeyse boş göründü. Katlama açarken de
+   * tersi: okunan yer başka bir satıra kayıyordu.
+   *
+   * Eski düzende okuma noktasındaki (`anchorOf`) satır bulunup yeni düzende aynı
+   * yere getiriliyor. Konum DOM'dan değil SON KAYDIRMADAN (`scroll`) okunuyor:
+   * içerik kısalınca tarayıcı `scrollTop`'u kendiliğinden kırpıyor ve bu anda
+   * DOM'daki değer zaten yanlış. `useLayoutEffect`: boyanmadan önce, yanlış
+   * konum bir kare bile görünmesin. Karşı tarafı aşağıdaki etki hizalıyor.
+   */
+  const lastLayout = useRef({ model1, model2, folds1, folds2 });
+  useLayoutEffect(() => {
+    const prev = lastLayout.current;
+    lastLayout.current = { model1, model2, folds1, folds2 };
+    if (prev.model1 === model1 && prev.model2 === model2) return;
+    const side = caret.side;
+    const node = side === 1 ? el1.current : el2.current;
+    if (!node) return;
+    const [pm, pf, nm, nf] =
+      side === 1 ? [prev.model1, prev.folds1, model1, folds1] : [prev.model2, prev.folds2, model2, folds2];
+    const anchor = anchorOf(height, lh);
+    const line = rowToLine(pm, pf, ((side === 1 ? scroll.top1 : scroll.top2) + anchor) / lh);
+    const target = Math.max(0, Math.round(lineToRow(nm, nf, line) * lh - anchor));
+    if (Math.abs(node.scrollTop - target) >= 1) {
+      echo.current[side] = target;
+      node.scrollTop = target;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model1, model2]);
+
   // Katlama ya da fark değişince karşı taraf yeniden hizalansın.
   useEffect(() => {
     if (sync) follow(caret.side);
@@ -947,6 +982,33 @@ export const Unified = forwardRef<PanesHandle, UnifiedProps>(function Unified(pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, height, lh, folds],
   );
+
+  /*
+   * Satırlar değişince (katlama) okuma noktasındaki satır yerinde kalıyor —
+   * yan yana görünümdekiyle aynı hata ve aynı çözüm (bkz. `SideBySide`). Konum
+   * son kaydırmadan (`top`); satır eski düzende bulunup yenisinde aranıyor.
+   */
+  const lastRows = useRef({ rows, folds });
+  useLayoutEffect(() => {
+    const prev = lastRows.current;
+    lastRows.current = { rows, folds };
+    const node = el.current;
+    if (prev.rows === rows || !node || prev.rows.length === 0) return;
+    const anchor = anchorOf(height, lh);
+    const r = prev.rows[Math.min(prev.rows.length - 1, Math.max(0, Math.floor((top + anchor) / lh)))];
+    const at: [1 | 2, number] =
+      r.kind === "fold"
+        ? [2, prev.folds[r.fold].start2]
+        : r.kind === "old"
+          ? [1, r.line1]
+          : r.kind === "new" || r.line2 >= 0
+            ? [2, r.line2]
+            : [1, r.line1];
+    const target = Math.max(0, Math.round(findRow(at[0], at[1]) * lh - anchor));
+    if (Math.abs(node.scrollTop - target) >= 1) node.scrollTop = target;
+    setTop(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   const caretRow = findRow(caret.side, caret.line);
 

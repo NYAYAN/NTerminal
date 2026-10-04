@@ -267,8 +267,10 @@ büyük) ya da ikili dosya burada yazılamaz; kalem onu ana penceredeki
 görüntüleyicide açar. Pencere
 açıkken fark canlıdır: dosyayı başka bir düzenleyicide kaydetmek ya da commit
 atmak yarım saniye içinde pencereye yansır, pencereye tıklamak gerekmez. Araç
-çubuğundan birleşik görünüme geçilir, değişmemiş parçalar daraltılır
-(dalgalı çizgiye tıklamak kademe kademe açar); dişli menüsünde eş zamanlı
+çubuğundan birleşik görünüme geçilir. Değişmemiş parçalar varsayılan olarak
+daraltılmış gelir (dalgalı çizgiye tıklamak kademe kademe açar); araç
+çubuğundaki düğme hepsini açar ya da yeniden daraltır, simgesi ve ipucu basınca
+ne olacağını söyler. Okuduğunuz satır daraltıp açarken yerinde kalır; dişli menüsünde eş zamanlı
 kaydırma, boşlukları yok sayma (baştaki/sondaki, bütün boşluklar, boş
 satırlar da) ve vurgulama (sözcük / satır / bölünmüş / karakter / hiçbiri)
 seçenekleri var; menü seçim yapınca kapanmaz, seçenekleri art arda denemek
