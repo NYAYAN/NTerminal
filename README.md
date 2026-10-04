@@ -190,8 +190,10 @@ göndermeyi sağlıyor. Her satırın solundaki **kutu** dosyayı commit'e ekler
 (`git add`), kaldırınca çıkarır (`git reset`; dosyaya dokunmaz). Üç hâli var:
 işaretli (dosyanın tamamı eklendi), işaretsiz ve **ara** — dosya *kısmen*
 eklenmiş (`MM`): commit'e yalnızca eklenen kısım girer, kutuya basmak kalanı da
-ekler. Başlıktaki toplu kutu hepsini ekler ya da çıkarır ve kaç dosyanın
-commit'e gireceğini yazar.
+ekler. Dosyaların üstündeki tablo başlığında, satır kutularıyla aynı sütunda
+bir toplu kutu durur: hepsini ekler ya da çıkarır; başlığın sağı kaç dosyanın
+commit'e gireceğini yazar. Commit kutusunda düğmelerin solunda bulunduğunuz dal
+görünür (ipucu Push'un hedefini, örneğin `main → origin/main`, söyler).
 
 İleti alanına yazıp **Commit**'e ya da `Ctrl+Enter`'a (mac'te `Cmd+Enter`)
 basmak yalnızca eklenen dosyaları commit'ler. `-a` yok: işaretlemediğiniz dosya

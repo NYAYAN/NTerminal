@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { commitBlock, pushPlan, stagePaths, stageSummary, unstagePaths } from "../lib/gitStage";
+import { commitBlock, pushPlan } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { modKey } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import type { GitChange, GitInfo } from "../types";
-import { ArrowIcon, StashIcon } from "./Icons";
+import { ArrowIcon, BranchIcon, StashIcon } from "./Icons";
 
 /**
  * Değişiklikler panelinin başındaki commit kutusu: ileti, commit, push.
@@ -26,7 +26,8 @@ import { ArrowIcon, StashIcon } from "./Icons";
  *
  * ## Kutu neyi gösteriyor
  *
- * - Değişiklik VARSA: ileti alanı, toplu seçim kutusu, Commit ve Push.
+ * - Değişiklik VARSA: ileti alanı, dal adı, Stash, Commit ve Push. Toplu seçim
+ *   kutusu burada DEĞİL, dosya listesinin başlığında (bkz. `ChangesHeader`).
  * - Değişiklik YOKSA ama gönderilecek bir şey varsa: yalnızca "N commit
  *   gönderilmedi" satırı ve Push. Bir şey commit'lendikten sonra listenin
  *   boşalması ile itilecek commit'in görünmemesi çakışmamalı — kullanıcı tam da
@@ -51,16 +52,9 @@ export function GitCommitBox({
   const message = useStore((s) => s.ui.gitDrafts[key] ?? "");
   const [busy, setBusy] = useState<"commit" | "push" | null>(null);
   const [error, setError] = useState<{ title: string; text: string } | null>(null);
-  const master = useRef<HTMLInputElement | null>(null);
 
-  const summary = stageSummary(changes);
   const plan = pushPlan(git);
   const hasChanges = changes.length > 0;
-
-  // "Kısmen" durumu yalnızca DOM özelliği olarak var, öznitelik değil.
-  useEffect(() => {
-    if (master.current) master.current.indeterminate = summary.state === "partial";
-  });
 
   // Başka bir depoya geçildi: öncekinin hatası burada anlamsız.
   useEffect(() => {
@@ -119,24 +113,6 @@ export function GitCommitBox({
     }
   };
 
-  /**
-   * Toplu kutu: hepsi seçiliyse hepsini bırakıyor, yoksa (kısmen dâhil)
-   * hepsini seçiyor. "Kısmen"de seçmek doğru yön: kutuya basan kişi "hepsini
-   * commit'e al" diyor, geri almak için ikinci basış var.
-   */
-  const toggleAll = async () => {
-    const store = useStore.getState();
-    // Yeni bir deneme eski hatayı siler (`commit` ve `push` da öyle): yoksa başarılı bir
-    // seçimden sonra da "Dosya seçimi değiştirilemedi" kutusu ekranda kalıyordu.
-    setError(null);
-    try {
-      if (summary.state === "staged") await store.unstageFiles(cwd, unstagePaths(changes));
-      else await store.stageFiles(cwd, stagePaths(changes));
-    } catch (err) {
-      setError({ title: t("git.stageFailed"), text: String(err) });
-    }
-  };
-
   const commitTitle =
     block === "noFiles"
       ? t("git.commitNoFiles")
@@ -188,6 +164,24 @@ export function GitCommitBox({
     </div>
   );
 
+  /*
+   * Hangi daldayız: düğmelerin SOLUNDA, toplu seçim kutusunun eski yerinde.
+   *
+   * İSTEK: "Stash commit push butonlarının en soluna hangi branchteysek o
+   * görünsün." Commit ve Push o dala gidiyor; dal adı bağlam şeridinde de var
+   * ama göz düğmeye basarken burada. İpucu yukarı akışı da söylüyor (Push'un
+   * hedefi). Uzun dal adı kırpılıyor, düğmeleri alt satıra itmiyor.
+   */
+  const branch = (
+    <span
+      className="git-commit-branch"
+      title={git.upstream ? `${git.branch} → ${git.upstream}` : git.branch}
+    >
+      <BranchIcon size={12} />
+      <span className="git-commit-branch-name">{git.branch}</span>
+    </span>
+  );
+
   const behindHint = plan.kind === "push" && plan.behind > 0 && (
     <div className="git-commit-hint">{tp("git.behindHint", plan.behind)}</div>
   );
@@ -196,6 +190,7 @@ export function GitCommitBox({
     return (
       <div className="git-commit compact">
         <div className="git-commit-row">
+          {branch}
           <span className="git-commit-status">
             {plan.kind === "push" ? tp("git.unpushed", plan.ahead) : t("git.notPublished")}
           </span>
@@ -228,18 +223,7 @@ export function GitCommitBox({
         }}
       />
       <div className="git-commit-row">
-        <label
-          className="git-commit-all"
-          title={t(summary.state === "staged" ? "git.deselectAll" : "git.selectAll")}
-        >
-          <input
-            ref={master}
-            type="checkbox"
-            checked={summary.state === "staged"}
-            onChange={() => void toggleAll()}
-          />
-          <span>{tp("git.selectedCount", git.staged)}</span>
-        </label>
+        {branch}
         <div className="git-commit-buttons">
           {/* Stash: değişiklikleri commit'lemeden kenara alır. Kendi penceresi
               var (hangi dosyalar, hangi ad; bkz. `StashDialog`) ve satırlardaki

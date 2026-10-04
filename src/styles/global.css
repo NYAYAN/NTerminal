@@ -2904,7 +2904,7 @@ html[data-platform="macos"] .titlebar {
   resize: vertical;
 }
 
-/* Toplu kutu solda, dugmeler sagda; dar panelde dugmeler alt satira iniyor
+/* Dal adi solda, dugmeler sagda; dar panelde dugmeler alt satira iniyor
    (`wrap`) yerine tasip kirpilmiyor. */
 .git-commit-row {
   display: flex;
@@ -2913,15 +2913,44 @@ html[data-platform="macos"] .titlebar {
   gap: 6px 8px;
 }
 
-.git-commit-all {
+.git-commit-branch {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-right: auto;
-  color: var(--text-dim);
+  gap: 5px;
+  /* Esneme TABANI 0: satir kirilip kirilmayacagina icerigin genisligiyle
+     karar veriliyor ve `0 1 auto` iken uzun bir dal adi
+     ("feature/degisiklikler-tablosu") kirpilmak yerine dugmeleri alt satira
+     itiyordu. Tabani 0 olunca dugmelerden kalan yeri aliyor, sigmazsa kirpiliyor. */
+  flex: 1 1 0;
+  min-width: 0;
+  /* Baglam seridindeki dal rozetiyle ayni ton. */
+  color: color-mix(in srgb, var(--ok) 78%, var(--text-dim));
   font-size: 0.8462rem;
-  cursor: pointer;
-  user-select: none;
+}
+
+.git-commit-branch svg {
+  flex: none;
+}
+
+.git-commit-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kucuk kutuda dalin sagina durum yazisi geliyor: dal kendi genisliginde ama
+   satirin yarisini gecmiyor, kalan yer (ve kirpma) durum yazisinin. */
+.git-commit.compact .git-commit-branch {
+  flex: 0 1 auto;
+  max-width: 45%;
+}
+
+.git-commit.compact .git-commit-status {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-commit-buttons {
@@ -2993,6 +3022,34 @@ html[data-platform="macos"] .titlebar {
   flex: none;
   margin: 0 0 0 6px;
   cursor: pointer;
+}
+
+/* Dosya listesinin basligi: tablo basligi gibi bir satir (bkz. `ChangesHeader`).
+ *
+ * Toplu kutu satirlarin kutulariyla AYNI sutunda: ayni `.git-check` sinifi, ayni
+ * sol bosluk. "Dosya" satirin katlama okunun hizasinda (`.git-row`un sol
+ * dolgusu), secili sayisi sagda. Zemin ve alt cizgi onu bir satir degil bir
+ * baslik yapiyor. */
+.git-table-head {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 5px 5px 0 0;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+}
+
+.git-table-col {
+  padding-left: 8px;
+  font-weight: 600;
+}
+
+.git-table-count {
+  margin-left: auto;
+  padding-right: 8px;
 }
 
 /* ------------------------------------------------------------------- stash */

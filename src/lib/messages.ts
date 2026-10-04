@@ -310,6 +310,8 @@ export const MESSAGES = {
   "git.selectAll": ["Tüm dosyaları commit'e ekle", "Include all files in the commit"],
   "git.deselectAll": ["Seçimi kaldır", "Clear the selection"],
   "git.stageFailed": ["Dosya seçimi değiştirilemedi", "Could not change the file selection"],
+  // Dosya listesinin tablo başlığındaki sütun adı (bkz. `ChangesHeader`).
+  "git.colFile": ["Dosya", "File"],
   "git.selectedCount.one": ["{n} dosya seçili", "{n} file selected"],
   "git.selectedCount.other": ["{n} dosya seçili", "{n} files selected"],
   // Alan hem etiket hem yer tutucu: ikisi aynı şeyi söylüyor.

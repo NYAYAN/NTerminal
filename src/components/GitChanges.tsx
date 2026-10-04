@@ -10,7 +10,7 @@ import {
 } from "../lib/diff";
 import { openDiffWindow } from "../lib/diffWindow";
 import { baseName, dirName } from "../lib/format";
-import { diffKind, stageState, unstagePaths } from "../lib/gitStage";
+import { diffKind, stagePaths, stageState, stageSummary, unstagePaths } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { useStore } from "../store/useStore";
@@ -23,7 +23,7 @@ import {
   RevertIcon,
   UnfoldIcon,
 } from "./Icons";
-import type { GitChange } from "../types";
+import type { GitChange, GitInfo } from "../types";
 import { GitCommitBox } from "./GitCommit";
 import { useActiveGit, useLabel } from "./gitShared";
 import { OutgoingSection } from "./OutgoingSection";
@@ -121,6 +121,7 @@ export function GitChanges() {
       <OutgoingSection />
       <StashSection />
       {git && changes.length === 0 && <div className="pop-empty">{t("git.clean")}</div>}
+      {git && cwd && changes.length > 0 && <ChangesHeader cwd={cwd} git={git} changes={changes} />}
 
       {changes.map((change) => (
         <ChangeRow
@@ -143,6 +144,96 @@ export function GitChanges() {
         />
       ))}
       </div>
+    </>
+  );
+}
+
+/**
+ * Dosya listesinin başlığı: tablo başlığı gibi bir satır.
+ *
+ * İSTEK: "0 dosya seçildi checkbox'ını dosyaların üstüne alalım. Dosyaların
+ * üstüne bir header ekleyelim. Table gibi olsun." Toplu seçim kutusu commit
+ * kutusundaydı, yönettiği satırlardan uzakta; artık satırların kutularıyla AYNI
+ * sütunda (aynı `.git-check` sınıfı, aynı sol boşluk), sütunun başında. Sağda
+ * kaç dosyanın commit'e gireceği.
+ *
+ * Kutu üç hâlli: hepsi seçiliyse hepsini bırakıyor, yoksa (kısmen dâhil)
+ * hepsini seçiyor. "Kısmen"de seçmek doğru yön: kutuya basan kişi "hepsini
+ * commit'e al" diyor, geri almak için ikinci basış var.
+ *
+ * Hata KALICI ve başlığın hemen altında (commit kutusundaki hatayla aynı
+ * görünüş): `git add` bir kilit ya da yok sayılan yol yüzünden düşebiliyor ve
+ * git'in metni üç saniyelik bir bildirimde okunmaz.
+ */
+function ChangesHeader({
+  cwd,
+  git,
+  changes,
+}: {
+  cwd: string;
+  git: GitInfo;
+  changes: readonly GitChange[];
+}) {
+  const t = useT();
+  const summary = stageSummary(changes);
+  const master = useRef<HTMLInputElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // "Kısmen" durumu yalnızca DOM özelliği olarak var, öznitelik değil.
+  useEffect(() => {
+    if (master.current) master.current.indeterminate = summary.state === "partial";
+  });
+
+  // Başka bir depoya geçildi: öncekinin hatası burada anlamsız.
+  useEffect(() => {
+    setError(null);
+  }, [cwd]);
+
+  const toggleAll = async () => {
+    const store = useStore.getState();
+    // Yeni bir deneme eski hatayı siliyor: yoksa başarılı bir seçimden sonra da
+    // "Dosya seçimi değiştirilemedi" kutusu ekranda kalıyordu.
+    setError(null);
+    try {
+      if (summary.state === "staged") await store.unstageFiles(cwd, unstagePaths(changes));
+      else await store.stageFiles(cwd, stagePaths(changes));
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const label = t(summary.state === "staged" ? "git.deselectAll" : "git.selectAll");
+  return (
+    <>
+      <div className="git-table-head">
+        <input
+          ref={master}
+          type="checkbox"
+          className="git-check"
+          checked={summary.state === "staged"}
+          title={label}
+          aria-label={label}
+          onChange={() => void toggleAll()}
+        />
+        <span className="git-table-col">{t("git.colFile")}</span>
+        <span className="git-table-count">{tp("git.selectedCount", git.staged)}</span>
+      </div>
+      {error && (
+        <div className="git-commit-error" role="alert">
+          <div className="git-commit-error-head">
+            <strong>{t("git.stageFailed")}</strong>
+            <button
+              type="button"
+              className="icon-btn"
+              title={t("common.close")}
+              onClick={() => setError(null)}
+            >
+              ×
+            </button>
+          </div>
+          <pre>{error}</pre>
+        </div>
+      )}
     </>
   );
 }

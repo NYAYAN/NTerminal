@@ -889,7 +889,7 @@ describe("Değişiklikler'in içinde bölüm", () => {
     const { container } = degisiklikler();
     await flush();
     const bolum = container.querySelector(".stash-section")!;
-    const ilkDosya = container.querySelector(".git-check")!;
+    const ilkDosya = container.querySelector(".git-head .git-check")!;
     expect(
       bolum.compareDocumentPosition(ilkDosya) & Node.DOCUMENT_POSITION_FOLLOWING,
       "bölüm dosya satırlarından sonra geliyor",

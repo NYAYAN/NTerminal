@@ -130,8 +130,11 @@ const box = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-commit");
 const area = (v: HTMLElement) => v.querySelector<HTMLTextAreaElement>(".git-commit-msg")!;
 const commitBtn = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".git-commit-btn")!;
 const pushBtn = (v: HTMLElement) => v.querySelector<HTMLButtonElement>(".git-push")!;
-const master = (v: HTMLElement) => v.querySelector<HTMLInputElement>(".git-commit-all input")!;
-const checks = (v: HTMLElement) => [...v.querySelectorAll<HTMLInputElement>(".git-check")];
+/** Toplu kutu: dosya listesinin tablo başlığında (bkz. `ChangesHeader`). */
+const master = (v: HTMLElement) => v.querySelector<HTMLInputElement>(".git-table-head input")!;
+const tableHead = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-table-head");
+/** Satırların kutuları; başlıktaki toplu kutu da `.git-check` taşıyor ama satır değil. */
+const checks = (v: HTMLElement) => [...v.querySelectorAll<HTMLInputElement>(".git-head .git-check")];
 const errorBox = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-commit-error");
 const yaz = (v: HTMLElement, value: string) =>
   fireEvent.change(area(v), { target: { value } });
@@ -410,16 +413,42 @@ describe("satırdaki kutu", () => {
 // ---------------------------------------------------------------- toplu kutu
 
 describe("toplu kutu", () => {
+  /*
+   * İSTEK: "0 dosya seçildi checkbox'ını dosyaların üstüne alalım. Dosyaların
+   * üstüne bir header ekleyelim. Table gibi olsun."
+   */
+  it("commit kutusunda değil, dosyaların üstündeki tablo başlığında", () => {
+    seed(repo([c("M ", "a"), c(" M", "b")]));
+    const { container } = render(<GitChanges />);
+    const head = tableHead(container)!;
+    expect(box(container)!.contains(master(container)), "kutu hâlâ commit kutusunda").toBe(false);
+    expect(head.closest(".git-list"), "başlık listenin içinde değil").not.toBe(null);
+    const ilkSatir = container.querySelector(".git-item")!;
+    expect(
+      head.compareDocumentPosition(ilkSatir) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "başlık dosya satırlarının üstünde değil",
+    ).toBeTruthy();
+    // Satır kutularıyla aynı sütun: aynı sınıf, dolayısıyla aynı sol boşluk.
+    expect(master(container).classList.contains("git-check")).toBe(true);
+    expect(head.querySelector(".git-table-col")!.textContent).toBe("Dosya");
+  });
+
+  it("değişiklik yokken başlık yok", () => {
+    seed(repo([], { ahead: 1 }));
+    const { container } = render(<GitChanges />);
+    expect(tableHead(container)).toBe(null);
+  });
+
   it("kaç dosyanın commit'e gireceğini yazıyor", () => {
     seed(repo([c("M ", "a"), c(" M", "b"), c("A ", "c")]));
     const { container } = render(<GitChanges />);
-    expect(container.querySelector(".git-commit-all")!.textContent).toBe("2 dosya seçili");
+    expect(container.querySelector(".git-table-count")!.textContent).toBe("2 dosya seçili");
   });
 
   it("tekil sayıda çoğul eki yok", () => {
     seed(repo([c("M ", "a")], { staged: 1 }));
     const { container } = render(<GitChanges />);
-    expect(container.querySelector(".git-commit-all")!.textContent).toBe("1 dosya seçili");
+    expect(container.querySelector(".git-table-count")!.textContent).toBe("1 dosya seçili");
   });
 
   it("hepsi seçili değilken basmak seçilmemiş OLANLARI ekliyor", async () => {
@@ -488,6 +517,48 @@ describe("toplu kutu", () => {
 });
 
 // -------------------------------------------------------------------- commit
+
+// --------------------------------------------------------------- dal adı
+
+/*
+ * İSTEK: "Stash commit push butonlarının en soluna (0 dosya seçildi yerine)
+ * hangi branchteysek o görünsün."
+ */
+describe("dal adı", () => {
+  const branch = (v: HTMLElement) => v.querySelector<HTMLElement>(".git-commit .git-commit-branch");
+
+  it("düğmelerin solunda, toplu kutunun eski yerinde", () => {
+    seed(repo([c(" M", "a.ts")], { branch: "feature/gecmis" }));
+    const { container } = render(<GitChanges />);
+    const b = branch(container)!;
+    expect(b.textContent).toBe("feature/gecmis");
+    const row = b.closest(".git-commit-row")!;
+    expect(row.firstElementChild, "satırın en solunda değil").toBe(b);
+    expect(
+      b.compareDocumentPosition(row.querySelector(".git-commit-buttons")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("ipucu Push'un hedefini söylüyor; yukarı akış yoksa yalnızca dal", () => {
+    seed(repo([c(" M", "a.ts")]));
+    const { container, unmount } = render(<GitChanges />);
+    expect(branch(container)!.title).toBe("main → origin/main");
+    unmount();
+
+    seed(repo([c(" M", "a.ts")], { branch: "yeni", upstream: null }));
+    const v = render(<GitChanges />);
+    expect(branch(v.container)!.title).toBe("yeni");
+  });
+
+  it("değişiklik yokken küçük kutuda da var", () => {
+    // Commit'ten sonra: yalnızca "N commit gönderilmedi" + Push.
+    seed(repo([], { ahead: 2 }));
+    const { container } = render(<GitChanges />);
+    expect(box(container)!.classList.contains("compact")).toBe(true);
+    expect(branch(container)!.textContent).toBe("main");
+  });
+});
 
 describe("commit", () => {
   it("dosya seçilmemişse kapalı ve ipucu ilk eksiği söylüyor", () => {
