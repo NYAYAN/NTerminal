@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { CommandPalette } from "./components/CommandPalette";
 import { FilePalette } from "./components/FilePalette";
-import { FolderIcon, SearchIcon, SidebarIcon } from "./components/Icons";
+import { FolderIcon, GearIcon, SearchIcon, SidebarIcon } from "./components/Icons";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FilePanel } from "./components/FilePanel";
 import { GroupSidebar } from "./components/GroupSidebar";
@@ -665,11 +665,6 @@ export function App() {
           <FolderIcon size={13} />
         </button>
 
-        <div className="brand">
-          <span className="mark">&gt;_</span>
-          N-Terminal
-          <span className="version">{appVersion}</span>
-        </div>
         {/* Baslik cubugunda TEK eylem: Ayarlar.
          *
          * Buradan cikanlar ve nereye gittikleri:
@@ -681,13 +676,24 @@ export function App() {
          *
          * Hicbiri erisilemez olmadi; ikisi de zaten baska yerde vardi ve
          * baslik cubugu bir eylem cubugu degil. */}
+        {/* Yazı değil SİMGE (dişli — stash ayarlarındakiyle aynı), görünüm düğmelerinin
+            hemen sağında; uygulamanın adı onun sağında. İSTEK: "Ayarlar yazıyor,
+            bunu ayarlar ikonu yapalım; N-Terminal yazısını sağına alalım."
+            Adı ipucunda ve erişilebilir adında duruyor. */}
         <button
-          className="icon-btn"
+          className="icon-btn view-btn"
           title={t("app.settingsTitle", { keys: key("settings") })}
+          aria-label={t("app.settings")}
           onClick={() => setUi({ settingsOpen: true })}
         >
-          {t("app.settings")}
+          <GearIcon size={13} />
         </button>
+
+        <div className="brand">
+          <span className="mark">&gt;_</span>
+          N-Terminal
+          <span className="version">{appVersion}</span>
+        </div>
 
         {/* Arama alani ORTADA: iki yanindaki esnek surukleme alanlari onu
             merkezde tutuyor. Warp'ta da ustte, ortada duruyor. */}

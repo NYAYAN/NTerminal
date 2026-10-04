@@ -279,6 +279,17 @@ describe("başlık çubuğu içeriği", () => {
     expect(titlebar, "dosya ağacı düğmesi yok").toContain("app.filesTitle");
   });
 
+  it("Ayarlar yazı değil simge; uygulamanın adı onun sağında", () => {
+    // İSTEK: "Ayarlar yazıyor, bunu ayarlar ikonu yapalım; N-Terminal yazısını
+    // sağına alalım." Adı ipucunda ve erişilebilir adında kalıyor.
+    const at = titlebar.indexOf("app.settingsTitle");
+    const button = titlebar.slice(at, titlebar.indexOf("</button>", at));
+    expect(button, "simge yok").toContain("<GearIcon");
+    expect(button, "erişilebilir adı yok").toContain('aria-label={t("app.settings")}');
+    expect(button, "yazı hâlâ düğmenin içinde").not.toMatch(/>\s*\{t\("app\.settings"\)\}\s*$/);
+    expect(titlebar.indexOf('className="brand"'), "ad Ayarlar'ın solunda").toBeGreaterThan(at);
+  });
+
   it("kaldırılan eylemler çubukta değil", () => {
     for (const key of ["app.newTab", "app.newGroup", "app.transfer", "app.history"]) {
       expect(titlebar, `${key} hâlâ başlık çubuğunda`).not.toContain(key);
