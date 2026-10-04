@@ -555,6 +555,15 @@ Açmak için karantina damgasını kaldırmak yeterli:
 xattr -dr com.apple.quarantine /Applications/N-Terminal.app
 ```
 
+Komut `Permission denied` derse uygulamanın dosyaları sizin hesabınıza ait
+değildir — örneğin `/Applications`'a başka bir yönetici hesabıyla ya da
+yönetici parolası sorularak kopyalandıysa. O zaman aynı komutu `sudo` ile
+koşun; yönetici parolası sorulur (yazarken ekranda görünmez, Enter yeterli):
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/N-Terminal.app
+```
+
 Komut bir kez koşuluyor; sonrasında uygulama normal açılıyor. Bir terminali
 kurmak için terminal gerekmesi ironik ama macOS'un bıraktığı tek güvenilir yol
 bu: sıradan "tanınmayan geliştirici" uyarısındaki **Yine de Aç** düğmesi bu
