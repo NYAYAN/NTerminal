@@ -594,6 +594,19 @@ fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
     Ok(files::read_text(std::path::Path::new(&path)))
 }
 
+/// Dosya goruntuleyicisindeki Kaydet: dosyayi yeni icerikle yazar.
+///
+/// Dosya okundugu halden ayrilmissa yazmiyor (`changed`); gerekcesi
+/// `files::write_checked` icinde.
+#[tauri::command]
+async fn write_text_file(path: String, expected: String, text: String) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        files::write_text(std::path::Path::new(&path), &expected, &text)
+    })
+    .await
+    .map_err(fail)?
+}
+
 /// Bir dizinin girdileri, tur bilgisiyle - dosya agaci icin.
 ///
 /// Klasorler ONCE, sonra dosyalar; her grup buyuk/kucuk harf gozetmeden
@@ -682,10 +695,43 @@ async fn git_write_file(
     .map_err(fail)?
 }
 
-/// Fark pencerelerinin sirasi; her pencere `diff-<n>` etiketini aliyor.
+/// Fark penceresinin sirasi; pencere `diff-<n>` etiketini aliyor (yeni bir
+/// pencere oncekinin kapanirken hala kayitli olabilecek etiketine carpmasin).
 static DIFF_WINDOW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
 
-/// Fark penceresini acar - IntelliJ'deki gibi ayri bir isletim sistemi penceresi.
+/// Acik fark penceresi hedef dinleyicisini kurdu mu; kurana kadar gelen son hedef.
+///
+/// Yeni acilan pencerenin sayfasi yuklenip `DIFF_TARGET_EVENT` dinleyicisini
+/// kurana kadar gonderilen olay kaybolurdu: o arada baska bir dosyaya
+/// tiklanirsa pencere ilk dosyada kalirdi. Hedef o zaman burada bekliyor ve
+/// pencere `diff_window_ready` ile aliyor.
+struct DiffWindowState {
+    ready: bool,
+    pending: Option<String>,
+}
+
+static DIFF_WINDOW: Mutex<DiffWindowState> = Mutex::new(DiffWindowState { ready: false, pending: None });
+
+/// Acik fark penceresi (en fazla bir tane; eski surumden kalmis birkac tane
+/// varsa en son acilani).
+fn diff_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+    app.webview_windows()
+        .into_iter()
+        .filter_map(|(label, window)| {
+            let n: u32 = label.strip_prefix("diff-")?.parse().ok()?;
+            Some((n, window))
+        })
+        .max_by_key(|(n, _)| *n)
+        .map(|(_, window)| window)
+}
+
+/// Farki fark penceresinde gosterir - IntelliJ'deki gibi ayri bir isletim
+/// sistemi penceresi.
+///
+/// TEK pencere: acik bir fark penceresi varsa one geliyor ve yeni dosyaya
+/// geciyor (`DIFF_TARGET_EVENT`), ikinci bir pencere acilmiyor. BILDIRILEN:
+/// "farkli bir dosya icin bastim, yeni bir tane acildi; her tikladigimda
+/// mevcut acik ekran guncellenmeli."
 ///
 /// `query` arayuzun kurdugu sorgu dizesi (`URLSearchParams`); pencere
 /// uygulamanin KENDI sayfasini (`index.html`) bu sorguyla aciyor ve `main.tsx`
@@ -711,6 +757,24 @@ async fn diff_window_open(
         .all(|c| c.is_ascii_alphanumeric() || "%=&._-*+~".contains(c));
     if !ok {
         return Err("gecersiz pencere sorgusu".into());
+    }
+
+    {
+        let mut state = DIFF_WINDOW.lock();
+        if let Some(window) = diff_window(&app) {
+            use tauri::Emitter;
+            let _ = window.set_title(&title);
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+            if state.ready {
+                app.emit_to(window.label(), DIFF_TARGET_EVENT, &query).map_err(fail)?;
+            } else {
+                state.pending = Some(query);
+            }
+            return Ok(());
+        }
+        *state = DiffWindowState { ready: false, pending: None };
     }
 
     let (width, height) = app
@@ -739,6 +803,15 @@ async fn diff_window_open(
     Ok(())
 }
 
+/// Fark penceresi hedef dinleyicisini kurdu; o ana kadar bekleyen hedef
+/// (yoksa `None`: pencere kendi sorgusundaki dosyayi gosteriyor).
+#[tauri::command]
+fn diff_window_ready() -> Option<String> {
+    let mut state = DIFF_WINDOW.lock();
+    state.ready = true;
+    state.pending.take()
+}
+
 /// Fark penceresindeki "Jump to Source": dosyayi ana pencerenin goruntuleyicisinde acar.
 ///
 /// Ana pencere one geliyor (gizliyse gorunur oluyor); hangi dosyanin acilacagini
@@ -750,6 +823,9 @@ fn main_window_open_file(app: tauri::AppHandle, path: String) -> CmdResult<()> {
     tray::show_main(&app);
     app.emit_to("main", OPEN_FILE_EVENT, path).map_err(fail)
 }
+
+/// Acik fark penceresine yeni hedefin sorgusu; `ipc.ts` ile ayni ad.
+const DIFF_TARGET_EVENT: &str = "app:diff-target";
 
 /// Ana pencerenin dinledigi "su dosyayi ac" olayi; `ipc.ts` ile ayni ad.
 const OPEN_FILE_EVENT: &str = "app:open-file";
@@ -1049,6 +1125,7 @@ pub fn run() {
             list_files,
             list_entries,
             read_text_file,
+            write_text_file,
             update_check,
             git_info,
             git_branches,
@@ -1056,6 +1133,7 @@ pub fn run() {
             git_diff_sides,
             git_write_file,
             diff_window_open,
+            diff_window_ready,
             main_window_open_file,
             git_revert,
             git_stage,

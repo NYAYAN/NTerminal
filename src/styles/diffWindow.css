@@ -97,6 +97,14 @@
   background: var(--hover-strong);
 }
 
+/* Düzenleme AÇIK: kalem vurgu renginde ve çerçeveli. Basılı hâl üzerine
+   gelmekle aynı zemindeydi; açık mı kapalı mı anlaşılmıyordu (BİLDİRİLEN). */
+.dw-tool.on.accent {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
 .dw-tool:disabled {
   opacity: 0.35;
   cursor: default;
@@ -277,6 +285,23 @@
   white-space: nowrap;
 }
 
+/* Sağ taraf yazılabilirken başlığın altında vurgu çizgisi ve "Düzenleniyor". */
+.dw-title.editing {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.dw-editing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 0.85em;
+}
+
 .dw-lock {
   display: inline-flex;
   margin-right: 4px;
@@ -406,6 +431,54 @@
   tab-size: 4;
   cursor: text;
   user-select: text;
+}
+
+/* Sağ taraf yazılabilirken harfleri üstteki yazı alanı çiziyor; satırlar
+   yalnızca zemini ve fark parçalarını. Aynı yazı tipi ve ölçü: parçaların
+   zemini harflerin tam altına düşüyor. */
+.dw-pane.editable .dw-line {
+  color: transparent;
+}
+
+.dw-editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  padding: 0 0 0 6px;
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+  caret-color: var(--text);
+  font: inherit;
+  line-height: var(--dw-line-height);
+  letter-spacing: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 4;
+  resize: none;
+  outline: none;
+  border-radius: 0;
+  scrollbar-width: none;
+}
+
+/* Genel `textarea:focus` halkası burada yok: yazı alanı bütün bölme, kenarı
+   bölmenin kenarı — halka metnin altında boşlukta asılı bir çizgi oluyordu. */
+.dw-editor:focus {
+  box-shadow: none;
+}
+
+/* IntelliJ'in seçim rengi (Darcula 214283, Light a6d2ff). */
+.dw-editor::selection {
+  background: #214283;
+}
+
+:root[data-tone="light"] .dw-editor::selection {
+  background: #a6d2ff;
 }
 
 /* İmlecin satırı: değişen satırların zemini bunun ÜSTÜNDE (sıra önemli). */
@@ -691,22 +764,4 @@
   color: var(--text-dim);
   background: var(--dw-bg);
   text-align: center;
-}
-
-/* Son farkta F7: "Sonraki dosyaya geçmek için yeniden basın" — kalın bir bilgi
-   balonu (IntelliJ `notifyMessage`). Herhangi bir tuş, tıklama ya da
-   kaydırmada kayboluyor. */
-.dw-hint {
-  position: absolute;
-  left: 50%;
-  top: 45%;
-  z-index: 60;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-alt);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  font-weight: 600;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
 }

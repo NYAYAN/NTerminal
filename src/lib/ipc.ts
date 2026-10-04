@@ -187,11 +187,23 @@ export const api = {
   gitWriteFile: (path: string, file: string, expected: string, text: string) =>
     invoke<void>("git_write_file", { path, file, expected, text }),
   /**
+   * Dosya görüntüleyicisindeki Kaydet: mutlak yoldaki dosyayı yazar. Dosya
+   * `expected`ten ayrılmışsa (başka yerde kaydedildi) yazmaz ve `"changed"`;
+   * UTF-8 olmayan dosyada `"not-text"`.
+   */
+  writeTextFile: (path: string, expected: string, text: string) =>
+    invoke<void>("write_text_file", { path, expected, text }),
+  /**
    * Fark penceresini ayrı bir işletim sistemi penceresi olarak açar. `query`
    * pencerenin sayfa sorgusu (`index.html?…`), `dark` başlık çubuğunun tonu.
    */
   diffWindowOpen: (query: string, title: string, dark: boolean) =>
     invoke<void>("diff_window_open", { query, title, dark }),
+  /**
+   * Fark penceresi hedef dinleyicisini kurdu; o ana kadar bekleyen hedefin
+   * sorgusu (yoksa `null`). Bkz. `onDiffTarget`.
+   */
+  diffWindowReady: () => invoke<string | null>("diff_window_ready"),
   /** Ana pencereyi öne getirip dosyayı görüntüleyicide açar ("Jump to Source"). */
   mainWindowOpenFile: (path: string) => invoke<void>("main_window_open_file", { path }),
   /**
@@ -278,6 +290,19 @@ export const OPEN_FILE_EVENT = "app:open-file";
 /** Ana pencere bir dosyanın görüntüleyicide açılmasını dinler (bkz. `mainWindowOpenFile`). */
 export function onOpenFile(handler: (path: string) => void): Promise<UnlistenFn> {
   return listen<string>(OPEN_FILE_EVENT, (event) => handler(event.payload));
+}
+
+/** Rust'taki `DIFF_TARGET_EVENT` ile aynı: açık fark penceresi başka bir dosyaya geçiyor. */
+export const DIFF_TARGET_EVENT = "app:diff-target";
+
+/**
+ * Fark penceresi yeni hedefini dinler (sorgu dizesi, `diffQuery` biçiminde).
+ *
+ * Değişiklikler panelinde başka bir dosyaya tıklanınca ikinci pencere
+ * açılmıyor; açık pencere bu olayla o dosyaya geçiyor.
+ */
+export function onDiffTarget(handler: (query: string) => void): Promise<UnlistenFn> {
+  return listen<string>(DIFF_TARGET_EVENT, (event) => handler(event.payload));
 }
 
 /** Rust'taki `SETTINGS_EVENT` ile aynı: kaydedilen ayarlar açık pencerelere yayılıyor. */

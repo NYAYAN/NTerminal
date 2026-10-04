@@ -107,6 +107,11 @@ export const MESSAGES = {
   "tree.collapseAll": ["Tüm klasörleri daralt", "Collapse all folders"],
   "tree.reopen": ["Klasörleri geri aç", "Reopen folders"],
   "viewer.back": ["Ağaca dön", "Back to tree"],
+  "viewer.unsaved": ["Kaydedilmemiş değişiklikler var", "Unsaved changes"],
+  "viewer.cannotEdit": [
+    "Bu dosya burada düzenlenemiyor: ikili, yarım megabayttan büyük ya da satır sonları karışık",
+    "This file cannot be edited here: binary, larger than half a megabyte, or mixed line endings",
+  ],
   "viewer.failed": ["Dosya okunamadı", "Could not read the file"],
   "viewer.binary": ["İkili dosya — içerik gösterilmiyor", "Binary file — contents not shown"],
   "viewer.truncated": [
@@ -139,7 +144,15 @@ export const MESSAGES = {
   // bu yüzden onun yazımıyla (başlık biçimi). Türkçesi cümle biçiminde.
   "diff.prevDifference": ["Önceki fark", "Previous Difference"],
   "diff.nextDifference": ["Sonraki fark", "Next Difference"],
-  "diff.openInEditor": ["Kaynağa git", "Jump to Source"],
+  "diff.openInEditor": ["Düzenle", "Edit Source"],
+  "diff.stopEditing": ["Düzenlemeyi kapat", "Stop Editing"],
+  "diff.editing": ["Düzenleniyor", "Editing"],
+  "diff.readOnlyEditHint": ["Salt okunur — düzenlemek için kaleme basın", "Read-only — press the pencil to edit"],
+  // Fark penceresinin araç çubuğu ve dosya görüntüleyicisi ortak.
+  "edit.edit": ["Düzenle", "Edit"],
+  "edit.undo": ["Geri al", "Undo"],
+  "edit.redo": ["İleri al", "Redo"],
+  "edit.save": ["Kaydet", "Save"],
   "diff.prevFile": ["Önceki dosyayı karşılaştır", "Compare Previous File"],
   "diff.nextFile": ["Sonraki dosyayı karşılaştır", "Compare Next File"],
   "diff.goToFile": ["Değişen dosyaya git…", "Go to Changed File…"],
@@ -193,22 +206,17 @@ export const MESSAGES = {
   // `»`: yerel değişiklikte IntelliJ'in ipucu "Revert"; Ctrl ile "Append".
   "diff.revert": ["Geri al", "Revert"],
   "diff.append": ["Arkasına ekle", "Append"],
-  // Son farkta F7: IntelliJ'in `DiffRequestProcessor.notifyMessage`ı.
-  "diff.pressAgainNext": [
-    "Sonraki dosyaya geçmek için yeniden basın",
-    "Press again to go to the next file",
+  // Sağ taraf yazılabilir; kaydetmeden önce dosya diskte değiştiyse (IntelliJ:
+  // "File Cache Conflict" — Load File System Changes / Keep Memory Changes).
+  "diff.conflict": [
+    "Dosya diskte değişti; buradaki değişiklikleriniz kaydedilmedi",
+    "The file changed on disk; your changes here were not saved",
   ],
-  "diff.pressAgainPrev": [
-    "Önceki dosyaya geçmek için yeniden basın",
-    "Press again to go to the previous file",
-  ],
-  "diff.fileChanged": [
-    "Dosya bu arada değişti; fark yenilendi, yeniden deneyin",
-    "The file changed in the meantime; the diff was refreshed, try again",
-  ],
+  "diff.loadDisk": ["Diskteki hâli yükle", "Load File System Changes"],
+  "diff.keepMine": ["Benimkini kaydet", "Keep Memory Changes"],
   "diff.notText": [
-    "Dosya UTF-8 değil; değişiklik uygulanmadı",
-    "The file is not UTF-8; the change was not applied",
+    "Dosya UTF-8 değil; buradaki değişiklikler kaydedilemiyor",
+    "The file is not UTF-8; your changes here cannot be saved",
   ],
   "git.openFile": ["Dosyayı aç", "Open the file"],
   "git.revert": ["Değişiklikleri geri al", "Discard changes"],

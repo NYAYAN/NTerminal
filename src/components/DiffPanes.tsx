@@ -23,6 +23,7 @@ import {
   type UnifiedRow,
 } from "../lib/diffView";
 import { transferLine, type Fold, type LineChange, type TextDiff } from "../lib/textDiff";
+import { EditorLayer, type EditorBinding } from "./DiffEditor";
 
 /*
  * Fark penceresinin editörleri.
@@ -126,6 +127,19 @@ function maxColumns(lines: readonly string[]): number {
   return max;
 }
 
+/**
+ * Metin alanının genişliği (CSS). Sağ taraf yazılabilirken genişlik KABA
+ * adımlarla büyüyor: en uzun satıra yazarken her tuşta değişseydi tarayıcı
+ * bütün yazı alanını yeniden dizerdi. ÖLÇÜLDÜ: 20 bin satırda tuş başına
+ * ~60 ms fazladan. Adım 40 sütun; boş kalan kısım yatay kaydırmada pay.
+ */
+const EDIT_WIDTH_STEP = 40;
+
+function textWidth(columns: number, editable: boolean): string {
+  const cols = editable ? Math.ceil((columns + 1) / EDIT_WIDTH_STEP) * EDIT_WIDTH_STEP : columns;
+  return `calc(${cols}ch + 32px)`;
+}
+
 /** Bir satırın her şeyi: zemin, numaralar, içerik ve (sol olukta) `»`. */
 interface RowView {
   key: string;
@@ -180,6 +194,11 @@ interface PaneProps {
   onLineDown: (row: number) => void;
   onFold: (fold: number) => void;
   labels: PaneLabels;
+  /**
+   * Metnin üstündeki yazı alanı (sağ taraf düzenlenebilirken). Satırlar o
+   * zaman yalnızca zemini ve fark parçalarını çiziyor; harfler yazı alanının.
+   */
+  editor?: ReactNode;
 }
 
 function Pane(props: PaneProps) {
@@ -308,6 +327,7 @@ function Pane(props: PaneProps) {
         {gaps.map((g) => (
           <div key={g.key} className={`dw-gap ${g.cls}`} style={{ top: g.row * lh - 1 }} />
         ))}
+        {props.editor}
       </div>
     </div>
   );
@@ -326,7 +346,7 @@ function Pane(props: PaneProps) {
   );
 
   return (
-    <div className={mirror ? "dw-pane mirror" : "dw-pane"}>
+    <div className={`dw-pane${mirror ? " mirror" : ""}${props.editor ? " editable" : ""}`}>
       {mirror ? bar : gutter}
       {text}
       {mirror ? gutter : bar}
@@ -483,6 +503,8 @@ interface SideBySideProps {
   appendMode: boolean;
   onAppend: (change: number) => void;
   labels: PaneLabels;
+  /** Sağ taraf yazılabilir mi (verilmezse salt okunur). */
+  editor?: EditorBinding | null;
 }
 
 /**
@@ -512,7 +534,11 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
   const model2 = useMemo(() => buildRows(lines2.length, folds2), [lines2.length, folds2]);
   const byLine1 = useMemo(() => changeIndexByLine(changes, lines1.length, 1), [changes, lines1.length]);
   const byLine2 = useMemo(() => changeIndexByLine(changes, lines2.length, 2), [changes, lines2.length]);
-  const width = useMemo(() => `calc(${Math.max(maxColumns(lines1), maxColumns(lines2))}ch + 32px)`, [lines1, lines2]);
+  const editing = !!props.editor;
+  const width = useMemo(
+    () => textWidth(Math.max(maxColumns(lines1), maxColumns(lines2)), editing),
+    [lines1, lines2, editing],
+  );
   const digits = String(Math.max(lines1.length, lines2.length)).length;
 
   const el1 = useRef<HTMLDivElement | null>(null);
@@ -736,6 +762,12 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
         }}
         onFold={props.onFold}
         labels={labels}
+        editor={
+          // Katlanmış satır varken yazı alanının satırları bölmeninkilerle örtüşmüyor.
+          props.editor && model2.rows.length === lines2.length ? (
+            <EditorLayer {...props.editor} lineHeight={lh} lines={lines2.length} />
+          ) : undefined
+        }
       />
     </div>
   );
@@ -864,7 +896,7 @@ export const Unified = forwardRef<PanesHandle, UnifiedProps>(function Unified(pr
   const { diff, folds, lineHeight: lh, colorize, caret, onCaret, canApply, onApply, labels } = props;
   const { lines1, lines2, changes } = diff;
   const rows = useMemo(() => unifiedRows(changes, lines1.length, folds), [changes, lines1.length, folds]);
-  const width = useMemo(() => `calc(${Math.max(maxColumns(lines1), maxColumns(lines2))}ch + 32px)`, [lines1, lines2]);
+  const width = useMemo(() => textWidth(Math.max(maxColumns(lines1), maxColumns(lines2)), false), [lines1, lines2]);
   const digits = String(Math.max(lines1.length, lines2.length)).length;
   const el = useRef<HTMLDivElement | null>(null);
   const height = useViewport(el);
@@ -1040,6 +1072,8 @@ interface OneSideProps {
   caret: Caret;
   onCaret: (caret: Caret) => void;
   labels: PaneLabels;
+  /** Yeni dosya yazılabilir mi (silinen dosyada hiç verilmiyor). */
+  editor?: EditorBinding | null;
 }
 
 /**
@@ -1054,7 +1088,8 @@ export const OneSide = forwardRef<PanesHandle, OneSideProps>(function OneSide(pr
   const el = useRef<HTMLDivElement | null>(null);
   const height = useViewport(el);
   const [top, setTop] = useState(0);
-  const width = useMemo(() => `calc(${maxColumns(lines)}ch + 32px)`, [lines]);
+  const editing = !!props.editor;
+  const width = useMemo(() => textWidth(maxColumns(lines), editing), [lines, editing]);
   const side: 1 | 2 = kind === "del" ? 1 : 2;
 
   useImperativeHandle(
@@ -1101,6 +1136,7 @@ export const OneSide = forwardRef<PanesHandle, OneSideProps>(function OneSide(pr
         onLineDown={(index) => onCaret({ side, line: index })}
         onFold={() => {}}
         labels={labels}
+        editor={props.editor ? <EditorLayer {...props.editor} lineHeight={lh} lines={lines.length} /> : undefined}
       />
     </div>
   );

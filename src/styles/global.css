@@ -672,6 +672,142 @@ html[data-platform="macos"] .titlebar {
   font-variant-numeric: tabular-nums;
 }
 
+/* Kaydedilmemiş değişiklik: adın yanında vurgu renginde nokta. */
+.viewer-dirty {
+  flex: none;
+  color: var(--accent);
+  font-size: 0.6rem;
+}
+
+/* Düzenle / Geri al / İleri al / Kaydet. İSTEK: "düzenle, geri al, ileri al,
+   kaydet gibi şeyler de olmalı." */
+.viewer-tools {
+  flex: none;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.viewer-tool {
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.viewer-tool:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.viewer-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Düzenleme AÇIK: kalem vurgu renginde ve çerçeveli, başlığın altında vurgu
+   çizgisi. "Açık mı kapalı mı" bir bakışta anlaşılsın (BİLDİRİLEN: "kalem
+   açınca rengi mi değişir ne yapar bilmiyorum"). */
+.viewer-tool.on,
+.viewer-tool.on:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.viewer-head.editing {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Kaydedilemedi: dosya başka yerde değişti ya da UTF-8 değil. */
+.viewer-issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  flex: none;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warn, #d29922) 14%, transparent);
+  font-size: 0.8462rem;
+}
+
+.viewer-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+
+.viewer-link:hover {
+  text-decoration: underline;
+}
+
+/* Düzenlerken: numaralar ve yazı alanı yan yana, ikisini de gövde kaydırıyor.
+   Yazı tipi ve satır yüksekliği okuma görünümüyle aynı (`.viewer-code`). */
+.viewer-edit {
+  display: flex;
+  min-width: 100%;
+  width: max-content;
+  font-family: var(--mono-font);
+  font-size: 0.8846rem;
+  line-height: 1.55;
+}
+
+.viewer-gutter {
+  flex: none;
+  margin: 0;
+  padding: 0 8px 0 6px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  color: var(--text-dim);
+  opacity: 0.55;
+  text-align: right;
+  user-select: none;
+  font: inherit;
+  line-height: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-edit-area {
+  flex: 1;
+}
+
+/* Genel `textarea` kuralının çerçevesi, dolgusu, zemini ve odak halkası
+   burada yok: yazı alanı gövdenin kendisi. Kendi başına kaymıyor (boyu bütün
+   dosya); gövde kayıyor. */
+.viewer-editor,
+.viewer-editor:focus {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  caret-color: var(--text);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  resize: none;
+  outline: none;
+  box-shadow: none;
+  scrollbar-width: none;
+}
+
 .viewer-body {
   flex: 1;
   min-height: 0;

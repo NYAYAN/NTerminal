@@ -527,9 +527,6 @@ pub fn diff_sides(
     Ok(DiffSides { base, current, head })
 }
 
-/// `write_worktree_file` reddettiginde donen, arayuzun cevirdigi kodlar.
-pub const WRITE_CHANGED: &str = "changed";
-pub const WRITE_NOT_TEXT: &str = "not-text";
 
 /// Fark penceresinin `»` dugmesi: calisma agacindaki dosyayi yeni icerikle yazar.
 ///
@@ -557,18 +554,7 @@ pub fn write_worktree_file(path: &str, file: &str, expected: &str, text: &str) -
     if rel.components().any(|c| !matches!(c, Component::Normal(_))) {
         return Err(format!("gecersiz yol: {file}"));
     }
-    let target = root.join(rel);
-    let meta = std::fs::symlink_metadata(&target).map_err(|e| e.to_string())?;
-    if !meta.file_type().is_file() {
-        return Err(format!("duz bir dosya degil: {file}"));
-    }
-
-    let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
-    let current = String::from_utf8(bytes).map_err(|_| WRITE_NOT_TEXT.to_string())?;
-    if current != expected {
-        return Err(WRITE_CHANGED.to_string());
-    }
-    std::fs::write(&target, text).map_err(|e| e.to_string())
+    crate::files::write_checked(&root.join(rel), expected, text)
 }
 
 /// Deponun `.git` klasoru; bulunamazsa `None`.

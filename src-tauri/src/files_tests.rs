@@ -97,3 +97,63 @@ fn olmayan_klasor_cokmuyor() {
     let yok = std::env::temp_dir().join("nterm-files-yok-boyle-bir-sey");
     assert!(list(&yok).is_empty());
 }
+
+// ------------------------------------------------------------- yazma
+//
+// Goruntuleyicideki Kaydet ve fark penceresinin sag tarafi buradan yaziyor.
+// En onemlisi "arada degistiyse yazma": baska bir duzenleyicide kaydedileni
+// sessizce silmek kullanicinin isini kaybettirir.
+
+#[test]
+fn yazma_okunan_hal_ayniysa_yaziyor() {
+    let root = tree("write-ok");
+    let p = root.join("a.txt");
+    std::fs::write(&p, "eski\n").unwrap();
+    write_text(&p, "eski\n", "yeni\n").unwrap();
+    assert_eq!(std::fs::read_to_string(&p).unwrap(), "yeni\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn yazma_dosya_arada_degistiyse_hicbir_sey_yazmiyor() {
+    let root = tree("write-changed");
+    let p = root.join("a.txt");
+    std::fs::write(&p, "baska yerde kaydedildi\n").unwrap();
+    assert_eq!(write_text(&p, "eski\n", "yeni\n").unwrap_err(), WRITE_CHANGED);
+    assert_eq!(std::fs::read_to_string(&p).unwrap(), "baska yerde kaydedildi\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn yazma_utf8_olmayan_dosyayi_bozmuyor() {
+    let root = tree("write-latin1");
+    let p = root.join("a.txt");
+    std::fs::write(&p, [0x61u8, 0xe7, 0x0a]).unwrap();
+    assert_eq!(write_text(&p, "a\u{fffd}\n", "x\n").unwrap_err(), WRITE_NOT_TEXT);
+    assert_eq!(std::fs::read(&p).unwrap(), vec![0x61u8, 0xe7, 0x0a]);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn yazma_goreli_yol_klasor_ve_olmayan_dosya_reddediliyor() {
+    let root = tree("write-reject");
+    assert!(write_text(Path::new("a.txt"), "", "x").is_err());
+    assert!(write_text(&root, "", "x").is_err());
+    assert!(write_text(&root.join("yok.txt"), "", "x").is_err());
+    assert!(!root.join("yok.txt").exists(), "yeni dosya olusturmuyor");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[cfg(unix)]
+#[test]
+fn yazma_baglantinin_ardina_yazmiyor() {
+    let root = tree("write-link");
+    let hedef = root.join("hedef.txt");
+    std::fs::write(&hedef, "dokunma\n").unwrap();
+    let bag = root.join("bag.txt");
+    std::os::unix::fs::symlink(&hedef, &bag).unwrap();
+    assert!(write_text(&bag, "dokunma\n", "x\n").is_err());
+    assert_eq!(std::fs::read_to_string(&hedef).unwrap(), "dokunma\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+

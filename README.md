@@ -223,18 +223,40 @@ dosyanın güncel hâli; iki dosyanın tamamı yan yana, satır numaraları orta
 değişen bloklar ortadaki eğri bağlayıcılarla birbirine bağlı. Renkler
 IntelliJ'inkiler: eklenen yeşil, silinen gri, değişen mavi; değişen satırın
 içinde değişen sözcükler koyu. İki taraf birlikte kayar. `F7` / `Shift+F7`
-sonraki / önceki farka gider; son farkta bir kez daha basınca sıradaki
-değişen dosyaya geçer. Dosyalar arasında araç çubuğundaki oklar (mac'te
+sonraki / önceki farka gider; son farktayken basmak doğrudan sıradaki
+değişen dosyanın ilk farkına geçer (ilk farkta `Shift+F7` öncekinin sonuncusuna). Dosyalar arasında araç çubuğundaki oklar (mac'te
 `⌃⇧←/→`, Windows'ta `Alt+Shift+←/→`) ya da "2/5 dosya" sayacı ile gezilir;
-`Esc` pencereyi kapatır. Sol oluktaki `»` o bloğu `HEAD`deki hâline geri alır
-(dosyaya yazar; `Ctrl+Z` / `Cmd+Z` geri getirir). Dosya fark alındıktan sonra
-bir düzenleyicide kaydedildiyse hiçbir şey yazılmaz, fark tazelenir. Araç
+`Esc` pencereyi kapatır. **Sağ taraf düzenlenebilir**: araç çubuğundaki
+kalem (**Düzenle**, `F4`, mac'te `⌘↓`) düzenlemeyi açar ve kapatır. Kapalıyken
+sağ başlıkta solda olduğu gibi bir kilit durur (salt okunur); açıkken kalem
+vurgu renginde ve çerçeveli, sağ başlıkta **✎ Düzenleniyor** yazar ve altında
+vurgu çizgisi belirir. Açıkken sağ tarafa tıklayıp yazarsınız; fark yazdıkça
+güncellenir ve yazmayı bıraktıktan kısa bir süre sonra dosyaya kaydedilir
+(düzenlemeyi kapatınca, pencereden çıkınca, başka dosyaya geçince ya da pencere
+kapanırken hemen). `Esc` önce düzenlemeyi kapatır, ikinci `Esc` pencereyi.
+Kalemin yanındaki **Geri al**, **İleri al** ve **Kaydet** düğmeleri
+`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `⇧⌘Z` ve `Ctrl+S` / `Cmd+S` ile aynı işi yapar. Enter
+girintiyi korur, Sekme girinti ekler (`Shift+Sekme` siler); satır sonları
+(LF / CRLF) dosyanın kendi biçiminde kalır. Sol oluktaki `»` o bloğu `HEAD`deki
+hâline geri alır; `Ctrl+Z` / `Cmd+Z` hem yazdıklarınızı hem `»`ü geri alır
+(art arda yazılan harfler tek adımda). Siz yazarken dosya başka bir yerde
+kaydedilirse üzerine yazılmaz; pencere sorar: **Diskteki hâli yükle** ya da
+**Benimkini kaydet**. Birleşik görünümde ve daraltılmış parça varken sağ taraf
+yazılamaz; kalem önce yan yana / açık görünüme geçip imleci sağ tarafta o
+satıra koyar. Satır sonları karışık, çok büyük (4 MB'tan
+büyük) ya da ikili dosya burada yazılamaz; kalem onu ana penceredeki
+görüntüleyicide açar. Pencere
+açıkken fark canlıdır: dosyayı başka bir düzenleyicide kaydetmek ya da commit
+atmak yarım saniye içinde pencereye yansır, pencereye tıklamak gerekmez. Araç
 çubuğundan birleşik görünüme geçilir, değişmemiş parçalar daraltılır
 (dalgalı çizgiye tıklamak kademe kademe açar); dişli menüsünde eş zamanlı
-kaydırma, boşlukları yok sayma ve vurgulama (sözcük / satır / karakter)
-seçenekleri var. Kalem simgesi dosyayı ana penceredeki görüntüleyicide açar.
-Yeni ve takip edilmeyen dosyada tek editör görünür, bütün satırlar eklenmiş
-renginde.
+kaydırma, boşlukları yok sayma (baştaki/sondaki, bütün boşluklar, boş
+satırlar da) ve vurgulama (sözcük / satır / bölünmüş / karakter / hiçbiri)
+seçenekleri var; menü seçim yapınca kapanmaz, seçenekleri art arda denemek
+için açık kalır.
+Yeni ve takip edilmeyen dosyada tek editör görünür (o da yazılabilir), bütün
+satırlar eklenmiş renginde. Fark penceresi tektir: açıkken başka bir dosyanın simgesine basmak
+ikinci bir pencere açmaz, açık pencereyi öne getirip o dosyaya geçirir.
 
 **Stash.** Değişiklikleri commit'lemeden kenara almak için commit kutusundaki
 **Stash** düğmesi bir pencere açar: hangi dosyaların gideceğini seçersiniz,
@@ -272,6 +294,19 @@ altında, varsayılan olarak **kapalı**: başlığa tıklayarak (ya da klavyeyl
 başlıkta Enter'a basarak) açılır ve uygulama açık kaldığı sürece açık kalır.
 Arama kapalı bölümdeki eşleşmeleri de bulur. Bir uzak dalı seçmek `git checkout
 --track origin/ad` gönderir; yerel bir izleme dalı oluşur.
+
+**Görüntüleyicide düzenlemek.** Dosyalar sekmesinde açılan dosya önce salt
+okunur görünür. Başlıktaki kalem (**Düzenle**) düzenlemeyi açar: kalem vurgu
+renginde ve çerçeveli olur, başlığın altında vurgu çizgisi belirir, satır
+numaraları yanında yazabilirsiniz. Yanındaki **Geri al**, **İleri al** ve
+**Kaydet** düğmeleri (`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `⇧⌘Z`, `Ctrl+S` / `Cmd+S`)
+her zaman başlıkta; kaydedilmemiş değişiklik varken adın yanında vurgu renginde
+bir nokta durur. Kayıt açık (düğme ya da kısayol); ama düzenlemeyi kapatırken,
+başka dosyaya geçerken ya da ağaca dönerken kaydedilmemiş olan kendiliğinden
+yazılır, kaybolmaz. Dosya siz düzenlerken başka bir yerde kaydedildiyse üzerine
+yazılmaz: **Diskteki hâli yükle** ya da **Benimkini kaydet**. Satır sonları
+(LF / CRLF) korunur. İkili, yarım megabayttan büyük ya da satır sonları karışık
+dosya düzenlenemez; kalem kapalıdır ve üzerine gelince nedenini söyler.
 
 **Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
 bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı sağ

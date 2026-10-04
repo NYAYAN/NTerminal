@@ -5,6 +5,8 @@
 //! belgelenmis; metin uzerinden test etmek hem hizli hem eksiksiz.
 
 use super::*;
+// Yazmanın ret kodları (denetim `files::write_checked`te).
+use crate::files::{WRITE_CHANGED, WRITE_NOT_TEXT};
 
 #[test]
 fn dal_adi_okunuyor() {

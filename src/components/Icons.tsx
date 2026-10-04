@@ -238,6 +238,34 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+/** Düzenle (kalem) — dosya görüntüleyicisi; fark penceresindekiyle aynı çizim. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10.5 2.8 L13.2 5.5 L5.6 13.1 L2.6 13.4 L2.9 10.4 Z M9.2 4.1 L11.9 6.8" />
+    </Svg>
+  );
+}
+
+/** İleri al: `UndoIcon`un aynası. */
+export function RedoIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10 2.6 L13 5.6 L10 8.6" />
+      <path d="M13 5.6 H7 A3 3 0 1 0 7 11.6 H9.4" />
+    </Svg>
+  );
+}
+
+/** Kaydet: disket. */
+export function SaveIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 2.5 H11 L13.5 5 V13.5 H3 Z M5.5 2.5 V5.5 H10 V2.5 M5.5 13.5 V9.5 H10.5 V13.5" />
+    </Svg>
+  );
+}
+
 /**
  * Tuş başlığındaki yön oku.
  *
@@ -375,17 +403,6 @@ export function RevertIcon(props: IconProps) {
     <Svg {...props}>
       <path d="M3.5 7.5 H10 C12 7.5 13 8.7 13 10.2 C13 11.7 12 13 10 13 H6" />
       <path d="M6 4 L2.8 7.5 L6 11" />
-    </Svg>
-  );
-}
-
-/** Dosyayı aç — kutudan çıkan ok. */
-export function OpenFileIcon(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M12.5 9.5 V12.5 H3.5 V3.5 H6.5" />
-      <path d="M9 3.5 H12.5 V7" />
-      <path d="M12.5 3.5 L7.5 8.5" />
     </Svg>
   );
 }

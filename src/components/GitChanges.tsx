@@ -19,7 +19,7 @@ import {
   ChevronIcon,
   CopyIcon,
   DiffWindowIcon,
-  OpenFileIcon,
+  FolderIcon,
   RevertIcon,
   UnfoldIcon,
 } from "./Icons";
@@ -540,7 +540,10 @@ function ChangeRow({
           title={t("git.openFile")}
           onClick={() => useStore.getState().openFile(fullPath)}
         >
-          <OpenFileIcon size={14} />
+          {/* Klasör simgesi: uygulamada "aç" eylemlerinin dili bu (dosya
+              sütunu, dizin seçici). İSTEK: "dosya aç ikonu klasör ikonu
+              olmalı, diğer ikonlarla tutarlı değil." */}
+          <FolderIcon size={14} />
         </button>
         {/* Farkı ayrı bir pencerede, IntelliJ'deki gibi iki dosyanın TAMAMI yan
             yana. Satırın kendi farkı panelde açılıyor ama dar panelde yalnızca

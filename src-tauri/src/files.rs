@@ -107,6 +107,47 @@ pub fn read_text(path: &Path) -> Option<FileText> {
     Some(text_from_bytes(&bytes, size, MAX_READ))
 }
 
+/// Yazma reddedildiginde donen, arayuzun cevirdigi kodlar.
+pub const WRITE_CHANGED: &str = "changed";
+pub const WRITE_NOT_TEXT: &str = "not-text";
+
+/// Var olan duz bir dosyayi, su anki hali `expected` ise `text` ile degistirir.
+///
+/// Fark penceresinin sag tarafi ve dosya goruntuleyicisi (Duzenle / Kaydet)
+/// buradan yaziyor.
+///
+/// `expected`: arayuz metni dosyanin OKUDUGU haline gore kurdu. Dosya o arada
+/// baska bir yerde kaydedildiyse korkusuzca yazmak o kaydi sessizce silerdi;
+/// hicbir sey yazilmiyor ve `changed` donuyor, arayuz kullaniciya soruyor.
+///
+/// UTF-8 olmayan dosya reddediliyor (`not-text`): arayuz onu `from_utf8_lossy`
+/// ile okudu, elindeki metin dosyanin kendisi degil ve geri yazmak gecersiz
+/// baytlari U+FFFD ile degistirirdi.
+///
+/// Sembolik baglanti ya da klasor degil, var olan bir dosya: yeni dosya
+/// olusturmak ya da baglantinin ardindaki baska bir yere yazmak bu isin parcasi
+/// degil.
+pub fn write_checked(target: &Path, expected: &str, text: &str) -> Result<(), String> {
+    let meta = std::fs::symlink_metadata(target).map_err(|e| e.to_string())?;
+    if !meta.file_type().is_file() {
+        return Err(format!("duz bir dosya degil: {}", target.display()));
+    }
+    let bytes = std::fs::read(target).map_err(|e| e.to_string())?;
+    let current = String::from_utf8(bytes).map_err(|_| WRITE_NOT_TEXT.to_string())?;
+    if current != expected {
+        return Err(WRITE_CHANGED.to_string());
+    }
+    std::fs::write(target, text).map_err(|e| e.to_string())
+}
+
+/// Dosya goruntuleyicisinde duzenlenen dosyayi yazar; yol mutlak olmali.
+pub fn write_text(path: &Path, expected: &str, text: &str) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err(format!("mutlak yol degil: {}", path.display()));
+    }
+    write_checked(path, expected, text)
+}
+
 /// Baytlari goruntulenecek metne cevirir: ikili sezgisi ve sinir burada.
 ///
 /// Ayri cunku fark penceresi de ayni karari veriyor - hem diskten okunan

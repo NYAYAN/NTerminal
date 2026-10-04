@@ -1188,8 +1188,7 @@ Community kaynağından alındı. Bulunanlar ve karşılıkları:
   `ad (klasör)`, yeniden adlandırmada `eski -> yeni (…)`.
 - Eş zamanlı kaydırmanın çapası görünen alanın üstten üçte biri; değişen bloğun
   içinde satır satır, karşı bloğun sonunda duruyor (`transferLine`). F7 de
-  bloğu oraya getiriyor; son farkta "Sonraki dosyaya geçmek için yeniden
-  basın", ikinci basışta sonraki dosya.
+  bloğu oraya getiriyor; son farkta doğrudan sonraki dosya.
 - Katlama ayrı pencerede varsayılan KAPALI; bağlam 4 satır, tıklayınca 8, 16,
   sonra tümü. Yer tutucuda yazı yok, editör + oluk + ayırıcı boyunca dalgalı
   çizgi.
@@ -1207,7 +1206,7 @@ yüklemiyor (`diffWindowRules.test.ts` içe aktarma ağacını yürüyerek bağl
 fark arayüzde: Myers (GNU diff'in doğrusal bellekli biçimi, "çok pahalı"
 sınırıyla) + git'in girinti sezgisi — `git diff --no-index` ile aynı blokları
 verdiği ölçüldü. Ayarlar ana pencere kaydettikçe `app:settings` olayıyla,
-"Kaynağa git" `app:open-file` ile ana pencereye gidiyor.
+burada yazılamayan dosyada kalem `app:open-file` ile ana pencereye gidiyor.
 
 **Asıl tehlike Rust'taki kapanış kancasıydı.** `on_window_event`'teki
 `Destroyed` HER pencerede koşuyor ve `kill_all()` çağırıyordu: bir fark
@@ -1225,8 +1224,122 @@ olmalı. Satır sonları (`\r\n`) ve dosya sonundaki satır sonu korunuyor
 (`applyChange` ham metinde çalışıyor). Geri alma yığını yalnızca başarılı
 yazmada ilerliyor.
 
-**Bilinçli olarak YAPILMAYANLAR:** sağ editörde yazmak (IntelliJ'de yazılabilir;
-burada yalnızca blok blok), sözdizimi renklendirmesi (bkz. `FileViewer`
+**Kullanımdan sonra IntelliJ'den bilinçli ayrılan üç şey (4 Ekim):**
+
+- **"Yeniden basın" ipucu kaldırıldı.** IntelliJ son farkta F7'ye ilk basışta
+  "Press again to go to the next file" deyip ikinci basışı bekliyor. İSTEK:
+  "o yazıyı kaldıralım, basınca geçer zaten." Ara adım bir hata kaynağıydı da:
+  BİLDİRİLEN "basıyorum ama olmuyor" — ikinci basıştan önce gelen her olay
+  (düğmenin `mousedown`u, Shift'in kendi keydown'u) ipucunu siliyor, ikinci
+  basış onu yeniden gösteriyordu. Testler artık gerçek olay sırasını gönderiyor.
+- **Fark canlı.** BİLDİRİLEN: "değişiklik yapınca açık pencereye anlık
+  yansımıyor" — yalnızca odakta tazeleniyordu. Pencere görünürken 500 ms'de bir
+  dosya (bir okuma) ve depo imzası (`git_fingerprint`: HEAD, indeks, stash)
+  yoklanıyor; pahalı yeniden yükleme yalnızca biri değişince. Aynı okunamayan
+  disk durumu yeniden yüklemeyi ikinci kez tetiklemiyor.
+- **Tek fark penceresi** (IntelliJ ayrı pencere kipinde her seferinde yenisini
+  açıyor). BİLDİRİLEN: "farklı bir dosya için bastım, yeni bir tane açıldı; her
+  tıkladığımda mevcut açık ekran güncellenmeli." `diff_window_open` açık bir
+  `diff-*` penceresi bulursa onu öne getirip `app:diff-target` olayıyla yeni
+  sorguyu gönderiyor; pencere aynı dosyaysa yerinde kalıyor, başka bir depoysa
+  listeyi ve geri alma yığınlarını bırakıyor. Sayfa yüklenirken gelen tıklama
+  kaybolmasın diye Rust hedefi pencere `diff_window_ready` diyene kadar
+  bekletiyor. Gerçek uygulamada (izole örnek, AX) doğrulandı: üç dosyaya art
+  arda basınca tek pencere, içerik ve "n/19 dosya" her seferinde değişiyor;
+  pencere açılırken hemen ikinci dosyaya basınca ikinci dosya geliyor.
+- **Dişli menüsü seçimden sonra açık kalıyor** (IntelliJ kapatıyor). İSTEK: "her
+  seçim yaptığımda kapanıyor." Seçenekler karşılaştırmalı denensin diye.
+**Sağ taraf yazılabilir (4 Ekim).** BİLDİRİLEN: "Düzenle butonuna basınca dosya
+açılıyor fakat düzenleme yapamıyorum" — kalem dosyayı salt okunur
+görüntüleyicide açıyordu. İlk çözüm (dosyayı WebStorm / IntelliJ / VS Code /
+Cursor'da açan kalem ve Ayarlar › Düzenleyici) GERİ ALINDI — İSTEK: "Düzenle de
+bizim terminalimizde olmalı", sorulunca "fark penceresinin sağ tarafında". Artık
+IntelliJ'deki gibi sağ taraf doğrudan yazılabilir:
+
+- **Yapı.** Bölmenin sanal satırlarının ÜSTÜNDE, aynı yazı tipi, satır yüksekliği,
+  sol boşluk ve sekme genişliğiyle saydam bir `<textarea>` (`DiffEditor.tsx`).
+  Harfleri yazı alanı çiziyor, satırlar yalnızca zemini ve sözcük parçalarını
+  (`.dw-pane.editable .dw-line { color: transparent }`) — yazarken harf
+  gecikmiyor, fark bir sonraki çizimde yetişiyor. İmleç, seçim, IME, kopyala /
+  yapıştır tarayıcının. Komut satırındaki renkli girdi kutusuyla aynı yöntem.
+  Yazı alanı kendi başına kaymıyor (boyu bütün dosya); iç kaydırma olursa
+  bölmeye aktarılıyor.
+- **Metin dosyanın kendi biçiminde** (`\r\n` dahil) tutuluyor; yazı alanının
+  `\n`i yalnızca kapıda çevriliyor (`diffEdit.ts` `toDisplay` / `toFile`).
+  Satır sonu karışık ya da yalnız CR olan dosyada yazı alanı YOK: geri yazarken
+  hangi satırın hangi ayırıcıyı taşıdığı bilinemezdi (`»` orada çalışıyor).
+- **Kayıt:** yazmayı bıraktıktan 400 ms sonra; `»`, geri alma, pencereden çıkış,
+  dosya değiştirme, Ctrl/Cmd+S ve kapanış (`onCloseRequested`, en çok 2 sn
+  bekliyor) beklemeden. `expected` metnin üzerine yazıldığı disk içeriği;
+  Rust dosya ondan ayrılmışsa yazmıyor. O zaman — ya da yazılmamış değişiklik
+  varken yoklama diskte başka bir içerik görürse — IntelliJ'in "File Cache
+  Conflict"i gibi bant: **Diskteki hâli yükle** / **Benimkini kaydet**; seçilene
+  kadar hiçbir şey yazılmıyor. Kaydedilmiş hâldeyken dışarıdan gelen değişiklik
+  sessizce benimseniyor (imleç değişikliğin üzerinden taşınıyor).
+- **Geri alma kendi geçmişimiz** (`EditHistory`): yazı alanının yerleşik geri
+  alması metni programla değiştirince (`»`, diskten yükleme) bozuluyor. Art
+  arda yazılan harfler 1 sn içinde tek adım (IntelliJ'in komut birleştirmesi);
+  yeni satır adımı bölüyor. Dosya başına; başka dosyaya geçince sıfırlanıyor.
+  macOS Düzen menüsünden gelen Geri Al da (`beforeinput` `historyUndo`) bize.
+- **Kalem aç / kapa ve görünürlüğü.** BİLDİRİLEN: "kaleme basınca düzenleme
+  açılıyor fakat tekrar basınca kapanmıyor" — sağ taraf hep yazılabilirdi,
+  kalem yalnızca odaklıyordu. Artık varsayılan SALT OKUNUR; kalem aç/kapa.
+  Sonra: "kullanıcının da anlaması gerek, rengi mi değişir bilmiyorum" — basılı
+  hâl üzerine gelmeyle aynı zemindeydi. Açıkken kalem vurgu renginde ve
+  çerçeveli, başlığı "Düzenlemeyi kapat"; sağ başlıkta "✎ Düzenleniyor" ve
+  altında vurgu çizgisi. Kapalıyken sağ başlıkta kilit (IntelliJ'de kilit = salt
+  okunur) ve ipucu "düzenlemek için kaleme basın". Esc önce düzenlemeyi kapatıyor.
+  İSTEK üzerine araç çubuğunda Geri al / İleri al / Kaydet düğmeleri de var.
+- **Kısayollar:** Enter girintiyi koruyor, Sekme bir birim (dosyadan sezilen:
+  sekme ya da en sık girinti adımı; JSDoc'un tek boşluğu sayılmıyor), Shift+Sekme
+  siliyor. Yazı alanındayken kalem kısayolu tarayıcının (mac'te `⌘↓` metnin
+  sonu); F7 yazı alanının imlecini de farka taşıyor. Kalem (artık "Düzenle")
+  birleşik görünümden / daraltmadan çıkıp imleci sağ tarafa koyuyor.
+- **Ölçülen iki başarım tuzağı** (20 bin satır, ~490 KB): (1) React
+  `defaultValue` her çizimde değişirse textarea'nın içeriğini DOM'da baştan
+  yazıyor — ilk değere sabitlendi; (2) en uzun satıra yazarken bölme genişliği
+  her tuşta değişirse tarayıcı bütün yazı alanını yeniden diziyor (tuş başına
+  ~60–300 ms) — yazılabilirken genişlik 40 sütunluk adımlarla büyüyor. Üretim
+  derlemesinde tuş başına 20 bin satırda ~36 ms (yalın textarea 13 ms), 2 bin
+  satırda 5–14 ms. GELİŞTİRME derlemesinde aynı dosya ~400 ms: profil sürenin
+  ~%85'ini React 19'un yalnız geliştirmede koşan `logComponentRender` /
+  `addObjectDiffToProperties`'inde gösterdi (20 bin satırlık dizileri prop farkı
+  diye geziyor) — `tauri dev`'de büyük dosyada yazmak yavaş, kurulu sürümde değil.
+- **Doğrulama (aç/kapa, araç çubuğu, görüntüleyici).** Fark penceresi ve
+  görüntüleyici testleri (açık/kapalı hâlin görünüşü, Kaydet / Ctrl+S, geri al /
+  ileri al düğmeleri, kapatırken ve dosya değişirken kayıt, çakışmada Ctrl+S'nin
+  de yazmaması) ve 5 Rust testi (`write_text`); 12 mutasyonun 12'si yakalandı
+  (ilk turda biri kaçtı: çakışmada Ctrl+S sınanmıyordu). Görünüş tarayıcı
+  düzeneğinde iki hâlde bakıldı.
+- **Doğrulama.** jsdom testleri (yazma, birleşen geri alma, CRLF, karışık satır
+  sonu, yeni dosya, Enter/Sekme, iki çakışma yolu, kapanışta ve dosya
+  değişirken kayıt, F7, kalem) ve 16 birim testi; 18 mutasyonun 18'i yakalandı.
+  Hizalama Chromium'da ve ayrı bir WKWebView anlık görüntüsünde (ekrana pencere
+  açmadan) alt satırlar kırmızı, yazı alanı yeşil boyanarak: harfler tam üst üste.
+  Gerçek uygulamada (izole örnek, geçici depo): gerçek tuşlarla yazmak dosyaya
+  yazıldı, ⌘Z geri aldı, yazıp 0,1 sn sonra Esc pencereyi kapattı ve bekleyen
+  kayıt kapanmadan önce yazıldı.
+
+Seçeneklerin hepsinin pencerede etkili olduğu `diffWindow.test.tsx` › "dişli
+menüsündeki seçenekler"de bağlı (SORULAN: "hangileri gerçekten çalışıyor").
+
+**Dosya görüntüleyicisinde düzenleme (4 Ekim).** İSTEK: "Dosyalar kısmından
+bir dosyayı açtığımda orada da düzenleme yapabilmeliyim, kaydet butonu da
+olmalı; düzenle, geri al, ileri al, kaydet." `FileViewer` başlığında dört düğme;
+kalem aç/kapa (fark penceresindekiyle aynı görünüş). Yazı alanı ve geri alma
+fark penceresininki (`EditorLayer`, `EditHistory`); numaralar tek bir `pre`
+(yazı alanıyla aynı satır yüksekliğinde dizilsin diye — kesirli `line-height`
+ayrı satır kutularında binlerce satır sonra kayardı). Kayıt AÇIK (istenen
+Kaydet düğmesi); kaybolmasın diye düzenlemeyi kapatırken, başka dosyaya
+geçerken ve ağaca dönerken kendiliğinden. Yazma yeni `write_text_file` komutuyla
+(`files::write_checked`: fark penceresiyle ORTAK denetim — okunduğu hâlden
+ayrılmışsa `changed`, UTF-8 değilse `not-text`, bağlantı / klasör / olmayan dosya
+değil). Kesilen (yarım megabayt), ikili, satır sonu karışık dosyada kalem kapalı.
+Ana penceredeki genel kısayollar odak bir metin alanındayken çekiliyor; Geri
+al / İleri al / Kaydet tuşlarını yazı alanının kendisi yakalıyor.
+
+**Bilinçli olarak YAPILMAYANLAR:** birleşik görünümde yazmak (IntelliJ'de
+yazılabilir), sözdizimi renklendirmesi (bkz. `FileViewer`
 gerekçesi), "Align Changes in Side-by-Side Diff". Ayrıntı §2.7.
 
 **Doğrulama.** Motor: rastgele girdide en kısa fark (LCS ile karşılaştırma),
@@ -1446,17 +1559,22 @@ Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 
 §1.23'ün bilinçli olarak dışarıda bıraktıkları, IntelliJ'den farklar:
 
-- **Sağ taraf yazılamıyor.** IntelliJ'de sağ editör dosyanın kendisi; burada
-  yalnızca `»` / Append ve geri al. Tam bir düzenleyici (imleç, seçim, IME,
-  geri al) ayrı bir iş.
+- **Birleşik görünümde ve daraltılmış parça varken yazılamıyor** (IntelliJ'de
+  yazılıyor): yazı alanının satırları bölmeninkilerle örtüşmüyor. Kalem önce
+  yan yana / açık görünüme geçiyor.
+- **Ana pencere kapanırken** fark penceresi Rust'tan yok ediliyor
+  (`CloseRequested` yok): son 400 ms içinde yazılıp kaydedilmemiş olan gidiyor.
+- **UTF-8 olmayan dosya** (kayıplı çözülmüş) ancak kayıtta anlaşılıyor
+  (`not-text` bandı); yazmaya izin vermeden önce sezilmiyor.
+- **Geri alma geçmişi dosya başına ve geçişte siliniyor**; IntelliJ belge
+  başına tutuyor.
+- Yazma Windows'ta (WebView2) denenmedi; hizalama Chromium'da ölçüldü.
 - **Sözdizimi renklendirmesi yok** — IntelliJ'de var. Hafif bir sözcükçü
   (yorum, dize, sayı, anahtar sözcük; renkler terminal paletinden) en makul yol;
   `FileViewer`'daki "renklendirici yok" kararıyla birlikte tartışılmalı.
 - **"Align Changes in Side-by-Side Diff" yok** (dişli menüsünde): karşılıklı
   satırları boş dolguyla hizalayan kip. Satır modeli (`buildRows`) dolgu
   satırını taşıyabilecek biçimde, eklenmesi orada.
-- **Canlı değil, odakta tazeleniyor.** IntelliJ farkı her tuşta yeniliyor;
-  burada pencereye dönünce ve `»`/geri al sonrası.
 - **Stash farkları pencerede açılmıyor**; yalnızca çalışma ağacı değişiklikleri.
 - **Pencere boyu hatırlanmıyor** (ana pencerenin %90'ı); IntelliJ boyutu saklıyor.
 - **Ana pencere kapanınca fark pencerelerinin kapanması gerçek uygulamada
@@ -1586,9 +1704,9 @@ TypeScript tip denetimi + vitest + cargo. Rust testleri doğrudan `cargo test`
 ile koşulamıyor (bkz. `scripts/win-env.ps1`). Ayrıntı ve sık düşen testlerin
 anlamı için `.claude/skills/testler/SKILL.md`.
 
-Son ölçüm (3 Ekim, fark penceresi, yayın iş akışı ve WiX düzeltmesi, macOS,
-`--exclude '.claude/**'`): **1775 arayüz testi** (109 dosya; 1774 geçti, 1
-atlandı), **265 Rust birim + 13 entegrasyon testi**, tip denetimi temiz. Atlanan
+Son ölçüm (4 Ekim, fark penceresinde ve görüntüleyicide düzenleme, macOS,
+`--dir src`): **1833 arayüz testi** (111 dosya; 1832 geçti, 1 atlandı),
+**270 Rust birim + 13 entegrasyon testi**, tip denetimi temiz. Atlanan
 `tauriConfig.test.ts` › "şablon kurulu Tauri CLI'nin şablonundan kaymamış": WiX
 şablonu yalnızca CLI'nin Windows derlemesinde var, mac'te ve CI'ın ubuntu işinde
 "uygulanamaz"; denetim CI'da Windows paket işinin ayrı adımı. (30 Eylül,

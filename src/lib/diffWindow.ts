@@ -60,11 +60,13 @@ export function diffWindowTitle(root: string, path: string, origPath?: string): 
 }
 
 /**
- * Farkı yeni bir pencerede açar.
+ * Farkı fark penceresinde gösterir.
  *
- * Her çağrı YENİ bir pencere: IntelliJ'de de "Show Diff" ayrı pencere kipinde her
- * seferinde yeni bir çerçeve açıyor ve iki dosyayı yan yana iki pencerede
- * karşılaştırmak bu sayede mümkün.
+ * TEK pencere: açık bir fark penceresi varsa öne geliyor ve bu dosyaya
+ * geçiyor (Rust `diff_window_open`). IntelliJ ayrı pencere kipinde her
+ * seferinde yeni bir çerçeve açıyor; burada bilinçli olarak açmıyor —
+ * BİLDİRİLEN: "farklı bir dosya için bastım, yeni bir tane açıldı; her
+ * tıkladığımda mevcut açık ekran güncellenmeli."
  */
 export function openDiffWindow(target: DiffTarget, origPath?: string): Promise<void> {
   const dark = document.documentElement.dataset.tone !== "light";
