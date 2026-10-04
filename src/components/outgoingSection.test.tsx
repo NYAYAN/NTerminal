@@ -100,7 +100,8 @@ function seed(info: GitInfo | null = repo(), open = true) {
     ready: true,
     groups: [group()],
     activeGroupId: "g1",
-    gitInfo: info ? { [CWD]: info } : {},
+    // `null` = bakıldı ve depo değil (anahtarın yokluğu "henüz bakılmadı").
+    gitInfo: { [CWD]: info },
     ui: {
       ...useStore.getState().ui,
       outgoingOpen: open,

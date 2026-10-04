@@ -33,6 +33,16 @@ export function useActiveGit() {
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
   const cwd = tab ? (sessions.get(tab.id)?.cwd ?? tab.cwd) : null;
   const git = cwd ? (allGit[cwd] ?? null) : null;
-  return { cwd, git, changes: git?.changes ?? [] };
+  /*
+   * Bu dizinin git durumu henüz BİLİNMİYOR: "depo değil" (`null`) ile aynı şey
+   * değil (bkz. depo `gitInfo`).
+   *
+   * BİLDİRİLEN: başka bir dizindeki sekmeye geçince panel bir an "Bu klasör bir
+   * git deposu değil" diyordu — `?? null` hiç bakılmamış dizini depo olmayanla
+   * birleştiriyordu. Dizin de henüz bilinmeyebilir: yeni sekmede kabuk
+   * doğana kadar `cwd` boş, doğunca hemen geliyor (`pty_spawn` sonucu).
+   */
+  const loading = tab !== undefined && (cwd === null || !(cwd in allGit));
+  return { cwd, git, changes: git?.changes ?? [], loading };
 }
 

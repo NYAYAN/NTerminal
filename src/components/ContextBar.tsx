@@ -71,6 +71,17 @@ export function ContextBar() {
     if (!cwd) return;
     const store = useStore.getState();
 
+    /*
+     * Bu dizine HİÇ bakılmadıysa hemen bak.
+     *
+     * Sekme değişince yeni dizinin durumu ancak kabuk dizini bildirince ya da
+     * ilk yoklamada (5 sn sonra, `pollGit` bilinmeyen dizinde tam sorgu
+     * yapıyor) geliyordu; o arada panel "Yükleniyor…" diyor (bkz.
+     * `useActiveGit`). Bakılmış dizinde (depo olmasa da) tekrar sormuyor:
+     * tazelemeyi zaten komut sonu, odak ve yoklama yapıyor.
+     */
+    if (!(cwd in store.gitInfo)) void store.refreshGit(cwd);
+
     const onFocus = () => void store.refreshGit(cwd);
     window.addEventListener("focus", onFocus);
 

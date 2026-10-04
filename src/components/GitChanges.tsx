@@ -75,7 +75,7 @@ export function allFilesCollapsed(
 
 export function GitChanges() {
   const t = useT();
-  const { cwd, git, changes } = useActiveGit();
+  const { cwd, git, changes, loading } = useActiveGit();
 
   /*
    * Satırlar KAPALI açılıyor; listede tutulan da AÇILANLAR.
@@ -109,7 +109,9 @@ export function GitChanges() {
           çizmiyor). */}
       {git && cwd && <GitCommitBox cwd={cwd} git={git} changes={changes} />}
       <div className="panel-list git-list">
-      {!git && <div className="pop-empty">{t("git.noRepo")}</div>}
+      {/* Henüz bakılmamış dizin "depo değil" DEĞİL (bkz. `useActiveGit`). */}
+      {loading && <div className="pop-empty">{t("common.loading")}</div>}
+      {!loading && !git && <div className="pop-empty">{t("git.noRepo")}</div>}
       {/* Stash bölümü listenin en üstünde ve depo varken HER ZAMAN: temiz bir
           çalışma ağacında da stash'i uygulamak gerekiyor ve o zaman aşağıdaki
           "değişiklik yok" yazısından başka bir şey görünmezdi. Kendi görünürlüğüne
