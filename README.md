@@ -220,7 +220,12 @@ olmayanlar) en yeni başta sıralar — ileti, altında kısa karma, yazar ve za
 Commit'e tıklamak dosyalarını, dosyaya tıklamak farkını açar (birleştirme
 commit'i ilk ebeveynine göre). Paneldeki **Push** gönderir (odak oradadır,
 `Enter` yeter); **Vazgeç**, `Esc` ya da panelin dışına tıklamak göndermeden
-kapatır.
+kapatır. En üstteki (son) commit'in yanındaki geri alma oku **Commit'i geri
+alır** (IntelliJ'deki "Undo Commit", `git reset --soft`): commit kalkar ama
+içindeki değişiklikler silinmez, eklenmiş hâlde Değişiklikler listesine döner
+ve iletisi commit kutusuna gelir (kutuda yazılmış bir ileti varsa ona
+dokunulmaz). Yalnızca henüz gönderilmemiş son commit geri alınır; uzaktaki bir
+commit ya da deponun ilk commit'i reddedilir.
 
 Hata **kalıcı** ve kutunun içinde: git'in kendi metni satır sonlarıyla, olduğu
 gibi gösterilir. Bir commit kancasının (lint, test) ya da reddedilen bir

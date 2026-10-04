@@ -4,7 +4,7 @@ import { formatWhen } from "../lib/format";
 import { tp, useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import type { GitCommitSummary, GitInfo, GitOutgoing } from "../types";
-import { ArrowIcon, ChevronIcon } from "./Icons";
+import { ArrowIcon, ChevronIcon, UndoIcon } from "./Icons";
 import { RevisionFiles } from "./RevisionFiles";
 
 /**
@@ -37,6 +37,7 @@ export function PushReview({
   anchor,
   onCancel,
   onConfirm,
+  onUndo,
 }: {
   cwd: string;
   git: GitInfo;
@@ -48,6 +49,12 @@ export function PushReview({
   anchor: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onConfirm: () => void;
+  /**
+   * En üstteki (son) commit'i geri al. İSTEK: "push basınca açılan ekranda
+   * commit'i geri almak mümkün mü?" — IntelliJ'in "Undo Commit"i gibi yalnızca
+   * son commit'te: içerik kaybolmuyor (`git::undo_last_commit`).
+   */
+  onUndo?: (commit: GitCommitSummary) => Promise<void>;
 }) {
   const t = useT();
   const panel = useRef<HTMLDivElement | null>(null);
@@ -82,7 +89,7 @@ export function PushReview({
     <div ref={panel} className="push-review" role="dialog" aria-label={t("git.outgoing")}>
       <div className="push-review-head">{title}</div>
       <div className="push-review-list">
-        <OutgoingList cwd={cwd} git={git} />
+        <OutgoingList cwd={cwd} git={git} onUndo={onUndo} />
       </div>
       <div className="push-review-foot">
         <button type="button" className="outline" onClick={onCancel}>
@@ -97,7 +104,15 @@ export function PushReview({
   );
 }
 
-function OutgoingList({ cwd, git }: { cwd: string; git: GitInfo }) {
+function OutgoingList({
+  cwd,
+  git,
+  onUndo,
+}: {
+  cwd: string;
+  git: GitInfo;
+  onUndo?: (commit: GitCommitSummary) => Promise<void>;
+}) {
   const t = useT();
   const [data, setData] = useState<GitOutgoing | null>(null);
   /**
@@ -140,8 +155,9 @@ function OutgoingList({ cwd, git }: { cwd: string; git: GitInfo }) {
   const hidden = data.total - data.commits.length;
   return (
     <div className="outgoing-body">
-      {data.commits.map((commit) => (
-        <OutgoingRow key={commit.id} cwd={cwd} commit={commit} />
+      {/* Liste en yeniden eskiye: ilk satır HEAD, geri alınabilen yalnızca o. */}
+      {data.commits.map((commit, i) => (
+        <OutgoingRow key={commit.id} cwd={cwd} commit={commit} onUndo={i === 0 ? onUndo : undefined} />
       ))}
       {hidden > 0 && <div className="pop-empty">{tp("git.outgoingMore", hidden)}</div>}
     </div>
@@ -154,9 +170,18 @@ function OutgoingList({ cwd, git }: { cwd: string; git: GitInfo }) {
  * Satır `Değişiklikler`in ve stash'in satırlarıyla AYNI sınıfları kullanıyor
  * (`git-item`, `git-head`, `git-row`): aynı düzen, aynı katlama oku.
  */
-function OutgoingRow({ cwd, commit }: { cwd: string; commit: GitCommitSummary }) {
+function OutgoingRow({
+  cwd,
+  commit,
+  onUndo,
+}: {
+  cwd: string;
+  commit: GitCommitSummary;
+  onUndo?: (commit: GitCommitSummary) => Promise<void>;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const meta = [commit.author, formatWhen(commit.time * 1000)].filter(Boolean).join(" · ");
 
   return (
@@ -182,6 +207,23 @@ function OutgoingRow({ cwd, commit }: { cwd: string; commit: GitCommitSummary })
             </span>
           </span>
         </button>
+        {onUndo && (
+          <div className="git-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              disabled={undoing}
+              title={t("git.undoCommit")}
+              aria-label={t("git.undoCommit")}
+              onClick={() => {
+                setUndoing(true);
+                void onUndo(commit).finally(() => setUndoing(false));
+              }}
+            >
+              <UndoIcon size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {open && (

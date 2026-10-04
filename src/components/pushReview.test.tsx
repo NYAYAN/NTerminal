@@ -356,6 +356,63 @@ describe("Push'un onay paneli", () => {
   });
 });
 
+/*
+ * İSTEK: "push basınca açılan ekranda commit'i geri almak mümkün mü?" → "böyle
+ * ekle": IntelliJ'in "Undo Commit"i gibi YALNIZCA son commit'te; içerik
+ * kaybolmuyor (Rust yarısı `git_tests.rs`), ileti commit kutusuna dönüyor.
+ */
+describe("son commit'i geri almak", () => {
+  const geriAl = (satir: HTMLElement) =>
+    satir.querySelector<HTMLButtonElement>('.git-actions button[aria-label^="Commit\'i geri al"]');
+
+  it("düğme yalnızca en üstteki (son) commit'te", async () => {
+    const { container } = await kutu();
+    await ac(container);
+    const [ilk, ikinci] = satirlar(container);
+    expect(geriAl(ilk)).not.toBe(null);
+    expect(geriAl(ilk)!.title).toContain("değişiklikler silinmez");
+    expect(geriAl(ikinci)).toBe(null);
+  });
+
+  it("geri alıyor, iletiyi boş commit kutusuna koyuyor, bildiriyor", async () => {
+    const undo = vi.spyOn(api, "gitUndoCommit").mockResolvedValue("Başlık\n\nGövde");
+    const toast = vi.fn();
+    const { container } = await kutu();
+    useStore.setState({ toast });
+    await ac(container);
+
+    fireEvent.click(geriAl(satirlar(container)[0])!);
+    await flush();
+
+    expect(undo).toHaveBeenCalledWith(CWD, C1.id);
+    expect(useStore.getState().ui.gitDrafts[CWD]).toBe("Başlık\n\nGövde");
+    expect(toast).toHaveBeenCalledWith("aaaaaaa geri alındı; değişiklikler listede", "ok");
+    expect(push, "geri almak göndermemeli").not.toHaveBeenCalled();
+  });
+
+  it("kutuda yazılmış bir ileti varsa ezmiyor", async () => {
+    vi.spyOn(api, "gitUndoCommit").mockResolvedValue("eski ileti");
+    const { container } = await kutu();
+    useStore.getState().setUi({ gitDrafts: { [CWD]: "yazdığım yeni ileti" } });
+    await flush();
+    await ac(container);
+    fireEvent.click(geriAl(satirlar(container)[0])!);
+    await flush();
+    expect(useStore.getState().ui.gitDrafts[CWD]).toBe("yazdığım yeni ileti");
+  });
+
+  it("reddedilirse (uzakta / son commit değişti) git'in metni kalıcı kutuda", async () => {
+    vi.spyOn(api, "gitUndoCommit").mockRejectedValue("bu commit uzakta var");
+    const { container } = await kutu();
+    await ac(container);
+    fireEvent.click(geriAl(satirlar(container)[0])!);
+    await flush();
+    const hata = container.querySelector(".git-commit-error")!;
+    expect(hata.querySelector("strong")!.textContent).toBe("Commit geri alınamadı");
+    expect(hata.querySelector("pre")!.textContent).toBe("bu commit uzakta var");
+  });
+});
+
 describe("bağlam şeridindeki rozet", () => {
   async function serit(info: GitInfo | null) {
     seed(info);

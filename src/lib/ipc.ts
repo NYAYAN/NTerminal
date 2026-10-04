@@ -132,6 +132,11 @@ export const api = {
    */
   gitCommit: (path: string, message: string) => invoke<string>("git_commit", { path, message }),
   /**
+   * Son commit'i geri alır (`reset --soft`; içerik eklenmiş kalıyor) ve tam
+   * iletisini döner. `id` HEAD değilse ya da commit uzaktaysa reddediyor.
+   */
+  gitUndoCommit: (path: string, id: string) => invoke<string>("git_undo_commit", { path, id }),
+  /**
    * Geçerli dalı uzağa gönderir; başarıda hedefi (`origin/main`) döner. Etiket
    * ve zorla itme YOK. Yukarı akışı olmayan dal yayınlanır (`-u`).
    */

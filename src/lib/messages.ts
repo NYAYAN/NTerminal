@@ -226,6 +226,13 @@ export const MESSAGES = {
   "git.expandAllFiles": ["Dosyaları aç", "Expand files"],
   // Satırlarda yalnızca dosya adı duruyor; bu düğme klasör zincirini de
   // gösteriyor. Tam yol her durumda satırın ipucunda.
+  // Push panelindeki son commit: IntelliJ'in "Undo Commit"i (`reset --soft`).
+  "git.undoCommit": [
+    "Commit'i geri al — değişiklikler silinmez, eklenmiş olarak listeye döner",
+    "Undo Commit — changes are kept and return to the list as staged",
+  ],
+  "git.undoneCommit": ["{hash} geri alındı; değişiklikler listede", "{hash} undone; the changes are back in the list"],
+  "git.undoCommitFailed": ["Commit geri alınamadı", "Could not undo the commit"],
   "git.showPaths": ["Klasör yollarını göster", "Show folder paths"],
   "git.hidePaths": ["Klasör yollarını gizle", "Hide folder paths"],
   // Bağlam açıcıları: `git diff` değişen satırların çevresinde üç satır

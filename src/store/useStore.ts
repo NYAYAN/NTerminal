@@ -578,6 +578,8 @@ interface Store {
   unstageFiles: (cwd: string, files: string[]) => Promise<void>;
   /** Başarıda commit'in KISA kimliğini döner. */
   commitStaged: (cwd: string, message: string) => Promise<string>;
+  /** Son commit'i geri alır (içerik eklenmiş kalıyor); başarıda iletisini döner. */
+  undoCommit: (cwd: string, id: string) => Promise<string>;
   /** Başarıda hedefi (`origin/main`) döner. */
   pushBranch: (cwd: string) => Promise<string>;
   /**
@@ -2093,6 +2095,10 @@ export const useStore = create<Store>((set, get) => ({
 
   commitStaged(cwd, message) {
     return gitWrite(cwd, () => api.gitCommit(cwd, message));
+  },
+
+  undoCommit(cwd, id) {
+    return gitWrite(cwd, () => api.gitUndoCommit(cwd, id));
   },
 
   pushBranch(cwd) {

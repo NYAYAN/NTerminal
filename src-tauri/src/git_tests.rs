@@ -2706,3 +2706,66 @@ fn takipsiz_klasordeki_yok_sayilan_dosya_eklenmiyor() {
     assert!(!indeks.contains("hata.log"), "yok sayilan dosya eklendi: {indeks}");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ------------------------------------------------------------- commit'i geri al
+//
+// Push panelindeki "Commit'i geri al". Asil guvence: icerik KAYBOLMUYOR ve
+// uzaga gitmis bir commit geri alinmiyor.
+
+#[test]
+fn son_commit_geri_aliniyor_icerik_eklenmis_kaliyor_ileti_donuyor() {
+    let root = repo_bir_commitli("undo-ok");
+    yaz(&root, "a.txt", "ikinci\n");
+    git(&root, &["commit", "--quiet", "-am", "Baslik\n\nGovde satiri"]);
+    let id = git_out(&root, &["rev-parse", "HEAD"]);
+
+    let ileti = undo_last_commit(&yol_of(&root), &id).unwrap();
+
+    assert_eq!(ileti, "Baslik\n\nGovde satiri");
+    assert_eq!(git_out(&root, &["log", "-1", "--format=%s"]), "ilk");
+    assert_eq!(oku(&root, "a.txt"), "ikinci\n", "calisma agaci degismemeli");
+    assert_eq!(durum_of(&root, "a.txt").as_deref(), Some("M "), "degisiklik eklenmis kalmali");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn geri_alma_head_degistiyse_dokunmuyor() {
+    let root = repo_bir_commitli("undo-stale");
+    yeni_commit(&root, "ikinci\n");
+    let eski = git_out(&root, &["rev-parse", "HEAD"]);
+    yeni_commit(&root, "ucuncu\n");
+
+    assert!(undo_last_commit(&yol_of(&root), &eski).is_err());
+    assert_eq!(git_out(&root, &["log", "-1", "--format=%s"]), "ucuncu");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn uzaga_gitmis_commit_geri_alinmiyor() {
+    let (root, uzak) = repo_ve_uzak("undo-pushed");
+    yeni_commit(&root, "ikinci\n");
+    push(&yol_of(&root)).unwrap();
+    let id = git_out(&root, &["rev-parse", "HEAD"]);
+
+    let hata = undo_last_commit(&yol_of(&root), &id).unwrap_err();
+
+    assert!(hata.contains("uzakta"), "{hata}");
+    assert_eq!(git_out(&root, &["rev-parse", "HEAD"]), id);
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&uzak);
+}
+
+#[test]
+fn ilk_commit_ve_ayrik_head_geri_alinmiyor() {
+    let root = repo_bir_commitli("undo-root");
+    let id = git_out(&root, &["rev-parse", "HEAD"]);
+    assert!(undo_last_commit(&yol_of(&root), &id).is_err());
+    assert_eq!(git_out(&root, &["rev-parse", "HEAD"]), id);
+
+    yeni_commit(&root, "ikinci\n");
+    let ikinci = git_out(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["checkout", "--quiet", "--detach"]);
+    assert!(undo_last_commit(&yol_of(&root), &ikinci).is_err());
+    assert_eq!(git_out(&root, &["rev-parse", "HEAD"]), ikinci);
+    let _ = std::fs::remove_dir_all(&root);
+}

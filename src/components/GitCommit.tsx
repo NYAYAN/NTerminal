@@ -4,7 +4,7 @@ import { commitBlock, pushPlan } from "../lib/gitStage";
 import { tp, useT } from "../lib/i18n";
 import { modKey } from "../lib/platform";
 import { useStore } from "../store/useStore";
-import type { GitChange, GitInfo } from "../types";
+import type { GitChange, GitCommitSummary, GitInfo } from "../types";
 import { ArrowIcon, BranchIcon, SpinnerIcon, StashIcon } from "./Icons";
 import { PushReview } from "./PushReview";
 
@@ -119,6 +119,24 @@ export function GitCommitBox({
     }
   };
 
+  /**
+   * Push panelindeki "Commit'i geri al": commit kalkıyor, içeriği eklenmiş
+   * olarak listeye dönüyor ve iletisi commit kutusuna geliyor — düzeltip
+   * yeniden commit'lemek için (IntelliJ de böyle). Kutuda yazılmış bir ileti
+   * varsa EZİLMİYOR: yeni bir şey yazılıyordu.
+   */
+  const undoCommit = async (target: GitCommitSummary) => {
+    const store = useStore.getState();
+    setError(null);
+    try {
+      const old = await store.undoCommit(cwd, target.id);
+      if (!useStore.getState().ui.gitDrafts[key]?.trim() && old) setMessage(old);
+      store.toast(t("git.undoneCommit", { hash: target.short }), "ok");
+    } catch (err) {
+      setError({ title: t("git.undoCommitFailed"), text: String(err) });
+    }
+  };
+
   const commitTitle =
     block === "noFiles"
       ? t("git.commitNoFiles")
@@ -175,6 +193,7 @@ export function GitCommitBox({
         setReview(false);
         void push();
       }}
+      onUndo={undoCommit}
     />
   );
 

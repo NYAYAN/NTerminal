@@ -880,6 +880,15 @@ async fn git_commit(path: String, message: String) -> CmdResult<String> {
         .map_err(fail)?
 }
 
+/// Push panelindeki "Commit'i geri al": son commit'i `reset --soft` ile
+/// kaldirir, iletisini doner (gerekce `git::undo_last_commit`).
+#[tauri::command]
+async fn git_undo_commit(path: String, id: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || git::undo_last_commit(&path, &id))
+        .await
+        .map_err(fail)?
+}
+
 /// Gecerli dali uzaga gonderir; basarida hedefi (`origin/main`) doner.
 #[tauri::command]
 async fn git_push(path: String) -> CmdResult<String> {
@@ -1173,6 +1182,7 @@ pub fn run() {
             git_stage,
             git_unstage,
             git_commit,
+            git_undo_commit,
             git_push,
             git_outgoing,
             git_commit_files,

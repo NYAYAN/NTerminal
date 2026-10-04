@@ -930,6 +930,66 @@ pub fn commit(path: &str, message: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&head.stdout).trim().to_string())
 }
 
+/// Son commit'i geri alir (IntelliJ'in "Undo Commit"i): `git reset --soft HEAD^`.
+/// Basarida commit'in TAM iletisini doner; arayuz onu commit kutusuna koyuyor.
+///
+/// ISTEK: "commit ettikten sonra push basinca acilan ekranda commit'i geri
+/// almak mumkun mu?" — Push panelindeki en ustteki commit'te.
+///
+/// ## Neden yalnizca soft
+///
+/// Commit kalkiyor ama ICERIGI kaybolmuyor: degisiklikler eklenmis (staged)
+/// hâlde calisma agacinda duruyor. Hicbir sey silinmedigi icin arayuz onay
+/// sormuyor. `--hard` ya da `--mixed` bu islevin isi degil.
+///
+/// ## Reddettigi durumlar
+///
+/// - `id` artik HEAD degil (panel acikken terminalden commit atildi): yanlis
+///   commit'i geri almamak icin.
+/// - Ayrik HEAD: geri alinacak dal yok.
+/// - Commit UZAKTA var (herhangi bir uzak izleme dalinda): onu geri almak
+///   paylasilmis gecmisi yeniden yazmak ve sonraki push'u zorlamaya donusturmek
+///   demek. Panel zaten yalnizca gonderilmemis commit'leri gosteriyor; bu
+///   savunma.
+/// - Deponun ilk commit'i: geri donulecek ebeveyn yok.
+pub fn undo_last_commit(path: &str, id: &str) -> Result<String, String> {
+    if !valid_id(id) {
+        return Err("gecersiz commit kimligi".into());
+    }
+    let _sira = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = work_dir(path);
+    let out = |args: &[&str]| -> Result<std::process::Output, String> {
+        git_at(&dir).args(args).output().map_err(|e| e.to_string())
+    };
+
+    if !out(&["symbolic-ref", "-q", "HEAD"])?.status.success() {
+        return Err("ayrik HEAD: geri alinacak dal yok".into());
+    }
+    let head = out(&["rev-parse", "--verify", "-q", "HEAD"])?;
+    let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+    if head.is_empty() || !head.starts_with(&id.to_ascii_lowercase()) {
+        return Err("son commit degisti; liste tazelendi, yeniden deneyin".into());
+    }
+    let remotes = out(&["for-each-ref", "--contains", "HEAD", "--format=%(refname)", "refs/remotes"])?;
+    if !remotes.status.success() {
+        return Err(failure_text(&remotes));
+    }
+    if !String::from_utf8_lossy(&remotes.stdout).trim().is_empty() {
+        return Err("bu commit uzakta var; geri almak paylasilmis gecmisi degistirirdi".into());
+    }
+    if !out(&["rev-parse", "--verify", "-q", "HEAD^1"])?.status.success() {
+        return Err("deponun ilk commit'i geri alinamaz".into());
+    }
+
+    let message = out(&["log", "-1", "--no-show-signature", "--format=%B", "HEAD"])?;
+    let message = String::from_utf8_lossy(&message.stdout).trim_end().to_string();
+    let reset = out(&["reset", "--soft", "--quiet", "HEAD^1"])?;
+    if !reset.status.success() {
+        return Err(failure_text(&reset));
+    }
+    Ok(message)
+}
+
 /// Gecerli dali uzaga gonderir; basarida HEDEFI (`origin/main`) doner.
 ///
 /// ## Iki yol
