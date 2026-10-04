@@ -756,7 +756,12 @@ describe("commit", () => {
 
     expect(area(container).readOnly).toBe(true);
     expect(commitBtn(container).disabled).toBe(true);
-    expect(commitBtn(container).textContent).toContain("Commit atılıyor…");
+    // İSTEK: yazı yerine çark — düğmenin yazısı ve genişliği aynı kalıyor,
+    // ne yaptığı ipucunda ve `aria-busy`de.
+    expect(commitBtn(container).querySelector(".spinner"), "çark yok").not.toBe(null);
+    expect(commitBtn(container).textContent).toBe("Commit");
+    expect(commitBtn(container).title).toBe("Commit atılıyor…");
+    expect(commitBtn(container).getAttribute("aria-busy")).toBe("true");
     expect(pushBtn(container).disabled, "commit sürerken push açık").toBe(true);
 
     gitSays(repo([], { ahead: 1 }));
@@ -855,6 +860,9 @@ describe("push", () => {
     seed(repo([], { ahead: 3, upstream: "origin/ozellik" }));
     const { container } = render(<GitChanges />);
     expect(pushBtn(container).title).toBe("3 commit gönderilecek → origin/ozellik");
+    // Boştayken çark yok: dönen bir simge "bir şey sürüyor" der.
+    expect(pushBtn(container).querySelector(".spinner")).toBe(null);
+    expect(pushBtn(container).getAttribute("aria-busy")).toBe("false");
   });
 
   it("Yayınla: yukarı akış yokken gönderiyor", async () => {
@@ -914,7 +922,12 @@ describe("push", () => {
     await flush();
 
     expect(pushBtn(container).disabled).toBe(true);
-    expect(pushBtn(container).textContent).toContain("Gönderiliyor…");
+    // İSTEK: "spinner olsa daha iyi olmaz mı, profesyonel görünür" — ok
+    // simgesinin yerinde çark, yazı aynı; ne yaptığı ipucunda ve `aria-busy`de.
+    expect(pushBtn(container).querySelector(".spinner"), "çark yok").not.toBe(null);
+    expect(pushBtn(container).textContent).toBe("Push1");
+    expect(pushBtn(container).title).toBe("Gönderiliyor…");
+    expect(pushBtn(container).getAttribute("aria-busy")).toBe("true");
     gitSays(repo([], { ahead: 0 }));
     is.coz("origin/main");
     await flush();

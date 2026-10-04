@@ -272,6 +272,23 @@ export function SaveIcon(props: IconProps) {
  * Yazı tipi karakteri (`↑`) DEĞİL, aynı sebeple: rozetin içinde okun boyu ve
  * taban hizası yazı tipine göre oynuyor, kimi tipte rozetten taşıyor.
  */
+/**
+ * Süren iş: soluk bir halka ve üstünde dönen bir yay (`.spinner`, global.css).
+ *
+ * Düğmelerin içinde, simgenin YERİNDE kullanılıyor: commit atılırken ve push
+ * sürerken. Yazıyı "Gönderiliyor…" yapmak düğmenin genişliğini her basışta
+ * değiştiriyordu; simgenin yerine geçen çark genişliği sabit tutuyor (İSTEK:
+ * "spinner olsa daha iyi olmaz mı, profesyonel görünür").
+ */
+export function SpinnerIcon({ className, ...props }: IconProps) {
+  return (
+    <Svg {...props} className={className ? `spinner ${className}` : "spinner"}>
+      <circle cx="8" cy="8" r="5.5" opacity="0.25" />
+      <path d="M8 2.5 A5.5 5.5 0 0 1 13.5 8" />
+    </Svg>
+  );
+}
+
 export function ArrowIcon({ dir, ...props }: IconProps & { dir: "up" | "down" | "right" }) {
   const paths = {
     up: "M8 12.5 V4 M4.5 7.5 L8 4 L11.5 7.5",

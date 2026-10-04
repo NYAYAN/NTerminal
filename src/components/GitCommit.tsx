@@ -5,7 +5,7 @@ import { tp, useT } from "../lib/i18n";
 import { modKey } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import type { GitChange, GitInfo } from "../types";
-import { ArrowIcon, BranchIcon, StashIcon } from "./Icons";
+import { ArrowIcon, BranchIcon, SpinnerIcon, StashIcon } from "./Icons";
 import { PushReview } from "./PushReview";
 
 /**
@@ -148,15 +148,16 @@ export function GitCommitBox({
       type="button"
       className={review ? "outline git-push on" : "outline git-push"}
       disabled={busy !== null || !canPush}
-      title={pushTitle}
+      // Sürerken ne yaptığı ipucunda ve `aria-busy`de; düğmede yalnızca çark
+      // (yazı aynı kalıyor, genişlik zıplamıyor — bkz. `SpinnerIcon`).
+      title={busy === "push" ? t("git.pushing") : pushTitle}
+      aria-busy={busy === "push"}
       aria-haspopup="dialog"
       aria-expanded={review && canPush}
       onClick={() => setReview(!review)}
     >
-      <ArrowIcon dir="up" size={12} />
-      <span>
-        {busy === "push" ? t("git.pushing") : t(plan.kind === "publish" ? "git.publish" : "git.push")}
-      </span>
+      {busy === "push" ? <SpinnerIcon size={12} /> : <ArrowIcon dir="up" size={12} />}
+      <span>{t(plan.kind === "publish" ? "git.publish" : "git.push")}</span>
       {plan.kind === "push" && <span className="pill-count">{plan.ahead}</span>}
     </button>
   );
@@ -276,10 +277,13 @@ export function GitCommitBox({
             type="button"
             className="primary git-commit-btn"
             disabled={busy !== null || block !== null}
-            title={commitTitle}
+            title={busy === "commit" ? t("git.committing") : commitTitle}
+            aria-busy={busy === "commit"}
             onClick={() => void commit()}
           >
-            <span>{busy === "commit" ? t("git.committing") : t("git.commit")}</span>
+            {/* Push'la aynı: sürerken çark, yazı aynı (bkz. `SpinnerIcon`). */}
+            {busy === "commit" && <SpinnerIcon size={12} />}
+            <span>{t("git.commit")}</span>
             {git.staged > 0 && busy === null && <span className="pill-count">{git.staged}</span>}
           </button>
           {pushButton}

@@ -3039,6 +3039,33 @@ html[data-platform="macos"] .titlebar {
   font-size: 0.8462rem;
 }
 
+/* Suren is (bkz. `SpinnerIcon`): yalnizca yay donuyor, halka sabit gorunuyor
+   cunku ikisi ayni merkezde ve donen SVG'nin tamami. */
+.spinner {
+  flex: none;
+  animation: spinner-turn 0.8s linear infinite;
+}
+
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Is surerken dugme kapali AMA soluk degil: kapali dugmenin solgunlugu "simdi
+   kullanilamaz" diyor, burada soylenmesi gereken "calisiyor". */
+button[aria-busy="true"]:disabled {
+  opacity: 0.9;
+  cursor: progress;
+}
+
+/* Hareketi azalt: durmuyor (duran bir cark bozuk simge gibi okunur), yavasliyor. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
 .git-commit-hint {
   color: var(--warn);
   font-size: 0.7692rem;
