@@ -297,11 +297,24 @@ mod nix {
         let Ok(text) = std::fs::read_to_string("/etc/shells") else {
             return Vec::new();
         };
+        shells_listed(&text)
+            .into_iter()
+            .filter(|p| is_executable(p))
+            .collect()
+    }
+
+    /// `/etc/shells` metnindeki kabuk yollari - `sh` HARIC.
+    ///
+    /// `sh` sabit listede de yok (bkz. `SHELL_NAMES`): mac'te `/bin/sh` POSIX
+    /// kipinde bash ve `kind_of` onu Bash sayiyor. Bu adim onu yine
+    /// getiriyordu ve listede ikinci bir "Bash" satiri oluyordu - kullanicinin
+    /// profillerinde gercekten oldu (`/bin/bash` ve `/bin/sh`, ikisi de "Bash").
+    pub(super) fn shells_listed(text: &str) -> Vec<PathBuf> {
         text.lines()
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
             .map(PathBuf::from)
-            .filter(|p| is_executable(p))
+            .filter(|p| p.file_name().and_then(|n| n.to_str()) != Some("sh"))
             .collect()
     }
 
@@ -467,3 +480,7 @@ mod nix {
         false
     }
 }
+
+#[cfg(test)]
+#[path = "shells_tests.rs"]
+mod tests;
