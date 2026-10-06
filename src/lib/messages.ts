@@ -710,6 +710,7 @@ export const MESSAGES = {
   "tab.nameHint": ["Çift tıkla ad ver", "Double-click to name"],
   "tab.renamed": ["Elle adlandırıldı", "Renamed by hand"],
   "tab.running": ["Komut çalışıyor", "Command running"],
+  "tab.claudeRunningTitle": ["Claude Code çalışıyor", "Claude Code is running"],
   "tab.exited": ["Kabuk kapandı", "Shell exited"],
   "tab.noIntegration": ["Kabuk entegrasyonu yok", "No shell integration"],
   "tab.notStarted": ["Henüz açılmadı", "Not started yet"],

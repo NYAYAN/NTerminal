@@ -45,6 +45,49 @@ const SHELL_BADGES: Record<ShellKind, string> = {
   custom: "EXE",
 };
 
+/**
+ * Komut satırı Claude Code'u mu başlatıyor? Öyleyse komut sürdükçe sekmede
+ * kabuk rozetinin yerine Claude'un resmi çiziliyor.
+ *
+ * Kabuk entegrasyonu komutu YAZILDIĞI hâliyle bildiriyor (zsh'te preexec'in
+ * `$1`i): takma ad açılmamış. `alias c=claude` kullanan birinin sekmesi bu
+ * yüzden tanınmıyor.
+ *
+ * Zincirin her halkasına bakılıyor: `cd proje && claude` de Claude başlatıyor.
+ * Tırnak içini ayırmıyoruz; `echo "x; claude"` gibi bir satır yanlış pozitif
+ * verir ama bedeli komut sürerken görünen bir resim.
+ */
+export function isClaudeCommand(command: string | null | undefined): boolean {
+  if (!command) return false;
+  return command.split(/&&|\|\||[;|&]/).some((part) => startsClaude(part.trim().split(/\s+/)));
+}
+
+/** Komutun önüne yazılıp asıl programı çalıştıranlar. */
+const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "caffeinate"]);
+
+/** Paketi indirip çalıştıranlar: `npx @anthropic-ai/claude-code`. */
+const RUNNERS = new Set(["npx", "bunx", "pnpx"]);
+
+function startsClaude(words: string[]): boolean {
+  let i = 0;
+  while (i < words.length) {
+    // `ANTHROPIC_MODEL=... claude`
+    if (/^[A-Za-z_]\w*=/.test(words[i])) i += 1;
+    else if (WRAPPERS.has(words[i])) {
+      i += 1;
+      while (words[i]?.startsWith("-")) i += 1;
+    } else break;
+  }
+  if (i >= words.length) return false;
+
+  // Yol ve uzantı düşüyor: `~/.local/bin/claude`, Windows'ta `claude.cmd`.
+  const name = baseName(words[i].replace(/^["']|["']$/g, "")).replace(/\.(exe|cmd|ps1)$/i, "");
+  if (name === "claude") return true;
+  if (!RUNNERS.has(name)) return false;
+  const pkg = words.slice(i + 1).find((w) => !w.startsWith("-"));
+  return !!pkg && /^@anthropic-ai\/claude-code(@|$)/.test(pkg);
+}
+
 /** Profilin kabuk türü için kısa kod: sekmede tek bakışta hangi kabuk olduğu belli olsun. */
 export function shellBadge(profile: Profile | undefined): string {
   // Buraya yalnızca profil listesi TÜMDEN boşken düşülüyor (hiç kabuk

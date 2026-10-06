@@ -1357,6 +1357,34 @@ scratchpad'deki Vite düzeneğinde koyu ve açık tema; gerçek uygulamada
 (ayrı veri klasörüyle) pencerenin açılması, IPC izinleri, "Kaynağa git" ve
 kapanışta kabukların yaşaması erişilebilirlik ağacından okunarak.
 
+### 1.24 Claude Code çalışan sekmede Claude'un resmi
+
+**İstek:** `claude` açılınca terminalde çıkan resim, soldaki sekmede de
+görünsün (başka bir terminal uygulamasında böyle).
+
+**Karar yeri.** Yeni bir durum yok: kabuk entegrasyonu komut başlarken metnini
+(`lastCommand`), bitince "bitti"yi (`running`) zaten bildiriyor. İkisinin
+birleşimi `isClaudeCommand` (`labels.ts`); kenar çubuğu, sekme çubuğu ve
+bölme başlığı rozetin yerine `ClaudeIcon` çiziyor. Rozet ayarından bağımsız:
+kabuk kodu bir etiket, resim sekmenin o anki işi. Sınır: metin takma ad
+açılmadan geliyor (zsh preexec `$1`), `alias c=claude` tanınmıyor. Süreç adına
+bakmak Rust'ta platforma özel bir iş olurdu; istenirse ayrıca.
+
+**Resim.** Claude Code maskotu blok karakterlerle çiziyor; kaynak ikilinin
+içinde (`clawd_body` rengi, 2.1.257'de `" ▐" + "▛███▛█"`, `"▝▜" + "█████" +
+"█▀"`, bacaklar `"▝▝ ▝▝"`). Her karakter 2×2 piksel ve hücre iki kat uzun, yani
+SVG'de piksel 1×2 (viewBox 17×10). Bacaklar kullanıcının ekran görüntüsündeki
+2.1.289'a göre gövde kenarlarının ve gözlerin altında; 2.1.257'de daha içerde.
+17px genişlikte bir sütun bir piksel: `crispEdges` ile 1x'te de keskin.
+Rozette resim kutuyu boydan boya dolduruyor (istek); kutu yazılı rozetle aynı
+boyda, `1lh + 4px`. Boyu 5px'in katına yuvarlamak (2x'te tam piksel ızgarası)
+denendi: 12px arayüz yazısında kutu 14px, resim ya 10px'e iniyor ya taşıyordu.
+
+**Doğrulama.** `labels.test.ts` (tanınan ve tanınmayan komutlar),
+`shellBadge.test.tsx` (üç çizim yeri, bitince geri dönüş, ayar kapalıyken).
+Gözle: scratchpad Vite düzeneği + ekran dışı WKWebView görüntüsü, koyu ve
+açık tema, sekme ve bölme görünümü.
+
 ---
 
 ## 2. Açık işler

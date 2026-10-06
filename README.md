@@ -62,6 +62,13 @@ sekmenin **gerçekte açtığı** kabuğu gösteriyor: profil silinmiş ya da ay
 sıfırlanmışsa kimlik boşa düşüyor, kabuk varsayılan profille açılıyor ve rozet
 de onu yazıyor (eskiden burada `?` çıkıyordu).
 
+**Claude Code.** Sekmede `claude` çalışırken rozetin yerinde Claude Code'un
+açılışta terminale çizdiği turuncu maskot duruyor; komut bitince kabuk rozeti
+geri geliyor. Rozet kapalıyken de çiziliyor, çünkü kabuğun türünü değil sekmede
+o an ne çalıştığını söylüyor. Tanıma kabuk entegrasyonunun bildirdiği komut
+metnine bakıyor (`claude`, yoluyla ya da `npx @anthropic-ai/claude-code`);
+takma adla (`alias c=claude`) başlatılan Claude tanınmıyor.
+
 **Menüler.** Sağ tık menülerinde uzun listeler alt menüde açılıyor: on beş
 grubu olan bir kullanıcıda "Gruba taşı" altındaki düz liste menüyü uzatıp
 "Sekmeyi kapat"ı ekranın dışına itiyordu. Alt menü sağda yer yoksa sola

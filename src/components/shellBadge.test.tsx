@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
 import { setPlatform } from "../lib/platform";
-import { useStore } from "../store/useStore";
+import { sessions, useStore } from "../store/useStore";
 import type { Group, Profile, TabState } from "../types";
 import { GroupSidebar } from "./GroupSidebar";
 import { TabBar } from "./TabBar";
+import { TerminalArea } from "./TerminalArea";
 
 /**
  * Sekmenin solundaki kabuk rozeti.
@@ -141,5 +142,98 @@ describe("boşa düşmüş profil kimliği", () => {
     seed([tab("t1", "p9")], true, "p2");
     const { container } = render(<TabBar />);
     expect(container.querySelector(".tab-badge")?.getAttribute("title")).toBe("Komut İstemi");
+  });
+});
+
+/**
+ * Sekmede Claude Code çalışırken rozetin yerinde Claude'un resmi.
+ *
+ * İSTEK: `claude` açılınca terminalde çıkan resim, sol taraftaki sekmede de
+ * görünsün. Karar `running` (kabuk "komut sürüyor" dedi) ile `lastCommand`ın
+ * (o komutun metni) birleşimi; resim kabuk türü değil sekmenin o anki işi
+ * olduğu için rozet ayarı kapalıyken de çiziliyor.
+ */
+describe("Claude Code çalışırken", () => {
+  function claudeTab(id: string, lastCommand: string | null): TabState {
+    return { ...tab(id, "p1"), lastCommand };
+  }
+
+  const { ensureSession } = useStore.getState();
+  afterEach(() => {
+    useStore.setState({ running: {}, ensureSession });
+    sessions.clear();
+  });
+
+  it("kenar çubuğunda ve sekme çubuğunda kabuk kodunun yerine resim", () => {
+    seed([claudeTab("t1", "claude --continue")]);
+    useStore.setState({ running: { t1: true } });
+
+    const side = render(<GroupSidebar />);
+    const rozet = side.container.querySelector(".tab-row-badge");
+    expect(rozet?.classList.contains("claude")).toBe(true);
+    expect(rozet?.querySelector("svg"), "resim çizilmemiş").not.toBe(null);
+    expect(rozet?.textContent, "kabuk kodu da kalmış").toBe("");
+    expect(rozet?.getAttribute("title")).toBe("Claude Code çalışıyor");
+
+    const bar = render(<TabBar />);
+    expect(bar.container.querySelector(".tab-badge.claude svg")).not.toBe(null);
+  });
+
+  it("bölme başlığında da", () => {
+    seed([claudeTab("t1", "claude")]);
+    useStore.setState({
+      running: { t1: true },
+      ensureSession: async () => null,
+      settings: {
+        ...useStore.getState().settings,
+        behavior: {
+          ...useStore.getState().settings.behavior,
+          commandBlocks: false,
+          blockHeaders: false,
+        },
+      },
+    });
+    // Gerçek xterm jsdom'da kurulamıyor; çizim yolunun istediği yüzey yeter.
+    sessions.set("t1", {
+      scrollToBottom: vi.fn(),
+      setDisplay: vi.fn(),
+      setBlockListener: vi.fn(),
+      blockGeometry: () => null,
+    } as never);
+
+    const { container } = render(<TerminalArea />);
+    expect(container.querySelector(".pane-badge.claude svg")).not.toBe(null);
+  });
+
+  it("Claude kapanınca kabuk rozeti geri geliyor", () => {
+    // `lastCommand` komut bitince silinmiyor; belirleyici `running`.
+    seed([claudeTab("t1", "claude")]);
+    useStore.setState({ running: { t1: false } });
+
+    const { container } = render(<GroupSidebar />);
+    expect(container.querySelector(".claude")).toBe(null);
+    expect(container.querySelector(".tab-row-badge")?.textContent).toBe("PS7");
+  });
+
+  it("başka bir komut sürerken kabuk rozeti kalıyor", () => {
+    seed([claudeTab("t1", "npm test")]);
+    useStore.setState({ running: { t1: true } });
+
+    const { container } = render(<TabBar />);
+    expect(container.querySelector(".claude")).toBe(null);
+    expect(container.querySelector(".tab-badge")?.textContent).toBe("PS7");
+  });
+
+  it("rozet ayarı kapalıyken yalnızca Claude'lu sekmede resim var", () => {
+    seed([claudeTab("t1", "claude"), claudeTab("t2", "npm test")], false);
+    useStore.setState({ running: { t1: true, t2: true } });
+
+    const side = render(<GroupSidebar />);
+    expect(side.container.querySelectorAll(".tab-row-badge").length).toBe(1);
+    expect(side.container.querySelector(".tab-row-badge.claude")).not.toBe(null);
+
+    const bar = render(<TabBar />);
+    expect(bar.container.querySelectorAll(".tab-badge").length).toBe(1);
+    expect(bar.container.querySelector(".tab-badge.claude")).not.toBe(null);
   });
 });

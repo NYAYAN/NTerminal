@@ -6,6 +6,7 @@ import { api } from "../lib/ipc";
 import {
   groupLabel,
   hasCustomTitle,
+  isClaudeCommand,
   resolveProfile,
   shellBadge,
   tabLabel,
@@ -26,6 +27,7 @@ import type { Group, TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 import {
   ChevronIcon,
+  ClaudeIcon,
   CollapseAllIcon,
   ExpandAllIcon,
   PlusIcon,
@@ -683,17 +685,29 @@ export function GroupSidebar() {
                           }
                         }}
                       >
-                        {showBadge && (
+                        {/* Claude Code çalışırken rozet ayarı kapalı olsa da
+                            çiziliyor: bu kabuğun türü değil, sekmede o an
+                            ne çalıştığı. */}
+                        {running[tab.id] && isClaudeCommand(tab.lastCommand) ? (
                           <span
-                            className="tab-row-badge"
-                            // Ham profil rengi DEĞİL: koyu bir profil rengi
-                            // (Windows PowerShell: #0e4d92) koyu temada
-                            // okunmuyordu — gerekçesi `readableAccent` içinde.
-                            style={{ color: readableAccent(profile?.color, themeId) }}
-                            title={profile?.name}
+                            className="tab-row-badge claude"
+                            title={t("tab.claudeRunningTitle")}
                           >
-                            {shellBadge(profile)}
+                            <ClaudeIcon />
                           </span>
+                        ) : (
+                          showBadge && (
+                            <span
+                              className="tab-row-badge"
+                              // Ham profil rengi DEĞİL: koyu bir profil rengi
+                              // (Windows PowerShell: #0e4d92) koyu temada
+                              // okunmuyordu — gerekçesi `readableAccent` içinde.
+                              style={{ color: readableAccent(profile?.color, themeId) }}
+                              title={profile?.name}
+                            >
+                              {shellBadge(profile)}
+                            </span>
+                          )
                         )}
 
                         {isEditing ? (

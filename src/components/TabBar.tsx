@@ -4,6 +4,7 @@ import { api } from "../lib/ipc";
 import {
   groupLabel,
   hasCustomTitle,
+  isClaudeCommand,
   resolveProfile,
   shellBadge,
   tabLabel,
@@ -18,7 +19,14 @@ import { readableAccent } from "../lib/themes";
 import { sessions, useStore } from "../store/useStore";
 import type { TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
-import { ArrowIcon, ChevronIcon, PanesViewIcon, PlusIcon, TabsViewIcon } from "./Icons";
+import {
+  ArrowIcon,
+  ChevronIcon,
+  ClaudeIcon,
+  PanesViewIcon,
+  PlusIcon,
+  TabsViewIcon,
+} from "./Icons";
 
 export function TabBar() {
   const groups = useStore((s) => s.groups);
@@ -317,10 +325,17 @@ export function TabBar() {
                 }
               }}
             >
-              {showBadge && (
-                <span className="tab-badge" title={profile?.name}>
-                  {shellBadge(profile)}
+              {/* Rozet ayarından bağımsız; gerekçe GroupSidebar'da. */}
+              {running[tab.id] && isClaudeCommand(tab.lastCommand) ? (
+                <span className="tab-badge claude" title={t("tab.claudeRunningTitle")}>
+                  <ClaudeIcon />
                 </span>
+              ) : (
+                showBadge && (
+                  <span className="tab-badge" title={profile?.name}>
+                    {shellBadge(profile)}
+                  </span>
+                )
               )}
 
               {isRenaming ? (

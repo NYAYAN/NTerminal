@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveProfile, shellBadge } from "./labels";
+import { isClaudeCommand, resolveProfile, shellBadge } from "./labels";
 import { healTabProfiles } from "./tabs";
 import type { Group, Profile, TabState } from "../types";
 
@@ -115,6 +115,63 @@ describe("kabuk rozeti", () => {
 
   it("? yalnızca hiç profil yokken çıkıyor", () => {
     expect(shellBadge(resolveProfile([], "prof-1"))).toBe("?");
+  });
+});
+
+describe("Claude Code komutu", () => {
+  it("claude ve bayraklı / argümanlı hâlleri", () => {
+    for (const command of [
+      "claude",
+      "claude --continue",
+      "claude -r",
+      'claude "testleri düzelt"',
+      "  claude  ",
+    ]) {
+      expect(isClaudeCommand(command), command).toBe(true);
+    }
+  });
+
+  it("yolla ve Windows uzantısıyla çağrılan", () => {
+    expect(isClaudeCommand("~/.local/bin/claude")).toBe(true);
+    expect(isClaudeCommand("./node_modules/.bin/claude -c")).toBe(true);
+    expect(isClaudeCommand("C:\\Users\\a\\AppData\\Roaming\\npm\\claude.cmd")).toBe(true);
+    expect(isClaudeCommand("claude.exe")).toBe(true);
+  });
+
+  it("ortam ataması ve sarmalayıcı önekleri atlanıyor", () => {
+    expect(isClaudeCommand("ANTHROPIC_MODEL=x claude")).toBe(true);
+    expect(isClaudeCommand("A=1 B=2 claude")).toBe(true);
+    expect(isClaudeCommand("caffeinate -i claude")).toBe(true);
+    expect(isClaudeCommand("env FOO=1 claude")).toBe(true);
+  });
+
+  it("zincirin herhangi bir halkası", () => {
+    expect(isClaudeCommand("cd ~/proje && claude")).toBe(true);
+    expect(isClaudeCommand("git pull; claude -c")).toBe(true);
+  });
+
+  it("paket çalıştırıcıyla", () => {
+    expect(isClaudeCommand("npx @anthropic-ai/claude-code")).toBe(true);
+    expect(isClaudeCommand("npx -y @anthropic-ai/claude-code@latest --continue")).toBe(true);
+    expect(isClaudeCommand("bunx @anthropic-ai/claude-code")).toBe(true);
+    expect(isClaudeCommand("npx create-react-app claude")).toBe(false);
+  });
+
+  it("claude'u yalnızca ANAN komutlar Claude değil", () => {
+    for (const command of [
+      "which claude",
+      "echo claude",
+      "npm i -g @anthropic-ai/claude-code",
+      "cat ~/.claude/settings.json",
+      "claude-desktop",
+      "vim CLAUDE.md",
+      "env",
+      "",
+    ]) {
+      expect(isClaudeCommand(command), command).toBe(false);
+    }
+    expect(isClaudeCommand(null)).toBe(false);
+    expect(isClaudeCommand(undefined)).toBe(false);
   });
 });
 

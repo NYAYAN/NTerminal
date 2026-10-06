@@ -478,3 +478,37 @@ export function GearIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * Claude Code'un maskotu: `claude` açılınca terminalin başında çıkan resim.
+ *
+ * Claude Code onu blok karakterlerle çiziyor (`▐▛███▛█`): her karakter 2×2
+ * piksel, terminal hücresi eninin iki katı boyunda olduğu için piksel 1×2.
+ * viewBox aynı ızgara — 17 sütun, her biri 2 birim boyunda beş sıra. Bacaklar
+ * 2.1.289'daki gibi gövdenin kenarlarının ve gözlerin altında.
+ *
+ * Renkler Claude Code temasının `clawd_body` ve `clawd_background` değerleri;
+ * `currentColor` bilerek yok, resim her temada aynı tanınmalı. `size` burada
+ * genişlik. 17px'te bir sütun bir piksele düşüyor, `crispEdges` gözleri ve
+ * bacakları keskin tutuyor. Sekme rozetlerinde boyu CSS veriyor: resim rozet
+ * kutusunu dolduruyor (global.css, `.tab-row-badge.claude`).
+ */
+export function ClaudeIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={(size * 10) / 17}
+      viewBox="0 0 17 10"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="#d77757"
+        d="M2 0H15V4H17V6H15V8H2V6H0V4H2Z M2 8H3V10H2Z M4 8H5V10H4Z M12 8H13V10H12Z M14 8H15V10H14Z"
+      />
+      <path fill="#000" d="M4 2H5V4H4Z M12 2H13V4H12Z" />
+    </svg>
+  );
+}

@@ -3,14 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/ipc";
 import { tSplit, useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
-import { resolveProfile, shellBadge, tabLabel } from "../lib/labels";
+import { isClaudeCommand, resolveProfile, shellBadge, tabLabel } from "../lib/labels";
 import { normalizeViewMode, paneGrid, visibleTabIds } from "../lib/panes";
 import { canCloseTab, isLocked } from "../lib/tabs";
 import { sessions, useStore } from "../store/useStore";
 import { TerminalBlocks } from "./TerminalBlocks";
 import type { TerminalSession } from "../terminal/TerminalSession";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
-import { ArrowIcon } from "./Icons";
+import { ArrowIcon, ClaudeIcon } from "./Icons";
 import { TerminalFind } from "./TerminalFind";
 
 /**
@@ -329,10 +329,17 @@ export function TerminalArea() {
           >
             {tab && (
               <div className="pane-head">
-                {showBadge && (
-                  <span className="pane-badge">
-                    {shellBadge(resolveProfile(profiles, tab.profileId, defaultProfileId))}
+                {/* Rozet ayarından bağımsız; gerekçe GroupSidebar'da. */}
+                {running[tabId] && isClaudeCommand(tab.lastCommand) ? (
+                  <span className="pane-badge claude" title={t("tab.claudeRunningTitle")}>
+                    <ClaudeIcon />
                   </span>
+                ) : (
+                  showBadge && (
+                    <span className="pane-badge">
+                      {shellBadge(resolveProfile(profiles, tab.profileId, defaultProfileId))}
+                    </span>
+                  )
                 )}
                 <span className="pane-title">{tabLabel(tab)}</span>
                 {running[tabId] && <span className="tab-dot busy" title={t("pane.running")} />}
