@@ -5775,20 +5775,31 @@ button.pop-group {
  * Yatay serit alti bolumde bile darlasiyordu; dokuz bolumde sigmiyor. Dikey
  * liste bolum adlarina yer aciyor, yeni bolum eklemek olculeri degistirmiyor
  * ve etkin bolum tek bakista belli oluyor. */
+/* Olculer `rem`: arayuz boyutu (`--ui-font-size`) buyudukce pencere de
+   buyuyor. Onceki hali sabit 880x430 px'ti; arayuz boyutu 16-20 px'e
+   cikinca icerik buyuyor, pencere buyumuyor ve her sey sikisiyordu.
+   74rem: 12 px'te eski genislik (888), 14 px'lik varsayilanda 1036. */
 .modal.settings {
-  width: min(880px, 94vw);
+  width: min(74rem, 94vw);
 }
 
 .settings-body {
   display: grid;
-  grid-template-columns: 172px 1fr;
+  grid-template-columns: 13rem 1fr;
   /* Sabit yukseklik. Bolumler farkli uzunlukta; pencere icerige gore
      kuculup buyudugunde bolum degistirmek gorsel bir ziplama uretiyordu
      (olculen: 379px ile 590px arasi). min() kucuk ekranda tasmayi onluyor.
-     Kisa bolumler bosluk birakiyor, uzun olanlar govdede kayiyor. */
-  height: min(430px, 62vh);
+     Kisa bolumler bosluk birakiyor, uzun olanlar govdede kayiyor. 36rem:
+     12 px'te eski yukseklik (432). */
+  height: min(36rem, 66vh);
   /* Izgara ogesi icerige gore buyuyup kaydirmayi yukari kacirmasin. */
   min-height: 0;
+}
+
+/* Iki panelli bolumlerin (Profiller, Gruplar) dar pencerede alt alta
+   dizilmesi icin olcu kabi: bkz. `.profile-grid` kapsayici sorgusu. */
+.modal.settings .modal-body {
+  container-type: inline-size;
 }
 
 .settings-nav {
@@ -5862,11 +5873,23 @@ button.pop-group {
   color: var(--text);
   font-size: 0.9231rem;
   line-height: 1.35;
-  /* Uzun etiketler kirilabilir: kutunun genisligi 172px. */
+  /* Uzun etiketler kirilabilir: kutunun genisligi 13rem. */
   white-space: normal;
 }
 
 .settings-result-section {
+  color: var(--text-dim);
+  font-size: 0.8077rem;
+}
+
+/* "Bolum › baslik": iki ayni etiketi (terminal ve arayuz "Boyut"u)
+   ayirt eden sey baslik. Bolum adi gibi soluk, uzunsa kiriliyor. */
+.settings-result-where {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.settings-result-group {
   color: var(--text-dim);
   font-size: 0.8077rem;
 }
@@ -5957,9 +5980,13 @@ button.pop-group {
  * 145px. Kalan 20px denetim sutununa - dolayisiyla ipuclarina - gidiyor ve
  * uzun ipuclari bir satir kisaliyor. 150px'e indirmek olcumde EK KAZANC
  * vermedi (ipuclari zaten en az satir sayisina inmisti), yalnizca daha cok
- * etiket sarardi. */
+ * etiket sarardi.
+ *
+ * `rem` cinsinden ve bu sonradan: olcum 13 px'lik arayuzde yapildi (170px =
+ * 13rem). Sabit px'te arayuz boyutu buyudukce etiketler buyuyor, sutun
+ * buyumuyordu ve 16 px'te etiketlerin cogu iki satira sariyordu. */
 :root {
-  --label-col: 170px;
+  --label-col: 13rem;
   /* Etiket ile denetim arasindaki bosluk.
    *
    * Degisken olmasi SART, sayi olarak yazmak degil: `.field`, `.section` ve
@@ -6124,6 +6151,29 @@ button.pop-group {
   padding: 2px 0;
 }
 
+/* Onay kutusu ESNEMIYOR. Esnek ogenin varsayilan `flex-shrink: 1`i etiketi
+   iki satira saran satirda kutuyu sikistiriyordu: ayni formda biri 14px,
+   oteki daha kucuk iki kutu (Profiller, "Kabuk entegrasyonunu yukle"). */
+.check-row > input[type="checkbox"] {
+  flex: none;
+}
+
+/* Baska bir ayara BAGLI satir (blok basligi -> komut bloklari): girintiyle
+   bagli oldugu satirin altinda. Yalnizca soluklasan bir satir neden kapali
+   oldugunu soylemiyordu. */
+.check-row.sub {
+  padding-left: 22px;
+}
+
+/* Denetimi birkac satir boyunca uzanan alan (tema kartlari): etiket ve
+   satirin dugmeleri ortada degil, ustte. */
+.field.top > label,
+.field.top > .info,
+.field.top > .undo {
+  align-self: start;
+  padding-top: 4px;
+}
+
 /* Tarayicinin onay kutusuna ve kaydiriciya verdigi varsayilan bosluk denetim
    sutunundan 4px kaydiriyordu (olculen: 218 ve 216, otekiler 214). Bosluk
    izgaradan geliyor, ogenin kendisinden degil. */
@@ -6180,11 +6230,12 @@ button.pop-group {
   max-width: 280px;
 }
 
-/* Kaydirici: fontSize 8-28, satir yuksekligi 1-2 (0,05 adim) - en ince
-   ayarda 21 durak. 220px'de durak basina 10px kaliyor, yani fare ile tek
-   adim secmek hala kolay. */
+/* Kaydirici: yazi boyutu 8-32 (25 durak), satir yuksekligi 1-2 (0,05 adim,
+   21 durak). Genislik acilir menuyle AYNI: onceki 220px'te kaydiricilarin
+   sag kenari menulerinkinden 60px icerde bitiyor ve form tirtikli
+   gorunuyordu. 280px'te durak basina 11px kaliyor. */
 .modal-body input[type="range"] {
-  max-width: 220px;
+  max-width: 280px;
 }
 
 /* Sayi kutusu: en buyuk deger 200000 (alti hane, ~45px) + artir/azalt oku. */
@@ -6340,9 +6391,29 @@ button.pop-group {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: 210px 1fr;
+  /* Liste `rem`: ad ve "Varsayilan" rozeti arayuz boyutuyla buyuyor.
+     `minmax(0, 1fr)`: formdaki "Gozat" gibi sikismayan ogeler izi
+     tasirmasin (bkz. `.field`). */
+  grid-template-columns: 13rem minmax(0, 1fr);
   gap: 10px;
   min-height: 320px;
+}
+
+/* Dar pencerede liste ustte, form altta.
+ *
+ * OLCULEN (800x500 pencere): yan yana duzende formun denetim sutununa
+ * ~84px kaliyordu; yol kutusunda yalnizca "/" ve "B" gorunuyordu. Formun
+ * rahat calismasi icin gereken genislik ~52rem (liste + etiket + yol kutusu
+ * + "Gozat"); altinda alt alta. */
+@container (max-width: 52rem) {
+  .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .profile-grid .profile-list {
+    max-height: 8.5rem;
+  }
 }
 
 .profile-list {
@@ -6350,19 +6421,34 @@ button.pop-group {
   border-radius: var(--radius);
   overflow-y: auto;
   max-height: 420px;
+  align-self: start;
 }
 
+/* Satirlar DUGME (klavyeyle secilebilsin): dugmenin taban gorunusu
+   sifirlaniyor, satir eski haliyle ayni. */
 .profile-list .row {
   display: flex;
   align-items: center;
   gap: 7px;
+  width: 100%;
+  min-height: 0;
   padding: 4px 8px;
-  cursor: pointer;
+  border: 0;
+  border-radius: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: transparent;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .profile-list .row:hover {
   background: var(--hover);
+}
+
+.profile-list .row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .profile-list .row.on {
@@ -6374,6 +6460,129 @@ button.pop-group {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* "Varsayilan yap": izgara hucresinde gerilmesin, icerigi kadar. */
+.field > .default-btn {
+  justify-self: start;
+}
+
+/* Kisayollari varsayilana dondur: bolum basliginin altinda, icerigi kadar. */
+.section > .keys-reset {
+  justify-self: start;
+  margin-bottom: 4px;
+}
+
+/* Kisayol kutusu tusun kendisi kadar: tam genislikte (~430px) bir kutuda
+   "⌘K" yazmak formu bos gosteriyordu. */
+.modal-body input.key-capture {
+  max-width: 12rem;
+}
+
+/* Hakkinda > Dosya konumlari: veri klasorune gore yol, tam yolu ipucunda. */
+.path-rel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+/* ---------------------------------------------------------- tema kartlari */
+
+/* Her tema kendi renkleriyle bir kart (gerekce `ThemePicker` icinde).
+ *
+ * Alti kart TEK satirda: iki satirlik izgara (olculen) bolumu 81px uzatip
+ * Gorunum'u kaydirmaya itiyordu; ayarlar govdesi sabit yukseklikte ve her
+ * satir "ayni anda kac ayar goruyorum" demek. Dar pencerede kartlar alt
+ * satira kayiyor (`auto-fill`). 5.5rem: alti palet noktasi + dolgu sigiyor. */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 6px;
+  max-width: 40rem;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+}
+
+.theme-card:hover:not(.on) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+/* Secili kart iki isaretle: vurgu rengi cerceve VE kalinlik — renk tek
+   basina ayirt edici olmasin. */
+.theme-card.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.theme-swatch {
+  display: flex;
+  height: 2.2rem;
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+  /* Zemini yuzeyle ayni olan temada (Acik temalar acik yuzeyde) ornek
+     kartin icinde kaybolmasin. */
+  border: 1px solid color-mix(in srgb, var(--text-dim) 30%, transparent);
+}
+
+.theme-sample {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.theme-line,
+.theme-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.theme-line i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.theme-dots i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.theme-name {
+  color: var(--text);
+  font-size: 0.8077rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+/* Bolunmus ornekte (Sistemi izle) her yari daha dar: noktalar sigmiyor,
+   iki cubuk yetiyor. */
+.theme-swatch.split .theme-dots {
+  display: none;
 }
 
 .env-editor {

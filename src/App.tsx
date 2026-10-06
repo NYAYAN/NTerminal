@@ -26,10 +26,11 @@ import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
-import { isNativeCopyKey, pageSelectionText } from "./lib/focus";
+import { escapeOwnedBy, isNativeCopyKey, pageSelectionText } from "./lib/focus";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
+import { applyWindowTheme } from "./lib/windowTheme";
 import { UPDATE_CHECK_INTERVAL_MS, flushAllState, useStore } from "./store/useStore";
 
 export function App() {
@@ -247,6 +248,29 @@ export function App() {
     return () => frameMonitor.stop();
   }, []);
 
+  /*
+   * Sistemin açık/koyu görünümü — "Sistemi izle" teması için.
+   *
+   * Tek kaynak medya sorgusu: pencerenin görünümü sisteme bırakıldığında
+   * (bkz. aşağıdaki pencere teması etkisi) WebKit de WebView2 de sorguyu
+   * sistemle birlikte güncelliyor. İlk çağrı açılıştaki değeri eşitliyor.
+   */
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return;
+    const query = matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => useStore.getState().setSystemDark(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  // Pencere teması temaya uyuyor; "Sistemi izle"de sisteme bırakılıyor
+  // (gerekçe `lib/windowTheme.ts`).
+  const themeSetting = settings.appearance.theme;
+  useEffect(() => {
+    if (ready) applyWindowTheme(themeSetting);
+  }, [ready, themeSetting]);
+
   // Periyodik güvenlik kaydı: uygulama beklenmedik şekilde kapanırsa (güç
   // kesintisi, çökme) en fazla iki dakikalık kayıp olsun.
   useEffect(() => {
@@ -319,6 +343,10 @@ export function App() {
         // Onay penceresi Esc'yi kendisi ele aliyor (capture fazinda). Stash
         // penceresi de: o, is surerken Esc'yi bilerek yok sayiyor.
         if (store.ui.confirm || store.ui.stashDialog) return;
+        // Geri alacak bir şeyi olan kutu (kayıttaki kısayol, dolu arama,
+        // düzenlenen sayı) Esc'yi kendisi karşılıyor; pencereyi kapatmak
+        // ona ait iptali yutuyordu (gerekçe `escapeOwnedBy` içinde).
+        if (escapeOwnedBy(event.target)) return;
         if (store.ui.suggest) return store.closeSuggestions();
         if (store.ui.findOpen) return store.setUi({ findOpen: false });
         if (store.ui.paletteOpen) return store.setUi({ paletteOpen: false });
@@ -592,20 +620,11 @@ export function App() {
       if (!inCommandInput && matchCombo(event, keys.paste)) {
         if (session) return run(() => void session.paste());
       }
-      if (matchCombo(event, keys.zoomIn))
-        return run(() =>
-          void store.patchAppearance({
-            fontSize: Math.min(32, store.settings.appearance.fontSize + 1),
-          }),
-        );
-      if (matchCombo(event, keys.zoomOut))
-        return run(() =>
-          void store.patchAppearance({
-            fontSize: Math.max(8, store.settings.appearance.fontSize - 1),
-          }),
-        );
-      if (matchCombo(event, keys.zoomReset))
-        return run(() => void store.patchAppearance({ fontSize: 14 }));
+      // Yakınlaştırma ayardaki boyuta DOKUNMUYOR; ⌘0 o boyuta döndürüyor
+      // (eskiden sabit 14'e dönüyordu). Sınırlar `settingsLimits`te.
+      if (matchCombo(event, keys.zoomIn)) return run(() => void store.zoomTerminalFont(1));
+      if (matchCombo(event, keys.zoomOut)) return run(() => void store.zoomTerminalFont(-1));
+      if (matchCombo(event, keys.zoomReset)) return run(() => void store.zoomTerminalFont(0));
 
       // Ctrl+1..9 (mac'te Cmd+1..9): gruptaki n. sekmeye geç.
       //

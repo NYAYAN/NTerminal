@@ -50,11 +50,15 @@ export function setPlatform(value: Platform) {
  *
  * Rust tarafı (`model.rs` → `default_font_family`) doğru kaynak; bu yalnızca
  * açılış verisi gelmeden önceki ilk çizim için. İki listenin aynı kalması
- * gerekiyor, test bunu bağlıyor.
+ * gerekiyor, test bunu bağlıyor. Ayarlar penceresinin yazı tipi menüsünde
+ * "sistem" seçeneğinin değeri de bu.
+ *
+ * mac'te `ui-monospace`, "SF Mono" değil: WebKit SF ailelerini adıyla
+ * vermiyor (ölçüm `model.rs` içinde) — eski yığın Menlo çiziyordu.
  */
 export function defaultFontStack(): string {
   return isMac()
-    ? "SF Mono, Menlo, Monaco, Courier New, monospace"
+    ? "ui-monospace, Menlo, Monaco, monospace"
     : "Cascadia Mono, Consolas, Courier New, monospace";
 }
 

@@ -6,9 +6,12 @@ import { describe, expect, it } from "vitest";
 import {
   BUNDLED_FONTS,
   CANDIDATE_FONTS,
+  UI_FONT_CANDIDATES,
   detectInstalled,
   fontStack,
   isFontInstalled,
+  uiFontStack,
+  withUiFallback,
 } from "./fonts";
 
 /**
@@ -156,5 +159,33 @@ describe("kurulu yazı tipi bulma", () => {
     const stack = fontStack("Fira Code");
     expect(stack.startsWith("Fira Code")).toBe(true);
     expect(stack.trim().endsWith("monospace")).toBe(true);
+  });
+});
+
+/**
+ * Arayüz yazı tipi.
+ *
+ * Önceki seçici bir öneri listesiydi (`datalist`): öneriler yazmadan
+ * görünmüyordu ve mac'te yalnızca Windows'ta olan aileler de listedeydi.
+ * Şimdi menüde yalnızca ölçülerek bulunan (kurulu) aileler var.
+ */
+describe("arayüz yazı tipi", () => {
+  it("kurulu olmayan aday menüye girmiyor", () => {
+    // Ölçüm taklidi: yalnızca Inter "kurulu" — genişliği jeneriklerden farklı.
+    const measure = (spec: string) => (spec.startsWith('"Inter"') ? 900 : 800);
+    expect(detectInstalled(UI_FONT_CANDIDATES, measure)).toEqual(["Inter"]);
+  });
+
+  it("menü seçenekleri yedekli yığın, olduğu gibi kalıyor", () => {
+    const stack = uiFontStack("Inter");
+    expect(withUiFallback(stack)).toBe(stack);
+  });
+
+  it("özel girişe sistem ailesi ekleniyor", () => {
+    // Yalnızca "Inter" yazılıp Inter kurulu değilse tarayıcı tırnaklı
+    // serif'e düşüyordu: yanlış bir giriş bütün arayüzü bozmamalı.
+    expect(withUiFallback("Inter")).toBe("Inter, system-ui, sans-serif");
+    expect(withUiFallback("Avenir Next, sans-serif")).toBe("Avenir Next, sans-serif");
+    expect(withUiFallback("ui-rounded")).toBe("ui-rounded");
   });
 });

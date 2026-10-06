@@ -4,6 +4,8 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
+import { defaultFontStack, setPlatform } from "../lib/platform";
+import { LIMITS } from "../lib/settingsLimits";
 import { useStore } from "../store/useStore";
 import { SettingsDialog } from "./SettingsDialog";
 
@@ -122,15 +124,17 @@ describe("ayarlar penceresi", () => {
 
   it("bölüm değiştirmek içeriği değiştiriyor", async () => {
     const { container } = render(<SettingsDialog />);
-    expect(headings(container)).toEqual(["Dil", "Görünüm biçimi"]);
+    // "Düzen", "Görünüm biçimi" değil: "Görünüm" yan menüde bir bölümün adı.
+    expect(headings(container)).toEqual(["Dil", "Düzen"]);
 
     fireEvent.click([...container.querySelectorAll(".settings-nav button")][1]);
     await settle();
+    // Kaydırma tamponu Oturum › Ekran çıktısı'na taşındı; başlık "İmleç".
     expect(headings(container)).toEqual([
       "Tema",
       "Terminal yazı tipi",
       "Arayüz yazı tipi",
-      "İmleç ve kaydırma",
+      "İmleç",
       "Sekmeler",
     ]);
 
@@ -567,5 +571,339 @@ describe("ayar açıklamaları", () => {
         `açıklama düğmesinin ebeveyni ızgara değil: ${parent.className}`,
       ).toBe(true);
     }
+  });
+});
+
+/**
+ * Klavye odağı pencerede.
+ *
+ * ÖLÇÜLEN: ⌘, ile açılan pencerede odak arkadaki terminalin gizli
+ * textarea'sında kalıyordu; yazılan harf kabuğa gidiyordu (`pty_write "x"`) ve
+ * Enter komutu çalıştırırdı.
+ */
+describe("klavye odağı", () => {
+  const search = (c: HTMLElement) => c.querySelector(".settings-search input") as HTMLInputElement;
+
+  it("açılınca odak arama kutusunda", () => {
+    const terminal = document.body.appendChild(document.createElement("textarea"));
+    terminal.focus();
+    const { container } = render(<SettingsDialog />);
+    expect(document.activeElement, "odak arkada kaldı").toBe(search(container));
+    terminal.remove();
+  });
+
+  it("kapanınca odak açılıştaki yerine dönüyor", () => {
+    const terminal = document.body.appendChild(document.createElement("textarea"));
+    terminal.focus();
+    const { unmount } = render(<SettingsDialog />);
+    unmount();
+    expect(document.activeElement, "kullanıcı kaldığı yerden yazamıyor").toBe(terminal);
+    terminal.remove();
+  });
+
+  it("dışarı kaçan odak geri çekiliyor", () => {
+    const terminal = document.body.appendChild(document.createElement("textarea"));
+    const { container } = render(<SettingsDialog />);
+    terminal.focus();
+    expect(document.activeElement, "odak terminalde kaldı").toBe(search(container));
+    terminal.remove();
+  });
+
+  it("pencere bir iletişim kutusu olarak tanımlı", () => {
+    const { container } = render(<SettingsDialog />);
+    const modal = container.querySelector(".modal.settings")!;
+    expect(modal.getAttribute("role")).toBe("dialog");
+    expect(modal.getAttribute("aria-modal")).toBe("true");
+    const title = container.querySelector(`#${CSS.escape(modal.getAttribute("aria-labelledby")!)}`);
+    expect(title?.textContent).toBe("Ayarlar");
+  });
+
+  it("kapat düğmesinin bir adı var", () => {
+    // "×" ekran okuyucuda "çarpı işareti" diye okunuyordu.
+    const { container } = render(<SettingsDialog />);
+    expect(container.querySelector(".modal-head .icon-btn")!.getAttribute("aria-label")).toBe(
+      "Kapat",
+    );
+  });
+});
+
+/**
+ * Esc'yi geri alacak bir şeyi olan kutu sahipleniyor (bkz. `escapeOwnedBy`).
+ * Genel dinleyici bu testlerde yok; sahiplik özniteliği ve kutunun kendi Esc
+ * davranışı burada, dinleyicinin özniteliğe baktığı `focus.test.ts`te bağlı.
+ */
+describe("Esc sahipliği", () => {
+  it("arama kutusu yalnızca doluyken sahipleniyor", async () => {
+    // Boşken Esc pencereyi kapatmalı: geri alacak bir şey yok.
+    const { container } = render(<SettingsDialog />);
+    const input = container.querySelector(".settings-search input")!;
+    expect(input.hasAttribute("data-owns-escape")).toBe(false);
+    fireEvent.change(input, { target: { value: "tema" } });
+    await settle();
+    expect(input.hasAttribute("data-owns-escape")).toBe(true);
+  });
+
+  it("kısayol kaydında Esc kaydı iptal ediyor", async () => {
+    const s = useStore.getState().settings;
+    useStore.setState({ settings: { ...s, keybindings: { newTab: "Ctrl+T" } } });
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click([...container.querySelectorAll(".settings-nav button")][7]); // Kısayollar
+    await settle();
+    const input = container.querySelector(".key-capture") as HTMLInputElement;
+    fireEvent.focus(input);
+    await settle();
+    expect(input.value).toBe("Tuşa basın…");
+    expect(input.hasAttribute("data-owns-escape"), "kayıtta Esc pencereyi kapatır").toBe(true);
+    fireEvent.keyDown(input, { key: "Escape" });
+    await settle();
+    expect(input.value).toBe("Ctrl+T");
+    expect(useStore.getState().settings.keybindings.newTab).toBe("Ctrl+T");
+  });
+});
+
+describe("görünüm bölümü", () => {
+  async function openAppearance() {
+    const view = render(<SettingsDialog />);
+    fireEvent.click([...view.container.querySelectorAll(".settings-nav button")][1]);
+    await settle();
+    return view;
+  }
+
+  it("tema kartlarla seçiliyor, ilki 'Sistemi izle'", async () => {
+    const { container } = await openAppearance();
+    const cards = [...container.querySelectorAll(".theme-card")];
+    expect(cards[0].textContent).toBe("Sistemi izle");
+    fireEvent.click(cards[0]);
+    await settle();
+    expect(useStore.getState().settings.appearance.theme).toBe("system");
+    expect(cards[0].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("fabrika yazı tipi menüde: 'Özel…' olarak görünmüyor", async () => {
+    // ÖLÇÜLEN: ilk açılışta yazı tipi "Özel…" olarak, altında çiğ bir
+    // yığınla görünüyordu — varsayılan menüde yoktu.
+    const s = useStore.getState().settings;
+    useStore.setState({
+      settings: { ...s, appearance: { ...s.appearance, fontFamily: defaultFontStack() } },
+    });
+    const { container } = await openAppearance();
+    const select = container.querySelector(
+      '[data-setting="settings.fontFamily"] select',
+    ) as HTMLSelectElement;
+    expect(select.value).toBe(defaultFontStack());
+    expect(container.querySelector(".font-custom")).toBe(null);
+  });
+
+  it("arayüz yazı tipi de bir menü, öneri listesi değil", async () => {
+    const { container } = await openAppearance();
+    const row = container.querySelector('[data-setting="settings.uiFontFamily"]')!;
+    expect(row.querySelector("datalist")).toBe(null);
+    const select = row.querySelector("select") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(select.options[0].textContent).toBe("Sistemin kendi yazı tipi");
+  });
+
+  it("kaydırıcılar ortak sınırları kullanıyor", async () => {
+    const { container } = await openAppearance();
+    const size = container.querySelector('[data-setting="settings.fontSize"] input')!;
+    expect(size.getAttribute("max"), "kaydırıcı ile ⌘= farklı sınırda").toBe(String(LIMITS.fontSize.max));
+    const spacing = container.querySelector('[data-setting="settings.letterSpacingLabel"] input')!;
+    expect(spacing.getAttribute("step"), "yarım adımların yarısı etkisiz").toBe("1");
+  });
+
+  it("kısayolla yakınlaştırılmışken bunu söylüyor", async () => {
+    const s = useStore.getState().settings;
+    useStore.setState({
+      settings: {
+        ...s,
+        keybindings: { zoomReset: "Ctrl+0" },
+        appearance: { ...s.appearance, fontSize: 10, fontZoom: 2 },
+      },
+    });
+    const { container } = await openAppearance();
+    const row = container.querySelector('[data-setting="settings.fontSize"]')!;
+    expect(row.querySelector("label")!.textContent).toBe("Boyut (10 px)");
+    expect(row.querySelector(".hintline")!.textContent).toContain("12 px");
+  });
+});
+
+describe("oturum bölümü", () => {
+  async function openSession() {
+    const view = render(<SettingsDialog />);
+    fireEvent.click([...view.container.querySelectorAll(".settings-nav button")][3]);
+    await settle();
+    return view;
+  }
+
+  it("ekran çıktısının iki sayısı yan yana, pencere kapatma kendi başlığında", async () => {
+    const { container } = await openSession();
+    expect(headings(container)).toEqual([
+      "Oturum devamlılığı",
+      "Ekran çıktısı",
+      "Yeni sekmeler",
+      "Kapatma",
+    ]);
+    const output = [...container.querySelectorAll(".section")][1];
+    expect(output.querySelector('[data-setting="settings.scrollbackLines"]')).not.toBe(null);
+    expect(output.querySelector('[data-setting="settings.scrollbackPerTab"]')).not.toBe(null);
+  });
+
+  it("çıktı geri yüklenmiyorsa diske yazılan satır kutusu kapalı", async () => {
+    const s = useStore.getState().settings;
+    useStore.setState({ settings: { ...s, behavior: { ...s.behavior, restoreScrollback: false } } });
+    const { container } = await openSession();
+    const input = container.querySelector(
+      '[data-setting="settings.scrollbackPerTab"] input',
+    ) as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+  });
+});
+
+describe("profiller bölümü", () => {
+  afterEach(() => setPlatform("windows"));
+
+  async function openProfiles() {
+    const view = render(<SettingsDialog />);
+    fireEvent.click([...view.container.querySelectorAll(".settings-nav button")][5]);
+    await settle();
+    return view;
+  }
+
+  const argsInput = (c: HTMLElement) =>
+    [...c.querySelectorAll(".settings-form .field")]
+      .find((f) => f.querySelector("label")?.textContent === "Argümanlar")!
+      .querySelector("input") as HTMLInputElement;
+
+  it("argüman kutusu boşluğu yutmuyor", async () => {
+    // ÖLÇÜLEN: "-l -i" yazmak "-l-i" üretiyordu. Her tuş kutunun O ANKİ
+    // değerine ekleniyor — tarayıcıdaki gibi. Testin kendi tuttuğu metne
+    // eklemek, kutunun boşluğu silmesini görmezdi (bir kez öyle geçti).
+    const { container } = await openProfiles();
+    fireEvent.change(argsInput(container), { target: { value: "" } });
+    await settle();
+    for (const ch of "-l -i") {
+      fireEvent.change(argsInput(container), { target: { value: argsInput(container).value + ch } });
+      await settle();
+    }
+    expect(argsInput(container).value).toBe("-l -i");
+    expect(useStore.getState().settings.profiles[0].args).toEqual(["-l", "-i"]);
+  });
+
+  it("mac'te yeni profil zsh türünde", async () => {
+    // Önceden PowerShell türünde açılıyordu; kabuk yolu boşken pwsh aranıyor
+    // ve çoğu mac'te yok.
+    setPlatform("macos");
+    const { container } = await openProfiles();
+    fireEvent.click(
+      [...container.querySelectorAll(".profile-grid button")].find((b) =>
+        b.textContent?.includes("Ekle"),
+      )!,
+    );
+    await settle();
+    const created = useStore.getState().settings.profiles.at(-1)!;
+    expect(created.kind).toBe("zsh");
+    expect(created.args).toEqual(["-l"]);
+  });
+
+  it("varsayılan profil bir düğmeyle seçiliyor; işaret kaldırılamayan kutu yok", async () => {
+    const s = useStore.getState().settings;
+    useStore.setState({
+      settings: {
+        ...s,
+        profiles: [...s.profiles, { ...s.profiles[0], id: "p2", name: "Zsh" }],
+      },
+    });
+    const { container } = await openProfiles();
+    expect(container.querySelector("#isDefault"), "eski onay kutusu duruyor").toBe(null);
+    expect(container.querySelector(".default-btn"), "varsayılanda düğme olmamalı").toBe(null);
+
+    const rows = [...container.querySelectorAll(".profile-list .row")] as HTMLElement[];
+    expect(rows[1].tagName, "satır klavyeyle seçilemiyor").toBe("BUTTON");
+    fireEvent.click(rows[1]);
+    await settle();
+    fireEvent.click(container.querySelector(".default-btn")!);
+    await settle();
+    expect(useStore.getState().settings.defaultProfileId).toBe("p2");
+  });
+});
+
+describe("kısayollar bölümü", () => {
+  async function openKeys(keybindings: Record<string, string>) {
+    const s = useStore.getState().settings;
+    useStore.setState({ settings: { ...s, keybindings } });
+    const view = render(<SettingsDialog />);
+    fireEvent.click([...view.container.querySelectorAll(".settings-nav button")][7]);
+    await settle();
+    return view;
+  }
+
+  it("gruplu ve sabit sırada, kimliğe göre alfabetik değil", async () => {
+    const { container } = await openKeys({
+      clearTerminal: "Ctrl+Shift+K",
+      closeTab: "Ctrl+W",
+      copy: "Ctrl+Shift+C",
+      newTab: "Ctrl+T",
+    });
+    expect(headings(container)).toEqual(["Klavye kısayolları", "Sekmeler ve gruplar", "Pano", "Ekran"]);
+    const labels = [...container.querySelectorAll(".modal-body .field label")].map((l) => l.textContent);
+    expect(labels.indexOf("Yeni sekme")).toBeLessThan(labels.indexOf("Sekmeyi kapat"));
+  });
+
+  it("aynı tuş iki eyleme atanmışsa iki satır da uyarıyor", async () => {
+    const { container } = await openKeys({ newTab: "Ctrl+T", clearTerminal: "ctrl+t" });
+    const warnings = [...container.querySelectorAll(".hintline.warn")].map((w) => w.textContent);
+    expect(warnings).toHaveLength(2);
+    expect(warnings.join(" ")).toContain("Yeni sekme");
+  });
+});
+
+describe("hakkında: dosya konumları", () => {
+  it("dosyalar veri klasörüne göre, başlıkta yol yok", async () => {
+    useStore.setState({
+      paths: {
+        root: "/Users/x/Library/Application Support/NTerminal",
+        settingsFile: "/Users/x/Library/Application Support/NTerminal/settings.json",
+        workspaceFile: "/Users/x/Library/Application Support/NTerminal/workspace.json",
+        historyFile: "/Users/x/Library/Application Support/NTerminal/history.jsonl",
+        scrollbackDir: "/Users/x/Library/Application Support/NTerminal/scrollback",
+        integrationDir: "/Users/x/Library/Application Support/NTerminal/shell-integration",
+        portable: false,
+      },
+    });
+    const view = render(<SettingsDialog />);
+    expect(view.container.querySelector(".modal-head")!.textContent).not.toContain("settings.json");
+    const buttons = [...view.container.querySelectorAll(".settings-nav button")];
+    fireEvent.click(buttons[buttons.length - 1]);
+    await settle();
+    const rel = [...view.container.querySelectorAll(".path-rel")].map((e) => e.textContent);
+    expect(rel).toEqual(["settings.json", "workspace.json", "history.jsonl", "shell-integration"]);
+    useStore.setState({ paths: null });
+  });
+
+  it("güncelleme satırının etiketi düğmesini tekrarlamıyor", async () => {
+    const view = render(<SettingsDialog />);
+    const buttons = [...view.container.querySelectorAll(".settings-nav button")];
+    fireEvent.click(buttons[buttons.length - 1]);
+    await settle();
+    const row = view.container.querySelector('[data-setting="update.check"]')!;
+    expect(row.querySelector("label")!.textContent).toBe("Yüklü sürüm");
+    expect(row.textContent).toContain("0.1.0");
+  });
+});
+
+describe("arama sonuçları", () => {
+  it("başlıkla birlikte, yer tutucusuz", async () => {
+    const { container } = render(<SettingsDialog />);
+    fireEvent.change(container.querySelector(".settings-search input")!, {
+      target: { value: "boyut" },
+    });
+    await settle();
+    const results = [...container.querySelectorAll(".settings-result")];
+    expect(results.map((r) => r.querySelector(".settings-result-label")!.textContent)).not.toContain(
+      "Boyut ({n} px)",
+    );
+    const groups = results.map((r) => r.querySelector(".settings-result-group")?.textContent ?? "");
+    expect(groups.some((g) => g.includes("Terminal yazı tipi"))).toBe(true);
+    expect(groups.some((g) => g.includes("Arayüz yazı tipi"))).toBe(true);
   });
 });

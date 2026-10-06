@@ -130,6 +130,11 @@ fn paths_get(state: State<AppState>) -> PathsInfo {
 #[tauri::command]
 fn settings_save(app: tauri::AppHandle, state: State<AppState>, settings: Settings) -> CmdResult<()> {
     use tauri::Emitter;
+    // Arayuz zaten sinirliyor (`sanitizeSettings`); bu kapi baska bir yoldan
+    // (eski bir arayuz, elle cagri) gelen sinir disi degeri diske ve gecmis
+    // sinirina ulastirmamak icin.
+    let mut settings = settings;
+    settings.sanitize();
     state.history.set_limit(settings.behavior.history_limit);
     store::save_settings(&state.paths, &settings).map_err(fail)?;
     // Acik fark pencereleri temayi, dili ve yazi tipini ana pencereyle ayni
@@ -162,6 +167,17 @@ fn settings_reset(state: State<AppState>) -> CmdResult<Settings> {
     store::save_settings(&state.paths, &fresh).map_err(fail)?;
     *state.settings.lock() = fresh.clone();
     Ok(fresh)
+}
+
+/// Fabrika kisayollari (platforma gore: mac'te Cmd).
+///
+/// Ayarlar > Kisayollar'daki "Kisayollari varsayilana dondur" icin: tum
+/// ayarlari sifirlamadan yalnizca kisayollari geri almanin yolu. Satir basina
+/// "varsayilana don" DEGIL - kullanicinin kurali: satirdaki geri al yalnizca bu
+/// oturumdaki degisiklik icin, eski hale donus toplu dugmeyle.
+#[tauri::command]
+fn settings_default_keybindings() -> std::collections::BTreeMap<String, String> {
+    model::default_keybindings()
 }
 
 /// Makinedeki kabuklari yeniden tarar. Arayuz bunu mevcut profillerle
@@ -400,7 +416,10 @@ fn config_import_apply(
     };
 
     // --- ayarlar
-    if let Some(incoming) = bundle.settings.clone() {
+    if let Some(mut incoming) = bundle.settings.clone() {
+        // Ice aktarilan dosya arayuzden gecmiyor: sinirlar burada (birlestirme
+        // de bu kopyadan uretiliyor).
+        incoming.sanitize();
         match options.settings {
             ImportMode::Skip => {}
             ImportMode::Replace => {
@@ -1288,6 +1307,7 @@ pub fn run() {
             paths_get,
             settings_save,
             settings_reset,
+            settings_default_keybindings,
             profiles_detect,
             workspace_save,
             session_end_flushed,

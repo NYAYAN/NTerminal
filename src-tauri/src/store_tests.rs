@@ -346,3 +346,77 @@ fn yinelenen_sekme_kimlikleri_yuklemede_onariliyor() {
     );
 
 }
+
+/// Sinir disi degerler yuklemede duzeltiliyor ve dosyaya geri yaziliyor.
+///
+/// Arayuz denetimleri sinirli ama elle duzenlenen ya da eski bir surumun
+/// yazdigi dosya arayuzden gecmeden xterm'e ve gecmis sinirina ulasiyordu:
+/// xterm 1'in altindaki satir yuksekliginde hata firlatiyor, 0'lik tampon
+/// ciktiyi siliyor, 1'lik gecmis siniri gecmisi kayit aninda kirpiyor.
+/// Sinirlar `src/lib/settingsLimits.ts` ile AYNI (arayuz testi karsilastiriyor).
+#[test]
+fn sinir_disi_ayarlar_yuklemede_duzeltiliyor() {
+    let paths = temp_paths("sinir");
+    let json = r#"{
+        "version": 2,
+        "appearance": {
+            "fontSize": 100, "fontZoom": 50, "lineHeight": 0.5, "letterSpacing": 0.5,
+            "uiFontSize": 3, "scrollback": 0, "cursorStyle": "kutu"
+        },
+        "behavior": { "historyLimit": 1, "scrollbackSaveLines": 999999 }
+    }"#;
+    std::fs::write(paths.settings_file(), json).unwrap();
+
+    let s = load_settings(&paths);
+    assert_eq!(s.appearance.font_size, 32);
+    assert_eq!(s.appearance.font_zoom, 0, "fark boyutu sinirin disina tasiyor");
+    assert_eq!(s.appearance.line_height, 1.0);
+    assert_eq!(s.appearance.letter_spacing, 1.0);
+    assert_eq!(s.appearance.ui_font_size, 11);
+    assert_eq!(s.appearance.scrollback, 500);
+    assert_eq!(s.appearance.cursor_style, "bar");
+    assert_eq!(s.behavior.history_limit, 100);
+    assert_eq!(s.behavior.scrollback_save_lines, 20_000);
+
+    // Duzeltilen deger diske de gitti: dosyada eski hali kalmiyor.
+    let disk: Settings =
+        serde_json::from_str(&std::fs::read_to_string(paths.settings_file()).unwrap()).unwrap();
+    assert_eq!(disk.appearance.scrollback, 500);
+}
+
+/// Gecerli ayarlara dokunulmuyor; "degisti" isareti yanlis yere yazdirmasin.
+#[test]
+fn gecerli_ayarlar_temizlemede_degismiyor() {
+    let mut s = Settings::default();
+    assert!(!s.sanitize(), "varsayilanlar sinirlarin disinda");
+    let mut yarim = Settings::default();
+    yarim.appearance.line_height = 1.55;
+    yarim.appearance.letter_spacing = -1.0;
+    assert!(!yarim.sanitize(), "gecerli ondalik kayan nokta yuzunden degisti sayildi");
+}
+
+/// Eski mac varsayilan yazi tipi yenisine tasiniyor.
+///
+/// OLCULEN: "SF Mono, Menlo, ..." yigininda WebKit SF Mono'yu adiyla vermiyor
+/// ve hucre Menlo'nunkiyle ayni cikiyordu; ayarlar penceresinde de "Ozel..."
+/// olarak gorunuyordu (menude yoktu).
+#[test]
+fn eski_mac_yazi_tipi_varsayilani_tasiniyor() {
+    let mut s = Settings::default();
+    s.appearance.font_family = "SF Mono, Menlo, Monaco, Courier New, monospace".into();
+    assert!(s.sanitize());
+    assert_eq!(s.appearance.font_family, crate::model::default_font_family());
+
+    // Kullanicinin sectigi bir yigina dokunulmuyor.
+    let mut secilmis = Settings::default();
+    secilmis.appearance.font_family = "Monaco, Menlo, Consolas, monospace".into();
+    assert!(!secilmis.sanitize());
+}
+
+/// Yakinlastirma alani eski dosyada yok: 0 olarak okunuyor.
+#[test]
+fn yakinlastirma_alani_eski_dosyada_sifir() {
+    let s: Settings = serde_json::from_str(r#"{ "appearance": { "fontSize": 12 } }"#).unwrap();
+    assert_eq!(s.appearance.font_zoom, 0);
+    assert_eq!(s.appearance.font_size, 12);
+}

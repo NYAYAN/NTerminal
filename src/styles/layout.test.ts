@@ -705,7 +705,10 @@ describe("ayarlar izgara hizası", () => {
   it("değişkenler tanımlı", () => {
     // `:root` dosyada birden çok kez açılıyor (tema değişkenleri ayrı blokta),
     // o yüzden tek bir bloğa değil dosyanın tamamına bakıyoruz.
-    expect(CSS, "--label-col tanımsız").toMatch(/--label-col:\s*\d+px/);
+    //
+    // Etiket sütunu `rem`: arayüz boyutuyla birlikte büyüyor (gerekçe CSS'te).
+    // Sabit px'te arayüz büyüyünce etiketler büyüyor, sütun büyümüyordu.
+    expect(CSS, "--label-col tanımsız").toMatch(/--label-col:\s*\d+(?:\.\d+)?rem/);
     expect(CSS, "--label-gap tanımsız").toMatch(/--label-gap:\s*\d+px/);
   });
 });

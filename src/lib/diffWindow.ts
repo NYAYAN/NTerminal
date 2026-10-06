@@ -14,6 +14,7 @@
 
 import { baseName, dirName } from "./format";
 import { api } from "./ipc";
+import { reapplyWindowTheme } from "./windowTheme";
 
 /** Sayfayı fark penceresi olarak çizdiren sorgu değeri. */
 export const DIFF_VIEW = "diff";
@@ -70,5 +71,10 @@ export function diffWindowTitle(root: string, path: string, origPath?: string): 
  */
 export function openDiffWindow(target: DiffTarget, origPath?: string): Promise<void> {
   const dark = document.documentElement.dataset.tone !== "light";
-  return api.diffWindowOpen(diffQuery(target), diffWindowTitle(target.root, target.path, origPath), dark);
+  // Yeni pencerenin teması macOS'ta UYGULAMA genelinde uygulanıyor ve ana
+  // pencereyi o tona kilitliyor; "Sistemi izle" kararı ardından yeniden
+  // veriliyor (bkz. `windowTheme.ts`).
+  return api
+    .diffWindowOpen(diffQuery(target), diffWindowTitle(target.root, target.path, origPath), dark)
+    .then(reapplyWindowTheme);
 }

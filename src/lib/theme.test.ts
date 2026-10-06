@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   MIN_FOREGROUND_CONTRAST,
@@ -9,7 +9,16 @@ import {
   luminance,
   parseHex,
 } from "./contrast";
-import { THEMES, getTheme, readableAccent } from "./themes";
+import {
+  SYSTEM_PAIR,
+  SYSTEM_THEME,
+  THEMES,
+  getTheme,
+  isLightTheme,
+  readableAccent,
+  resolveThemeId,
+  setSystemDark,
+} from "./themes";
 import { hasCustomTitle, shellBadge, tabLabel, tabSubtitle } from "./labels";
 import type { Profile, TabState } from "../types";
 
@@ -299,5 +308,50 @@ describe("genel bakış sütunu", () => {
     for (const theme of THEMES) {
       expect(getTheme(theme.id).xterm.overviewRulerBorder).toBeTruthy();
     }
+  });
+});
+
+/**
+ * "Sistemi izle" ve açık tema tespiti.
+ *
+ * Açık tema önceden ADINDAN anlaşılıyordu (`id.includes("light")`): adında
+ * "light" geçmeyen her yeni açık tema koyu sayılıp arayüzün tonlarını ters
+ * çevirirdi. Şimdi zeminin parlaklığından.
+ */
+describe("sistem teması", () => {
+  afterEach(() => setSystemDark(true));
+
+  it("sistemin görünümüne göre Koyu ya da Açık'a çözülüyor", () => {
+    setSystemDark(true);
+    expect(resolveThemeId(SYSTEM_THEME)).toBe(SYSTEM_PAIR.dark);
+    expect(getTheme(SYSTEM_THEME).id).toBe(SYSTEM_PAIR.dark);
+    setSystemDark(false);
+    expect(resolveThemeId(SYSTEM_THEME)).toBe(SYSTEM_PAIR.light);
+    expect(getTheme(SYSTEM_THEME).id).toBe(SYSTEM_PAIR.light);
+  });
+
+  it("gerçek tema kimliği olduğu gibi kalıyor", () => {
+    setSystemDark(false);
+    expect(resolveThemeId("one-half-dark")).toBe("one-half-dark");
+  });
+
+  it("çiftin iki yarısı da gerçek bir tema ve tonları doğru", () => {
+    const dark = THEMES.find((t) => t.id === SYSTEM_PAIR.dark)!;
+    const light = THEMES.find((t) => t.id === SYSTEM_PAIR.light)!;
+    expect(dark, "koyu yarı tanımsız").toBeTruthy();
+    expect(light, "açık yarı tanımsız").toBeTruthy();
+    expect(isLightTheme(getTheme(dark.id))).toBe(false);
+    expect(isLightTheme(getTheme(light.id))).toBe(true);
+  });
+
+  it("açık tema zeminden anlaşılıyor, addan değil", () => {
+    const tones = Object.fromEntries(THEMES.map((t) => [t.id, isLightTheme(getTheme(t.id))]));
+    expect(tones).toEqual({
+      "nterminal-dark": false,
+      "windows-terminal": false,
+      "one-half-dark": false,
+      "solarized-light": true,
+      "nterminal-light": true,
+    });
   });
 });

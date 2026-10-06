@@ -11,6 +11,8 @@ import {
   SETTINGS_INDEX,
   fold,
   searchSettings,
+  settingLabel,
+  softened,
   type Section,
 } from "./settingsIndex";
 
@@ -240,5 +242,90 @@ describe("platforma bağlı ayarlar", () => {
       const before = source.slice(Math.max(0, at - 900), at);
       expect(before, `${entry.key} isMac() koşulu olmadan çiziliyor`).toContain("isMac()");
     }
+  });
+});
+
+/**
+ * Başlık bağlamı.
+ *
+ * Terminal ve arayüz yazı tipinin ikisinde de "Yazı tipi ailesi" / "Boyut"
+ * var; hangisi olduğunu başlık söylüyor. Sonuç listesi başlığı göstermeseydi
+ * iki "Boyut" ayırt edilemezdi. İndeksteki başlık elle yazılıyor — kaynakla
+ * karşılaştırılıyor ki satır başka bir başlığın altına taşınınca sürüklenmesin.
+ */
+describe("başlık bağlamı", () => {
+  it("işaretli her ayarın başlığı kaynaktaki başlığıyla aynı", () => {
+    const problems: string[] = [];
+    for (const entry of SETTINGS_INDEX) {
+      const at = SOURCE.indexOf(`data-setting="${entry.key}"`);
+      if (at === -1) continue; // iki panelli bölümler işaretlenmiyor
+      const before = SOURCE.slice(0, at);
+      const headings = [...before.matchAll(/<h3>\{t\("([^"]+)"\)\}<\/h3>/g)];
+      const heading = headings.at(-1)?.[1];
+      if (entry.group !== heading) {
+        problems.push(`${entry.key}: indekste "${entry.group}", kaynakta "${heading}"`);
+      }
+    }
+    expect(problems, problems.join("\n")).toEqual([]);
+  });
+
+  it("aynı etiketli iki ayar başlıklarıyla ayrışıyor", () => {
+    const sizes = searchSettings("boyut", t).filter((h) => h.label === "Boyut");
+    expect(sizes.map((h) => h.groupLabel).sort()).toEqual(["Arayüz yazı tipi", "Terminal yazı tipi"]);
+  });
+
+  it("başlıkla da buluyor", () => {
+    // "Arayüz" artık etiketlerde değil başlıkta: iki ayar yine bulunmalı.
+    const keys = searchSettings("arayüz", t).map((h) => h.key);
+    expect(keys).toContain("settings.uiFontFamily");
+    expect(keys).toContain("settings.uiFontSize");
+  });
+});
+
+/**
+ * Sonuç etiketi yer tutucusuz.
+ *
+ * ÖLÇÜLEN: "boyut" araması "Boyut ({n} px)" ve "Arayüz boyutu ({n} px)"
+ * gösteriyordu: etiket ekranda değerle dolduruluyor, aramada değer yok.
+ */
+describe("sonuç etiketi", () => {
+  it("yer tutuculu parantez düşüyor", () => {
+    expect(settingLabel("Boyut ({n} px)")).toBe("Boyut");
+    expect(settingLabel("Satır yüksekliği ({n})")).toBe("Satır yüksekliği");
+    expect(settingLabel("Renk teması")).toBe("Renk teması");
+  });
+
+  it("hiçbir sonuçta çiğ yer tutucu yok", () => {
+    for (const lang of ["tr", "en"] as const) {
+      setLanguage(lang);
+      for (const entry of SETTINGS_INDEX) {
+        for (const hit of searchSettings(fold(t(entry.key)).slice(0, 4), t)) {
+          expect(hit.label, `${lang} ${hit.key}`).not.toMatch(/\{\w+\}/);
+        }
+      }
+    }
+  });
+});
+
+/**
+ * Türkçe ünsüz yumuşaması.
+ *
+ * ÖLÇÜLEN: "aralık" araması "Harf aralığı"nı bulmuyordu — k ek alınca ğ
+ * oluyor ve sadeleştirilmiş hâlleri ayrışıyor (aralik / araligi).
+ */
+describe("ünsüz yumuşaması", () => {
+  it("aralık → Harf aralığı", () => {
+    expect(searchSettings("aralık", t).map((h) => h.key)).toContain(
+      "settings.letterSpacingLabel",
+    );
+  });
+
+  it("yalnızca harfle biten uzun sözcükte", () => {
+    expect(softened("aralik")).toBe("arali");
+    expect(softened("renk")).toBe("ren");
+    // Kısa sözcük her şeyi eşlerdi; "Ctrl+C" sözcük değil.
+    expect(softened("ip")).toBe(null);
+    expect(softened("ctrl+c")).toBe(null);
+    expect(softened("tema")).toBe(null);
   });
 });

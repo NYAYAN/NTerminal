@@ -1,3 +1,5 @@
+import { isMac } from "./platform";
+
 /**
  * Uygulamayla birlikte gelen yazı tipleri.
  *
@@ -5,8 +7,9 @@
  * herhangi bir yazı tipini yazabilmesi gerekiyor. Ama serbest metin tek başına
  * gömülü aileleri GÖRÜNMEZ kılıyor: kullanıcı "JetBrains Mono" yazabileceğini
  * bilmiyorsa o dosyalar boşuna paketlenmiş oluyor. Ayarlardaki alan bu yüzden
- * bir öneri listesi (`<datalist>`) gösteriyor; yazmayı engellemiyor, yalnızca
- * neyin hazır olduğunu söylüyor.
+ * bir açılır menü: sistem yazı tipi, gömülüler ve makinede kurulu olanlar,
+ * her biri kendi yazı tipiyle; listede olmayan için "Özel…" (gerekçesi
+ * `SettingsDialog` içinde).
  *
  * Buradaki adlar `styles/fonts.css` içindeki `@font-face` aileleriyle birebir
  * aynı olmak zorunda; ayrılırlarsa liste var olmayan bir yazı tipi öneriyor ve
@@ -75,6 +78,19 @@ export const CANDIDATE_FONTS: string[] = [
 /** Bir ailenin ayara yazılacak tam yığını. */
 export function fontStack(family: string): string {
   return `${family}, Menlo, Consolas, monospace`;
+}
+
+/**
+ * Platformun kendi eş aralıklı yazı tipinin GÖRÜNEN adı; menüdeki "sistem"
+ * seçeneğinin etiketi. Seçeneğin değeri `defaultFontStack()` (fabrika ayarı).
+ *
+ * mac'te ad yığından okunamıyor: WebKit SF Mono'yu adıyla VERMİYOR, ona yalnızca
+ * `ui-monospace` ile ulaşılıyor. ÖLÇÜLEN: "SF Mono, Menlo, …" yığınıyla hücre
+ * Menlo'nunkiyle aynı çıktı (8×16 px, 14 px'te), `ui-monospace` ile 8,5×17 —
+ * yani eski varsayılan aslında Menlo çiziyordu.
+ */
+export function systemMonoName(): string {
+  return isMac() ? "SF Mono" : "Cascadia Mono";
 }
 
 /**
@@ -161,12 +177,14 @@ export function canvasMeasurer(): ((spec: string) => number) | null {
  *
  * Terminalinkinden AYRI bir liste ve olması gereken de bu: terminalde eş
  * aralıklılık zorunlu (sütun hizası ondan geliyor), arayüzde ise oransal
- * aileler daha okunaklı. Yine de eş aralıklılar da listede — arayüzünü de
- * terminal gibi görmek isteyen kullanıcı var ve ona "hayır" demek için bir
- * sebep yok.
+ * aileler daha okunaklı.
  *
- * Liste bir ÖNERİ: kurulu olmayan bir aile seçilirse tarayıcı yığındaki
- * sonrakine düşüyor, en sonda sistemin kendi ailesi duruyor.
+ * Menüde yalnızca KURULU olanlar çıkıyor (`installedUiFonts`). Önceki hâli bir
+ * öneri listesiydi (`datalist`): öneriler yazmaya başlamadan görünmüyordu,
+ * seçilen ailenin yerine kutuya CSS yığını (`"Inter", system-ui, sans-serif`)
+ * yazılıyordu ve mac'te yalnızca Windows'ta olan Segoe UI ile Calibri de
+ * listede duruyordu. SF Pro Text burada değil: WebKit SF ailelerini adıyla
+ * vermiyor ve mac'in "sistem yazı tipi" seçeneği zaten o.
  */
 export const UI_FONT_CANDIDATES: string[] = [
   // Windows
@@ -192,6 +210,22 @@ export function uiFontStack(family: string): string {
 }
 
 /**
+ * Makinede kurulu arayüz yazı tipleri — eş aralıklılar gibi SÜREÇTE BİR KEZ
+ * ölçülüyor (gerekçe `installedMonoFonts` içinde). Ölçüm kuralı aynı:
+ * `isFontInstalled` iki jenerikle deniyor, oransal bir aile sistemin
+ * varsayılan `sans-serif`i olsa bile `monospace` ölçümü onu yakalıyor.
+ */
+let kuruluArayuzOnbellek: string[] | null = null;
+
+export function installedUiFonts(): string[] {
+  if (kuruluArayuzOnbellek) return kuruluArayuzOnbellek;
+  const measure = canvasMeasurer();
+  if (!measure) return [];
+  kuruluArayuzOnbellek = detectInstalled(UI_FONT_CANDIDATES, measure);
+  return kuruluArayuzOnbellek;
+}
+
+/**
  * Arayüz yazı tipini ve ölçüsünü belgeye uygular.
  *
  * İkisi de KÖKTE (`document.documentElement`) satır içi değişken olarak
@@ -205,7 +239,24 @@ export function uiFontStack(family: string): string {
  */
 export function applyUiFont(family: string, size: number): void {
   const root = document.documentElement;
-  if (family.trim()) root.style.setProperty("--ui-font", family);
+  if (family.trim()) root.style.setProperty("--ui-font", withUiFallback(family));
   else root.style.removeProperty("--ui-font");
   root.style.setProperty("--ui-font-size", `${size}px`);
+}
+
+/**
+ * Yığın jenerik bir aileyle bitmiyorsa sistemin ailesini ekler.
+ *
+ * "Özel…" kutusuna yalnızca "Inter" yazıldığında ve Inter kurulu değilse
+ * tarayıcı varsayılanına (tırnaklı serif) düşüyordu: yanlış bir giriş bütün
+ * arayüzü bozmamalı. Menüdeki seçenekler zaten yığınla geliyor
+ * (`uiFontStack`); onlara dokunulmuyor.
+ */
+export function withUiFallback(family: string): string {
+  const trimmed = family.trim();
+  return /(?:^|,)\s*(?:system-ui|-apple-system|sans-serif|serif|monospace|ui-\w+)\s*$/i.test(
+    trimmed,
+  )
+    ? trimmed
+    : `${trimmed}, system-ui, sans-serif`;
 }

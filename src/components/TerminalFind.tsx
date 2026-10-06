@@ -43,6 +43,9 @@ export function TerminalFind() {
    *    sıradan eşleşme seçim rengiyle — "vurgulu ama odakta değil" anlamı zaten
    *    bu —, etkin eşleşme vurgu rengiyle, çerçevesi de ön plan rengiyle.
    */
+  // `themeEpoch`: "Sistemi izle"de çizilen tema ayar değişmeden değişiyor;
+  // abonelik olmadan çubuk eski temanın renklerinde kalırdı.
+  useStore((s) => s.themeEpoch);
   const theme = getTheme(useStore((s) => s.settings.appearance.theme));
   const options = {
     caseSensitive,

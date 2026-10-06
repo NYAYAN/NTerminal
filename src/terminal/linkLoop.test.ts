@@ -173,7 +173,13 @@ describe("bağlantı renklendirme döngüsü", () => {
     await bekle(150);
 
     const marker = vi.spyOn(s.term, "registerMarker");
-    s.applySettings(useStore.getState().settings);
+    // Tema GERÇEKTEN değişiyor: `applySettings` yalnızca değişen kısmı
+    // uyguluyor, aynı ayarla çağrı boyaya dokunmuyor.
+    const settings = useStore.getState().settings;
+    s.applySettings({
+      ...settings,
+      appearance: { ...settings.appearance, theme: "solarized-light" },
+    });
     await bekle(150);
 
     expect(

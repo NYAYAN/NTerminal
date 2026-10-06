@@ -26,6 +26,48 @@ export function typingOutsideTerminal(): boolean {
 }
 
 /**
+ * Esc'yi odaktaki öğe mi karşılıyor?
+ *
+ * Genel kısayol dinleyicisi (`App`) `window`da capture fazında duruyor: Esc'yi
+ * her zaman ilk o görüyor ve bir örtü açıksa onu kapatıyordu. ÖLÇÜLEN: Ayarlar'da
+ * kısayol kaydederken ("Tuşa basın…") Esc kaydı iptal etmiyor, bütün pencereyi
+ * kapatıyordu; arama kutusunun "Esc aramayı temizler" kodu da aynı sebeple
+ * gerçek uygulamada hiç çalışmıyordu (testte çalışıyordu: orada genel
+ * dinleyici yok).
+ *
+ * Kural: odaktaki öğe ya da atası `data-owns-escape` taşıyorsa genel dinleyici
+ * Esc'ye dokunmuyor, öğe kendi `onKeyDown`unda karşılıyor. Öznitelik yalnızca
+ * öğenin GERİ ALACAK bir şeyi varken duruyor (dolu arama kutusu, düzenlenen
+ * sayı, kayıttaki kısayol); yoksa Esc yine pencereyi kapatıyor.
+ */
+export function escapeOwnedBy(target: EventTarget | null): boolean {
+  return (
+    typeof Element !== "undefined" &&
+    target instanceof Element &&
+    target.closest("[data-owns-escape]") !== null
+  );
+}
+
+/**
+ * Odak bir kip penceresinin DIŞINA mı kaçtı?
+ *
+ * ÖLÇÜLEN: Ayarlar ⌘, ile açılınca odak arkadaki terminalin gizli
+ * textarea'sında kalıyordu ve yazılan harf kabuğa gidiyordu (`pty_write`) —
+ * Enter komutu çalıştırırdı. Pencere açılışta odağı kendine alıyor; bu işlev
+ * sonradan dışarı kaçan odak için (Tab, terminalin kendi odak çağrıları).
+ *
+ * Başka bir ÖRTÜYE geçen odak kaçmış sayılmıyor: ayarların üstünde açılan onay
+ * penceresi odağı kendi düğmesine alıyor ve onu geri çekmek pencereyi
+ * kullanılmaz yapardı.
+ */
+export function focusEscaped(target: EventTarget | null, modal: Element): boolean {
+  if (typeof Node === "undefined" || !(target instanceof Node)) return false;
+  if (modal.contains(target)) return false;
+  const element = target instanceof Element ? target : target.parentElement;
+  return !element?.closest(".overlay");
+}
+
+/**
  * Sayfada — terminalin ve komut kutusunun DIŞINDA — seçili metin; yoksa boş.
  *
  * BİLDİRİLEN: Değişiklikler panelindeki git hata kutusunun metni seçilip

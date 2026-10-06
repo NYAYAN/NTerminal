@@ -53,6 +53,15 @@ export interface Profile {
 export interface Appearance {
   fontFamily: string;
   fontSize: number;
+  /**
+   * Kısayolla (⌘= / ⌘-) yapılan yakınlaştırma; `fontSize`a eklenen fark.
+   *
+   * Ayarın kendisi DEĞİL: ⌘0 bunu sıfırlıyor ve terminal Ayarlar'da seçilen
+   * boyuta dönüyor. Terminalin gerçek boyutu `terminalFontSize()`
+   * (`lib/settingsLimits.ts`). Eski bir sürümün yazdığı dosyada alan yok;
+   * `sanitizeSettings` 0'a tamamlıyor.
+   */
+  fontZoom: number;
   lineHeight: number;
   letterSpacing: number;
   /**

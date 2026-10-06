@@ -18,7 +18,7 @@ import { typingOutsideTerminal } from "../lib/focus";
 import { cwdFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { shouldResize } from "../lib/ptySize";
-import { getTheme } from "../lib/themes";
+import { getTheme, resolveThemeId } from "../lib/themes";
 import {
   MAX_WEBGL,
   demote as lruDemote,
@@ -261,6 +261,8 @@ export class TerminalSession {
   private unlisteners: UnlistenFn[] = [];
 
   private settings: Settings;
+  /** Son uygulanan temanın ÇÖZÜLMÜŞ kimliği (bkz. `applySettings`). */
+  private appliedTheme: string;
   private env: Record<string, string>;
 
   cwd: string | null;
@@ -367,6 +369,7 @@ export class TerminalSession {
     this.cwd = init.cwd;
     this.env = init.env;
     this.settings = init.settings;
+    this.appliedTheme = resolveThemeId(init.settings.appearance.theme);
 
     const theme = getTheme(init.settings.appearance.theme);
     this.term = new Terminal({
@@ -822,29 +825,76 @@ export class TerminalSession {
     this.webgl = null;
   }
 
+  /**
+   * Ayar değişikliğini terminale uygular — yalnızca DEĞİŞEN kısmı.
+   *
+   * Önceki hâli her çağrıda her şeyi yeniden yapıyordu: hücre ölçüsünü
+   * sıfırlayıp yeniden sığdırma, bağlantı boyasını söküp yeniden tarama ve
+   * sekmenin ekran çıktısını "kaydedilmedi" işaretleme. Depo bunu HER ayar
+   * değişikliğinde bütün oturumlar için çağırıyor — profil adına yazılan tek
+   * bir harf bile her terminalde bu turu başlatıyor ve bir sonraki kayıtta
+   * bütün sekmelerin çıktısı yeniden diske yazılıyordu.
+   *
+   * xterm seçenekleri her seferinde yazılıyor: aynı değeri yazmak xterm'de
+   * hiçbir şey tetiklemiyor (seçenek servisi eşitlikte susuyor).
+   */
   applySettings(settings: Settings) {
+    const prev = this.settings;
     this.settings = settings;
-    this.term.options.fontFamily = settings.appearance.fontFamily;
-    this.term.options.fontSize = settings.appearance.fontSize;
-    this.term.options.lineHeight = settings.appearance.lineHeight;
-    this.term.options.letterSpacing = settings.appearance.letterSpacing;
-    this.term.options.cursorStyle = settings.appearance.cursorStyle;
-    this.term.options.cursorBlink = settings.appearance.cursorBlink;
-    this.term.options.scrollback = settings.appearance.scrollback;
-    // Tema ve imleç TEK YERDEN: burada `theme.xterm`i doğrudan yazmak, uygulama
-    // komut satırı açıkken gizlenmiş imleci geri getiriyordu.
-    this.applyCursorVisibility();
-    // Yazi tipi, boyut ve satir araligi hucre olcusunu degistiriyor.
-    this.invalidateGeometry();
-    this.safeFit();
-    this.syncCellHeight();
-    // Kaydedilecek satir sayisi degismis olabilir: diskteki kopya artik
-    // ayarla ortusmuyor.
-    this.outputSinceSave = true;
-    // Vurgu rengi temayla degisiyor ve renklendirme kapatilabiliyor: ikisi de
-    // mevcut dekorasyonlari gecersiz kiliyor.
-    this.clearLinkDecorations();
-    this.scheduleLinkHighlight();
+    const a = settings.appearance;
+    const p = prev.appearance;
+    this.term.options.fontFamily = a.fontFamily;
+    this.term.options.fontSize = a.fontSize;
+    this.term.options.lineHeight = a.lineHeight;
+    this.term.options.letterSpacing = a.letterSpacing;
+    this.term.options.cursorStyle = a.cursorStyle;
+    this.term.options.cursorBlink = a.cursorBlink;
+    this.term.options.scrollback = a.scrollback;
+
+    // Çizilen tema "Sistemi izle"de ayar değişmeden de değişebiliyor; kıyas
+    // ÇÖZÜLMÜŞ kimlikle.
+    const theme = resolveThemeId(a.theme);
+    const themeChanged = theme !== this.appliedTheme;
+    this.appliedTheme = theme;
+    if (themeChanged || a.cursorBlink !== p.cursorBlink || a.cursorStyle !== p.cursorStyle) {
+      // Tema ve imleç TEK YERDEN: burada `theme.xterm`i doğrudan yazmak,
+      // uygulama komut satırı açıkken gizlenmiş imleci geri getiriyordu.
+      this.applyCursorVisibility();
+    }
+    if (
+      a.fontFamily !== p.fontFamily ||
+      a.fontSize !== p.fontSize ||
+      a.lineHeight !== p.lineHeight ||
+      a.letterSpacing !== p.letterSpacing
+    ) {
+      // Yazi tipi, boyut ve satir araligi hucre olcusunu degistiriyor.
+      this.invalidateGeometry();
+      this.safeFit();
+      this.syncCellHeight();
+    }
+    if (settings.behavior.scrollbackSaveLines !== prev.behavior.scrollbackSaveLines) {
+      // Kaydedilecek satir sayisi degisti: diskteki kopya artik ayarla
+      // ortusmuyor.
+      this.outputSinceSave = true;
+    }
+    if (themeChanged || a.highlightLinks !== p.highlightLinks) {
+      // Vurgu rengi temayla degisiyor ve renklendirme kapatilabiliyor: ikisi
+      // de mevcut dekorasyonlari gecersiz kiliyor.
+      this.clearLinkDecorations();
+      this.scheduleLinkHighlight();
+    }
+  }
+
+  /**
+   * Kaydırma tamponunda tutulan satır sayısı (ekranın kendisi hariç).
+   *
+   * Ayarlar penceresi tamponu küçültmeden önce buna bakıyor: küçülen tampon
+   * sığmayan en eski satırları SİLİYOR ve silme onay istiyor. Ana tampon
+   * okunuyor; tam ekran program açıkken etkin tampon ikincil ekran, onun
+   * kaydırması yok.
+   */
+  scrollbackLines(): number {
+    return Math.max(0, this.term.buffer.normal.length - this.term.rows);
   }
 
   /**

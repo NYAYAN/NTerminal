@@ -90,13 +90,22 @@ fn default_true() -> bool {
 /// Platform basina ayri olmasi SART: Cascadia Mono ve Consolas mac'te YOK,
 /// oradaki liste dogrudan jenerik `monospace`'e duserdi - Chromium'un varsayilani
 /// ise terminal icin kotu (dar, ligatursuz, satir yuksekligi tutarsiz).
-/// Menlo her mac'te var; SF Mono Xcode ile geliyor ve varsa daha iyi.
+///
+/// mac'te ilk aile `ui-monospace`, "SF Mono" DEGIL: WebKit SF ailelerini
+/// adiyla VERMIYOR. OLCULEN: "SF Mono, Menlo, ..." yigininda hucre Menlo'nunkiyle
+/// ayni cikiyordu (8x16 px, 14 px'te) - eski varsayilan aslinda Menlo ciziyordu.
+/// `ui-monospace` gercek SF Mono'yu veriyor (8,5x17). Menlo her mac'te var.
 pub fn default_font_family() -> String {
     #[cfg(target_os = "macos")]
-    return "SF Mono, Menlo, Monaco, Courier New, monospace".into();
+    return "ui-monospace, Menlo, Monaco, monospace".into();
     #[cfg(not(target_os = "macos"))]
     return "Cascadia Mono, Consolas, Courier New, monospace".into();
 }
+
+/// Eski mac varsayilani. Ayarlar penceresinde "Ozel..." olarak gorunuyordu
+/// (menude yoktu) ve SF Mono yerine Menlo ciziyordu; `sanitize` yenisine
+/// tasiyor. Kullanicinin elle sectigi bir yigin bu metnin aynisi olamaz.
+const LEGACY_MAC_FONT: &str = "SF Mono, Menlo, Monaco, Courier New, monospace";
 
 /// Kapsayici duzeyinde `serde(default)`: eksik alanlar `Default` uygulamasindan
 /// dolduruluyor. Bu sart - yeni bir gorunum alani eklendiginde (ornek:
@@ -108,6 +117,10 @@ pub fn default_font_family() -> String {
 pub struct Appearance {
     pub font_family: String,
     pub font_size: u16,
+    /// Kisayolla (Cmd+= / Cmd+-) yapilan yakinlastirma; `font_size`a eklenen
+    /// fark. Ayarin kendisi DEGIL: Cmd+0 bunu sifirliyor ve terminal Ayarlar'da
+    /// secilen boyuta donuyor (onceden sabit 14'e donuyordu).
+    pub font_zoom: i16,
     pub line_height: f32,
     pub letter_spacing: f32,
     /// Arayuz yazi tipi. Bos dize = sistemin kendi arayuz ailesi.
@@ -148,10 +161,10 @@ pub struct Appearance {
     pub view_mode: String,
     /// Sekmenin solundaki kabuk rozeti ("PS", "CMD", "WSL") gorunsun mu.
     ///
-    /// Varsayilan ACIK: tek bakista hangi kabugun calistigi belli oluyor.
-    /// Kapatilabilir olmasi bilincli - tek profille calisan kullanicida rozet
-    /// her satirda ayni seyi tekrar ediyor ve dar kenar cubugunda sekme adina
-    /// ayrilan yeri yiyor.
+    /// Varsayilan KAPALI (gerekce `Default` icinde): tek profille calisan
+    /// kullanicida rozet her satirda ayni seyi tekrar ediyor ve dar kenar
+    /// cubugunda sekme adina ayrilan yeri yiyor. Acan kullanici tek bakista
+    /// hangi kabugun calistigini goruyor.
     pub show_shell_badge: bool,
     /// Grup kenar cubugu daraltilmis mi (baslik cubugundaki panel dugmesi).
     ///
@@ -178,6 +191,7 @@ impl Default for Appearance {
         Self {
             font_family: default_font_family(),
             font_size: 14,
+            font_zoom: 0,
             // 1.50 - xterm'in kendi varsayilani (1.0) ve onceki deger (1.2)
             // degil. Satirlar bitisikken uzun ciktida goz satir atliyor;
             // yaridan fazla bosluk ise ekrandan satir yiyor. Kaydirici
@@ -185,8 +199,7 @@ impl Default for Appearance {
             line_height: 1.5,
             letter_spacing: 0.0,
             // Bos: arayuz sistemin kendi ailesini kullaniyor (CSS'teki
-            // `--ui-font`). 13, bugune kadarki sabit deger - varsayilan
-            // gorunum degismiyor.
+            // `--ui-font`).
             ui_font_family: String::new(),
             ui_font_size: 14,
             theme: "nterminal-dark".into(),
@@ -395,6 +408,95 @@ impl Default for Settings {
             keybindings: default_keybindings(),
             language: default_language(),
         }
+    }
+}
+
+/// Sayisal ayarlarin sinirlari - arayuzdeki `src/lib/settingsLimits.ts` ile
+/// AYNI (`settingsLimits.test.ts` karsilastiriyor).
+///
+/// Arayuz de sinirliyor ama elle duzenlenen ya da ice aktarilan dosya arayuzden
+/// gecmeden diske ve xterm'e ulasiyordu: xterm 1'in altindaki satir
+/// yuksekliginde hata firlatiyor, 0'lik kaydirma tamponu terminalin ciktisini
+/// siliyor, 1'lik gecmis siniri gecmisi kayit aninda kirpiyor.
+pub mod limits {
+    pub const FONT_SIZE: (u16, u16) = (8, 32);
+    pub const LINE_HEIGHT: (f32, f32) = (1.0, 2.0);
+    pub const LETTER_SPACING: (f32, f32) = (-1.0, 3.0);
+    pub const UI_FONT_SIZE: (u16, u16) = (11, 20);
+    pub const SCROLLBACK: (u32, u32) = (500, 200_000);
+    pub const SCROLLBACK_SAVE_LINES: (u32, u32) = (0, 20_000);
+    pub const HISTORY_LIMIT: (u32, u32) = (100, 500_000);
+}
+
+/// Degeri degistirir ve degistiyse isaretler.
+fn fix<T: PartialEq>(slot: &mut T, next: T, changed: &mut bool) {
+    if *slot != next {
+        *slot = next;
+        *changed = true;
+    }
+}
+
+/// JavaScript'in `Math.round`u: yarim yukari (-0,5 -> 0). Rust'in `round`u
+/// sifirdan uzaga yuvarliyor (-0,5 -> -1); iki taraf ayni degeri uretsin.
+fn js_round(x: f32) -> f32 {
+    (x + 0.5).floor()
+}
+
+impl Settings {
+    /// Ayarlari sinirlarin icine ceker; eski mac yazi tipi varsayilanini
+    /// yenisine tasir. Bir sey degistiyse `true` (cagiran diske yazsin).
+    ///
+    /// Yukleme, kaydetme ve ice aktarma ayni kapidan geciyor. Arayuzdeki
+    /// karsiligi `sanitizeSettings` (`settingsLimits.ts`).
+    pub fn sanitize(&mut self) -> bool {
+        use limits::*;
+        let mut changed = false;
+        let a = &mut self.appearance;
+
+        if a.font_family == LEGACY_MAC_FONT {
+            a.font_family = default_font_family();
+            changed = true;
+        }
+        let size = a.font_size.clamp(FONT_SIZE.0, FONT_SIZE.1);
+        fix(&mut a.font_size, size, &mut changed);
+        // Fark boyutla BIRLIKTE anlamli: 30 px'te +4 yazi boyutunu 34'e cikarirdi.
+        let zoom = a
+            .font_zoom
+            .clamp(FONT_SIZE.0 as i16 - size as i16, FONT_SIZE.1 as i16 - size as i16);
+        fix(&mut a.font_zoom, zoom, &mut changed);
+        // Iki ondalik: kaydirici 0,05 adimli; kayan nokta artigi kalmasin.
+        let line = if a.line_height.is_finite() {
+            (a.line_height.clamp(LINE_HEIGHT.0, LINE_HEIGHT.1) * 100.0).round() / 100.0
+        } else {
+            1.5
+        };
+        fix(&mut a.line_height, line, &mut changed);
+        // Tam sayi: xterm harf araligini cihaz pikselinde tam sayiya yuvarliyor,
+        // yarim degerlerin yarisi hicbir sey degistirmiyordu.
+        let spacing = if a.letter_spacing.is_finite() {
+            js_round(a.letter_spacing).clamp(LETTER_SPACING.0, LETTER_SPACING.1)
+        } else {
+            0.0
+        };
+        fix(&mut a.letter_spacing, spacing, &mut changed);
+        let ui = a.ui_font_size.clamp(UI_FONT_SIZE.0, UI_FONT_SIZE.1);
+        fix(&mut a.ui_font_size, ui, &mut changed);
+        let scrollback = a.scrollback.clamp(SCROLLBACK.0, SCROLLBACK.1);
+        fix(&mut a.scrollback, scrollback, &mut changed);
+        if !matches!(a.cursor_style.as_str(), "block" | "bar" | "underline") {
+            a.cursor_style = "bar".into();
+            changed = true;
+        }
+
+        let b = &mut self.behavior;
+        let save = b
+            .scrollback_save_lines
+            .clamp(SCROLLBACK_SAVE_LINES.0, SCROLLBACK_SAVE_LINES.1);
+        fix(&mut b.scrollback_save_lines, save, &mut changed);
+        let history = b.history_limit.clamp(HISTORY_LIMIT.0, HISTORY_LIMIT.1);
+        fix(&mut b.history_limit, history, &mut changed);
+
+        changed
     }
 }
 

@@ -228,14 +228,67 @@ describe("blok geometrisi", () => {
       expect(ikinciOkuma, "ikinci çağrı yerleşimi yine zorluyor").toBe(0);
       expect(ikinci).toEqual(ilk);
 
-      // Yazı tipi/boyut değişimi ölçüyü geçersiz kılıyor.
-      s.applySettings(useStore.getState().settings);
+      // Yazı tipi/boyut değişimi ölçüyü geçersiz kılıyor. Değişiklik GERÇEK
+      // olmalı: `applySettings` artık yalnızca değişen kısmı uyguluyor ve aynı
+      // ayarla çağrı ölçüye dokunmuyor (aşağıdaki "ilgisiz ayar" testi).
+      const settings = useStore.getState().settings;
+      s.applySettings({
+        ...settings,
+        appearance: { ...settings.appearance, fontSize: settings.appearance.fontSize + 1 },
+      });
       const oncekiOkuma = okuma;
       s.blockGeometry();
       expect(
         okuma - oncekiOkuma,
         "ayar değişti, geometri hâlâ eski önbellekten geliyor",
       ).toBeGreaterThan(0);
+    } finally {
+      Element.prototype.getBoundingClientRect = gercek;
+    }
+    void s.dispose(true);
+  });
+
+  /*
+   * İlgisiz ayar terminale iş çıkarmıyor.
+   *
+   * Depo HER ayar değişikliğinde bütün oturumlara `applySettings` çağırıyor:
+   * profil adına yazılan tek bir harf de dahil. Önceki hâli her çağrıda ölçüyü
+   * sıfırlayıp yeniden sığdırıyor, bağlantı boyasını söküp yeniden tarıyor ve
+   * sekmenin çıktısını "kaydedilmedi" işaretliyordu — bir sonraki kayıtta
+   * BÜTÜN sekmelerin çıktısı yeniden diske yazılıyordu.
+   */
+  it("ilgisiz bir ayar ölçüye ve kayıt işaretine dokunmuyor", async () => {
+    const { s } = await oturum("t5b");
+    const settings = useStore.getState().settings;
+    s.applySettings({
+      ...settings,
+      behavior: { ...settings.behavior, checkUpdates: !settings.behavior.checkUpdates },
+    });
+    s.markOutputSaved();
+    const gercek = Element.prototype.getBoundingClientRect;
+    let okuma = 0;
+    Element.prototype.getBoundingClientRect = function () {
+      okuma++;
+      return {
+        top: 10,
+        left: 0,
+        right: 800,
+        bottom: 410,
+        width: 800,
+        height: 400,
+        x: 0,
+        y: 10,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+    try {
+      s.blockGeometry();
+      const once = okuma;
+      // Profil adı gibi: terminalin hiçbir şeyini değiştirmeyen bir ayar.
+      s.applySettings({ ...settings, defaultProfileId: "baska" });
+      s.blockGeometry();
+      expect(okuma - once, "ilgisiz ayar ölçüyü geçersiz kıldı").toBe(0);
+      expect(s.hasUnsavedOutput(), "ilgisiz ayar çıktıyı kaydedilmemiş işaretledi").toBe(false);
     } finally {
       Element.prototype.getBoundingClientRect = gercek;
     }

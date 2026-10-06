@@ -1,6 +1,6 @@
 import type { ITheme } from "@xterm/xterm";
 
-import { ensureContrast, filledColors, harmonizeTheme } from "./contrast";
+import { ensureContrast, filledColors, harmonizeTheme, luminance } from "./contrast";
 import type { MsgKey } from "./messages";
 
 export interface TerminalTheme {
@@ -157,7 +157,91 @@ export const THEMES: TerminalTheme[] = [
       brightWhite: "#fdf6e3",
     },
   },
+  /*
+   * N-Terminal Koyu'nun açık eşi — "Sistemi izle"nin açık yarısı.
+   *
+   * Tek açık tema Solarized'dı ve onun kremsi zemini, sistemin açık görünümünün
+   * beyaz pencereleri arasında yabancı duruyordu. Palet GitHub'ın açık
+   * temasından (Koyu'nunki de GitHub'ın koyusundan); okunabilirlik yine
+   * `harmonizeTheme`den geçiyor.
+   */
+  {
+    id: "nterminal-light",
+    nameKey: "theme.nterminalLight",
+    ui: {
+      surface: "#ffffff",
+      surfaceAlt: "#f6f8fa",
+      border: "#d0d7de",
+      text: "#1f2328",
+      textDim: "#59636e",
+      accent: "#0969da",
+    },
+    xterm: {
+      background: "#ffffff",
+      foreground: "#1f2328",
+      cursor: "#0969da",
+      cursorAccent: "#ffffff",
+      selectionBackground: "#c8e1ff",
+      black: "#24292f",
+      red: "#cf222e",
+      green: "#116329",
+      yellow: "#4d2d00",
+      blue: "#0969da",
+      magenta: "#8250df",
+      cyan: "#1b7c83",
+      white: "#6e7781",
+      brightBlack: "#57606a",
+      brightRed: "#a40e26",
+      brightGreen: "#1a7f37",
+      brightYellow: "#633c01",
+      brightBlue: "#218bff",
+      brightMagenta: "#a475f9",
+      brightCyan: "#3192aa",
+      brightWhite: "#8c959f",
+    },
+  },
 ];
+
+/**
+ * "Sistemi izle": bir tema değil, iki tema arasında seçim.
+ *
+ * Ayarda bu kimlik duruyor; çizen herkes `getTheme` üzerinden geçtiği için
+ * çözümleme tek yerde. Sistemin görünümünü `App` izliyor ve değişince
+ * `setSystemDark` ile buraya bildiriyor.
+ */
+export const SYSTEM_THEME = "system";
+
+/** "Sistemi izle"nin iki yarısı; ayarlar penceresi örneğini de bunlardan çiziyor. */
+export const SYSTEM_PAIR = { dark: "nterminal-dark", light: "nterminal-light" } as const;
+
+let systemDark =
+  typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)").matches : true;
+
+/** Sistemin görünümü değişti (`App` içindeki dinleyici). */
+export function setSystemDark(dark: boolean): void {
+  systemDark = dark;
+}
+
+export function systemPrefersDark(): boolean {
+  return systemDark;
+}
+
+/** Ayardaki tema kimliğinin ŞU AN çizilen temaya çözümü. */
+export function resolveThemeId(id: string): string {
+  if (id !== SYSTEM_THEME) return id;
+  return systemDark ? SYSTEM_PAIR.dark : SYSTEM_PAIR.light;
+}
+
+/**
+ * Tema açık mı? Zeminin parlaklığından — adından DEĞİL.
+ *
+ * Önceki kural `id.includes("light")`tı: "solarized-light" için doğru, ama
+ * adında "light" geçmeyen her yeni açık tema koyu sayılıp arayüzün gölge ve
+ * metin tonlarını ters çevirirdi.
+ */
+export function isLightTheme(theme: TerminalTheme): boolean {
+  return luminance(theme.xterm.background ?? theme.ui.surface) > 0.4;
+}
 
 /**
  * Uyumlandirilmis temalar onbellegi. harmonizeTheme her renk icin karsitlik
@@ -167,10 +251,11 @@ export const THEMES: TerminalTheme[] = [
 const harmonized = new Map<string, TerminalTheme>();
 
 export function getTheme(id: string): TerminalTheme {
-  const cached = harmonized.get(id);
+  const resolved = resolveThemeId(id);
+  const cached = harmonized.get(resolved);
   if (cached) return cached;
 
-  const base = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const base = THEMES.find((t) => t.id === resolved) ?? THEMES[0];
   // Palet okunabilirlik guvencesinden geciyor: acik zeminli temalarda arka
   // planla karisan renkler (Solarized Light'ta brightWhite arka planin
   // aynisidir) koyulastiriliyor. Bkz. contrast.ts.
@@ -289,8 +374,7 @@ export function applyThemeToDocument(theme: TerminalTheme) {
   );
   root.dataset.theme = theme.id;
   // Açık temalarda arayüz metin/gölge tonlarının ters çevrilmesi gerekiyor.
-  const isLight = theme.id.includes("light");
-  root.dataset.tone = isLight ? "light" : "dark";
+  root.dataset.tone = isLightTheme(theme) ? "light" : "dark";
 }
 
 /**

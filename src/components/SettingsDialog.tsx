@@ -1,22 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { focusEscaped } from "../lib/focus";
 import { formatBytes } from "../lib/format";
 import { api } from "../lib/ipc";
 import { LANGS, localeTag, tSplit, tp, useT, type Translate } from "../lib/i18n";
 import {
   BUNDLED_FONTS,
-  UI_FONT_CANDIDATES,
   fontStack,
   installedMonoFonts,
+  installedUiFonts,
+  systemMonoName,
   uiFontStack,
 } from "../lib/fonts";
-import { actionLabel, comboFromEvent, prettyCombo } from "../lib/keys";
+import {
+  actionLabel,
+  comboConflicts,
+  comboFromEvent,
+  groupBindings,
+  prettyCombo,
+} from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
-import { isMac } from "../lib/platform";
+import { defaultFontStack, isMac } from "../lib/platform";
 import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
-import { THEMES } from "../lib/themes";
-import { useStore, type UpdateInstall } from "../store/useStore";
+import { LIMITS, terminalFontSize } from "../lib/settingsLimits";
+import { sessions, useStore, type UpdateInstall } from "../store/useStore";
 import type {
   Appearance,
   Behavior,
@@ -29,11 +37,14 @@ import type {
   ShellPrediction,
   ViewMode,
 } from "../types";
+import { ArgsInput } from "./ArgsInput";
 import { EnvEditor } from "./EnvEditor";
 import { SpinnerIcon } from "./Icons";
 import { HealthPanel } from "./HealthPanel";
+import { NumberField } from "./NumberField";
 import { SettingHint, SettingHints } from "./SettingHint";
 import { SettingUndo } from "./SettingUndo";
+import { ThemePicker } from "./ThemePicker";
 
 
 const VIEW_MODES: { value: ViewMode; key: MsgKey }[] = [
@@ -126,6 +137,22 @@ function installProgress(install: UpdateInstall, t: Translate): string {
   return t("update.downloadingUnknown");
 }
 
+/**
+ * Dosyanın veri klasörüne göre yolu ("settings.json"); klasörün dışındaysa
+ * tam yol.
+ *
+ * Hakkında bölümü aynı kökü beş satırda tekrarlıyordu ve dar kutuda sonları
+ * kırpılıyordu ("…/NTerminal/settin"): kök bir kez yazılıyor, dosyalar
+ * adlarıyla. İki ayırıcı da deneniyor — yol Windows'ta `\`.
+ */
+function underRoot(root: string, path: string): string {
+  for (const sep of ["/", "\\"]) {
+    const prefix = root.endsWith(sep) ? root : root + sep;
+    if (path.startsWith(prefix)) return path.slice(prefix.length);
+  }
+  return path;
+}
+
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
@@ -191,7 +218,14 @@ export function SettingsDialog() {
    * gerekçe orada. Burada `useMemo` gereksiz: önbellek aynı diziyi döndürüyor,
    * yani başvuru da kararlı.
    */
-  const installedFonts = installedMonoFonts();
+  /*
+   * Platformun kendi yazı tipi ilk seçenek ve fabrika ayarı o. Kurulu
+   * listede ikinci kez görünmesin (Windows'ta Cascadia Mono iki yığınla iki
+   * satır olurdu).
+   */
+  const systemFont = systemMonoName();
+  const systemStack = defaultFontStack();
+  const installedFonts = installedMonoFonts().filter((f) => f !== systemFont);
 
   /**
    * Menüde seçili duran değer.
@@ -199,28 +233,143 @@ export function SettingsDialog() {
    * Kayıtlı ayar bir seçeneğin yığınıyla birebir eşleşmiyorsa "özel" kipe
    * düşüyoruz — aksi hâlde menü eşleşmeyen bir değerde boş görünür ve
    * kullanıcı kendi yazdığı yazı tipinin kaybolduğunu sanır.
+   *
+   * Fabrika ayarı da listede: önceki hâlinde menüde yoktu ve ilk açılışta
+   * yazı tipi "Özel…" olarak, altında çiğ bir yığınla görünüyordu.
    */
   const [customFont, setCustomFont] = useState(false);
   const bilinen = useMemo(
     () => [
+      systemStack,
       ...BUNDLED_FONTS.map((f) => f.stack),
       ...installedFonts.map((f) => fontStack(f)),
     ],
-    [installedFonts],
+    // `installedFonts` her çizimde süzülen yeni bir dizi; içerik süreçte sabit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [systemStack],
   );
   const fontChoice =
     !customFont && bilinen.includes(settings.appearance.fontFamily)
       ? settings.appearance.fontFamily
       : CUSTOM_FONT;
+
+  /*
+   * Arayüz yazı tipi de bir menü: sistem yazı tipi + makinede kurulu olanlar
+   * + "Özel…" (gerekçe `lib/fonts.ts` UI_FONT_CANDIDATES). Değer biçimi eskisi
+   * gibi (`uiFontStack`), yani kayıtlı ayarlar olduğu gibi tanınıyor.
+   */
+  const uiFonts = installedUiFonts();
+  const [customUiFont, setCustomUiFont] = useState(false);
+  const uiFontChoice =
+    !customUiFont &&
+    (settings.appearance.uiFontFamily === "" ||
+      uiFonts.some((f) => uiFontStack(f) === settings.appearance.uiFontFamily))
+      ? settings.appearance.uiFontFamily
+      : CUSTOM_FONT;
   const [query, setQuery] = useState("");
   /** Aramadan gidilen ayar: bulunduğunda kısa bir vurgu alıyor. */
   const [highlight, setHighlight] = useState<string | null>(null);
   const [historySize, setHistorySize] = useState<string>("");
+  /** Geçmişteki kayıt sayısı: sınırı küçültmek kayıt siliyor mu, ona bakılıyor. */
+  const [historyTotal, setHistoryTotal] = useState<number | null>(null);
 
   const store = useStore.getState;
   // `editingGroupId` BURADA temizlenmiyor: yönlendirmeyi açılış tüketiyor
   // (yukarıdaki etki) ve kapanış yollarının yalnızca biri buradan geçiyor.
   const close = () => setUi({ settingsOpen: false });
+
+  const modalRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+
+  /*
+   * Klavye odağı pencerede.
+   *
+   * ÖLÇÜLEN: ⌘, ile açılan pencerede odak arkadaki terminalin gizli
+   * textarea'sında kalıyordu; yazılan harf kabuğa gidiyordu (`pty_write`) ve
+   * Enter komutu çalıştırırdı. Açılışta odak arama kutusuna alınıyor — "⌘, ve
+   * yaz" aynı zamanda bir ayarı bulmanın en kısa yolu. Sonradan dışarı kaçan
+   * odak (Tab, terminalin kendi odak çağrıları) geri çekiliyor; kapanışta odak
+   * açılıştaki yerine dönüyor ki kullanıcı yazmaya kaldığı yerden devam etsin.
+   */
+  useEffect(() => {
+    const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    searchRef.current?.focus();
+    const onFocusIn = (event: FocusEvent) => {
+      const modal = modalRef.current;
+      if (modal && focusEscaped(event.target, modal)) searchRef.current?.focus();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      // Aktarma penceresine geçildiyse odak onun: terminale döndürmek, yazılanı
+      // yine kabuğa gönderirdi.
+      if (useStore.getState().ui.transferOpen) return;
+      if (back?.isConnected) back.focus();
+    };
+  }, []);
+
+  /**
+   * Kaydırma tamponunu kaydeder; küçültmek açık sekmelerden satır SİLİYORSA
+   * önce sorar ("silme her zaman sorar", `deleteConfirm.test.ts`).
+   *
+   * xterm tampon küçülünce sığmayan en eski satırları hemen atıyor ve bu geri
+   * gelmiyor. Değer depodan okunuyor, kapanıştan değil: kutu pencere kapanırken
+   * de kaydedebiliyor (bkz. `NumberField`).
+   */
+  const commitScrollback = async (next: number): Promise<boolean> => {
+    if (next < store().settings.appearance.scrollback) {
+      let lost = 0;
+      for (const session of sessions.values()) {
+        lost += Math.max(0, session.scrollbackLines() - next);
+      }
+      if (lost > 0) {
+        const ok = await store().askConfirm({
+          title: t("confirm.scrollbackShrinkTitle"),
+          message: tp("confirm.scrollbackShrinkMessage", lost, {
+            n: lost.toLocaleString(localeTag()),
+          }),
+          detail: t("confirm.scrollbackShrinkDetail", { limit: next.toLocaleString(localeTag()) }),
+          confirmLabel: t("confirm.delete"),
+          danger: true,
+        });
+        if (!ok) return false;
+      }
+    }
+    await store().patchAppearance({ scrollback: next });
+    return true;
+  };
+
+  /**
+   * Geçmiş sınırını kaydeder; sınırın altında kalan kayıtlar silinecekse önce
+   * sorar. Rust tarafı sınırı kayıt anında uyguluyor ve günlük sıkıştırılınca
+   * silinen kayıtlar dosyadan da gidiyor.
+   */
+  const commitHistoryLimit = async (next: number): Promise<boolean> => {
+    // Sayı henüz gelmediyse (bölüm yeni açıldı) beklenmeden sorulamaz: silme
+    // onaysız geçmesin diye burada okunuyor.
+    const total =
+      historyTotal ??
+      (await api
+        .historyStats()
+        .then((stats) => stats.total)
+        .catch(() => 0));
+    if (next < store().settings.behavior.historyLimit && next < total) {
+      const lost = total - next;
+      const ok = await store().askConfirm({
+        title: t("confirm.historyShrinkTitle"),
+        message: tp("confirm.historyShrinkMessage", lost, {
+          n: lost.toLocaleString(localeTag()),
+        }),
+        detail: t("confirm.historyShrinkDetail", { limit: next.toLocaleString(localeTag()) }),
+        confirmLabel: t("confirm.delete"),
+        danger: true,
+      });
+      if (!ok) return false;
+    }
+    await store().patchBehavior({ historyLimit: next });
+    return true;
+  };
 
   /**
    * Pencere ACILDIGI ANDAKI ayarlar - satir basina "geri al"in olcutu.
@@ -302,6 +451,34 @@ export function SettingsDialog() {
     );
   }
 
+  /**
+   * Yalnızca kısayolları fabrika ayarına döndürür; öteki ayarlara dokunmaz.
+   *
+   * Varsayılanlar Rust'tan (platforma göre: mac'te Cmd). Bu sürümün
+   * tanımadığı eylemler (başka bir sürümden gelen) olduğu gibi kalıyor.
+   */
+  const resetKeys = () => {
+    void store()
+      .askConfirm({
+        title: t("confirm.resetKeysTitle"),
+        message: t("confirm.resetKeysMessage"),
+        detail: t("confirm.resetKeysDetail"),
+        confirmLabel: t("confirm.reset"),
+        danger: true,
+      })
+      .then(async (ok) => {
+        if (!ok) return;
+        try {
+          const defaults = await api.defaultKeybindings();
+          await store().patchSettings({
+            keybindings: { ...store().settings.keybindings, ...defaults },
+          });
+        } catch (err) {
+          store().toast(String(err), "err");
+        }
+      });
+  };
+
   /** Pencere altligindaki genel sifirlama; onay sorup HER SEYI geri aliyor. */
   const resetAll = () => {
     void store()
@@ -335,12 +512,16 @@ export function SettingsDialog() {
 
   const addProfile = () => {
     const id = `prof-${crypto.randomUUID().replace(/-/g, "")}`;
+    // Tür platformun kabuğu: mac'te yeni profil PowerShell türünde açılıyordu
+    // ve kabuk yolu boşken "türe göre varsayılan" pwsh'i arıyordu — çoğu mac'te
+    // kurulu değil. `-l`: mac'te PATH'i login kabuğu kuruyor (gerekçe Rust
+    // `shells.rs` default_args).
     const fresh: Profile = {
       id,
       name: t("settings.newProfileName"),
-      kind: "pwsh",
+      kind: isMac() ? "zsh" : "pwsh",
       shell: "",
-      args: [],
+      args: isMac() ? ["-l"] : [],
       cwd: null,
       env: {},
       shellIntegration: true,
@@ -393,6 +574,7 @@ export function SettingsDialog() {
       .historyStats()
       .then((stats) => {
         if (alive) {
+          setHistoryTotal(stats.total);
           setHistorySize(
             t("settings.historyStats", {
               n: stats.total.toLocaleString(localeTag()),
@@ -430,16 +612,28 @@ export function SettingsDialog() {
   }, [highlight, section]);
 
   const hits = searchSettings(query, t);
+  const conflicts = comboConflicts(settings.keybindings);
 
   return (
     <div className="overlay" onMouseDown={close}>
-      <div className="modal settings" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className="modal settings"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Başlıkta ayar dosyasının yolu YOK: aynı yol Hakkında › Dosya
+            konumları'nda duruyor ve başlığın en göze çarpan şeyi oydu. */}
         <div className="modal-head">
-          <h2>{t("settings.title")}</h2>
-          <span className="dim mono" style={{ fontSize: 11 }}>
-            {paths?.settingsFile}
-          </span>
-          <button className="icon-btn" onClick={close}>
+          <h2 id={titleId}>{t("settings.title")}</h2>
+          <button
+            className="icon-btn"
+            title={t("common.close")}
+            aria-label={t("common.close")}
+            onClick={close}
+          >
             ×
           </button>
         </div>
@@ -450,8 +644,12 @@ export function SettingsDialog() {
           <nav className="settings-nav">
             <div className="settings-search">
               <input
+                ref={searchRef}
                 value={query}
                 placeholder={t("settings.searchPlaceholder")}
+                // Doluyken Esc aramayı temizliyor, boşken pencereyi kapatıyor
+                // (bkz. `escapeOwnedBy`).
+                data-owns-escape={query ? "" : undefined}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
                   e.stopPropagation();
@@ -493,7 +691,14 @@ export function SettingsDialog() {
                     }}
                   >
                     <span className="settings-result-label">{hit.label}</span>
-                    <span className="settings-result-section">{hit.sectionLabel}</span>
+                    {/* Bölüm › başlık: iki "Boyut" (terminal ve arayüz) ancak
+                        başlığıyla ayırt ediliyor. */}
+                    <span className="settings-result-where">
+                      <span className="settings-result-section">{hit.sectionLabel}</span>
+                      {hit.groupLabel && (
+                        <span className="settings-result-group"> › {hit.groupLabel}</span>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -569,18 +774,16 @@ export function SettingsDialog() {
             <>
               <div className="section">
                 <h3>{t("settings.theme")}</h3>
-                <div className="field" data-setting="settings.colorTheme">
+                {/* Renk örnekli kartlar (gerekçe `ThemePicker` içinde). İlk
+                    kart "Sistemi izle": ayarda `system` duruyor, çizilen tema
+                    sistemin görünümüne göre çözülüyor (`themes.ts`). */}
+                <div className="field top" data-setting="settings.colorTheme">
                   <label>{t("settings.colorTheme")}</label>
-                  <select
+                  <ThemePicker
                     value={settings.appearance.theme}
-                    onChange={(e) => void store().patchAppearance({ theme: e.target.value })}
-                  >
-                    {THEMES.map((theme) => (
-                      <option key={theme.id} value={theme.id}>
-                        {t(theme.nameKey)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(theme) => void store().patchAppearance({ theme })}
+                  />
+                  <SettingHint>{t("settings.themeSystemHint")}</SettingHint>
                   {undoAppearance("theme")}
                 </div>
               </div>
@@ -602,6 +805,9 @@ export function SettingsDialog() {
 
                     "Özel" seçeneği duruyor: listede olmayan bir aile ya da
                     elle yazılmış bir yığın kullanmak isteyen kaybolmasın.
+
+                    İlk seçenek platformun kendi yazı tipi ve fabrika ayarı:
+                    mac'te SF Mono (`ui-monospace`), Windows'ta Cascadia Mono.
                   */}
                   <select
                     value={fontChoice}
@@ -614,6 +820,9 @@ export function SettingsDialog() {
                       void store().patchAppearance({ fontFamily: e.target.value });
                     }}
                   >
+                    <option value={systemStack} style={{ fontFamily: systemStack }}>
+                      {t("settings.fontSystem", { name: systemFont })}
+                    </option>
                     <optgroup label={t("settings.fontBundled")}>
                       {BUNDLED_FONTS.map((font) => (
                         <option key={font.family} value={font.stack} style={{ fontFamily: font.stack }}>
@@ -647,18 +856,33 @@ export function SettingsDialog() {
                   )}
                   {undoAppearance("fontFamily")}
                 </div>
+                {/* Kaydırıcı ile ⌘= / ⌘- aynı sınırları kullanıyor
+                    (`settingsLimits`; önceden 28'e karşı 32'ydi). Kaydırıcı
+                    ayarı değiştiriyor ve kısayolla yapılmış yakınlaştırmayı
+                    sıfırlıyor: elle seçilen boyut, görünen boyut. */}
                 <div className="field" data-setting="settings.fontSize">
                   <label>{t("settings.fontSize", { n: settings.appearance.fontSize })}</label>
                   <input
                     type="range"
-                    min={8}
-                    max={28}
+                    min={LIMITS.fontSize.min}
+                    max={LIMITS.fontSize.max}
                     value={settings.appearance.fontSize}
                     onChange={(e) =>
-                      void store().patchAppearance({ fontSize: Number(e.target.value) })
+                      void store().patchAppearance({
+                        fontSize: Number(e.target.value),
+                        fontZoom: 0,
+                      })
                     }
                   />
                   {undoAppearance("fontSize")}
+                  {terminalFontSize(settings.appearance) !== settings.appearance.fontSize && (
+                    <div className="hintline">
+                      {t("settings.fontZoomed", {
+                        n: terminalFontSize(settings.appearance),
+                        keys: prettyCombo(settings.keybindings.zoomReset ?? ""),
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="field" data-setting="settings.lineHeightLabel">
                   <label>
@@ -668,8 +892,8 @@ export function SettingsDialog() {
                   </label>
                   <input
                     type="range"
-                    min={1}
-                    max={2}
+                    min={LIMITS.lineHeight.min}
+                    max={LIMITS.lineHeight.max}
                     step={0.05}
                     value={settings.appearance.lineHeight}
                     onChange={(e) =>
@@ -678,15 +902,18 @@ export function SettingsDialog() {
                   />
                   {undoAppearance("lineHeight")}
                 </div>
+                {/* Adım 1: xterm harf aralığını tam piksele yuvarlıyor, yarım
+                    adımların yarısı hiçbir şey değiştirmiyordu (ölçüm
+                    `settingsLimits` LIMITS.letterSpacing yanında). */}
                 <div className="field" data-setting="settings.letterSpacingLabel">
                   <label>
                     {t("settings.letterSpacingLabel", { n: settings.appearance.letterSpacing })}
                   </label>
                   <input
                     type="range"
-                    min={-1}
-                    max={3}
-                    step={0.5}
+                    min={LIMITS.letterSpacing.min}
+                    max={LIMITS.letterSpacing.max}
+                    step={1}
                     value={settings.appearance.letterSpacing}
                     onChange={(e) =>
                       void store().patchAppearance({ letterSpacing: Number(e.target.value) })
@@ -704,37 +931,63 @@ export function SettingsDialog() {
                 seçilen yazı tipinin yalnızca terminali etkilediği fark
                 edilmiyordu.
 
-                Aile listesi bir SEÇİCİ değil öneri (`datalist`): arayüz yazı
-                tipleri oransal ve sistemde ne olduğunu ölçmek gerekmiyor —
-                kurulu olmayan bir ad yazılırsa yığın sistemin kendi ailesine
-                düşüyor, yani yanlış bir seçim bozuk bir arayüz üretmiyor.
+                Aile listesi terminalinki gibi bir AÇILIR MENÜ: sistem yazı
+                tipi, makinede kurulu olanlar (her biri kendi yazı tipiyle) ve
+                "Özel…". Önceki öneri listesinin (`datalist`) kusurları
+                `lib/fonts.ts` içinde. Özel bir ad kurulu değilse yığın
+                sistemin kendi ailesine düşüyor (`applyUiFont`), yani yanlış
+                bir giriş bozuk bir arayüz üretmiyor.
               */}
               <div className="section">
                 <h3>{t("settings.uiFont")}</h3>
                 <div className="field" data-setting="settings.uiFontFamily">
                   <label>{t("settings.uiFontFamily")}</label>
-                  <input
-                    list="ui-font-list"
-                    value={settings.appearance.uiFontFamily}
-                    placeholder={t("settings.uiFontSystem")}
-                    onChange={(e) => void store().patchAppearance({ uiFontFamily: e.target.value })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                  <datalist id="ui-font-list">
-                    {UI_FONT_CANDIDATES.map((family) => (
-                      <option key={family} value={uiFontStack(family)}>
-                        {family}
-                      </option>
-                    ))}
-                  </datalist>
+                  <select
+                    value={uiFontChoice}
+                    onChange={(e) => {
+                      if (e.target.value === CUSTOM_FONT) {
+                        setCustomUiFont(true);
+                        return;
+                      }
+                      setCustomUiFont(false);
+                      void store().patchAppearance({ uiFontFamily: e.target.value });
+                    }}
+                  >
+                    <option value="">{t("settings.uiFontSystem")}</option>
+                    {uiFonts.length > 0 && (
+                      <optgroup label={t("settings.fontInstalled")}>
+                        {uiFonts.map((family) => (
+                          <option
+                            key={family}
+                            value={uiFontStack(family)}
+                            style={{ fontFamily: uiFontStack(family) }}
+                          >
+                            {family}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value={CUSTOM_FONT}>{t("settings.fontCustom")}</option>
+                  </select>
+                  {uiFontChoice === CUSTOM_FONT && (
+                    <input
+                      className="font-custom"
+                      value={settings.appearance.uiFontFamily}
+                      placeholder={t("settings.fontCustomHint")}
+                      onChange={(e) =>
+                        void store().patchAppearance({ uiFontFamily: e.target.value })
+                      }
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                  )}
                   {undoAppearance("uiFontFamily")}
                 </div>
                 <div className="field" data-setting="settings.uiFontSize">
                   <label>{t("settings.uiFontSize", { n: settings.appearance.uiFontSize })}</label>
                   <input
                     type="range"
-                    min={11}
-                    max={20}
+                    min={LIMITS.uiFontSize.min}
+                    max={LIMITS.uiFontSize.max}
                     value={settings.appearance.uiFontSize}
                     onChange={(e) =>
                       void store().patchAppearance({ uiFontSize: Number(e.target.value) })
@@ -773,22 +1026,6 @@ export function SettingsDialog() {
                   <label htmlFor="cursorBlink">{t("settings.cursorBlink")}</label>
                 </div>
                 {undoAppearance("cursorBlink")}
-                <div className="field" data-setting="settings.scrollbackLines">
-                  <label>{t("settings.scrollbackLines")}</label>
-                  <input
-                    type="number"
-                    min={500}
-                    max={200000}
-                    step={500}
-                    value={settings.appearance.scrollback}
-                    onChange={(e) =>
-                      void store().patchAppearance({ scrollback: Number(e.target.value) })
-                    }
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                  <SettingHint>{t("settings.scrollbackHint")}</SettingHint>
-                  {undoAppearance("scrollback")}
-                </div>
               </div>
 
               <div className="section">
@@ -804,7 +1041,10 @@ export function SettingsDialog() {
                   />
                   <label htmlFor="showShellBadge">{t("settings.shellBadge")}</label>
                 </div>
-                <SettingHint>{t("settings.shellBadgeHint")}</SettingHint>
+                {/* Örnek kodlar platformun kabuklarından: mac'te PS/CMD/WSL yok. */}
+                <SettingHint>
+                  {t(isMac() ? "settings.shellBadgeHintMac" : "settings.shellBadgeHint")}
+                </SettingHint>
                 {undoAppearance("showShellBadge")}
               </div>
             </>
@@ -895,8 +1135,10 @@ export function SettingsDialog() {
                 <SettingHint>{t("settings.commandBlocksHint")}</SettingHint>
                 {undoBehavior("commandBlocks")}
                 {/* Blok basligi bloklara BAGLI: bloklar kapaliyken cizilecek
-                    bir baslik da yok. */}
-                <div className="check-row" data-setting="settings.blockHeaders">
+                    bir baslik da yok. Bagi girinti de gosteriyor (`.sub`):
+                    yalnizca soluklasan bir satir neden kapali oldugunu
+                    soylemiyordu. */}
+                <div className="check-row sub" data-setting="settings.blockHeaders">
                   <input
                     id="blockHeaders"
                     type="checkbox"
@@ -1025,6 +1267,34 @@ export function SettingsDialog() {
                   <label htmlFor="restoreSession">{t("settings.restoreSessionLabel")}</label>
                 </div>
                 {undoBehavior("restoreSession")}
+              </div>
+
+              {/*
+                Ekran çıktısının iki sayısı YAN YANA: bellekte tutulan
+                (kaydırma tamponu) ve diske yazılan. Önceden biri Görünüm'de
+                biri burada duruyordu; ikincisi birincisini geçemiyor ve bu
+                ilişki ancak yan yana görünüyor.
+
+                Sayı kutuları yazarken değil, kutudan çıkınca kaydediyor
+                (gerekçe ve ölçüm `NumberField` içinde).
+              */}
+              <div className="section">
+                <h3>{t("settings.screenOutput")}</h3>
+                <div className="field" data-setting="settings.scrollbackLines">
+                  <label>{t("settings.scrollbackLines")}</label>
+                  <NumberField
+                    value={settings.appearance.scrollback}
+                    limit={LIMITS.scrollback}
+                    step={500}
+                    onCommit={commitScrollback}
+                  />
+                  <SettingHint>{t("settings.scrollbackHint")}</SettingHint>
+                  {/* Geri alma da küçültebilir: o da sorarak (`commitScrollback`). */}
+                  <SettingUndo
+                    changed={settings.appearance.scrollback !== opened.appearance.scrollback}
+                    onUndo={() => void commitScrollback(opened.appearance.scrollback)}
+                  />
+                </div>
                 <div className="check-row" data-setting="settings.restoreScrollbackLabel">
                   <input
                     id="restoreScrollback"
@@ -1037,22 +1307,29 @@ export function SettingsDialog() {
                   <label htmlFor="restoreScrollback">{t("settings.restoreScrollbackLabel")}</label>
                 </div>
                 {undoBehavior("restoreScrollback")}
+                {/* Ekran çıktısı geri yüklenmiyorsa diske yazılan satır sayısının
+                    bir etkisi yok: kutu kapalı. */}
                 <div className="field" data-setting="settings.scrollbackPerTab">
                   <label>{t("settings.scrollbackPerTab")}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20000}
-                    step={100}
+                  <NumberField
                     value={settings.behavior.scrollbackSaveLines}
-                    onChange={(e) =>
-                      void store().patchBehavior({ scrollbackSaveLines: Number(e.target.value) })
-                    }
-                    onKeyDown={(e) => e.stopPropagation()}
+                    limit={{
+                      ...LIMITS.scrollbackSaveLines,
+                      max: Math.min(LIMITS.scrollbackSaveLines.max, settings.appearance.scrollback),
+                    }}
+                    step={100}
+                    disabled={!settings.behavior.restoreScrollback}
+                    onCommit={(lines) => void store().patchBehavior({ scrollbackSaveLines: lines })}
                   />
                   <SettingHint>{t("settings.scrollbackPerTabHint")}</SettingHint>
                   {undoBehavior("scrollbackSaveLines")}
                 </div>
+              </div>
+
+              {/* "Oturum devamlılığı" değil: yeni sekmenin nerede açılacağı,
+                  açılışta neyin geri geleceğiyle ilgili değil. */}
+              <div className="section">
+                <h3>{t("settings.newTabs")}</h3>
                 <div className="check-row" data-setting="settings.inheritCwd">
                   <input
                     id="inheritCwd"
@@ -1106,25 +1383,26 @@ export function SettingsDialog() {
           {section === "history" && (
             <div className="section">
               <h3>{t("settings.history")}</h3>
+              {/* Sınırı küçültmek kayıt SİLİYOR: kutu yazarken değil kutudan
+                  çıkınca kaydediyor ve silinecek kayıt varsa önce soruyor
+                  (`commitHistoryLimit`). Geri alma da aynı yoldan. */}
               <div className="field" data-setting="settings.historyLimit">
                 <label>{t("settings.historyLimit")}</label>
-                <input
-                  type="number"
-                  min={100}
-                  max={500000}
-                  step={1000}
+                <NumberField
                   value={settings.behavior.historyLimit}
-                  onChange={(e) =>
-                    void store().patchBehavior({ historyLimit: Number(e.target.value) })
-                  }
-                  onKeyDown={(e) => e.stopPropagation()}
+                  limit={LIMITS.historyLimit}
+                  step={1000}
+                  onCommit={commitHistoryLimit}
                 />
                 <SettingHint>
                   {t("settings.historyLimitHint", {
                     size: historySize || t("settings.historyReading"),
                   })}
                 </SettingHint>
-                {undoBehavior("historyLimit")}
+                <SettingUndo
+                  changed={settings.behavior.historyLimit !== opened.behavior.historyLimit}
+                  onUndo={() => void commitHistoryLimit(opened.behavior.historyLimit)}
+                />
               </div>
               <div className="check-row" data-setting="settings.historyDedupeDefault">
                 <input
@@ -1142,11 +1420,15 @@ export function SettingsDialog() {
           {section === "profiles" && (
             <div className="profile-grid">
               <div>
+                {/* Satırlar DÜĞME: önceki `div`ler yalnızca fareyle
+                    seçilebiliyordu, klavyeyle odak bile almıyordu. */}
                 <div className="profile-list">
                   {settings.profiles.map((p) => (
-                    <div
+                    <button
+                      type="button"
                       key={p.id}
                       className={p.id === selectedProfileId ? "row on" : "row"}
+                      aria-pressed={p.id === selectedProfileId}
                       onClick={() => setSelectedProfileId(p.id)}
                     >
                       <span
@@ -1158,7 +1440,7 @@ export function SettingsDialog() {
                         <span className="kbd">{t("common.default")}</span>
                       )}
                       {p.unavailable && <span className="kbd err-text">{t("common.missing")}</span>}
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -1227,16 +1509,13 @@ export function SettingsDialog() {
                     </div>
                     <div className="field">
                       <label>{t("settings.args")}</label>
-                      <input
-                        className="mono"
+                      {/* Kutu kendi metnini tutuyor: önceki hâli sondaki
+                          boşluğu her tuşta siliyordu ("-l -i" → "-l-i").
+                          Boşluk içeren argüman tırnakla (`lib/args.ts`). */}
+                      <ArgsInput
+                        args={profile.args}
                         placeholder={t("settings.argsPlaceholder")}
-                        value={profile.args.join(" ")}
-                        onChange={(e) =>
-                          updateProfile({
-                            args: e.target.value.split(" ").filter((a) => a.length > 0),
-                          })
-                        }
-                        onKeyDown={(e) => e.stopPropagation()}
+                        onChange={(args) => updateProfile({ args })}
                       />
                     </div>
                     <div className="field">
@@ -1279,14 +1558,25 @@ export function SettingsDialog() {
                         {t("settings.shellIntegrationLoad")}
                       </label>
                     </div>
-                    <div className="check-row">
-                      <input
-                        id="isDefault"
-                        type="checkbox"
-                        checked={settings.defaultProfileId === profile.id}
-                        onChange={() => void store().setProfiles(settings.profiles, profile.id)}
-                      />
-                      <label htmlFor="isDefault">{t("settings.defaultProfile")}</label>
+                    {/*
+                      Onay kutusu DEĞİL: her zaman tam bir varsayılan profil
+                      var, yani işaret kaldırılamıyordu — tıklamak hiçbir şey
+                      yapmıyordu. Varsayılan olmayan profilde bir düğme,
+                      varsayılanda durumun kendisi.
+                    */}
+                    <div className="field">
+                      <label>{t("settings.defaultProfile")}</label>
+                      {settings.defaultProfileId === profile.id ? (
+                        <span className="dim">{t("settings.isDefault")}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="outline default-btn"
+                          onClick={() => void store().setProfiles(settings.profiles, profile.id)}
+                        >
+                          {t("settings.makeDefault")}
+                        </button>
+                      )}
                     </div>
 
                     <div className="section" style={{ marginTop: 14 }}>
@@ -1303,9 +1593,11 @@ export function SettingsDialog() {
             <div className="profile-grid">
               <div className="profile-list">
                 {groups.map((g) => (
-                  <div
+                  <button
+                    type="button"
                     key={g.id}
                     className={g.id === selectedGroupId ? "row on" : "row"}
+                    aria-pressed={g.id === selectedGroupId}
                     onClick={() => setSelectedGroupId(g.id)}
                   >
                     <span
@@ -1314,7 +1606,7 @@ export function SettingsDialog() {
                     />
                     <span className="nm">{g.name}</span>
                     <span className="kbd">{g.tabs.length}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
 
@@ -1403,41 +1695,82 @@ export function SettingsDialog() {
           )}
 
           {section === "keys" && (
-            <div className="section">
-              <h3>{t("settings.keysHeading")}</h3>
-              <p className="dim" style={{ fontSize: 11, marginTop: 0 }}>
-                {t("settings.keysHint")}
-              </p>
-              {Object.entries(settings.keybindings).map(([action, combo]) => (
-                <div className="field" key={action}>
-                  <label>{actionLabel(action)}</label>
-                  <input
-                    className="mono"
-                    readOnly
-                    value={capturing === action ? t("settings.pressKey") : prettyCombo(combo)}
-                    onFocus={() => setCapturing(action)}
-                    onBlur={() => setCapturing(null)}
-                    onKeyDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.key === "Escape") {
-                        setCapturing(null);
-                        e.currentTarget.blur();
-                        return;
-                      }
-                      const next = comboFromEvent(e.nativeEvent);
-                      if (!next) return;
-                      void store().patchSettings({
-                        keybindings: { ...settings.keybindings, [action]: next },
-                      });
-                      setCapturing(null);
-                      e.currentTarget.blur();
-                    }}
-                  />
-                  {undoKey(action)}
+            <>
+              <div className="section">
+                <h3>{t("settings.keysHeading")}</h3>
+                <p className="dim" style={{ fontSize: 11, marginTop: 0 }}>
+                  {t("settings.keysHint")}
+                </p>
+                {/*
+                  Yalnızca kısayolları geri alan TOPLU düğme. Satır başına
+                  "varsayılana dön" bilinçli olarak yok: satırdaki geri al
+                  bu oturumdaki değişiklik için (gerekçe `SettingUndo`),
+                  fabrika ayarına dönüş toplu. Önceden bunun tek yolu bütün
+                  ayarları sıfırlamaktı.
+                */}
+                <button type="button" className="outline keys-reset" onClick={resetKeys}>
+                  {t("keys.resetAll")}
+                </button>
+              </div>
+              {/*
+                Gruplu ve sabit sırada (`keys.ts` ACTION_GROUPS): önceki liste
+                eylem kimliğine göre alfabetikti ve kullanıcıya rastgele
+                görünüyordu.
+
+                Aynı tuş iki eyleme atanmışsa İKİ satır da uyarıyor: genel
+                dinleyici ilk eşleşeni çalıştırıyor, öteki eylem kısayoldan
+                sessizce erişilemez oluyordu.
+              */}
+              {groupBindings(settings.keybindings).map((group) => (
+                <div className="section" key={group.key}>
+                  <h3>{t(group.key)}</h3>
+                  {group.actions.map((action) => {
+                    const clash = conflicts.get(action);
+                    return (
+                      <div className="field" key={action}>
+                        <label>{actionLabel(action)}</label>
+                        {/* Kayıt sırasında Esc kaydı iptal ediyor, pencereyi
+                            kapatmıyor (`data-owns-escape`, bkz. `escapeOwnedBy`). */}
+                        <input
+                          className="mono key-capture"
+                          readOnly
+                          data-owns-escape={capturing === action ? "" : undefined}
+                          value={
+                            capturing === action
+                              ? t("settings.pressKey")
+                              : prettyCombo(settings.keybindings[action])
+                          }
+                          onFocus={() => setCapturing(action)}
+                          onBlur={() => setCapturing(null)}
+                          onKeyDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (e.key === "Escape") {
+                              setCapturing(null);
+                              e.currentTarget.blur();
+                              return;
+                            }
+                            const next = comboFromEvent(e.nativeEvent);
+                            if (!next) return;
+                            void store().patchSettings({
+                              keybindings: { ...settings.keybindings, [action]: next },
+                            });
+                            setCapturing(null);
+                            e.currentTarget.blur();
+                          }}
+                        />
+                        {undoKey(action)}
+                        {clash && (
+                          <div className="hintline warn">
+                            {t("keys.conflict", { actions: clash.map(actionLabel).join(", ") })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
-            </div>
+            </>
           )}
 
           {section === "about" && (
@@ -1462,9 +1795,14 @@ export function SettingsDialog() {
               <div className="section">
                 <h3>{t("update.heading")}</h3>
 
+                {/* Etiket "Yüklü sürüm": önceki etiket ("Güncellemeleri
+                    denetle") yanındaki düğmenin metninin aynısıydı. */}
                 <div className="field" data-setting="update.check">
-                  <label>{t("update.check")}</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <label>{t("update.installedVersion")}</label>
+                  <div
+                    style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}
+                  >
+                    <span className="mono">{appVersion}</span>
                     <button
                       className="outline"
                       disabled={checking}
@@ -1626,21 +1964,32 @@ export function SettingsDialog() {
                         {t(paths.portable ? "settings.portableOn" : "settings.portableOff")}
                       </SettingHint>
                     </div>
+                    {/* Dosyalar veri klasörüne GÖRE: kök bir kez, yukarıda.
+                        Önceden her satır tam yolu tekrarlıyordu ve dar kutuda
+                        sonları kırpılıyordu ("…/settin"). Tam yol ipucunda. */}
                     <div className="field">
                       <label>{t("app.settings")}</label>
-                      <input readOnly className="mono" value={paths.settingsFile} />
+                      <span className="mono path-rel" title={paths.settingsFile}>
+                        {underRoot(paths.root, paths.settingsFile)}
+                      </span>
                     </div>
                     <div className="field" data-setting="settings.workspaceFile">
                       <label>{t("settings.workspaceFile")}</label>
-                      <input readOnly className="mono" value={paths.workspaceFile} />
+                      <span className="mono path-rel" title={paths.workspaceFile}>
+                        {underRoot(paths.root, paths.workspaceFile)}
+                      </span>
                     </div>
                     <div className="field">
                       <label>{t("settings.history")}</label>
-                      <input readOnly className="mono" value={paths.historyFile} />
+                      <span className="mono path-rel" title={paths.historyFile}>
+                        {underRoot(paths.root, paths.historyFile)}
+                      </span>
                     </div>
                     <div className="field" data-setting="settings.integrationDir">
                       <label>{t("settings.integrationDir")}</label>
-                      <input readOnly className="mono" value={paths.integrationDir} />
+                      <span className="mono path-rel" title={paths.integrationDir}>
+                        {underRoot(paths.root, paths.integrationDir)}
+                      </span>
                     </div>
                   </>
                 )}

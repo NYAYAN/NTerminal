@@ -47,6 +47,8 @@ export const api = {
 
   saveSettings: (settings: Settings) => invoke<void>("settings_save", { settings }),
   resetSettings: () => invoke<Settings>("settings_reset"),
+  /** Fabrika kısayolları (platforma göre); Kısayollar bölümünün toplu geri alması. */
+  defaultKeybindings: () => invoke<Record<string, string>>("settings_default_keybindings"),
   detectProfiles: () => invoke<Profile[]>("profiles_detect"),
 
   saveWorkspace: (workspace: Workspace) => invoke<void>("workspace_save", { workspace }),

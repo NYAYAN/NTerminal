@@ -89,6 +89,12 @@ pub fn load_settings(paths: &DataPaths) -> Settings {
         changed = true;
     }
 
+    // Sinirlarin disindaki deger (elle duzenlenmis dosya) ve eski mac yazi tipi
+    // varsayilani burada duzeltiliyor; gerekce `Settings::sanitize`.
+    if settings.sanitize() {
+        changed = true;
+    }
+
     // Profil listesi bossa (ilk acilis) makinede kurulu kabuklari tara.
     if settings.profiles.is_empty() {
         settings.profiles = shells::detect_profiles();

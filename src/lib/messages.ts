@@ -14,6 +14,10 @@ export const MESSAGES = {
   "theme.windowsTerminal": ["Windows Terminal", "Windows Terminal"],
   "theme.oneHalfDark": ["One Half Koyu", "One Half Dark"],
   "theme.solarizedLight": ["Solarized Açık", "Solarized Light"],
+  "theme.nterminalLight": ["N-Terminal Açık", "N-Terminal Light"],
+  // Tema değil, iki tema arasında seçim: sistem açık görünümdeyse Açık,
+  // koyudaysa Koyu (bkz. `themes.ts` SYSTEM_THEME).
+  "theme.system": ["Sistemi izle", "Match system"],
 
   "store.settingsReset": [
     "Ayarlar varsayılanlara döndürüldü",
@@ -746,8 +750,11 @@ export const MESSAGES = {
     "Bölme görünümü — grubun sekmeleri yan yana ({keys})",
     "Pane view — the group's tabs side by side ({keys})",
   ],
-  "view.heading": ["Görünüm biçimi", "View mode"],
-  "view.label": ["Görünüm", "View"],
+  // "Görünüm" DEĞİL: ayarlar penceresinde aynı kelime bir bölümün adı
+  // (Görünüm = tema, yazı tipi). İki ayrı şeyin aynı adı taşıması aramada da
+  // ikisini karıştırıyordu.
+  "view.heading": ["Düzen", "Layout"],
+  "view.label": ["Terminal alanı", "Terminal area"],
 
   // Pencere düğmeleri. Yalnızca Windows/Linux'ta çiziliyor; macOS'ta yerel
   // trafik ışıkları duruyor ve onların kendi erişilebilirlik adları var.
@@ -1151,19 +1158,25 @@ export const MESSAGES = {
   "settings.navHistory": ["Geçmiş", "History"],
   "settings.copyPaste": ["Kopyala ve yapıştır", "Copy and paste"],
   "settings.links": ["Bağlantılar", "Links"],
-  "settings.closeTabSection": ["Sekme kapatma", "Closing tabs"],
+  "settings.closeTabSection": ["Kapatma", "Closing"],
   "settings.fontSize": ["Boyut ({n} px)", "Size ({n} px)"],
   "settings.lineHeightLabel": ["Satır yüksekliği ({n})", "Line height ({n})"],
   "settings.letterSpacingLabel": ["Harf aralığı ({n})", "Letter spacing ({n})"],
   "settings.scrollbackHint": [
-    "Terminalde geriye doğru kaç satır saklanacağı. Yüksek değer daha çok bellek kullanır.",
-    "How many lines are kept for scrolling back. A higher value uses more memory.",
+    "Terminalde geriye doğru kaç satır saklanacağı. Yüksek değer daha çok bellek kullanır; küçültmek açık sekmelerin sığmayan en eski çıktısını siler.",
+    "How many lines are kept for scrolling back. A higher value uses more memory; lowering it deletes the oldest output that no longer fits in open tabs.",
   ],
   "settings.tabsHeading": ["Sekmeler", "Tabs"],
   "settings.shellBadge": ["Sekmelerde kabuk rozeti", "Shell badge on tabs"],
   "settings.shellBadgeHint": [
     "Sekme adının solunda hangi kabuğun çalıştığını gösteren kısa kod: PS, PS7, CMD, WSL. Kapatıldığında dar kenar çubuğunda sekme adına daha çok yer kalıyor.",
     "The short code left of the tab name showing which shell is running: PS, PS7, CMD, WSL. Turning it off leaves more room for the tab name in a narrow sidebar.",
+  ],
+  // macOS'taki kabukların kodları (`labels.ts` SHELL_BADGES): PS/CMD/WSL
+  // orada yok, örnek olarak göstermek yanıltıyordu.
+  "settings.shellBadgeHintMac": [
+    "Sekme adının solunda hangi kabuğun çalıştığını gösteren kısa kod: ZSH, SH, FISH, PS7. Kapatıldığında dar kenar çubuğunda sekme adına daha çok yer kalıyor.",
+    "The short code left of the tab name showing which shell is running: ZSH, SH, FISH, PS7. Turning it off leaves more room for the tab name in a narrow sidebar.",
   ],
   "settings.restoreSessionLabel": [
     "Açılışta grup ve sekme düzenini geri yükle",
@@ -1174,8 +1187,8 @@ export const MESSAGES = {
     "Restore tab screen output as well",
   ],
   "settings.scrollbackPerTabHint": [
-    "Diske yazılan satır sayısı. Kabuk süreçleri uygulamayla kapanır; geri yüklenen içerik geçmiş ekran görüntüsüdür, canlı çıktı değildir.",
-    "How many lines are written to disk. Shell processes close with the application; restored content is a past screenshot, not live output.",
+    "Diske yazılan satır sayısı; en fazla kaydırma tamponu kadar olabilir. Kabuk süreçleri uygulamayla kapanır; geri yüklenen içerik geçmiş ekran görüntüsüdür, canlı çıktı değildir.",
+    "How many lines are written to disk; at most as many as the scrollback holds. Shell processes close with the application; restored content is a past screenshot, not live output.",
   ],
   "settings.historyStats": ["{n} kayıt · {size}", "{n} records · {size}"],
   "settings.appearance": ["Görünüm", "Appearance"],
@@ -1231,9 +1244,12 @@ export const MESSAGES = {
   // tutabilmenin de tek yolu.
   "settings.font": ["Terminal yazı tipi", "Terminal font"],
   "settings.uiFont": ["Arayüz yazı tipi", "Interface font"],
-  "settings.uiFontFamily": ["Arayüz yazı tipi", "Interface font"],
+  // Etiketler terminal yazı tipininkiyle AYNI: hangisi olduğunu başlık
+  // söylüyor. Önceki hâli başlığı ("Arayüz yazı tipi") etikette tekrarlıyordu.
+  // Aramada ikisi başlıklarıyla birlikte gösteriliyor (bkz. `settingsIndex`).
+  "settings.uiFontFamily": ["Yazı tipi ailesi", "Font family"],
   "settings.uiFontSystem": ["Sistemin kendi yazı tipi", "The system font"],
-  "settings.uiFontSize": ["Arayüz boyutu ({n} px)", "Interface size ({n} px)"],
+  "settings.uiFontSize": ["Boyut ({n} px)", "Size ({n} px)"],
   "settings.uiFontHint": [
     "Menüler, paneller, sekme adları ve ayarlar bu ölçüye göre büyüyüp küçülür. Terminalin yazı tipi ve boyutu ayrı: onu değiştirmek satıra kaç sütun sığdığını da değiştirdiği için tek bir ayara bağlanmadı.",
     "Menus, panels, tab names and settings scale with this size. The terminal's font and size are separate: changing those also changes how many columns fit on a line, so the two are not tied to one setting.",
@@ -1247,7 +1263,9 @@ export const MESSAGES = {
     "Bağlantılar vurgu renginde görünür ve tıklanınca varsayılan tarayıcıda açılır. Çok yoğun çıktı üreten işlerde kapatmak çizimi hafifletir.",
     "Links appear in the accent color and open in the default browser when clicked. Turning it off lightens rendering for very noisy output.",
   ],
-  "settings.cursorScroll": ["İmleç ve kaydırma", "Cursor and scrolling"],
+  // Kaydırma tamponu buradan "Oturum › Ekran çıktısı"na taşındı: diske
+  // yazılan satır sayısıyla yan yana durmalı (biri öbürünü sınırlıyor).
+  "settings.cursorScroll": ["İmleç", "Cursor"],
   "settings.cursorStyle": ["İmleç biçimi", "Cursor style"],
   "settings.cursorBar": ["Çizgi", "Bar"],
   "settings.cursorBlock": ["Blok", "Block"],
@@ -1328,6 +1346,67 @@ export const MESSAGES = {
     "Yazı tipi adı ya da yığın",
     "Font name or stack",
   ],
+  // Platformun kendi eş aralıklı yazı tipi (mac'te SF Mono, Windows'ta
+  // Cascadia Mono); fabrika ayarı bu. Ad platformdan geliyor.
+  "settings.fontSystem": ["{name} (sistem)", "{name} (system)"],
+  // ⌘= / ⌘- ayarı değil yakınlaştırmayı değiştiriyor (bkz. `fontZoom`).
+  "settings.fontZoomed": [
+    "Kısayolla değiştirildi: şu an {n} px. {keys} bu boyuta döndürür.",
+    "Changed with the shortcut: {n} px right now. {keys} returns to this size.",
+  ],
+  "settings.themeSystemHint": [
+    "Sistemin açık ya da koyu görünümüne göre N-Terminal Açık ile N-Terminal Koyu arasında kendiliğinden geçer.",
+    "Switches between N-Terminal Light and N-Terminal Dark with the system's light or dark appearance.",
+  ],
+  "settings.screenOutput": ["Ekran çıktısı", "Screen output"],
+  "settings.newTabs": ["Yeni sekmeler", "New tabs"],
+  "settings.makeDefault": ["Varsayılan yap", "Make default"],
+  "settings.isDefault": ["Yeni sekmeler bu profille açılıyor", "New tabs open with this profile"],
+  // Kısayollar bölümünün alt başlıkları (`keys.ts` ACTION_GROUPS).
+  "keys.groupTabs": ["Sekmeler ve gruplar", "Tabs and groups"],
+  "keys.groupClipboard": ["Pano", "Clipboard"],
+  "keys.groupSearch": ["Arama ve paneller", "Search and panels"],
+  "keys.groupScreen": ["Ekran", "Screen"],
+  "keys.groupApp": ["Uygulama", "Application"],
+  "keys.groupOther": ["Diğer", "Other"],
+  "keys.conflict": ["Aynı tuş: {actions}", "Same key as: {actions}"],
+  "keys.resetAll": ["Kısayolları varsayılana döndür", "Restore default shortcuts"],
+  "confirm.resetKeysTitle": ["Kısayollar varsayılana dönsün mü?", "Restore default shortcuts?"],
+  "confirm.resetKeysMessage": [
+    "Değiştirdiğiniz bütün kısayollar fabrika ayarına döner.",
+    "Every shortcut you changed goes back to its factory setting.",
+  ],
+  "confirm.resetKeysDetail": [
+    "Öteki ayarlara dokunulmaz. Hepsini sıfırlamak için alttaki \"Ayarları sıfırla\".",
+    "Other settings stay as they are. To reset everything, use \"Reset settings\" below.",
+  ],
+  "confirm.scrollbackShrinkTitle": ["Kaydırma tamponu küçültülsün mü?", "Shrink the scrollback?"],
+  "confirm.scrollbackShrinkMessage.one": [
+    "Açık sekmelerden {n} satır silinecek.",
+    "{n} line will be deleted from open tabs.",
+  ],
+  "confirm.scrollbackShrinkMessage.other": [
+    "Açık sekmelerden {n} satır silinecek.",
+    "{n} lines will be deleted from open tabs.",
+  ],
+  "confirm.scrollbackShrinkDetail": [
+    "Tampon {limit} satıra inince sığmayan en eski çıktı atılır. Bu geri alınamaz.",
+    "With {limit} lines, the oldest output that no longer fits is discarded. This can't be undone.",
+  ],
+  "confirm.historyShrinkTitle": ["Komut geçmişi kısaltılsın mı?", "Shorten the command history?"],
+  "confirm.historyShrinkMessage.one": [
+    "En eski {n} kayıt silinecek.",
+    "The oldest {n} record will be deleted.",
+  ],
+  "confirm.historyShrinkMessage.other": [
+    "En eski {n} kayıt silinecek.",
+    "The oldest {n} records will be deleted.",
+  ],
+  "confirm.historyShrinkDetail": [
+    "Sınır {limit} olunca daha eski kayıtlar geçmişten kalıcı olarak çıkar. Bu geri alınamaz.",
+    "With a limit of {limit}, older records leave the history for good. This can't be undone.",
+  ],
+  "update.installedVersion": ["Yüklü sürüm", "Installed version"],
   "settings.commandLine": ["Komut satırı", "Command line"],
   "settings.blockHeaders": [
     "Kabuk istemi yerine blok başlığı",
@@ -1448,7 +1527,9 @@ export const MESSAGES = {
   // İkisinin ayrılmaması `trayLabels.test.ts` ile bağlı.
   "tray.show": ["N-Terminal'i göster", "Show N-Terminal"],
   "tray.quit": ["Çıkış", "Quit"],
-  "settings.closeAction": ["Kapatma düğmesi", "Close button"],
+  // Pencerenin kapatma düğmesi — sekmeninki değil. "Kapatma düğmesi" yalın
+  // hâliyle "Sekme kapatma" başlığının altında sekmeninki sanılıyordu.
+  "settings.closeAction": ["Pencereyi kapatınca", "When the window is closed"],
   "settings.closeActionQuit": ["Uygulamadan tamamen çık", "Quit the app"],
   "settings.closeActionBackground": [
     "Arka planda çalışmaya devam et",
@@ -1510,7 +1591,10 @@ export const MESSAGES = {
     "Empty = default for the type",
   ],
   "settings.args": ["Argümanlar", "Arguments"],
-  "settings.argsPlaceholder": ["Boşlukla ayrılmış", "Space separated"],
+  "settings.argsPlaceholder": [
+    "Boşlukla ayrılmış; boşluk içeren tırnakla",
+    "Space separated; quote ones with spaces",
+  ],
   "settings.startFolder": ["Başlangıç klasörü", "Starting folder"],
   "settings.startFolderHome": ["Boş = ev dizini", "Empty = home directory"],
   "settings.startFolderProfile": ["Boş = profilin klasörü", "Empty = the profile's folder"],

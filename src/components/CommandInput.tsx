@@ -6,6 +6,7 @@ import { passThroughSequence, resolveInputMode, SIGINT, stdinKeyAction } from ".
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
 import { promptedTabs } from "../lib/promptSeen";
+import { terminalFontSize } from "../lib/settingsLimits";
 import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
 
@@ -84,7 +85,9 @@ export function CommandInput() {
    * 13px × 1.55 = 20.15px kesirli kalır ve iki öğe hiçbir zaman aynı tam
    * piksele oturmazdı.
    */
-  const rowH = Math.round(appearance.fontSize * 1.55);
+  // Terminalin GERÇEK boyutu: kısayolla yapılan yakınlaştırma dahil.
+  const fontSize = terminalFontSize(appearance);
+  const rowH = Math.round(fontSize * 1.55);
   const rowStyle = { "--cmd-row-h": `${rowH}px` } as React.CSSProperties;
   const allRunning = useStore((s) => s.running);
   const allExited = useStore((s) => s.exited);
@@ -429,7 +432,7 @@ export function CommandInput() {
   // katman üst üste duruyor ve tek piksellik fark bile harfleri kaydırıyor.
   const typography = {
     fontFamily: appearance.fontFamily,
-    fontSize: `${appearance.fontSize}px`,
+    fontSize: `${fontSize}px`,
     lineHeight: `${rowH}px`,
   };
 

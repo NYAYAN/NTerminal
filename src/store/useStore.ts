@@ -34,7 +34,13 @@ import {
   type SuggestEntry,
 } from "../lib/suggest";
 import type { Section } from "../lib/settingsIndex";
-import { applyThemeToDocument, getTheme } from "../lib/themes";
+import {
+  SYSTEM_THEME,
+  applyThemeToDocument,
+  getTheme,
+  setSystemDark as applySystemDark,
+} from "../lib/themes";
+import { sanitizeSettings, terminalFontSize, terminalSettings } from "../lib/settingsLimits";
 import { TerminalSession } from "../terminal/TerminalSession";
 import type {
   Favorite,
@@ -517,6 +523,12 @@ interface Store {
    */
   statusTick: number;
   /**
+   * Çizilen tema ayar değişmeden değişti ("Sistemi izle" + sistemin
+   * görünümü): temayı çizim sırasında okuyan bileşenler (`TerminalFind`)
+   * buna bakıp yeniden çiziliyor.
+   */
+  themeEpoch: number;
+  /**
    * Durdurma isteği SİLAHLI olan sekme; hiçbiri değilse null.
    *
    * Ctrl+C çalışan komutu tek basışta durdurmuyor, çünkü aynı tuş kopyalama
@@ -552,6 +564,14 @@ interface Store {
   toggleViewMode: () => Promise<void>;
   setProfiles: (profiles: Profile[], defaultProfileId?: string) => Promise<void>;
   resetSettings: () => Promise<void>;
+  /**
+   * Terminal yazısını kısayolla büyütür (+1) / küçültür (−1) / ayardaki
+   * boyuta döndürür (0). Ayarın kendisine (`fontSize`) dokunmuyor; farkı
+   * (`fontZoom`) değiştiriyor — gerekçe `terminalFontSize` içinde.
+   */
+  zoomTerminalFont: (step: 1 | -1 | 0) => Promise<void>;
+  /** Sistemin açık/koyu görünümü değişti; "Sistemi izle" temasını yeniden çizer. */
+  setSystemDark: (dark: boolean) => void;
   /**
    * Boşa düşmüş sekme-profil bağlarını onarır. Profil listesi her
    * değiştiğinde çağrılıyor; gerekçe `lib/tabs.ts` içindeki
@@ -887,6 +907,7 @@ export const useStore = create<Store>((set, get) => ({
       // şart: Cascadia mac'te yok, jenerik monospace terminal için kötü.
       fontFamily: defaultFontStack(),
       fontSize: 14,
+      fontZoom: 0,
       // `model.rs` ile AYNI kalmalı: ayrışırlarsa açılışın ilk karesi bir
       // satır yüksekliğinde, ikincisi başka birinde çizilir ve terminal
       // gözle görülür biçimde bir kez zıplar.
@@ -945,6 +966,7 @@ export const useStore = create<Store>((set, get) => ({
   exited: {},
   sessionEpoch: {},
   statusTick: 0,
+  themeEpoch: 0,
   stopArmed: null,
   update: null,
   updateInstall: { phase: "idle" },
@@ -997,31 +1019,39 @@ export const useStore = create<Store>((set, get) => ({
   async bootstrap() {
     try {
       const boot = await api.bootstrap();
+      // Sınırların dışındaki değer (elle düzenlenmiş dosya, eski bir sürümün
+      // yazdığı alan) xterm'e ulaşmadan düzeltiliyor: xterm örneğin 1'in
+      // altındaki satır yüksekliğinde hata fırlatıyor (bkz. `settingsLimits`).
+      const settings = sanitizeSettings(boot.settings);
       // Platform en basta: dil ve tema metinleri dosya yoneticisi adini
       // ("Gezgin" / "Finder") ve Cmd/Ctrl yazimini buna gore uretiyor.
       applyPlatform(boot.platform);
       applyFileManager(boot.fileManager, boot.fileManagerEn);
       // Dil temadan once: hata iletileri de dogru dilde cikabilsin.
-      applyLanguage(boot.settings.language);
-      applyThemeToDocument(getTheme(boot.settings.appearance.theme));
-      applyUiFont(boot.settings.appearance.uiFontFamily, boot.settings.appearance.uiFontSize);
+      applyLanguage(settings.language);
+      applyThemeToDocument(getTheme(settings.appearance.theme));
+      applyUiFont(settings.appearance.uiFontFamily, settings.appearance.uiFontSize);
       set({
         ready: true,
         appVersion: boot.appVersion,
         windowsBuild: boot.windowsBuild,
         paths: boot.paths,
-        settings: boot.settings,
+        settings,
         // Diskteki çalışma alanı, diskteki ayarlardan bağımsız eskimiş
         // olabiliyor (silinmiş profil, sıfırlanmış ayar dosyası). Bağı burada
         // onarmak, ilk çizimden önce doğru rozetle açılmayı sağlıyor.
         groups: healTabProfiles(
           boot.workspace.groups,
-          boot.settings.profiles,
-          boot.settings.defaultProfileId,
+          settings.profiles,
+          settings.defaultProfileId,
         ),
         activeGroupId: boot.workspace.activeGroupId,
         restoredSession: boot.restored,
       });
+      // Düzeltilen değer diske de gitsin: yoksa dosyada eski hâli kalıyor.
+      if (settings !== boot.settings) {
+        scheduleSettingsWrite(settings, (message) => get().toast(message, "err"));
+      }
       void get().loadFavorites();
       void get().loadSuggestHistory();
       // Denetim ARKA PLANDA: açılışı bekletmiyor ve düşerse hiçbir şey
@@ -1072,12 +1102,16 @@ export const useStore = create<Store>((set, get) => ({
   // ---------------------------------------------------------------- ayarlar
 
   async patchSettings(patch) {
-    const next = { ...get().settings, ...patch };
+    // Her yazım sınırlardan geçiyor: denetimler sınırlı ama kısayol, içe
+    // aktarma ve elle yazılan değer aynı kapıdan giriyor.
+    const next = sanitizeSettings({ ...get().settings, ...patch });
     set({ settings: next });
     applyLanguage(next.language);
     applyThemeToDocument(getTheme(next.appearance.theme));
     applyUiFont(next.appearance.uiFontFamily, next.appearance.uiFontSize);
-    for (const session of sessions.values()) session.applySettings(next);
+    // Terminaller yakınlaştırılmış boyutu görüyor (bkz. `terminalSettings`).
+    const forTerminals = terminalSettings(next);
+    for (const session of sessions.values()) session.applySettings(forTerminals);
     scheduleSettingsWrite(next, (message) => get().toast(message, "err"));
   },
 
@@ -1130,11 +1164,12 @@ export const useStore = create<Store>((set, get) => ({
 
   async resetSettings() {
     try {
-      const fresh = await api.resetSettings();
+      const fresh = sanitizeSettings(await api.resetSettings());
       set({ settings: fresh });
       applyThemeToDocument(getTheme(fresh.appearance.theme));
       applyUiFont(fresh.appearance.uiFontFamily, fresh.appearance.uiFontSize);
-      for (const session of sessions.values()) session.applySettings(fresh);
+      const forTerminals = terminalSettings(fresh);
+      for (const session of sessions.values()) session.applySettings(forTerminals);
       // Sıfırlama profilleri yeniden tarıyor ve hepsine YENİ kimlik veriyor;
       // bu çağrı olmadan açık her sekmenin bağı aynı anda kopuyor.
       get().healProfileLinks();
@@ -1142,6 +1177,30 @@ export const useStore = create<Store>((set, get) => ({
     } catch (err) {
       get().toast(String(err), "err");
     }
+  },
+
+  async zoomTerminalFont(step) {
+    const a = get().settings.appearance;
+    const zoom = step === 0 ? 0 : a.fontZoom + step;
+    if (zoom === a.fontZoom) return;
+    // Sınırdaysa (8 ya da 32 px) yazacak bir şey yok: her basışta aynı değeri
+    // diske yazmak ve bütün terminallere uygulamak boşuna iş.
+    const unchanged =
+      terminalFontSize({ fontSize: a.fontSize, fontZoom: zoom }) === terminalFontSize(a);
+    if (step !== 0 && unchanged) return;
+    await get().patchAppearance({ fontZoom: zoom });
+  },
+
+  setSystemDark(dark) {
+    applySystemDark(dark);
+    const settings = get().settings;
+    if (settings.appearance.theme !== SYSTEM_THEME) return;
+    applyThemeToDocument(getTheme(SYSTEM_THEME));
+    // Ayar değişmedi, çizilen tema değişti: oturumlar çözülmüş kimliğe
+    // bakıyor (bkz. `TerminalSession.applySettings`).
+    const forTerminals = terminalSettings(settings);
+    for (const session of sessions.values()) session.applySettings(forTerminals);
+    set({ themeEpoch: get().themeEpoch + 1 });
   },
 
   // ----------------------------------------------------------------- gruplar
@@ -1689,7 +1748,9 @@ export const useStore = create<Store>((set, get) => ({
       profileId: tab.profileId,
       cwd: tab.cwd,
       env: group.env,
-      settings,
+      // Yakınlaştırma dahil (bkz. `terminalSettings`): yeni açılan sekme de
+      // ötekilerle aynı boyutta.
+      settings: terminalSettings(settings),
       windowsBuild: get().windowsBuild,
       restoreScrollback: settings.behavior.restoreScrollback,
     });

@@ -39,6 +39,7 @@ import {
   type TextDiff,
 } from "../lib/textDiff";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
+import { terminalFontSize } from "../lib/settingsLimits";
 import type { DiffSides, FileText, GitChange, Settings } from "../types";
 import type { EditorBinding, EditorHandle } from "./DiffEditor";
 import { OneSide, SideBySide, Unified, type Caret, type PaneLabels, type PanesHandle } from "./DiffPanes";
@@ -971,7 +972,8 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
   // pencerenin erişilebilirlik ağacında ipucu "Önceki fark (⇧f7)" okunuyordu.
   const shortcut = (title: string, combo: string) =>
     `${title} (${prettyCombo(combo).replace(/f(\d{1,2})$/, "F$1")})`;
-  const fontSize = settings?.appearance.fontSize ?? 14;
+  // Terminalin gerçek boyutu: kısayolla yakınlaştırma dahil.
+  const fontSize = settings ? terminalFontSize(settings.appearance) : 14;
   // JetBrains Mono'nun satır ölçüsü 1.32em; IntelliJ'in satır aralığı 1.2.
   // 14px'te 22px — belgedeki ekran görüntüsünde ölçülen satır yüksekliği.
   const lineHeight = Math.round(fontSize * 1.584);

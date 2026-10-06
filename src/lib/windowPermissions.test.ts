@@ -33,6 +33,8 @@ const IZIN: Record<string, string> = {
   setTitle: "core:window:allow-set-title",
   setFocus: "core:window:allow-set-focus",
   startDragging: "core:window:allow-start-dragging",
+  // Pencerenin görünümü temaya uyuyor ("Sistemi izle"de sisteme bırakılıyor).
+  setTheme: "core:window:allow-set-theme",
 };
 
 function tsFiles(dir: string): string[] {
