@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const WINDOWS = process.platform === "win32";
+// Yerel macOS paketlerini imzalayan kimlik; olusturan betik macos-cert.sh.
+const MAC_IDENTITY = "NTerminal Dev";
 
 const TASKS = {
   dev: { ps: "dev.ps1" },
@@ -139,7 +141,8 @@ function runPosix() {
   if (task === "build") {
     const deps = ensureDeps();
     if (deps !== 0) return deps;
-    const code = run("npx", ["tauri", "build", ...rest]);
+    const env = process.platform === "darwin" ? macSigningEnv() : process.env;
+    const code = run("npx", ["tauri", "build", ...rest], { env });
     if (code === 0) listBundles();
     return code;
   }
@@ -162,6 +165,50 @@ function runPosix() {
   console.log("");
   console.log(failed === 0 ? "Tum testler gecti." : "Basarisiz testler var.");
   return failed;
+}
+
+/**
+ * macOS paketinin imza kimligi: YALNIZCA NTerminal'in kendisi.
+ *
+ * Tauri kimligi once `APPLE_SIGNING_IDENTITY` ortam degiskeninden okuyor;
+ * `bundle.macOS.signingIdentity` ancak degisken yoksa devreye giriyor. Kabuk
+ * profilinde (~/.zshrc) baska bir proje icin GENEL tanimli degisken her
+ * NTerminal paketini o projenin sertifikasiyla imzaliyordu: kurulum oncesi
+ * DMG'ye bakan `codesign -dvv` imzaci olarak "CopyBoard Dev" gosterdi.
+ *
+ * Kabuktan gelen deger bu yuzden devralinmiyor. Sira:
+ *   1. `NTERMINAL_SIGNING_IDENTITY` - acik secim ("-" ad-hoc imza).
+ *   2. Anahtar zincirinde `NTerminal Dev` varsa o (scripts/macos-cert.sh).
+ *   3. Hicbiri yoksa imzasiz; CI'daki paketle ayni.
+ */
+function macSigningEnv() {
+  const env = { ...process.env };
+  const inherited = env.APPLE_SIGNING_IDENTITY;
+  delete env.APPLE_SIGNING_IDENTITY;
+
+  const identity =
+    process.env.NTERMINAL_SIGNING_IDENTITY || (hasIdentity(MAC_IDENTITY) ? MAC_IDENTITY : null);
+  if (identity) env.APPLE_SIGNING_IDENTITY = identity;
+
+  if (inherited && inherited !== identity) {
+    console.log(
+      `Kabuktaki APPLE_SIGNING_IDENTITY="${inherited}" kullanilmiyor (NTerminal'e ait degil).`,
+    );
+  }
+  console.log(
+    identity
+      ? `macOS imzasi: "${identity}"`
+      : `macOS imzasi: yok. "${MAC_IDENTITY}" kimligini olusturmak icin: sh scripts/macos-cert.sh`,
+  );
+  return env;
+}
+
+/** Anahtar zincirinde bu adda bir kod imzalama kimligi var mi? */
+function hasIdentity(name) {
+  // `-v` YOK: guvenilir isaretlenmemis kendinden imzali kimlik "gecerli"
+  // listesine girmiyor, ama codesign imza icin guven aramiyor.
+  const res = spawnSync("security", ["find-identity", "-p", "codesigning"], { encoding: "utf8" });
+  return res.status === 0 && res.stdout.includes(`"${name}"`);
 }
 
 /** Uretilen .app / .dmg dosyalarini yazar. */

@@ -111,6 +111,11 @@ Aynı komutlar çalışır; çıktı `bundle\macos\*.app` ve `bundle\dmg\*.dmg`
 olur. macOS paketi bir Mac'te üretilmek zorunda — Apple SDK'sı olmadan
 çapraz derleme mümkün değil.
 
+İsteğe bağlı, bir kez: `sh scripts/macos-cert.sh` anahtar zincirine
+**NTerminal Dev** imza kimliğini ekler. `npm run bundle` sonra paketi onunla
+imzalar ve macOS izinleri (Tam Disk Erişimi vb.) her derlemede sıfırlanmaz.
+Kabuktaki `APPLE_SIGNING_IDENTITY` kullanılmaz; gerekçe README'de.
+
 ## Temizlik
 
 `src-tauri\target\release\bundle\nsis\` altında eski adla üretilmiş

@@ -1839,6 +1839,16 @@ sürecinin ortamını açtığı her kabuğa veriyor. Geliştirme kipinde bu ort
 `Get-ChildItem env:` ile NTerminal içindeki ortamı normal terminaldekiyle
 karşılaştır.
 
+**Kabuk profilindeki genel değişkenler pakete sızıyor.** `~/.zshrc`deki
+`export APPLE_SIGNING_IDENTITY="CopyBoard Dev"` başka bir proje içindi ama Tauri
+onu her `tauri build`de okuyor ve `bundle.macOS.signingIdentity`nin önüne
+koyuyor: NTerminal paketleri CopyBoard'un sertifikasıyla imzalanıyordu, kurulum
+öncesi DMG'ye bakan `codesign -dvv` gösterince fark edildi. Claude oturumlarının
+Bash aracında değişken YOKTU; yani aynı komut aracın içinden imzasız,
+kullanıcının terminalinden CopyBoard imzalı paket üretiyordu. `npm run bundle`
+artık değişkeni devralmıyor (`scripts/run.mjs` → `macSigningEnv`); `npx tauri
+build`ı doğrudan koşan hâlâ devralır.
+
 **Terminale yazılan metin yeniden ölçülendirmeye uyum sağlamaz.** Ortalanmış
 ya da tam genişlikte bir şey çizilecekse tampona yazmak yerine DOM katmanında
 çizilmeli (`TerminalBlocks` bunu yapıyor).

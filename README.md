@@ -713,9 +713,17 @@ arası korunuyor. Tauri bunu derleme sırasında kendisi yapıyor; gereken,
 sertifikanın ve Apple hesabı bilgilerinin CI'a sır olarak verilmesi. Şimdilik
 yapılmadı: üyelik ücretli ve kararı proje sahibinin.
 
-Kendinden imzalı bir sertifika (`bundle.macOS.signingIdentity`) izin
-sıfırlanmasını **geliştirme makinesinde** çözer ama son kullanıcı için hiçbir
-şey değiştirmez — o sertifika başka bir Mac'te güvenilmiyor.
+Kendinden imzalı bir sertifika izin sıfırlanmasını **geliştirme makinesinde**
+çözer ama son kullanıcı için hiçbir şey değiştirmez — o sertifika başka bir
+Mac'te güvenilmiyor. Yerel derleme için bu yol hazır: `sh scripts/macos-cert.sh`
+anahtar zincirine **NTerminal Dev** adlı bir kimlik ekliyor, `npm run bundle`
+da kimlik varsa onunla imzalıyor (yoksa imzasız; CI ise ad-hoc imzalıyor).
+
+Kabuktan gelen `APPLE_SIGNING_IDENTITY` bilerek **kullanılmıyor**. Tauri bu
+değişkeni yapılandırmadaki imza ayarından önce okuyor; kabuk profilinde başka
+bir proje için genel tanımlıyken NTerminal paketleri o projenin sertifikasıyla
+imzalanıyordu. Başka bir kimlik gerekiyorsa (örneğin ileride Developer ID)
+`NTERMINAL_SIGNING_IDENTITY` ile verilir.
 
 ### Neden `npx tauri dev` yerine `npm start`?
 
