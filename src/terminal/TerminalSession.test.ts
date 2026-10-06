@@ -50,6 +50,8 @@ const h = vi.hoisted(() => {
       handlers.clear();
       yayin.length = 0;
     },
+    /** Kabuğa yazılan her şey (`ptyWrite`). */
+    yazilan: [] as { id: string; data: string }[],
   };
 });
 
@@ -70,12 +72,16 @@ vi.mock("../lib/ipc", () => {
     return { pid: 4242, shell: "powershell", integration: true, cwd: "C:\\Users\\test" };
   });
 
+  const ptyWrite = vi.fn(async (id: string, data: string) => {
+    h.yazilan.push({ id, data });
+  });
+
   return {
-    // Gerçek `api` yüzeyi geniş; testin ilgilendiği tek çağrı `ptySpawn`.
-    // Vekil, geri kalanını sessiz birer boş çağrıya indiriyor — yüzey
-    // büyüdükçe testin bozulmaması için.
+    // Gerçek `api` yüzeyi geniş; testin ilgilendiği çağrılar `ptySpawn` ve
+    // `ptyWrite`. Vekil, geri kalanını sessiz birer boş çağrıya indiriyor —
+    // yüzey büyüdükçe testin bozulmaması için.
     api: new Proxy(
-      { ptySpawn } as Record<string, unknown>,
+      { ptySpawn, ptyWrite } as Record<string, unknown>,
       {
         get: (target, prop: string) =>
           target[prop] ?? vi.fn(async () => null),
@@ -265,6 +271,67 @@ describe("başlık bildirimi", () => {
       "~/projeler/nterminal",
     ]);
     expect(s.title).toBe("~/projeler/nterminal");
+    void s.dispose(true);
+  });
+});
+
+/**
+ * Geri yüklenen ekran yeni kabuğu programın kiplerinde BIRAKMAMALI.
+ *
+ * BİLDİRİLEN: Claude Code tam ekran çalışırken uygulama yeniden başladı; geri
+ * gelen sekmede komut kutusu yoktu, fareyi oynatmak isteme `^[[<35;12;1M`,
+ * pencereye dönmek `^[[I` basıyordu. "Yeniden başlat" düzeltmiyordu. Kayıt
+ * ikincil ekranı ve fare / odak kiplerini taşıyordu (diskteki dosyada
+ * sayıldı: `?1049h`, `?1003h`, `?1004h`); gerekçe `RESTORE_RESET`te.
+ */
+describe("geri yüklenen ekran", () => {
+  /** Düzeltmeden önceki `serialize` çıktısının biçimi: ana ekran, ikincil ekran, kipler. */
+  const ESKI_KAYIT =
+    "onceki komutun ciktisi\r\n" +
+    "\x1b[?1049h\x1b[H" +
+    "programin son karesi" +
+    "\x1b[?1h\x1b[?2004h\x1b[?1004h\x1b[?1003h\x1b[?1006h\x1b[?25l";
+
+  it("eski kayıttan sonra kabuk ana ekranda ve varsayılan kiplerde başlıyor", async () => {
+    const s = session("geri-eski");
+    await s.start(ESKI_KAYIT);
+    await flush(s);
+
+    expect(s.term.buffer.active.type, "kabuk ikincil ekranda doğdu").toBe("normal");
+    expect(s.term.modes.mouseTrackingMode, "fare hareketleri kabuğa yazılır").toBe("none");
+    expect(s.term.modes.sendFocusMode, "odak değişimi kabuğa yazılır").toBe(false);
+    expect(s.term.modes.applicationCursorKeysMode).toBe(false);
+    expect(s.term.modes.bracketedPasteMode).toBe(false);
+
+    // Kutunun açılması için gereken: istemde ve ikincil ekranda değil.
+    expect(s.inputSignals()).toMatchObject({ atPrompt: true, altScreen: false });
+
+    // Ana ekrandaki çıktı yerinde; ikincil ekranın karesi değil.
+    const satirlar = Array.from({ length: s.term.buffer.active.length }, (_, i) =>
+      s.term.buffer.active.getLine(i)?.translateToString(true),
+    ).join("\n");
+    expect(satirlar).toContain("onceki komutun ciktisi");
+    expect(satirlar).not.toContain("programin son karesi");
+
+    // `?1004h` yazıldığı anda xterm odağı bildiriyor; o rapor kabuğa gitmemeli.
+    const raporlar = h.yazilan
+      .filter((w) => w.id === "geri-eski")
+      .filter((w) => w.data.includes("\x1b[I") || w.data.includes("\x1b[O"));
+    expect(raporlar, "geri yükleme sırasında üretilen odak raporu kabuğa gitti").toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("kayıt ikincil ekranı ve kipleri içermiyor", async () => {
+    const s = session("geri-kayit");
+    await s.start(null);
+    s.term.write("normal satir\r\n" + "\x1b[?1049h" + "tam ekran" + "\x1b[?1003h\x1b[?1004h\x1b[?1h");
+    await flush(s);
+
+    const kayit = s.serialize();
+    expect(kayit).toContain("normal satir");
+    for (const parca of ["\x1b[?1049h", "tam ekran", "\x1b[?1003h", "\x1b[?1004h", "\x1b[?1h"]) {
+      expect(kayit, JSON.stringify(parca)).not.toContain(parca);
+    }
     void s.dispose(true);
   });
 });

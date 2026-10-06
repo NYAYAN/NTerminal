@@ -167,6 +167,28 @@ const INPUT_NOTIFY_DELAY = 70;
 const INTEGRATION_GRACE_MS = 220;
 
 /**
+ * Geri yüklenen ekranın ARDINDAN yazılan sıfırlama: yeni kabuk ana ekranda ve
+ * varsayılan girdi kiplerinde başlamalı.
+ *
+ * ÖLÇÜLEN HATA: Claude Code tam ekran çalışırken uygulama yeniden başladı.
+ * Kayıt ikincil ekranı (`?1049h` + programın son karesi) ve programın açtığı
+ * kipleri (`?1003h` her fare hareketini bildir, `?1004h` odağı bildir)
+ * taşıyordu; geri yükleme bunları yeni terminale yazdı. Yeni kabuk ikincil
+ * ekranda doğdu — komut kutusu orada bilerek kapalı (`resolveInputMode`) — ve
+ * fareyi oynatmak isteme `^[[<35;12;1M`, pencereye dönmek `^[[I` bastı.
+ * "Yeniden başlat" ekranı aynı yoldan kaydedip geri yüklediği için durum
+ * kalıcıydı.
+ *
+ * Kayıt artık bunları içermiyor (`serialize`); bu dizi o düzeltmeden önce
+ * yazılmış dosyalar için. `?1047l` ana ekrana döner ve `?1049l`in aksine
+ * imleci geri YÜKLEMEZ, ana ekrandaysak hiçbir şey yapmaz. DECSTR (`CSI ! p`)
+ * imleci gösterir; uygulama tuşlarını, odak bildirimini, bracketed paste'i ve
+ * renk özniteliklerini kapatır. Fare izleme ve SGR kodlaması onun dışında.
+ */
+const RESTORE_RESET =
+  "\x1b[?1047l" + "\x1b[!p" + "\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l" + "\x1b[?1006l";
+
+/**
  * WebGL bağlamı tutan oturumlar, en son kullanılan SONDA.
  *
  * Modül düzeyinde çünkü tavan TÜM terminaller için geçerli: motorun sınırı
@@ -250,6 +272,13 @@ export class TerminalSession {
   exited = false;
   exitCode: number | null = null;
   spawned = false;
+  /**
+   * Kayıtlı ekran yazılıyor: terminalin bu arada ürettiği yanıtlar kabuğa
+   * GİTMİYOR. Eski biçimli kayıttaki `?1004h`i gören xterm o anki odağı hemen
+   * bildiriyor (`ESC [ O`); yeniden başlatmada aynı kimlikle doğan yeni kabuk
+   * bunu girdi diye alabilirdi. Bkz. `RESTORE_RESET`.
+   */
+  private restoring = false;
 
   // --- kabuk entegrasyonu durum makinesi
   private promptEndMark: BufferMark | null = null;
@@ -534,7 +563,9 @@ export class TerminalSession {
     this.spawned = true;
 
     if (restoreData) {
+      this.restoring = true;
       this.term.write(restoreData);
+      this.term.write(RESTORE_RESET);
       /*
        * Ay\u0131ra\u00e7 terminale YAZILMIYOR; uygulama \u00e7iziyor.
        *
@@ -556,6 +587,8 @@ export class TerminalSession {
       await new Promise<void>((resolve) => this.term.write("\r\n", () => resolve()));
       this.restoreMarker = this.term.registerMarker(0);
       await new Promise<void>((resolve) => this.term.write("\r\n", () => resolve()));
+      // Geri çağrı geldiğinde kayıt ayrıştırılmış: ürettiği yanıtlar geçti.
+      this.restoring = false;
     }
 
     /*
@@ -844,11 +877,20 @@ export class TerminalSession {
     };
   }
 
-  /** Diske yazılacak ekran çıktısı. */
+  /**
+   * Diske yazılacak ekran çıktısı.
+   *
+   * Kipler ve ikincil ekran DIŞARIDA: kayıt yeni bir kabuğun önüne yazılıyor
+   * ve kabuk ana ekranda, varsayılan kiplerle başlamalı (ölçülen hata
+   * `RESTORE_RESET`te). Tam ekran programın son karesi de o program artık
+   * çalışmadığı için yanıltıcı; ekran, program kapanmış gibi geri geliyor.
+   */
   serialize(): string {
     try {
       return this.serializer.serialize({
         scrollback: this.settings.behavior.scrollbackSaveLines,
+        excludeModes: true,
+        excludeAltBuffer: true,
       });
     } catch {
       return "";
@@ -1663,8 +1705,12 @@ export class TerminalSession {
 
   private registerHandlers() {
     this.disposables.push(
-      this.term.onData((data) => this.handleInput(data)),
+      // Kayıtlı ekran yazılırken terminalin yanıtları yutuluyor (`restoring`).
+      this.term.onData((data) => {
+        if (!this.restoring) this.handleInput(data);
+      }),
       this.term.onBinary((data) => {
+        if (this.restoring) return;
         void api.ptyWrite(this.tabId, data).catch(() => {});
       }),
       /*

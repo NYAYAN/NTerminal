@@ -1385,6 +1385,46 @@ denendi: 12px arayüz yazısında kutu 14px, resim ya 10px'e iniyor ya taşıyor
 Gözle: scratchpad Vite düzeneği + ekran dışı WKWebView görüntüsü, koyu ve
 açık tema, sekme ve bölme görünümü.
 
+### 1.26 Geri yüklenen ekran kabuğu tam ekran programın kiplerinde bırakıyordu
+
+**Bildirilen:** Claude Code tam ekran açıkken uygulama yeniden başladı (kabuk
+SIGHUP aldı). Geri gelen sekmede komut kutusu yoktu; fare oynadıkça isteme
+`^[[<35;12;1M`, pencereye dönünce `^[[I` yazılıyordu. "Yeniden başlat"
+düzeltmiyordu.
+
+**Kök neden.** `serialize()` seçeneksiz çağrılıyordu ve xterm'in serialize
+eklentisi o zaman ikincil ekranı (`?1049h` + son kare) ve kipleri (fare izleme,
+odak, uygulama tuşları, bracketed paste) de yazıyor. Geri yükleme bunları yeni
+terminale uyguluyordu: kabuk ikincil ekranda doğuyor — komut kutusu orada
+bilerek kapalı (`resolveInputMode`) — ve terminal fare / odak raporlarını
+kabuğa girdi diye gönderiyordu. Diskteki iki kayıtta `?1049h`, `?1003h`,
+`?1004h` sayıldı. Eklenti SGR kodlamasını (`?1006h`) yazmadığı için geri
+yüklemeden sonra raporlar X10 biçimine döndü (`[ZZYZ…`). "Yeniden başlat" ekranı
+aynı yoldan kaydedip geri yüklediği için durum kendini taşıyordu.
+
+**Çözüm.** Kayıt `excludeModes` + `excludeAltBuffer` ile; tam ekran programın
+son karesi, program artık çalışmadığı için zaten yanıltıcı. Düzeltmeden önce
+yazılmış dosyalar için geri yüklemenin ardından `RESTORE_RESET`: `?1047l` (ana
+ekrana dön, `?1049l`in aksine imleci geri yükleme), DECSTR, fare izleme ve SGR
+kodlaması kapalı. Sıfırlama tek başına yetmiyordu: eski kayıttaki `?1004h`
+yazıldığı AN xterm odağı bildiriyor (`ESC [ O`) ve rapor sıfırlamadan önce
+`ptyWrite`a gidiyordu (düzenekte görüldü). Kabuk o an yok, Rust yazmayı
+düşürüyor; ama yeniden başlatmada aynı kimlikle doğan kabuğa ulaşmaması IPC
+sırasına kalıyordu. Kayıt yazılırken (`restoring`) terminalin yanıtları
+yutuluyor.
+
+**Açık uç.** Uygulama açıkken tam ekran bir program çökerse ya da öldürülürse
+kipler canlı terminalde kalıyor; kurtarma artık "Yeniden başlat". İstemde (OSC
+133;D) kendiliğinden sıfırlamak düşünüldü, Windows'ta denenmeden yapılmadı.
+
+**Doğrulama.** `TerminalSession.test.ts` › "geri yüklenen ekran": eski biçimli
+kayıttan sonra ana ekran, varsayılan kipler, kutunun açılma koşulu
+(`atPrompt`, `altScreen`) ve kabuğa odak raporu gitmemesi; kayıtta ikincil
+ekran ve kip dizisi yok. Mutasyonla sınandı: düzeltmesiz ikisi, sıfırlamasız,
+kayıt seçeneksiz ve kapısız hâlde ilgili olan düşüyor. Uçtan uca: scratchpad
+düzeneğinde eski biçimli kaydı geri yükleyip fareyi gezdirmek ve odağı
+değiştirmek (ekran dışı WKWebView); kutu açık, kabuğa hiçbir şey yazılmadı.
+
 ---
 
 ## 2. Açık işler
