@@ -201,6 +201,20 @@ interface PaneProps {
   editor?: ReactNode;
 }
 
+/**
+ * Teker / trackpad hareketini BASKIN eksene indirger.
+ *
+ * BİLDİRİLEN: "yatay scroll ettiğimde dikey position korunmuyor." Trackpad'de
+ * yatay bir kaydırma çoğu zaman birkaç piksel dikey de getiriyor; yan yana
+ * görünümde dikey her hareket eş zamanlı kaydırmayı yeniden hesaplatıyor ve
+ * değişen bloklarda (31 satır eklenmiş, karşıda 0) karşı bölme satırlarca
+ * sıçrayabiliyor. VS Code da aynı sebeple baskın eksene kilitliyor
+ * (`editor.scrollPredominantAxis`).
+ */
+export function predominantAxis(dx: number, dy: number): { dx: number; dy: number } {
+  return Math.abs(dx) > Math.abs(dy) ? { dx, dy: 0 } : { dx: 0, dy };
+}
+
 function Pane(props: PaneProps) {
   const {
     mirror,
@@ -218,6 +232,8 @@ function Pane(props: PaneProps) {
     labels,
   } = props;
   const scroller = useRef<HTMLDivElement | null>(null);
+  const lhRef = useRef(lh);
+  lhRef.current = lh;
   const first = Math.max(0, Math.floor(top / lh) - OVERSCAN);
   const last = Math.min(rowCount, Math.ceil((top + height) / lh) + OVERSCAN);
 
@@ -241,9 +257,32 @@ function Pane(props: PaneProps) {
   const forwardWheel = (event: React.WheelEvent) => {
     const el = scroller.current;
     if (!el) return;
-    el.scrollTop += event.deltaY;
-    el.scrollLeft += event.deltaX;
+    const { dx, dy } = predominantAxis(event.deltaX, event.deltaY);
+    el.scrollTop += dy;
+    el.scrollLeft += dx;
   };
+
+  /*
+   * Metnin kendi tekerinde de baskın eksen (bkz. `predominantAxis`). İki eksende
+   * birden hareket varsa tarayıcının kaydırması durduruluyor ve yalnızca baskın
+   * eksen uygulanıyor; tek eksenli hareket (fare tekeri, Shift+teker) tarayıcının
+   * kendi akıcı kaydırmasıyla kalıyor. Pasif olmayan dinleyici: React'in
+   * `onWheel`i pasif ve `preventDefault` orada işlemiyor.
+   */
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaX === 0 || event.deltaY === 0) return;
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? lhRef.current : event.deltaMode === 2 ? el.clientHeight : 1;
+      const { dx, dy } = predominantAxis(event.deltaX * unit, event.deltaY * unit);
+      el.scrollLeft += dx;
+      el.scrollTop += dy;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const gutter = (
     <div
@@ -548,6 +587,8 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
   const [scroll, setScroll] = useState({ top1: 0, top2: 0 });
   /** Programın kaydırdığı bölme ve hedef değer: o bölmenin olayı geri yansımasın. */
   const echo = useRef<{ 1: number | null; 2: number | null }>({ 1: null, 2: null });
+  /** Her bölmenin son kaydırma olayındaki konumu: olayda NEYİN değiştiğini bilmek için. */
+  const last = useRef({ 1: { top: 0, left: 0 }, 2: { top: 0, left: 0 } });
 
   // Blok içi konumlar (iç parçalar bloğun metnine göre) — blok başına bir kez.
   const offsets = useRef(new Map<string, number[]>());
@@ -590,13 +631,47 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
     [changes, folds1, folds2, height, lh, model1, model2],
   );
 
+  /** Yalnızca yatay konumu karşı bölmeye taşır; dikeye dokunmuyor. */
+  const mirrorLeft = (from: 1 | 2) => {
+    const master = from === 1 ? el1.current : el2.current;
+    const slave = from === 1 ? el2.current : el1.current;
+    if (master && slave && slave.scrollLeft !== master.scrollLeft) slave.scrollLeft = master.scrollLeft;
+  };
+
+  /*
+   * Bir bölme kaydı: NE değiştiyse o eşleniyor.
+   *
+   * BİLDİRİLEN: "yatay scroll ettiğimde bir anda başka bir yere gidiyor, dikey
+   * position korunmuyor." ÖLÇÜLDÜ (kullanıcının dosyası: sağda 31 satır
+   * eklenmiş, solda karşılığı 0): sağ bölme dikey kaydırılıp okuma noktası
+   * eklenen bloğun ortasına gelmişken sol, bloğun durduğu satıra kilitli. Yalnızca
+   * yatay 80px kaydırınca sağ 13 satır aşağı sıçradı. Sebep iki halka:
+   *
+   *   1. Her kaydırma olayı — yatay da — dikey eşlemeyi (`follow`) koşturuyordu.
+   *   2. `follow` karşı bölmenin yatay konumunu da yazıyor; karşı bölmenin bu
+   *      yüzden attığı olay "kullanıcı kaydırdı" sanılıyor (yankı denetimi
+   *      yalnızca dikeye bakıyordu) ve ana bölme rolü karşıya geçiyordu.
+   *
+   * Dikey eşleme iki yönde TERSİNİR değil (bloklar farklı boyda: sağın bloğun
+   * ortası solda tek satıra, o satır sağda bloğun SONUNA düşüyor); rol değişince
+   * sıçrama kaçınılmaz. Artık yalnızca kullanıcının kendi DİKEY kaydırması
+   * eşleniyor; yatay değişiklik yalnızca yatay konumu taşıyor (IntelliJ de
+   * ikisini ayrı eşliyor).
+   */
   const onScroll = (side: 1 | 2) => {
     const el = side === 1 ? el1.current : el2.current;
     if (!el) return;
+    const prev = last.current[side];
+    const now = { top: el.scrollTop, left: el.scrollLeft };
+    last.current[side] = now;
+    const vertical = Math.abs(now.top - prev.top) >= 1;
     const expected = echo.current[side];
-    const isEcho = expected !== null && Math.abs(el.scrollTop - expected) < 1;
+    const isEcho = expected !== null && Math.abs(now.top - expected) < 1;
     echo.current[side] = null;
-    if (sync && !isEcho) follow(side);
+    if (sync) {
+      if (vertical && !isEcho) follow(side);
+      else if (now.left !== prev.left) mirrorLeft(side);
+    }
     setScroll({ top1: el1.current?.scrollTop ?? 0, top2: el2.current?.scrollTop ?? 0 });
   };
 
@@ -771,7 +846,10 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
         onWheel={(event) => {
           const el = el2.current;
           if (!el) return;
-          el.scrollTop += event.deltaY;
+          // Ayırıcının üstünde de baskın eksen (bkz. `predominantAxis`).
+          const { dx, dy } = predominantAxis(event.deltaX, event.deltaY);
+          el.scrollTop += dy;
+          el.scrollLeft += dx;
         }}
       />
       <Pane

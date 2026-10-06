@@ -544,6 +544,102 @@ describe("görünüm", () => {
     expect(pane().scrollTop, "daraltınca okunan satır kaydı").toBe(10 * lh - a);
   });
 
+  /*
+   * BİLDİRİLEN: "yatay scroll ettiğimde bir anda başka bir yere gidiyor,
+   * dikey position korunmuyor." ÖLÇÜLDÜ (kullanıcının dosyası): sağda 31 satır
+   * eklenmiş, solda karşılığı yok. Sağ dikey kaydırılıp okuma noktası bloğun
+   * ortasındayken sol bloğun durduğu satıra kilitli; yalnızca yatay kaydırınca
+   * sağ 13 satır sıçradı. Burada aynı yapı: sağda 30 satır eklenmiş.
+   */
+  describe("eş zamanlı kaydırma: yatay kaydırma dikeye dokunmuyor", () => {
+    const BASE = Array.from({ length: 80 }, (_, i) => `l${i}`).join("\n") + "\n";
+    const CURRENT =
+      [...Array.from({ length: 40 }, (_, i) => `l${i}`), ...Array.from({ length: 30 }, (_, i) => `yeni${i}`),
+        ...Array.from({ length: 40 }, (_, i) => `l${i + 40}`)].join("\n") + "\n";
+
+    /** jsdom ölçmüyor: bölmelere yükseklik ver ki `follow` sıfıra kırpmasın. */
+    const olc = (el: HTMLElement) => {
+      Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => 10000 });
+      Object.defineProperty(el, "clientHeight", { configurable: true, get: () => 600 });
+    };
+
+    async function kur() {
+      vi.mocked(api.gitDiffSides).mockResolvedValue({ base: text(BASE), current: text(CURRENT), head: "1a2b3c4d" });
+      const view = render(<DiffWindow target={{ root: ROOT, path: "a.ts" }} />);
+      await settle();
+      fireEvent.click(collapseBtn(view.container)); // katlamayı aç: sıra = satır
+      await settle();
+      const [sol, sag] = [...view.container.querySelectorAll<HTMLElement>(".dw-sbs .dw-scroll")];
+      olc(sol);
+      olc(sag);
+      const lh = lineHeightOf(view.container);
+      const a = anchorPx(lh);
+      // Sağın okuma noktası eklenen bloğun ortasında (55. satır).
+      sag.scrollTop = 55 * lh - a;
+      fireEvent.scroll(sag);
+      await settle();
+      fireEvent.scroll(sol); // tarayıcının programla kaydırılan bölme için attığı olay
+      await settle();
+      return { sol, sag, lh, a };
+    }
+
+    it("sağı yatay kaydırmak sağı da solu da dikeyde yerinde bırakıyor", async () => {
+      const { sol, sag, lh, a } = await kur();
+      expect(sol.scrollTop, "sol bloğun durduğu satıra kilitli değil").toBe(40 * lh - a);
+      const [ust1, ust2] = [sol.scrollTop, sag.scrollTop];
+
+      sag.scrollLeft = 80;
+      fireEvent.scroll(sag);
+      await settle();
+      expect(sol.scrollLeft, "yatay konum karşıya geçmedi").toBe(80);
+      // Tarayıcı solun programla değişen yatay konumu için de olay atıyor;
+      // eskiden bu "kullanıcı kaydırdı" sanılıyor ve sağ yeniden eşleniyordu.
+      fireEvent.scroll(sol);
+      await settle();
+
+      expect(sag.scrollTop, "sağ dikeyde sıçradı").toBe(ust2);
+      expect(sol.scrollTop).toBe(ust1);
+    });
+
+    it("solu yatay kaydırmak da", async () => {
+      const { sol, sag } = await kur();
+      const [ust1, ust2] = [sol.scrollTop, sag.scrollTop];
+      sol.scrollLeft = 60;
+      fireEvent.scroll(sol);
+      await settle();
+      expect(sag.scrollLeft).toBe(60);
+      fireEvent.scroll(sag);
+      await settle();
+      expect(sag.scrollTop, "sağ dikeyde sıçradı").toBe(ust2);
+      expect(sol.scrollTop).toBe(ust1);
+    });
+
+    it("dikey kaydırma eskisi gibi eşleniyor", async () => {
+      const { sol, sag, lh, a } = await kur();
+      // Sağ bloğun ALTINA: sol da bloğun altındaki karşılığına gidiyor.
+      sag.scrollTop = 75 * lh - a;
+      fireEvent.scroll(sag);
+      await settle();
+      expect(sol.scrollTop).toBe(45 * lh - a);
+    });
+
+    it("teker baskın eksende: yatay harekette dikey kayma, dikeyde yatay kayma atılıyor", async () => {
+      const { sag } = await kur();
+      const [ust, yan] = [sag.scrollTop, sag.scrollLeft];
+      // `fireEvent` varsayılan engellendiyse `false` dönüyor.
+      expect(fireEvent.wheel(sag, { deltaX: 50, deltaY: 6 }), "tarayıcının kaydırması durmadı").toBe(false);
+      expect(sag.scrollLeft).toBe(yan + 50);
+      expect(sag.scrollTop, "yatay harekette dikey kayma").toBe(ust);
+
+      expect(fireEvent.wheel(sag, { deltaX: 4, deltaY: 48 })).toBe(false);
+      expect(sag.scrollTop).toBe(ust + 48);
+      expect(sag.scrollLeft, "dikey harekette yatay kayma").toBe(yan + 50);
+
+      // Tek eksenli (fare tekeri): tarayıcının kendi akıcı kaydırması.
+      expect(fireEvent.wheel(sag, { deltaX: 0, deltaY: 30 })).toBe(true);
+    });
+  });
+
   it("katlama değişince okunan satır yerinde kalıyor (birleşik görünüm)", async () => {
     files = ["uzun.ts"];
     const { container, getByTitle } = render(<DiffWindow target={{ root: ROOT, path: "uzun.ts" }} />);
