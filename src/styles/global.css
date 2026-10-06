@@ -2245,14 +2245,16 @@ button.hit-head:hover {
      vurusunda degisiyor ve terminali yeniden olculendiriyordu. Artik yuzuyor
      (bkz. `.suggest-bar`). */
   grid-template-rows: auto 1fr auto auto auto auto;
-  grid-template-columns: 1fr auto;
+  /* Sag panel burada bir SUTUN degil: terminalin ustunde aciliyor (bkz.
+     `.side-panel`); terminal ve alttaki cubuklar tam genislikte. */
+  grid-template-columns: 1fr;
   grid-template-areas:
-    "tabbar tabbar"
-    "terminal panel"
-    "context panel"
-    "links panel"
-    "input panel"
-    "status status";
+    "tabbar"
+    "terminal"
+    "context"
+    "links"
+    "input"
+    "status";
   min-width: 0;
   min-height: 0;
   background: var(--term-bg);
@@ -2836,6 +2838,18 @@ button.hit-head:hover {
 
 .block.on .block-tools {
   display: flex;
+}
+
+/* Sag panel acikken (terminalin USTUNDE, bkz. `.side-panel`) blok araclari ve
+   basligin sag ucu panelin SOLUNDA; yoksa panelin altinda kalirlardi. Yalnizca
+   sekme gorunumunde: bloklar bolme basina ve bolme gorunumunde soldaki
+   bolmeler panelin altinda degil. */
+.main:has(> .side-panel) .terminal-area[data-view="tabs"] .block-head {
+  right: calc(var(--side-panel-w, 390px) + 90px);
+}
+
+.main:has(> .side-panel) .terminal-area[data-view="tabs"] .block-tools {
+  right: calc(var(--side-panel-w, 390px) + 14px);
 }
 
 /* Arac cubugu gorununce rozet gizleniyor: ikisi ayni koseye denk geliyor ve
@@ -4692,6 +4706,12 @@ button.pop-group {
   cursor: pointer;
 }
 
+/* Sag panel acikken dugme panelin SOLUNDA (bkz. `.side-panel`). Yalnizca sekme
+   gorunumunde - gerekcesi `.block-tools`un yanindaki kuralda. */
+.main:has(> .side-panel) .terminal-area[data-view="tabs"] .scroll-bottom {
+  right: calc(var(--side-panel-w, 390px) + 20px);
+}
+
 .scroll-bottom:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
@@ -4996,17 +5016,58 @@ button.pop-group {
 
 /* --------------------------------------------------------------- yan panel */
 
+/* Sag panel terminalin USTUNDE - Dosyalar katmani gibi (bkz. `.files-layer`).
+ *
+ * ISTEK: "Degisiklikler kismini Dosyalar gibi ustte acilir yapalim" (secilen:
+ * Gecmis / Favoriler / Degisiklikler paneli sagda, terminalin ustunde).
+ * Eskiden `.main` izgarasinda kendi SUTUNUYDU: acilinca terminal daraliyor,
+ * PTY yeniden olculuyor ve kabuk ekrani yeniden ciziyordu. Artik terminal
+ * hucresinde (`grid-area: terminal`), sag kenara dayali; terminal ve alttaki
+ * cubuklar (baglam, komut kutusu) tam genislikte kaliyor.
+ *
+ * z-index Dosyalar katmaniyla ayni (22): terminalin kendi katmanlarinin (0-20)
+ * ustunde, oneri seridinin (24) ve menulerin altinda. DOM'da sonra geldigi icin
+ * ikisi cakisirsa ustte bu.
+ *
+ * Ust sinir: en az 240px terminal gorunsun; dar pencerede eski ayardan gelen
+ * genis bir panel terminali tumden ortmesin. Golge yalnizca SOL kenarda:
+ * kenarin altinda terminal var. */
 .side-panel {
-  grid-area: panel;
+  grid-area: terminal;
+  justify-self: end;
+  z-index: 22;
   width: 390px;
   min-width: 260px;
-  max-width: 720px;
+  max-width: min(720px, calc(100% - 240px));
   background: var(--surface-alt);
   border-left: 1px solid var(--border);
+  box-shadow: -10px 0 24px -14px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   position: relative;
   min-height: 0;
+  animation: side-panel-in 120ms ease-out;
+}
+
+@keyframes side-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel {
+    animation: none;
+  }
+}
+
+/* Sag panel acikken Dosyalar katmani onun SOLUNA kadar. Ikisi de terminalin
+   ustunde; sutunken yan yana duruyorlardi, ust uste binince goruntuleyicinin
+   sagi panelin altinda kalirdi. Genislik paneli ciziyor (`SidePanel`,
+   `--side-panel-w`: cizilen genislik, istenen degil). */
+.main:has(> .side-panel) .files-overlay {
+  right: var(--side-panel-w, 390px);
 }
 
 .panel-resize {
@@ -6534,6 +6595,13 @@ button.pop-group {
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
   z-index: 20;
+}
+
+/* Sag panel acikken cubuk panelin SOLUNDA (bkz. `.side-panel`): yoksa panelin
+   altinda kalir ve arama gorunmez olurdu. Cubuk butun alana ait (bolme
+   gorunumunde de tek), panel de alanin sag kenarinda. */
+.main:has(> .side-panel) .find-bar {
+  right: calc(var(--side-panel-w, 390px) + 18px);
 }
 
 .find-bar input {

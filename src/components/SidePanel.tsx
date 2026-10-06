@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useT } from "../lib/i18n";
 import type { MsgKey } from "../lib/messages";
@@ -41,6 +41,31 @@ export function SidePanel() {
 
   const [width, setWidth] = useState(storedWidth);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const aside = useRef<HTMLElement | null>(null);
+
+  /*
+   * Panelin ÇİZİLEN genişliği `.main`e değişken olarak (`--side-panel-w`).
+   *
+   * Panel terminalin üstünde açılıyor (bkz. `.side-panel`); Dosyalar katmanı da
+   * öyle. İkisi birden açıkken Dosyalar panelin soluna kadar uzanıyor (bkz.
+   * `.main:has(> .side-panel) .files-overlay`) ve bunun için genişliği bilmeli.
+   * Çizilen, istenen değil: CSS dar pencerede paneli sınırlıyor. Gözlemci
+   * sürüklemeyi de pencere boyutunu da yakalıyor.
+   */
+  useLayoutEffect(() => {
+    const el = aside.current;
+    const main = el?.parentElement;
+    if (!el || !main) return;
+    const write = () =>
+      main.style.setProperty("--side-panel-w", `${Math.round(el.getBoundingClientRect().width)}px`);
+    write();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(write) : null;
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      main.style.removeProperty("--side-panel-w");
+    };
+  }, []);
 
   // Ayardan gelen genislik degisirse (ice alma, baska pencere) yakala.
   useEffect(() => {
@@ -75,7 +100,7 @@ export function SidePanel() {
   }, [storedWidth, width, patchAppearance]);
 
   return (
-    <aside className="side-panel" style={{ width }}>
+    <aside className="side-panel" ref={aside} style={{ width }}>
       <div
         className="panel-resize"
         onMouseDown={(e) => {

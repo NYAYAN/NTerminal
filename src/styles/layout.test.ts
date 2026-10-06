@@ -120,6 +120,67 @@ describe("terminal boşluk dolgusu", () => {
 });
 
 /**
+ * Sağ panel (Geçmiş / Favoriler / Değişiklikler) terminalin ÜSTÜNDE açılıyor.
+ *
+ * İSTEK: "Değişiklikler kısmını Dosyalar gibi üstte açılır yapalım." Panel
+ * ızgarada kendi sütunuyken açılınca terminal daralıyor, PTY yeniden ölçülüyor
+ * ve kabuk ekranı yeniden çiziyordu. Artık terminal hücresinde, sağ kenarda.
+ */
+describe("sağ panel terminalin üstünde", () => {
+  const zOf = (selector: string) => Number(/z-index:\s*(\d+)/.exec(ruleBody(selector))?.[1]);
+
+  it("ana ızgarada panel sütunu yok: terminal daralmıyor", () => {
+    const body = ruleBody(".main");
+    expect(/grid-template-areas:\s*([^;]+);/.exec(body)![1], "panel yeniden ızgara alanı olmuş").not.toContain(
+      "panel",
+    );
+    const columns = /grid-template-columns:\s*([^;]+);/.exec(body)![1].trim().split(/\s+/);
+    expect(columns, "ızgarada ikinci bir sütun var").toHaveLength(1);
+  });
+
+  it("panel terminal hücresinde, sağ kenarda", () => {
+    const body = ruleBody(".side-panel");
+    expect(body).toMatch(/grid-area:\s*terminal/);
+    expect(body).toMatch(/justify-self:\s*end/);
+  });
+
+  it("katman sırası: terminalde arama çubuğunun üstünde, öneri şeridinin altında", () => {
+    // Öneri şeridi komut kutusuna ait: panel açıkken de yazılan komutun
+    // önerileri görünmeli.
+    expect(zOf(".side-panel")).toBeGreaterThan(zOf(".find-bar"));
+    expect(zOf(".side-panel")).toBeLessThan(zOf(".suggest-bar"));
+  });
+
+  it("terminalin sağ kenarındaki denetimler panel açıkken onun solunda", () => {
+    // Arama çubuğu bütün alana ait: her görünümde kayıyor. Bloklar ve "en alta
+    // in" bölme başına: yalnızca sekme görünümünde (bölme görünümünde soldaki
+    // bölmeler panelin altında değil).
+    expect(ruleBody(".main:has(> .side-panel) .find-bar")).toMatch(/right:\s*calc\(var\(--side-panel-w/);
+    for (const sel of [".scroll-bottom", ".block-tools", ".block-head"]) {
+      expect(
+        ruleBody(`.main:has(> .side-panel) .terminal-area[data-view="tabs"] ${sel}`),
+        `${sel} panelin altında kalıyor`,
+      ).toMatch(/right:\s*calc\(var\(--side-panel-w/);
+    }
+    // Ek kurallar asıl kuraldan SONRA: `ruleBody` ilk eşleşmeyi okuyor ve öbür
+    // testler asıl kuralın değerlerine bakıyor.
+    for (const sel of [".find-bar", ".scroll-bottom", ".block-tools", ".block-head"]) {
+      expect(CSS.indexOf(`\n${sel} {`), `${sel}: ek kural asıl kuraldan önce`).toBeLessThan(
+        CSS.indexOf(`.side-panel) .terminal-area[data-view="tabs"] ${sel} {`) === -1
+          ? CSS.indexOf(`.side-panel) ${sel} {`)
+          : CSS.indexOf(`.side-panel) .terminal-area[data-view="tabs"] ${sel} {`),
+      );
+    }
+  });
+
+  it("ikisi birden açıkken Dosyalar katmanı panelin soluna kadar", () => {
+    expect(ruleBody(".main:has(> .side-panel) .files-overlay")).toMatch(/right:\s*var\(--side-panel-w/);
+    const source = readFileSync(join(process.cwd(), "src/components/SidePanel.tsx"), "utf8");
+    expect(source, "panel genişliğini değişkene yazmıyor").toContain('setProperty("--side-panel-w"');
+  });
+});
+
+/**
  * xterm.css `.xterm .xterm-viewport`a `background-color: #000` veriyor ve bunu
  * temayla değiştirmiyor. Viewport `.xterm`in dolgu kutusunu tamamen kapladığı,
  * metin ise dolgunun içindeki `.xterm-screen`de durduğu için o dolgu halkası

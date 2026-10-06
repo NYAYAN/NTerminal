@@ -175,6 +175,12 @@ aranabilir, başarılı-hatalı filtrelenebilir, tekrarlar gizlenebilir. Satırl
 seçilip istem satırına yazılabilir, çalıştırılabilir, kopyalanabilir veya
 silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a bas.
 
+**Sağ panel terminalin üstünde.** Geçmiş, Favoriler ve Değişiklikler sekmeli
+sağ panel, Dosyalar paneli gibi terminalin **üstünde**, sağ kenarında açılır:
+terminal daralmaz, kabuk ekranı yeniden çizilmez; bağlam çubuğu ve komut satırı
+tam genişlikte kalır. İkisi birden açıkken Dosyalar sağ panelin soluna kadar
+uzanır, birbirlerinin üstüne binmezler.
+
 **Değişiklikler.** Sağ panelin *Değişiklikler* sekmesi bulunulan dizin bir git
 deposuysa değişen dosyaları listeliyor; farklar **yerinde**, listeyi
 kaybetmeden açılıyor. Satırlar **kapalı** geliyor: liste önce dosya adlarını
