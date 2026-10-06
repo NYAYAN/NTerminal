@@ -179,6 +179,7 @@ const ACTION_KEYS: Record<string, MsgKey> = {
   newGroup: "action.newGroup",
   commandPalette: "action.commandPalette",
   filePalette: "action.filePalette",
+  textSearch: "action.textSearch",
   historyPanel: "action.historyPanel",
   historySearch: "action.historySearch",
   favorites: "action.favorites",

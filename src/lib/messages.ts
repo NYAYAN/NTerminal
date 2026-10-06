@@ -69,12 +69,58 @@ export const MESSAGES = {
     "Bulunduğun dizinde dosya ara ({keys})",
     "Search files in the current directory ({keys})",
   ],
+  // İpucunun ikinci yarısı; içerik kısayolu tanımsızsa (ayar dosyasından
+  // silinmiş) hiç yazılmıyor — boş bir "()" göstermesin.
+  "app.searchTextTitle": ["Dosyaların içinde ara ({keys})", "Search inside files ({keys})"],
   "files.empty": ["Eşleşen dosya yok", "No matching files"],
   "files.hint": [
-    "Enter dosyayı açar · Shift+Enter yolunu komut satırına ekler",
-    "Enter opens the file · Shift+Enter appends its path to the command line",
+    "Enter dosyayı açar · Shift+Enter yolunu komut satırına ekler · Tab içeriklerde arar",
+    "Enter opens the file · Shift+Enter appends its path to the command line · Tab searches contents",
   ],
   "action.filePalette": ["Dosya ara", "Search files"],
+  // Dosyaların İÇİNDE arama: paletin ikinci sekmesi ve dosya sütunundaki
+  // aramanın ikinci kipi. Arama Rust'ta (`search.rs`); sınırlar söyleniyor.
+  "action.textSearch": ["Dosyaların içinde ara", "Search in files"],
+  "search.modeLabel": ["Arama türü", "Search type"],
+  "search.byName": ["Dosya adı", "File name"],
+  "search.byContent": ["Dosya içeriği", "File content"],
+  // Dosya sütunu dar: aynı iki kip kısa adlarıyla.
+  "search.nameShort": ["Dosya", "File"],
+  "search.contentShort": ["İçerik", "Content"],
+  "search.contentPlaceholder": ["Dosyaların içinde ara…", "Search inside files…"],
+  "search.caseSensitive": ["Büyük/küçük harfe duyarlı", "Match case"],
+  "search.wholeWord": ["Yalnızca tam sözcük", "Match whole word"],
+  "search.regex": ["Düzenli ifade", "Use regular expression"],
+  "search.searching": ["Aranıyor…", "Searching…"],
+  "search.noMatch": ["Eşleşme yok", "No matches"],
+  "search.matches.one": ["{n} eşleşme", "{n} match"],
+  "search.matches.other": ["{n} eşleşme", "{n} matches"],
+  "search.files.one": ["{n} dosya", "{n} file"],
+  "search.files.other": ["{n} dosya", "{n} files"],
+  "search.truncated": [
+    "Yalnızca ilk {n} satır gösteriliyor — aramayı daraltın",
+    "Only the first {n} lines are shown — narrow the search",
+  ],
+  "search.filesCapped": [
+    "Klasör çok büyük: yalnızca ilk 20.000 dosyaya bakıldı",
+    "The folder is very large: only the first 20,000 files were searched",
+  ],
+  "search.skippedLarge.one": [
+    "2 MB'tan büyük {n} dosyaya bakılmadı",
+    "{n} file larger than 2 MB was skipped",
+  ],
+  "search.skippedLarge.other": [
+    "2 MB'tan büyük {n} dosyaya bakılmadı",
+    "{n} files larger than 2 MB were skipped",
+  ],
+  "search.gitIgnored": ["Git'in yok saydığı dosyalar aranmadı", "Files ignored by git were not searched"],
+  "search.badRegex": ["Geçersiz düzenli ifade: {detail}", "Invalid regular expression: {detail}"],
+  "search.failed": ["Arama yapılamadı: {detail}", "Search failed: {detail}"],
+  "search.contentHint": [
+    "Enter dosyayı o satırda açar · Shift+Enter yolunu komut satırına ekler · Tab dosya adlarına döner",
+    "Enter opens the file at that line · Shift+Enter appends its path to the command line · Tab goes back to file names",
+  ],
+  "search.lineTitle": ["{path} — {line}. satır", "{path} — line {line}"],
   "dirs.parent": ["Üst klasör", "Parent directory"],
   "dirs.empty": ["Alt klasör yok", "No subdirectories"],
   "dirs.open": ["Klasör değiştir", "Change directory"],
@@ -106,7 +152,12 @@ export const MESSAGES = {
   // yüzden "geri aç" — daraltmadan önce açık olanları geri getiriyor.
   "tree.collapseAll": ["Tüm klasörleri daralt", "Collapse all folders"],
   "tree.reopen": ["Klasörleri geri aç", "Reopen folders"],
-  "viewer.back": ["Ağaca dön", "Back to tree"],
+  // Görüntüleyici ağacın YANINDA açılıyor; "geri" yok, yalnızca dosya kapanıyor.
+  "viewer.close": ["Dosyayı kapat", "Close file"],
+  "viewer.revealOutside": [
+    "{line}. satır gösterilen ilk 512 KB'ın dışında kaldı",
+    "Line {line} is beyond the first 512 KB shown",
+  ],
   "viewer.unsaved": ["Kaydedilmemiş değişiklikler var", "Unsaved changes"],
   "viewer.cannotEdit": [
     "Bu dosya burada düzenlenemiyor: ikili, yarım megabayttan büyük ya da satır sonları karışık",

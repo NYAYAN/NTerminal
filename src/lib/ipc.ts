@@ -30,10 +30,12 @@ import type {
   PathsInfo,
   Profile,
   ReleaseInfo,
+  SearchFlags,
   Settings,
   SpawnResult,
   SpawnSpec,
   StashFiles,
+  TextSearchResult,
   UpdateProgress,
   Workspace,
 } from "../types";
@@ -102,6 +104,13 @@ export const api = {
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   listDirs: (path: string) => invoke<string[]>("list_dirs", { path }),
   listFiles: (path: string) => invoke<string[]>("list_files", { path }),
+  /**
+   * Dosyaların İÇİNDE arama. `id` aramanın kimliği: yenisi başlayınca eskisi
+   * `searchTextCancel` ile durduruluyor (bkz. `lib/textSearch.ts`).
+   */
+  searchText: (id: number, path: string, query: string, options: SearchFlags) =>
+    invoke<TextSearchResult>("search_text", { id, path, query, options }),
+  searchTextCancel: (id: number) => invoke<void>("search_text_cancel", { id }),
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),

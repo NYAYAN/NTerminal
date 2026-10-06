@@ -11,6 +11,7 @@ mod osinfo;
 mod paths;
 mod platform;
 pub mod pty;
+mod search;
 mod session_end;
 mod shellint;
 mod shells;
@@ -736,6 +737,33 @@ fn list_files(path: String) -> CmdResult<Vec<String>> {
     Ok(files::list(p))
 }
 
+/// Dosyalarin ICINDE arama - paletin "Dosya icerigi" sekmesi ve dosya sutunu.
+///
+/// `async` + `spawn_blocking`: bir git sureci ve binlerce dosya okumasi; ana
+/// is parcaciginda pencereyi dondururdu. `id` arayuzun verdigi kimlik: yeni
+/// bir aramaya gecince eskisi `search_text_cancel` ile durduruluyor. Sinirlar,
+/// iptal ve hangi dosyalara bakildigi `search` modulunde belgelenmis.
+#[tauri::command]
+async fn search_text(
+    id: u64,
+    path: String,
+    query: String,
+    options: search::SearchOptions,
+) -> CmdResult<search::SearchResult> {
+    tauri::async_runtime::spawn_blocking(move || {
+        search::run(id, std::path::Path::new(&path), &query, &options)
+    })
+    .await
+    .map_err(fail)?
+}
+
+/// Suren (ya da henuz baslamamis) bir aramayi durdurur.
+#[tauri::command]
+fn search_text_cancel(id: u64) -> CmdResult<()> {
+    search::cancel(id);
+    Ok(())
+}
+
 /// Deponun ucuz durum imzasi; degistiyse tam sorgu gerekiyor.
 ///
 /// Yoklama icin: her yoklamada `git status` kosturmak buyuk bir depoda saniye
@@ -1285,6 +1313,8 @@ pub fn run() {
             open_external,
             list_dirs,
             list_files,
+            search_text,
+            search_text_cancel,
             list_entries,
             read_text_file,
             write_text_file,

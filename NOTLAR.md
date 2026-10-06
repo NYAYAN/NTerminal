@@ -1482,6 +1482,95 @@ denendi: 12px arayüz yazısında kutu 14px, resim ya 10px'e iniyor ya taşıyor
 Gözle: scratchpad Vite düzeneği + ekran dışı WKWebView görüntüsü, koyu ve
 açık tema, sekme ve bölme görünümü.
 
+### 1.25 Dosya paneli terminalin üstünde; dosyaların içinde arama
+
+**İstek:** "Klasörleri göster'e basınca açılıyor ve terminali sıkıştırıyor,
+üstüne açılsın. Bir dosyayı seçersem yanına full width açılsın. Üstteki arama
+dosyaları arıyor; dosyaların içinde metin araması da olmalı."
+
+**Katman, sütun değil.** Panel ızgarada `files` sütunuydu; açılınca terminal
+daralıyor, xterm yeniden ölçülüyor, PTY'ye yeni boyut gidiyor ve kabuk ekranı
+yeniden çiziyordu. Şimdi `.main` içinde, terminal hücresinde (`grid-area:
+terminal`) duran `.files-layer`; içeriği mutlak konumlu, yani hücrenin ölçüsüne
+katkısı sıfır. Ölçüldü (tarayıcı düzeneği): terminal alanı 984×633, xterm
+ekranı 948×611 — panel açıkken de, dosya açıkken de aynı. Katman
+`pointer-events: none`; yalnızca sütun ve görüntüleyici olay alıyor, ağacın
+sağında kalan terminal tıklanabilir. Sekme çubuğu, komut kutusu ve durum
+çubuğu örtülmüyor (ağaçta Shift+tıklama yolu kutuya ekliyor). Sağ panel de
+örtülmüyor: kullanıcının açtığı sabit bir panel; o açıkken görüntüleyici
+terminalin genişliğini alıyor (dar kalırsa başlıkta boyut/klasör kap
+sorgusuyla gizleniyor).
+
+**Katman sırası.** Terminal alanı kendi bağlamını kurmuyor (`.terminal-area`
+z-index'siz); içindeki arama çubuğu 20, bloklar 4. Panel 22: onların üstünde.
+Öneri şeridi 20'den 24'e çıktı — panel açıkken yazılan komutun önerileri
+görünmeli. Terminal alanına z-index verip yalıtmak DÜŞÜNÜLDÜ ve yapılmadı:
+terminalin sağ tık menüsü (`.ctx-menu`, 300) o alanın İÇİNDE çiziliyor;
+yalıtılsaydı menü ve arkasındaki tıklama kalkanı panelin altına düşerdi.
+
+**Görüntüleyici yanda.** `ui.viewerPath` doluysa sütunun yanında
+`.file-viewer-pane` (kalan bütün genişlik). "Geri" kalktı; başlıktaki × yalnızca
+dosyayı kapatıyor. `key={viewerPath}`: başka dosyaya geçmek görüntüleyiciyi
+baştan kuruyor — eskiden aynı yer yeniden kullanılınca kaydırma konumu önceki
+dosyadan taşınırdı. Ağaçta açık dosya işaretli; `openFile` dosyanın EKSİK
+dallarını `treeExpanded`a ekliyor (kökün altındaysa; hiçbiri eksik değilse
+aynı dizi) ve satır bir kez görünür alana kaydırılıyor. Sütun genişliğinin
+üst sınırı 900 → 600 (görüntüleyici artık sütunda değil) ve katmanda
+`min(600px, 100% - 240px)`. Esc katman katman: arama → panel; düzenleme yazı
+alanındaki Esc paneli kapatmıyor; panel kapanırken odak komut kutusuna ya da
+terminale dönüyor. "Terminalde ara" açık bir dosya terminali örtüyorsa önce
+paneli kapatıyor (yoksa çubuk panelin altında kalırdı).
+
+**İçerik araması Rust'ta (`search.rs`).** Arayüze binlerce dosyanın içeriğini
+taşımak yerine. Dosya listesi depoda `git ls-files -z --cached --others
+--exclude-standard` (`.gitignore`a uyuyor, yeni bağımlılık yok); depo değilse,
+git yoksa ya da liste boşsa (yok sayılan bir klasörün içindeyiz) `files::list`.
+Git süreci AKITILARAK okunuyor: 20.000 dosyayı geçince, 4 sn dolunca ya da
+arama iptal edilince öldürülüyor — ev klasörü "dotfiles" deposu olan
+kullanıcıda `--others` bütün ev klasörünü yürüyebilir. Liste 5 sn önbellekte
+(yazma soluğu); içerik her aramada diskten. Eşleştirici `regex` (tauri-utils
+zaten aynı sürüme bağlıydı, yeni ağırlık değil): düz metin `regex::escape`,
+varsayılan harf gözetmeyen, `multi_line` + `crlf`. Düz metinde dosyaya tek
+tarama, eşleşmeler satırlarına dağıtılıyor; düzenli ifadede her satıra ayrı
+(`\s` satır sonunu yakalayıp iki satıra yayılmasın, `(?-m)^` dosya başına
+kilitlenmesin). Konumlar UTF-16 birimi (arayüz `slice` ile kesiyor; Türkçe
+harf ve emoji testte). Dosyalar 8 iş parçacığına kadar paralel, ortak sayaçtan
+alınıyor; 2000 satırı geçince yeni dosya alınmıyor, alınanlar bitiriliyor —
+sonuç her koşuda aynı ilk 2000 satır. Sınırlar sonuçla geliyor ve arayüz
+yazıyor: `truncated`, `files_capped`, `skipped_large` (2 MB), ikili (ilk 8 KB'ta
+NUL, görüntüleyiciyle aynı karar). Ölçüldü (release, bu depo): ilk arama
+~37 ms, önbellekli ~3 ms; 20.000 dosyalık git'siz bir klasörde ilk ~1,1 sn,
+sonra ~170 ms.
+
+**İptal.** Arayüz her aramaya kimlik veriyor (`Date.now()*1000 + sayaç` —
+sayfa yenilenince sayaç sıfırlanıp Rust'ta süren eski bir aramayla
+çakışmasın) ve yeni sorgu geldiği AN eskisini `search_text_cancel` ile
+durduruyor; geç gelen sonuç yok sayılıyor. İptal Rust'ta aramanın kendisinden
+önce işlenebiliyor (ayrı görevler): kimlik `early` kümesine yazılıyor, arama
+hiç başlamıyor; küme 256'da temizleniyor.
+
+**Arayüz.** Başlık çubuğundaki palet iki sekmeli (Dosya adı / Dosya içeriği,
+JetBrains'in Search Everywhere'i gibi): kutu ve sorgu ortak, Tab değiştiriyor,
+Enter o satırda açıyor, son sorgu seçili geri geliyor. Kısayol `textSearch`:
+mac'te ⌘⇧F; Windows'ta Ctrl+Shift+F zaten "Terminalde ara" olduğu için
+Ctrl+Shift+G. Seçenekler (Aa / tam sözcük / .*) palet ve sütunda ortak
+(`ui.searchFlags`), tuşları VS Code'unki (Alt+C/W/R, mac'te ⌥⌘; harf `code`dan).
+Sütunun aramasında Dosya / İçerik kipi; seçim listeyi kapatmıyor (eskiden
+kapatıyordu, çünkü görüntüleyici aynı yeri paylaşıyordu). Sonuç listesi tek
+bileşen (`TextResults`): palet ve sütun aynı işareti çiziyor.
+
+**Doğrulama.** Rust: `search_tests.rs` (36 test: konumlar, kırpma, vekil
+çifti, CRLF, tam sözcük, düzenli ifadenin satır satır uygulanması, iki yolun
+aynı sonucu, sınır kararlılığı, git'in yok saydıkları, yok sayılan klasörde
+yürüyüş, iptal). Arayüz: `textSearch.test.ts`, `filePalette.test.tsx`,
+`fileOverlay.test.tsx`, `dirs.test.ts` (dallar), `fileViewer.test.tsx`
+(satıra gitme), güncellenen `titlebar.test.tsx` / `fileSearch.test.tsx` /
+`treeCollapse.test.tsx`. Gözle: scratchpad Vite + sahte IPC (deponun gerçek
+kaynakları sahte dosya sistemi), Chromium ve ekran dışı WKWebView, koyu ve açık
+tema, sağ panel açıkken. Tuzak: ekran dışı WKWebView'de CSS animasyonu
+ilerlemiyor — panelin açılış animasyonu ilk karede (opaklık 0) kalıp paneli
+görünmez gösterdi; görüntüden önce animasyonları kapat.
+
 ### 1.26 Geri yüklenen ekran kabuğu tam ekran programın kiplerinde bırakıyordu
 
 **Bildirilen:** Claude Code tam ekran açıkken uygulama yeniden başladı (kabuk
@@ -1752,6 +1841,29 @@ Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 - **Ana pencere kapanınca fark pencerelerinin kapanması gerçek uygulamada
   denenmedi** (kod yolu `on_window_event`, yalnızca kaynak kuralı testli).
   Windows'ta (WebView2) pencere hiç denenmedi; macOS'ta denendi.
+
+### 2.8 Dosya paneli ve içerik aramasının açık uçları
+
+Bkz. §1.25.
+
+- **Görüntüleyicide dosya içi arama yok.** "Terminalde ara" kısayolu açık dosya
+  varken paneli kapatıp terminalde arıyor; dosyanın içinde ⌘F/Ctrl+F ile
+  aramak ayrı bir iş (eşleşme işareti hazır: `.viewer-mark`).
+- **İki arama iki ayrı dosya kümesine bakıyor.** Ad araması (`files::list`)
+  `.gitignore`ı okumuyor, içerik araması (depoda) okuyor: `.env` adla
+  bulunuyor, içinde aranmıyor. Ad aramasını da `git ls-files`e bağlamak
+  tutarlı olurdu; Ctrl+P'nin bilinen davranışını değiştirdiği için yapılmadı.
+  "Yok sayılanları da ara" seçeneği de yok.
+- **Değiştir (replace) yok**; yalnızca arama.
+- **Sağ panel açıkken görüntüleyici dar** (terminalin genişliği). Katmanı sağ
+  panelin üstüne de taşımak düşünüldü; panel dört satıra yayıldığı için
+  yarısı örtülüp yarısı görünürdü.
+- **Gerçek uygulamada denenmedi**: tarayıcı düzeneğinde ve ekran dışı
+  WKWebView'de doğrulandı. Windows'ta (WebView2) ve Ctrl+Shift+G hiç
+  denenmedi.
+- Görüntüleyici dosyanın ilk 512 KB'ını gösteriyor, arama 2 MB'a kadar
+  bakıyor: aradaki eşleşmede görüntüleyici "satır gösterilen kısmın dışında"
+  diyor; o satıra gitmenin yolu yok.
 
 ---
 

@@ -24,6 +24,8 @@ import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
+import { ancestorDirs } from "../lib/dirs";
+import { DEFAULT_FLAGS } from "../lib/textSearch";
 import {
   canSuggest,
   cycleIndex,
@@ -43,9 +45,11 @@ import type {
   Profile,
   ReleaseInfo,
   Lang,
+  SearchFlags,
   Settings,
   TabState,
   ViewMode,
+  ViewerReveal,
   Workspace,
   GitInfo,
   NodeEnv,
@@ -66,6 +70,9 @@ import type {
 const SUGGEST_SOURCE_LIMIT = 400;
 
 export const sessions = new Map<string, TerminalSession>();
+
+/** `ViewerReveal.seq` için: aynı satıra ikinci gidiş de görüntüleyiciyi kaydırsın. */
+let revealSeq = 0;
 
 /**
  * Durdurma silahının açık kalma süresi (ms).
@@ -225,6 +232,25 @@ export interface UiState {
   paletteOpen: boolean;
   /** Ctrl+P: bulunulan dizindeki dosyalarda arama. */
   filePaletteOpen: boolean;
+  /**
+   * Dosya paletinin hangi sekmede açılacağı: dosya ADI mı, dosya İÇERİĞİ mi.
+   *
+   * Depoda çünkü paleti açan yer onun dışında: Ctrl+P adla, içerik kısayolu
+   * içerikle açıyor; palet içinde Tab ile değişiyor.
+   */
+  paletteMode: "files" | "text";
+  /**
+   * Paletin son sorgusu. Yeniden açılınca kutuda SEÇİLİ geliyor: yazmak onu
+   * siliyor, Enter ise aynı aramaya dönüyor — içerik aramasında bir sonraki
+   * eşleşmeye gitmenin yolu bu (palet seçimde kapanıyor).
+   */
+  paletteQuery: string;
+  /**
+   * İçerik aramasının seçenekleri (Aa, tam sözcük, düzenli ifade). Palet ve
+   * dosya sütunu ORTAK kullanıyor: birinde açılan "büyük/küçük harfe duyarlı"
+   * ötekinde kapalı kalsaydı aynı sorgu iki yerde iki ayrı sonuç verirdi.
+   */
+  searchFlags: SearchFlags;
   transferOpen: boolean;
   searchOpen: boolean;
   /**
@@ -291,7 +317,7 @@ export interface UiState {
   /** Node sürüm seçici açık mı. Listesi `nodeEnv`den geliyor. */
   nodePicker: boolean;
   /**
-   * Dosya sütunu açık mı (grupların SAĞINDA, terminalin solunda).
+   * Dosya paneli açık mı — terminalin ÜSTÜNDE, sol kenarında (bkz. `FilePanel`).
    *
    * Sağ panelin bir sekmesi DEĞİL: ağaç sol tarafta, grup listesinin yanında
    * duruyor — düzenin sırası da başlık çubuğundaki düğmelerin sırası.
@@ -300,12 +326,17 @@ export interface UiState {
    */
   treeOpen: boolean;
   /**
-   * Görüntüleyicide açık dosyanın yolu; ağaç görünümündeyken null.
+   * Görüntüleyicide açık dosyanın yolu; dosya açık değilken null.
    *
-   * Dosya sütununun iki durumu var ve ayrım burada: yol varsa içerik, yoksa
-   * ağaç. Ayrı bir yer çoğu zaman boş dururdu.
+   * Görüntüleyici ağacın YANINDA, terminalin kalan genişliğinde açılıyor;
+   * null olunca yalnızca ağaç kalıyor.
    */
   viewerPath: string | null;
+  /**
+   * Görüntüleyicinin gideceği satır ve işaretleyeceği eşleşme. İçerik
+   * aramasından açılan dosyada dolu, ağaçtan açılanda null.
+   */
+  viewerReveal: ViewerReveal | null;
   /**
    * "Değişiklikler" listesinde AÇIK dosyaların yolları; listede olmayan satır kapalı.
    *
@@ -657,7 +688,11 @@ interface Store {
   closeSuggestions: () => void;
   setAppInputSink: (sink: ((text: string, mode: "replace" | "append") => void) | null) => void;
   insertPath: (path: string) => void;
-  openFile: (path: string) => void;
+  /**
+   * Dosyayı görüntüleyicide açar; `at` verilirse o satıra gidip eşleşmeyi
+   * işaretler (içerik aramasından açılırken).
+   */
+  openFile: (path: string, at?: { line: number; col: number; len: number }) => void;
   insertCommand: (command: string, execute: boolean) => void;
   /**
    * Etkin sekme kilitli mi? Kilit yalnızca kapatmayı değil KLASÖRÜ de
@@ -928,6 +963,9 @@ export const useStore = create<Store>((set, get) => ({
     settingsOpen: false,
     paletteOpen: false,
     filePaletteOpen: false,
+    paletteMode: "files",
+    paletteQuery: "",
+    searchFlags: DEFAULT_FLAGS,
     transferOpen: false,
     searchOpen: false,
     dirPicker: null,
@@ -940,6 +978,7 @@ export const useStore = create<Store>((set, get) => ({
     nodePicker: false,
     treeOpen: false,
     viewerPath: null,
+    viewerReveal: null,
     gitExpanded: [],
     gitShowPaths: false,
     gitDrafts: {},
@@ -2494,11 +2533,29 @@ export const useStore = create<Store>((set, get) => ({
   /**
    * Bir dosyayı görüntüleyicide açar.
    *
-   * Dosya sütununu da açıyor: kullanıcı paletten ya da ağaçtan bir dosya
+   * Dosya panelini de açıyor: kullanıcı paletten ya da ağaçtan bir dosya
    * seçtiğinde içeriğin nerede göründüğünü aramak zorunda kalmamalı.
+   *
+   * Ağaçta dosyanın DALLARI da açılıyor (yalnızca eksik olanlar): görüntüleyici
+   * artık ağacın yanında duruyor ve aramadan açılan bir dosyanın ağaçta nerede
+   * olduğu — hangi klasörde, yanında neler var — görünmeli. Dosya etkin
+   * sekmenin dizini altında değilse ağaca dokunulmuyor.
    */
-  openFile(path) {
-    set({ ui: { ...get().ui, treeOpen: true, viewerPath: path } });
+  openFile(path, at) {
+    const ui = get().ui;
+    const active = get().activeTab();
+    const root = active ? (sessions.get(active.tab.id)?.cwd ?? active.tab.cwd) : null;
+    const eksik = (root ? (ancestorDirs(root, path) ?? []) : []).filter((d) => !ui.treeExpanded.includes(d));
+    set({
+      ui: {
+        ...ui,
+        treeOpen: true,
+        viewerPath: path,
+        viewerReveal: at ? { ...at, seq: ++revealSeq } : null,
+        // Değişmediyse AYNI dizi: yeni bir dizi ağacı boşuna yeniden çizerdi.
+        treeExpanded: eksik.length > 0 ? [...ui.treeExpanded, ...eksik] : ui.treeExpanded,
+      },
+    });
   },
 
   /**

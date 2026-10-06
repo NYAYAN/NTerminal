@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { joinDir } from "../lib/dirs";
+import { joinDir, sameDir } from "../lib/dirs";
 import { baseName } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
@@ -9,15 +9,15 @@ import { ChevronIcon, FolderIcon } from "./Icons";
 import type { DirEntry } from "../types";
 
 /**
- * Dosya ağacı — sağ panelin "Dosyalar" sekmesi.
+ * Dosya ağacı — dosya panelinin sol sütunu (bkz. `FilePanel`).
  *
- * ## Neden var olan panelin içinde
+ * ## Görüntüleyicide açık dosya İŞARETLİ
  *
- * Warp'ta ağaç solda, sekme listesinin yanında ayrı bir panel. Burada sağ
- * panelin dördüncü sekmesi: geçmiş, favoriler ve değişiklikler zaten orada.
- * Yeni bir panel yeni bir kapatma yolu, yeni bir genişlik tutamacı ve
- * "bunu nasıl kapatıyorum" sorusu demekti — değişiklikler için de aynı kararı
- * verdik.
+ * Görüntüleyici ağacın yanında açılıyor; hangi dosyanın açık olduğu ağaçta da
+ * görünmeli. Aramadan ya da paletten açılan dosyanın dalları da açılıyor
+ * (`openFile`) ve satırı bir kez görünür alana kaydırılıyor — her çizimde
+ * değil: kullanıcı ağacı başka yere kaydırdıysa bir klasör açmak onu geri
+ * çekmemeli.
  *
  * ## Tembel açılıyor
  *
@@ -75,6 +75,26 @@ export function FileTree() {
     [setUi],
   );
 
+  /*
+   * Açık dosyanın satırı: bir kez, açılışta görünür alana.
+   *
+   * Anahtar yol + gidiş sırası: aynı dosya aramadan yeniden açıldığında da
+   * kaydırılsın. Satır tembel yüklenen bir dalda olabilir; ref geri çağırması
+   * satır ÇİZİLDİĞİ an çalışıyor, dal ne zaman gelirse gelsin.
+   */
+  const selected = useStore((s) => s.ui.viewerPath);
+  const seq = useStore((s) => s.ui.viewerReveal?.seq ?? 0);
+  const kaydirilan = useRef<string | null>(null);
+  const anahtar = selected ? `${selected}#${seq}` : null;
+  const onSelectedRow = useCallback(
+    (el: HTMLElement | null) => {
+      if (!el || !anahtar || kaydirilan.current === anahtar) return;
+      kaydirilan.current = anahtar;
+      el.scrollIntoView({ block: "nearest" });
+    },
+    [anahtar],
+  );
+
   if (!cwd) return <div className="pop-empty">{t("tree.noDir")}</div>;
 
   return (
@@ -87,7 +107,15 @@ export function FileTree() {
       </div>
       {/* `key` dizinle: sekme değişip dizin değişince ağaç sıfırdan kurulmalı,
           eski klasörlerin açık kalması yanıltıcı olurdu. */}
-      <Level key={cwd} path={cwd} depth={0} expanded={expanded} onToggle={toggle} />
+      <Level
+        key={cwd}
+        path={cwd}
+        depth={0}
+        expanded={expanded}
+        onToggle={toggle}
+        selected={selected}
+        onSelectedRow={onSelectedRow}
+      />
     </div>
   );
 }
@@ -105,11 +133,16 @@ function Level({
   depth,
   expanded,
   onToggle,
+  selected,
+  onSelectedRow,
 }: {
   path: string;
   depth: number;
   expanded: ReadonlySet<string>;
   onToggle: (full: string) => void;
+  /** Görüntüleyicide açık dosya. */
+  selected: string | null;
+  onSelectedRow: (el: HTMLElement | null) => void;
 }) {
   const t = useT();
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
@@ -138,12 +171,15 @@ function Level({
       {entries.map((entry) => {
         const full = joinDir(path, entry.name);
         const acik = expanded.has(full);
+        const secili = !entry.dir && !!selected && sameDir(full, selected);
 
         return (
           <div key={entry.name}>
             <button
               type="button"
-              className={entry.dir ? "tree-row dir" : "tree-row"}
+              ref={secili ? onSelectedRow : undefined}
+              className={entry.dir ? "tree-row dir" : secili ? "tree-row on" : "tree-row"}
+              aria-current={secili || undefined}
               style={{ paddingLeft: pad(depth) }}
               title={full}
               onClick={(e) => {
@@ -167,7 +203,14 @@ function Level({
             </button>
 
             {entry.dir && acik && (
-              <Level path={full} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
+              <Level
+                path={full}
+                depth={depth + 1}
+                expanded={expanded}
+                onToggle={onToggle}
+                selected={selected}
+                onSelectedRow={onSelectedRow}
+              />
             )}
           </div>
         );

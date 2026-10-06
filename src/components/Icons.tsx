@@ -174,6 +174,46 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+/*
+ * İçerik aramasının üç seçeneği: büyük/küçük harf ("Aa"), tam sözcük (altı
+ * çizili "ab") ve düzenli ifade (".*"). Görünümleri VS Code ve JetBrains'teki
+ * karşılıklarıyla aynı — kullanıcı bunları oradan tanıyor. Harfler yazı tipi
+ * değil çizgi: dosyanın başındaki gerekçe (her yazı tipinde aynı boy, aynı taban).
+ */
+
+/** "Aa": büyük/küçük harfe duyarlı. */
+export function MatchCaseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M1.8 12.5 L4.6 3.5 L7.4 12.5 M2.8 9.4 H6.4" />
+      <circle cx="11.3" cy="10.3" r="2.3" />
+      <path d="M13.6 7.8 V12.6" />
+    </Svg>
+  );
+}
+
+/** Altı köşeli çizgili "ab": yalnızca tam sözcük. */
+export function WholeWordIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="4.6" cy="7.6" r="2.1" />
+      <path d="M6.7 5.4 V9.8 M9.4 2.8 V9.8" />
+      <circle cx="11.6" cy="7.6" r="2.2" />
+      <path d="M1.8 11.6 V13.6 H14.2 V11.6" />
+    </Svg>
+  );
+}
+
+/** ".*": düzenli ifade. */
+export function RegexIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="4" cy="12.2" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M11 2.2 V8.8 M8.2 3.9 L13.8 7.1 M8.2 7.1 L13.8 3.9" />
+    </Svg>
+  );
+}
+
 /**
  * Ayar açıklamalarını açan "i" düğmesinin simgesi.
  *

@@ -132,33 +132,60 @@ describe("ağacın açılma durumu", () => {
     expect(useStore.getState().ui.treeExpanded).toEqual([`${CWD}/src`]);
   });
 
-  it("dosya açıp geri dönünce açık kalıyor", async () => {
+  it("dosya açılınca ağaç YANINDA kalıyor, dosya kapanınca da açık", async () => {
     /*
-     * BİLDİRİLEN HATA tam olarak bu akış. Ölçüt ekranda: geri döndükten sonra
-     * DERİN satır (`format.ts`) hâlâ çizili olmalı — yani `src` ve `src/lib`
-     * açık kalmış olmalı.
+     * BİLDİRİLEN HATA: "dizinleri aça aça en alta indim, bir dosyaya
+     * tıkladım, geri bastığımda açtığım dizinler kapanmış oluyor." O zaman
+     * görüntüleyici ağacın YERİNE açılıyordu.
+     *
+     * Şimdi görüntüleyici ağacın yanında açılıyor (İSTEK: "bir dosyayı
+     * seçersem yanına full width olarak açılsın"): ağaç hiç gizlenmiyor. Ölçüt
+     * ekranda — dosya açıkken de, kapatıldıktan sonra da DERİN satır
+     * (`format.ts`) çizili, yani `src` ve `src/lib` açık.
      */
     seed([`${CWD}/src`, `${CWD}/src/lib`]);
     const { container } = render(<FilePanel />);
     await waitFor(() => expect(satir(container, "format.ts")).not.toBe(undefined));
 
-    // Dosyaya tıkla → görüntüleyici.
+    // Dosyaya tıkla → görüntüleyici, ağaç yerinde.
     await act(async () => {
       fireEvent.click(satir(container, "format.ts")!);
     });
     await waitFor(() => expect(container.querySelector(".viewer")).not.toBe(null));
+    expect(satir(container, "format.ts"), "dosya açılınca ağaç gitti").not.toBe(undefined);
+    expect(
+      container.querySelector(".file-tree-keep")?.getAttribute("data-hidden"),
+      "ağaç gizlendi",
+    ).toBe("false");
+    // Açık dosya ağaçta işaretli.
+    expect(satir(container, "format.ts")?.getAttribute("aria-current")).toBe("true");
 
-    // Geri → ağaç, açık hâliyle.
+    // Dosyayı kapat → ağaç aynı hâliyle.
     await act(async () => {
-      fireEvent.click(container.querySelector<HTMLElement>(".viewer-back")!);
+      fireEvent.click(container.querySelector<HTMLElement>(".viewer-close")!);
     });
-
+    expect(container.querySelector(".viewer"), "görüntüleyici kapanmadı").toBe(null);
     expect(useStore.getState().ui.treeExpanded, "açık klasörler kaybolmuş").toEqual([
       `${CWD}/src`,
       `${CWD}/src/lib`,
     ]);
+    expect(satir(container, "format.ts"), "derin satır kayboldu").not.toBe(undefined);
+    expect(satir(container, "format.ts")?.getAttribute("aria-current"), "işaret kalmış").toBe(null);
+  });
+
+  it("aramadan açılan dosyanın dalları ağaçta açılıyor", async () => {
+    // Görüntüleyici ağacın yanında: aramadan ya da paletten açılan dosyanın
+    // ağaçta nerede olduğu görünmeli. Yalnızca EKSİK dallar ekleniyor.
+    seed([`${CWD}/baska`]);
+    const { container } = render(<FilePanel />);
+    await act(async () => {
+      useStore.getState().openFile(`${CWD}/src/lib/format.ts`);
+    });
+    expect(useStore.getState().ui.treeExpanded).toEqual([`${CWD}/baska`, `${CWD}/src`, `${CWD}/src/lib`]);
     await waitFor(() =>
-      expect(satir(container, "format.ts"), "derin satır geri gelmedi").not.toBe(undefined),
+      expect(satir(container, "format.ts")?.getAttribute("aria-current"), "dosya ağaçta işaretli değil").toBe(
+        "true",
+      ),
     );
   });
 });
@@ -207,14 +234,31 @@ describe("toplu katlama düğmesi", () => {
     );
   });
 
-  it("ağaç görünmüyorken çizilmiyor", async () => {
-    // Görüntüleyici açıkken katlanacak bir şey ekranda yok.
+  it("görüntüleyici açıkken de duruyor — ağaç yanda görünüyor", async () => {
+    // Eskiden görüntüleyici ağacın yerine açılıyordu ve düğme gizleniyordu;
+    // şimdi ağaç yanda ve katlanacak şey ekranda.
     seed([`${CWD}/src`]);
     useStore.setState({
       ui: { ...useStore.getState().ui, viewerPath: `${CWD}/src/lib/format.ts` },
     });
     const { container } = render(<FilePanel />);
     await waitFor(() => expect(container.querySelector(".viewer")).not.toBe(null));
-    expect(katlaButonu(container), "görüntüleyicide düğme duruyor").toBe(null);
+    expect(katlaButonu(container), "görüntüleyici açıkken düğme yok").not.toBe(null);
+  });
+
+  it("arama sırasında çizilmiyor", async () => {
+    // Arama sonuçları ağacın yerinde; katlanacak ağaç ekranda yok.
+    seed([`${CWD}/src`]);
+    vi.spyOn(api, "listFiles").mockResolvedValue(["src/lib/format.ts"]);
+    const { container } = render(<FilePanel />);
+    const head = container.querySelector(".file-panel-head")!;
+    const buyutec = [...head.querySelectorAll("button")].find((b) => b.title === "Dosyalarda ara")!;
+    await act(async () => {
+      fireEvent.click(buyutec);
+    });
+    await act(async () => {
+      fireEvent.change(container.querySelector(".panel-controls input")!, { target: { value: "format" } });
+    });
+    expect(katlaButonu(container), "arama sırasında düğme duruyor").toBe(null);
   });
 });

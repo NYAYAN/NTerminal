@@ -303,21 +303,24 @@ describe("dosya sütununda arama", () => {
     expect(otekisi, "yanlış eylem çağrıldı").not.toHaveBeenCalled();
   });
 
-  it("sonuca tıklamak DETAYI açıyor", async () => {
+  it("sonuca tıklamak DETAYI yanında açıyor, liste yerinde kalıyor", async () => {
     /*
      * BİLDİRİLEN HATA: "aradığım dosyaya tıklıyorum, detayı açılmıyor."
      *
-     * Sebep sütunun çizim sırasıydı: sorgu doluyken sonuç listesi her zaman
-     * kazanıyordu, dolayısıyla `openFile` yolu ayarlasa da görüntüleyici hiç
-     * çizilmiyordu. Tıklama bir şey yapıyordu ama ekranda hiçbir şey
-     * değişmiyordu.
+     * Sebep sütunun çizim sırasıydı: görüntüleyici ve sonuç listesi AYNI yeri
+     * paylaşıyordu ve sorgu doluyken liste kazanıyordu. O zamanki çözüm seçimde
+     * aramayı kapatmaktı.
+     *
+     * Görüntüleyici artık sütunun YANINDA açılıyor; yer paylaşımı yok, seçim
+     * aramayı kapatmak zorunda değil. Liste kalıyor ki adaylar arasında
+     * tıklayarak gezilebilsin; açık olanın satırı işaretli.
      *
      * Bu test bir üsttekinin YAKALAYAMADIĞI şeyi ölçüyor: orada `openFile`
      * sahtesiyle değiştirildiği için depo hiç güncellenmiyor ve ekranda ne
      * olduğu görülmüyor. Burada GERÇEK eylem koşuyor ve iddia çizilen şey.
      */
     seed();
-    vi.spyOn(api, "listFiles").mockResolvedValue(["src/target.ts"]);
+    vi.spyOn(api, "listFiles").mockResolvedValue(["src/target.ts", "src/other.ts"]);
     // Görüntüleyici içeriği okumaya çalışacak; okunamayan dosya da görüntüleyici
     // kabuğunu çizdiriyor, ölçtüğümüz şey o.
     vi.spyOn(api, "readTextFile").mockResolvedValue(null);
@@ -332,11 +335,13 @@ describe("dosya sütununda arama", () => {
 
     expect(useStore.getState().ui.viewerPath, "dosya yolu ayarlanmadı").toContain("target.ts");
     await waitFor(() =>
-      expect(container.querySelector(".viewer"), "detay açılmadı").not.toBe(null),
+      expect(container.querySelector(".file-viewer-pane .viewer"), "detay açılmadı").not.toBe(null),
     );
-    // Arama işini bitirdi: kutu tümden kapandı ve liste yerini içeriğe bıraktı.
-    expect(kutu(container), "kutu açık kaldı").toBe(null);
-    expect(container.querySelector(".file-results"), "sonuç listesi duruyor").toBe(null);
+    // Görüntüleyici sütunun İÇİNDE değil, yanında.
+    expect(container.querySelector(".file-panel .viewer"), "görüntüleyici sütunun içinde").toBe(null);
+    expect(kutu(container)?.value, "arama kapanmış").toBe("target");
+    const row = container.querySelector(".file-result");
+    expect(row?.getAttribute("aria-current"), "açık dosyanın satırı işaretli değil").toBe("true");
   });
 
   it("Shift ile eklemek aramayı KAPATMIYOR", async () => {

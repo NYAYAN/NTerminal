@@ -359,14 +359,18 @@ input[type="color"] {
    * Ayni hata `.main` icin bir kez cozulmustu (`min-height: 0`); bu bir ust
    * katman ve orada atlanmisti. */
   grid-template-rows: 34px minmax(0, 1fr);
-  /* Uc sutun: gruplar, dosyalar, geri kalan. Ikisi de `auto` ve kapaliyken
-     hic cizilmiyorlar (React onlari kurmuyor), yani sutun sifira iniyor ve
-     yeri terminal aliyor. Sira duzenin sirasi: baslik cubugundaki iki
-     gorunum dugmesi de bu sirada (bkz. titlebar.test.tsx). */
-  grid-template-columns: auto auto 1fr;
+  /* Iki sutun: gruplar ve geri kalan. Gruplar `auto` ve kapaliyken hic
+     cizilmiyor (React kurmuyor), yani sutun sifira iniyor ve yeri terminal
+     aliyor.
+
+     Dosya paneli burada sutun DEGIL. Eskiden gruplar ile terminal arasinda
+     kendi sutunuydu ve acilinca terminali daraltiyordu: xterm yeniden
+     olculuyor, kabuk ekrani yeni sutun sayisiyla yeniden ciziyordu. Simdi
+     `.main` icinde, terminal hucresinin USTUNDE bir katman (`.files-layer`). */
+  grid-template-columns: auto 1fr;
   grid-template-areas:
-    "titlebar titlebar titlebar"
-    "sidebar files main";
+    "titlebar titlebar"
+    "sidebar main";
   height: 100%;
 }
 
@@ -404,29 +408,125 @@ html[data-platform="macos"] .titlebar {
   padding: 0 6px;
 }
 
-/* Dosya sutunu - gruplarin SAGINDA, terminalin solunda (izgara alani `files`).
+/* Dosya paneli - terminal hucresinin USTUNDE duran katman (bkz. `FilePanel`).
  *
- * Genislik SABIT ve bu bilincli bir baslangic: sag panelin tutamagi bir ayara
- * yaziyor (`Appearance.panelWidth`) ve o ayar hem TS hem Rust tarafinda
- * tanimli; burada ikinci bir olcu tanimlamak once o zinciri gerektiriyor.
- * 260px bir dosya adi + birkac kademe girinti icin yetiyor; ihtiyac cikarsa
- * tutamak sonra eklenir.
+ * Izgarada terminalle AYNI alanda (`terminal`) ve kendi icerigi mutlak
+ * konumlu: katmanin icerik boyutu sifir, yani izgara izlerini hic etkilemiyor
+ * ve terminal acilip kapanirken bir piksel bile olcu degistirmiyor. Eskiden
+ * kendi sutunuydu ve acilinca terminali daraltiyordu - xterm yeniden
+ * olculuyor, kabuk ekrani yeni sutun sayisiyla yeniden ciziyordu.
  *
- * `min-width: 0` sart: icindeki uzun dosya adlari sutunu pencereden tasirir
- * (ayni hata `.sidebar` icin bir kez odendi). */
-.file-panel {
-  grid-area: files;
-  /* Genislik JS'ten (`Appearance.filesWidth`); burada yalnizca sinirlar.
-     Tutamak kenar cubugununkiyle ayni duzenek - bkz. `FilePanel`. */
-  min-width: 200px;
-  max-width: 900px;
+ * `pointer-events: none` katmanin KENDISINDE: agac acikken sagda kalan
+ * terminal tiklanabilir kalmali. Sutun ve goruntuleyici olaylari geri aliyor.
+ *
+ * z-index 22: terminal alaninin kendi katmanlarinin (bolmeler 0-1, blok
+ * katmani 4, terminalde arama cubugu 20) USTUNDE, oneri seridinin (24) ve
+ * menulerin (300+) ALTINDA. Oneri seridi komut kutusuna ait: panel acikken de
+ * yazilan komutun onerileri gorunmeli. */
+.files-layer {
+  grid-area: terminal;
+  position: relative;
+  z-index: 22;
+  min-width: 0;
   min-height: 0;
+  pointer-events: none;
+}
+
+.files-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+/* Agac sutunu: katmanin sol kenarinda, terminalin uzerinde yuzuyor.
+ *
+ * Genislik JS'ten (`Appearance.filesWidth`); burada yalnizca sinirlar.
+ * Tutamak kenar cubugununkiyle ayni duzenek - bkz. `FilePanel`.
+ *
+ * Ust sinir 600px: eskiden 900'du, cunku goruntuleyici de bu sutunda
+ * aciliyordu. Artik yaninda; sutunda yalnizca adlar var. Katmanin icinde ayrica
+ * yuzdeyle sinirli (asagida) ki sagda goruntuleyiciye ya da terminale yer
+ * kalsin.
+ *
+ * Golge yalnizca SAG kenarda: sutun terminalin ustunde duruyor ve kenarin
+ * "altinda bir sey var" diye okunmasi gerekiyor; sol kenar zaten grup
+ * cubuguna dayali. */
+.file-panel {
+  /* Genislik JS'ten (`Appearance.filesWidth`); burada yalnizca sinirlar. */
+  min-width: 200px;
+  max-width: 600px;
+  min-height: 0;
+  flex: none;
   display: flex;
   flex-direction: column;
   background: var(--surface-alt);
   border-right: 1px solid var(--border);
+  box-shadow: 10px 0 24px -14px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
   /* Tutamak mutlak konumlu; kap konumlandirilmis olmali. */
   position: relative;
+  animation: files-in 120ms ease-out;
+}
+
+/* Katmanin icinde sutun hicbir zaman alanin tamamini almiyor: en az 240px
+   sagda (goruntuleyici ya da terminal) kaliyor. Dar pencerede eski ayardan
+   gelen genis bir sutun goruntuleyiciyi yok etmesin. */
+.files-overlay .file-panel {
+  max-width: min(600px, calc(100% - 240px));
+}
+
+/* Dosya acikken sutunun sagi goruntuleyiciye dayali; golge orada metnin
+   ustune dusuyordu. */
+.files-overlay.with-viewer .file-panel {
+  box-shadow: none;
+}
+
+/* Goruntuleyici: sutunun YANINDA, kalan butun genislikte. Zemini terminalinki
+   (`--surface`): okunan sey icerik, sutun ise gezinme yuzeyi - ikisi ayni
+   renkte olunca nerede bittikleri seciliyordu. */
+.file-viewer-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  pointer-events: auto;
+  animation: files-fade 100ms ease-out;
+  /* Dar kaldiginda (sag panel acik, pencere kucuk) baslik sadelesiyor; bkz.
+     asagidaki kap sorgusu. */
+  container-type: inline-size;
+}
+
+/* Goruntuleyici darsa once boyut ve klasor gidiyor: araclar ve carpi yer
+   kapliyor, kirpilmasi gereken son sey dosyanin ADI. OLCULEN: 240px'te ad
+   "App…"ya iniyordu. */
+@container (max-width: 380px) {
+  .viewer-size,
+  .viewer-dir {
+    display: none;
+  }
+}
+
+@keyframes files-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
+@keyframes files-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-panel,
+  .file-viewer-pane {
+    animation: none;
+  }
 }
 
 /* Tutamak SAG kenarda: sutun solda oldugu icin genisleyen kenar o.
@@ -497,6 +597,12 @@ html[data-platform="macos"] .titlebar {
   background: var(--hover);
 }
 
+/* Goruntuleyicide acik olan sonuc: secim aramayi kapatmiyor (dosya yanda
+   aciliyor), listede hangisine bakildigi gorunmeli. */
+.file-result.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .file-result-name {
   max-width: 100%;
   overflow: hidden;
@@ -511,6 +617,237 @@ html[data-platform="macos"] .titlebar {
   white-space: nowrap;
   color: var(--text-dim);
   font-size: 0.7692rem;
+}
+
+/* Sutunun arama kutusu iki katli: ustte ne arandigi (Dosya / Icerik), altinda
+   kutu ve icerik kipinde secenekler. Kip dugmeleri kutunun SOLUNDA dursaydi
+   200px'lik sutunda kutuya yer kalmazdi. */
+.file-search-box {
+  gap: 6px;
+}
+
+.file-search-box .seg button {
+  padding: 2px 9px;
+  min-height: 22px;
+}
+
+/* Kutu ve seceneklerin ortak cercevesi: secenekler kutunun ICINDE duruyor
+   gibi gorunsun (VS Code'daki gibi), kutunun yanina eklenmis dugmeler gibi
+   degil. Odak halkasi cercevenin; icteki kutu kendi halkasini cizmiyor. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding-right: 3px;
+}
+
+.search-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.search-field input,
+.search-field input:focus {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Sonuc listesini saran kap duzende YOK: liste eskisi gibi sutunun esnek
+   ogesi; kap yalnizca tuslari yakaliyor (bkz. `FilePanel`). */
+.file-search-area {
+  display: contents;
+}
+
+/* Aa / tam sozcuk / duzenli ifade. Kapali hali sessiz; acik hali vurgu
+   renginde ve cerceveli - "acik mi" bir bakista okunmali (goruntuleyicinin
+   kalemiyle ayni dil). */
+.search-toggles {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+}
+
+.search-toggle {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.search-toggle:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.search-toggle.on,
+.search-toggle.on:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* ------------------------------------------- dosyalarin icinde arama sonuclari
+ *
+ * Palette ve sutunda AYNI liste (`TextResults`). Dosya basligi: ad, soluk
+ * klasor ve eslesme sayisi. Satir: numara (sabit genislik, sayilar alt alta)
+ * ve isaretli metin. Metin SARMIYOR: kodda girinti ve hiza anlam tasiyor,
+ * kirpilan uc zaten `…` ile geliyor. */
+.hits {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Yeni arama surerken onceki sonuc yerinde ama soluk: her harfte listenin
+   bosalip dolmasi titreme gibi gorunuyordu. */
+.hits.stale {
+  opacity: 0.55;
+}
+
+.hit-file + .hit-file {
+  margin-top: 4px;
+}
+
+.hit-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  padding: 3px 6px;
+  border-radius: var(--radius);
+  font-size: 0.9231rem;
+  text-align: left;
+  color: var(--text);
+}
+
+button.hit-head:hover {
+  background: var(--hover);
+}
+
+.hit-caret {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-dim);
+}
+
+.hit-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.hit-dir {
+  flex: 0 3 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+
+.hit-count {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hit-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  padding: 2px 6px 2px 10px;
+  border-radius: var(--radius);
+  text-align: left;
+  font-weight: 400;
+}
+
+.hit-line:hover {
+  background: var(--hover);
+}
+
+.hit-line.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Genislik dosya basina (`--hit-no`, bkz. `TextResults`): ayni dosyada 82 ile
+   1182 alt alta dururken metin ayni sutundan baslasin. */
+.hit-no {
+  flex: none;
+  min-width: var(--hit-no, 3ch);
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+  font-size: 0.8077rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.hit-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font-family: var(--mono-font);
+  font-size: 0.8462rem;
+  color: var(--text);
+}
+
+.hit-text mark {
+  background: color-mix(in srgb, #e3b341 38%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* Durum satiri: suruyor, sayilar, sinirlar. Sinir notlari uyari renginde -
+   kesilen bir listeyi tam sanmak "baska yerde yokmus" demek olurdu. */
+.search-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 3px 6px 6px;
+  color: var(--text-dim);
+  font-size: 0.8077rem;
+}
+
+.search-status.err {
+  color: var(--err);
+}
+
+.search-note {
+  color: var(--warn, #d29922);
+}
+
+.search-note.dim {
+  color: var(--text-dim);
 }
 
 /* Agaci AYAKTA tutan sarmalayici.
@@ -587,6 +924,14 @@ html[data-platform="macos"] .titlebar {
   color: var(--text-dim);
 }
 
+/* Goruntuleyicide acik dosya. Zemin + tam renk: soluk dosya satirlarinin
+   arasinda tek basina renk farki secilmiyor. */
+.tree-row.on,
+.tree-row.on:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+}
+
 /* Ok icin SABIT yer: dosyalarda bos kaliyor ama yer tutuyor, yoksa dosya ve
    klasor satirlari yatay olarak kayiyor. */
 .tree-caret {
@@ -611,7 +956,7 @@ html[data-platform="macos"] .titlebar {
   opacity: 0.7;
 }
 
-/* Dosya goruntuleyici: "Dosyalar" sekmesinin ikinci hali. */
+/* Dosya goruntuleyici: agacin yaninda, kalan butun genislikte. */
 .viewer {
   display: flex;
   flex-direction: column;
@@ -619,50 +964,53 @@ html[data-platform="macos"] .titlebar {
   flex: 1;
 }
 
+/* Baslik agac sutununun basligiyla AYNI yukseklikte (39px): ikisi yan yana ve
+   alt cizgileri tek bir cizgi gibi okunmali. Dosya henuz okunmamisken
+   araclar yok; yukseklik o zaman da sabit kalsin diye `min-height`. */
 .viewer-head {
   display: flex;
   align-items: center;
   gap: 7px;
   flex: none;
-  padding: 5px 8px 6px;
+  min-height: 39px;
+  padding: 6px 6px 6px 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.viewer-back {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.viewer-back:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-/* Ok cevriliyor: `ChevronIcon` kapali halde SAGA bakiyor, geri donus solu
-   gostermeli. Ayri bir simge eklemek yerine cevirmek yeterli. */
-.viewer-back .flip {
-  display: inline-flex;
-  transform: rotate(180deg);
-}
-
+/* Ad once, klasoru yaninda ve soluk: "hangi `index.ts`" sorusunun yaniti.
+   Yer daralinca once KLASOR kisaliyor; ad kirpilinca baslik ise yaramiyor. */
 .viewer-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono-font);
   font-size: 0.9231rem;
+}
+
+.viewer-dir {
+  flex: 0 3 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  /* Klasor BASTAN kirpiliyor: dosyaya en yakin parca kalsin (bkz. `.file-dir`). */
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+
+.viewer-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Dosyayi kapatan carpi: araclardan biraz ayrik, sag kenarda. */
+.viewer-close {
+  margin-left: 4px;
 }
 
 .viewer-size {
@@ -848,6 +1196,20 @@ html[data-platform="macos"] .titlebar {
   padding: 0 10px 0 10px;
   white-space: pre;
   color: var(--text);
+}
+
+/* Aramadan gelinen satir ve eslesmesi. Satirin zemini hafif (goz satiri
+   buluyor), eslesmenin zemini belirgin (goz satirda kelimeyi buluyor) - arama
+   listesindeki `<mark>` ile ayni renk ailesi. */
+.viewer-line.hit {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.viewer-mark {
+  background: color-mix(in srgb, #e3b341 45%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e3b341 70%, transparent);
 }
 
 /* Kesildi bildirimi: sessizce kesmek "dosyanin sonu buymus" sanmaya yol
@@ -1585,8 +1947,10 @@ html[data-platform="macos"] .titlebar {
  * bir iki satir kaydiriyordu. Kullanicinin gordugu titreme buydu.
  *
  * `fixed` konumlandirma bilincli: kutuyu imlece gore JS yerlestiriyor ve
- * gorunum koordinatlari en basit ortak zemin. z-index 20, terminalin ustunde
- * ama menulerin (300+) altinda.
+ * gorunum koordinatlari en basit ortak zemin. z-index 24: terminalin ve
+ * terminalin ustune acilan dosya panelinin (22) ustunde, menulerin (300+)
+ * altinda. Panel acikken yazilan komutun onerileri panelin altinda kalsaydi
+ * kullanici onlari hic gormezdi.
  *
  * KENARDAN KENARA SERIT, yuzen kart DEGIL. Panel terminal alaninin tam
  * genisligini kapliyor, dibine yapisik duruyor ve yalnizca ust kenarligi var.
@@ -1602,7 +1966,7 @@ html[data-platform="macos"] .titlebar {
  * bosluk birakiyordu. */
 .suggest-bar {
   position: fixed;
-  z-index: 20;
+  z-index: 24;
   border: none;
   border-top: 1px solid var(--border);
   background: var(--surface-alt);
@@ -5924,6 +6288,58 @@ button.pop-group {
 .palette-list {
   overflow-y: auto;
   padding: 4px;
+}
+
+/* Dosya paleti komut paletinden GENIS: icerik sekmesinde satirlar kod ve
+   720px'te uzun satirlarin cogu kirpiliyordu. Iki sekmede ayni genislik -
+   sekme degistirince palet ziplamasin. */
+.palette.file-palette {
+  width: min(880px, 94vw);
+}
+
+/* Sekmeler: dosya adi / dosya icerigi. Kutunun USTUNDE, ince bir serit;
+   sagda icerik seceneklerinin yeri. */
+.palette-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-tab {
+  min-height: 0;
+  padding: 5px 10px 6px;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: var(--text-dim);
+  font-size: 0.9231rem;
+}
+
+.palette-tab.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.palette-tabs-spacer {
+  flex: 1;
+}
+
+.palette-tabs .search-toggles {
+  padding-bottom: 4px;
+}
+
+/* Icerik aramasinin durum satiri: kutunun hemen altinda, listenin ustunde. */
+.palette-status {
+  flex: none;
+  padding: 4px 8px 0;
+}
+
+.palette-status .search-status {
+  padding: 2px 4px 4px;
 }
 
 /* Dosya paleti satiri: dosya ADI solda, KLASORU sagda.

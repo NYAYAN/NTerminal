@@ -351,27 +351,71 @@ başlıkta Enter'a basarak) açılır ve uygulama açık kaldığı sürece aç�
 Arama kapalı bölümdeki eşleşmeleri de bulur. Bir uzak dalı seçmek `git checkout
 --track origin/ad` gönderir; yerel bir izleme dalı oluşur.
 
-**Görüntüleyicide düzenlemek.** Dosyalar sekmesinde açılan dosya önce salt
+**Dosya paneli.** Başlık çubuğundaki klasör düğmesi bulunulan dizinin ağacını
+**terminalin üstünde**, sol kenarında açar — terminal daralmaz, kabuk ekranı
+yeniden çizmez (önceden panel kendi sütunuydu ve açılınca terminali
+sıkıştırıyordu). Sekme çubuğu, komut kutusu ve durum çubuğu görünür kalır;
+ağaçta `Shift`+tıklama yolu komut kutusuna ekler. Bir dosyaya tıklamak onu
+ağacın **yanında, terminalin kalan bütün genişliğinde** açar; ağaç yerinde
+kalır, açık dosya ağaçta işaretlidir ve başka bir dosyaya tıklamak
+görüntüleyiciyi değiştirir. Görüntüleyicinin `×`'i yalnızca dosyayı, panelin
+`×`'i ya da klasör düğmesi paneli kapatır. Panelin içindeyken `Esc` önce aramayı,
+sonra paneli kapatır ve odak terminale (ya da komut kutusuna) döner;
+düzenlerken basılan `Esc` paneli kapatmaz. Açık bir dosya terminali örtüyorsa
+**Terminalde ara** kısayolu önce paneli kapatır. Aramadan ya da paletten açılan
+dosyanın dalları ağaçta kendiliğinden açılır.
+
+**Panelde arama.** Panel başlığındaki büyüteç bir kutu açar; üstündeki iki düğme
+ne arandığını seçer: **Dosya** (dosya adlarında bulanık arama) ya da **İçerik**
+(dosyaların içinde metin). Sonuçlar ağacın yerinde listelenir ve seçim listeyi
+kapatmaz: dosya sağda açılır, liste solda kalır — eşleşmeler arasında tıklayarak
+gezilir. İçerik kipinde sonuçlar dosyaya göre gruplu (başlığa tıklamak grubu
+katlar), satır numarası ve işaretli eşleşmeyle gelir; tıklamak dosyayı **o
+satırda** açar ve eşleşmeyi işaretler. Kutudan aşağı ok sonuçlara iner.
+
+**Görüntüleyicide düzenlemek.** Panelde açılan dosya önce salt
 okunur görünür. Başlıktaki kalem (**Düzenle**) düzenlemeyi açar: kalem vurgu
 renginde ve çerçeveli olur, başlığın altında vurgu çizgisi belirir, satır
 numaraları yanında yazabilirsiniz. Yanındaki **Geri al**, **İleri al** ve
 **Kaydet** düğmeleri (`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `⇧⌘Z`, `Ctrl+S` / `Cmd+S`)
 her zaman başlıkta; kaydedilmemiş değişiklik varken adın yanında vurgu renginde
 bir nokta durur. Kayıt açık (düğme ya da kısayol); ama düzenlemeyi kapatırken,
-başka dosyaya geçerken ya da ağaca dönerken kaydedilmemiş olan kendiliğinden
-yazılır, kaybolmaz. Dosya siz düzenlerken başka bir yerde kaydedildiyse üzerine
+başka dosyaya geçerken, dosyayı ya da paneli kapatırken kaydedilmemiş olan
+kendiliğinden yazılır, kaybolmaz. Dosya siz düzenlerken başka bir yerde kaydedildiyse üzerine
 yazılmaz: **Diskteki hâli yükle** ya da **Benimkini kaydet**. Satır sonları
 (LF / CRLF) korunur. İkili, yarım megabayttan büyük ya da satır sonları karışık
 dosya düzenlenemez; kalem kapalıdır ve üzerine gelince nedenini söyler.
 
 **Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
-bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı sağ
-paneldeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler
+bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı dosya
+panelindeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler
 (`code ` yazıp `Ctrl+P`). Satırda dosya **adı solda**, klasörü sağda ve soluk:
 klasör zinciri çoğu satırda aynı, yani ayırt etmeyen kısmı önce okutmak gözü
 boşuna yoruyordu. Ad öne alınınca satırlar ilk harften ayrışıyor. Liste açılışta
 bir kez okunuyor, süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten
 geçirmemek için.
+
+**Dosyaların içinde arama (`Ctrl+Shift+G`, mac'te `⌘⇧F`).** Aynı paletin ikinci
+sekmesi: **Dosya içeriği**. Kutu ve sorgu iki sekmede ortak; `Tab` sekmeyi
+değiştirir — adında bulamadığınızı içinde aramak için yeniden yazmanız gerekmez.
+Sonuçlar dosyaya göre gruplu, satır numarasıyla ve eşleşmesi işaretli gelir;
+`Enter` dosyayı **o satırda** açar (eşleşme işaretli), `Shift+Enter` yolu komut
+satırına ekler. Kutunun sağındaki üç seçenek: **büyük/küçük harfe duyarlı**
+(`Aa`, `Alt+C` / `⌥⌘C`), **yalnızca tam sözcük** (`Alt+W` / `⌥⌘W`) ve **düzenli
+ifade** (`.*`, `Alt+R` / `⌥⌘R`; Rust `regex` sözdizimi, her satıra ayrı
+uygulanır). Varsayılan büyük/küçük harf gözetmeyen düz metin. Palet son
+sorguyu hatırlar ve seçili getirir: bir sonraki eşleşmeye gitmek için yeniden
+açıp ok + `Enter` yeter.
+
+Arama Rust'ta ve iş parçacıklarına bölünmüş koşuyor; yazdıkça 200 ms bekleyip
+yeniden arar, eskisini durdurur. Dizin bir git deposundaysa dosya listesi
+git'ten gelir: **`.gitignore`a takılanlar aranmaz** (derleme çıktısı, önbellek),
+izlenmeyen yeni dosyalar aranır. Depo değilse `Ctrl+P`'nin yürüyüşü kullanılır
+(`node_modules`, `target`, `dist` gibi klasörler atlanır). Sınırlar **söylenir**:
+ilk 2000 satır gösterilir, 2 MB'tan büyük ve ikili dosyalara bakılmaz, en fazla
+20.000 dosya taranır — sınıra takılan arama durum satırında bunu yazar. Bu
+depoda bir arama ilk seferde ~40 ms, sonrakiler ~3 ms; 20.000 dosyalık git'siz
+bir klasörde ilk tarama ~1 sn.
 
 **Arayüz yazı tipi.** *Ayarlar › Görünüm* altında terminalin yazı tipinden
 **ayrı** bir aile ve boyut var: menüler, paneller, sekme adları ve ayarlar
@@ -1090,6 +1134,7 @@ dışa aktarılır.
 | `Ctrl+Shift+B` | Favori komutlar |
 | `Ctrl+Shift+P` | Komut paleti |
 | `Ctrl+P` | Bu dizinde dosya ara |
+| `Ctrl+Shift+G` | Dosyaların içinde ara (mac'te `⌘⇧F`) |
 | `Ctrl+Shift+R` | Sekmeyi yeniden adlandır |
 | `Ctrl+Shift+L` | Sekmeyi kilitle / kilidi aç |
 | `Ctrl+Shift+E` | Sekme / bölme görünümü |
@@ -1106,7 +1151,7 @@ bölme görünümünü seçer.
 
 Başlık çubuğunun sol köşesindeki iki düğme birer **açma/kapama**: soldaki grup
 kenar çubuğunu daraltıp geri getirir, sağdaki bulunulan dizinin dosya ağacını
-açar ve ikinci tıkta kapatır. Sıraları düzenin sırasını izliyor — en soldaki
+terminalin üstünde açar ve ikinci tıkta kapatır. Sıraları düzenin sırasını izliyor — en soldaki
 düğme en soldaki paneli açıyor. Tek yönlü hâllerinde ikinci tıklama hiçbir şey
 yapmıyormuş gibi görünüyordu: ağacı kapatmak için panelin kendi `×` düğmesini
 bulmak gerekiyordu, kenar çubuğunu kapatmanın ise hiçbir yolu yoktu.

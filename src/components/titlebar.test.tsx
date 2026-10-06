@@ -390,23 +390,74 @@ describe("görünüm düğmeleri", () => {
     expect(APP, "açma/kapama dalı yok").toMatch(/setUi\(\{ treeOpen: !treeOpen \}\)/);
   });
 
-  it("dosya sütunu grupların SAĞINDA çiziliyor", () => {
-    // Sıra hem DOM'da hem ızgarada aynı olmalı: gruplar → dosyalar → terminal.
-    // DOM sırası kaydığında ızgara alanları onu gizlice düzeltir ve iki kaynak
-    // birbirinden ayrılır.
+  it("dosya paneli terminalin ÜSTÜNDE açılıyor, ızgarada sütun değil", () => {
+    /*
+     * İSTEK: "klasörleri göster'e basınca açılıyor ve terminali sıkıştırıyor;
+     * üstüne açılacak şekilde yapalım." Önceki hâli ızgarada kendi sütunuydu
+     * ("sidebar files main"): açılınca terminal daralıyor, xterm yeniden
+     * ölçülüyor ve kabuk ekranı yeni sütun sayısıyla yeniden çiziyordu.
+     *
+     * Şimdi panel `.main` içinde, terminal hücresinde (aynı ızgara alanı) ve
+     * içeriği mutlak konumlu — yani hücrenin ölçüsüne hiç katkısı yok. Grupların
+     * sağında, terminalin sol kenarında durması değişmedi.
+     */
     const sidebar = APP.indexOf("<GroupSidebar />");
     const files = APP.indexOf("<FilePanel />");
     const main = APP.indexOf('className="main"');
-    expect(files, "dosya sütunu çizilmiyor").toBeGreaterThan(-1);
-    expect(sidebar, "dosya sütunu grupların solunda").toBeLessThan(files);
-    expect(files, "dosya sütunu terminalin sağında").toBeLessThan(main);
-    expect(CSS, "ızgarada `files` alanı yok").toMatch(/"sidebar files main"/);
+    const terminal = APP.indexOf("<TerminalArea />");
+    expect(files, "dosya paneli çizilmiyor").toBeGreaterThan(-1);
+    expect(sidebar, "panel grupların solunda").toBeLessThan(files);
+    expect(main, "panel `.main`in dışında — terminali yine daraltır").toBeLessThan(files);
+    expect(terminal, "panel terminalden önce çiziliyor").toBeLessThan(files);
+
+    expect(CSS, "ızgarada hâlâ `files` sütunu var").not.toMatch(/"sidebar files main"/);
+    expect(CSS, "ızgara iki sütunlu değil").toMatch(/"sidebar main"/);
+
+    const rule = (sel: string) => {
+      const at = CSS.indexOf(`${sel} {`);
+      expect(at, `${sel} kuralı yok`).toBeGreaterThan(-1);
+      return CSS.slice(at, CSS.indexOf("}", at));
+    };
+    const layer = rule(".files-layer");
+    expect(layer, "katman terminal hücresinde değil").toMatch(/grid-area:\s*terminal/);
+    // Katmanın kendisi tıklamaları geçiriyor: ağaç açıkken sağda kalan terminal
+    // tıklanabilir kalmalı.
+    expect(layer, "katman terminale gelen tıklamaları yutuyor").toMatch(/pointer-events:\s*none/);
+    // İçerik mutlak konumlu: hücrenin ölçüsünü büyütemez.
+    expect(rule(".files-overlay"), "panel içeriği akışta — ızgarayı büyütür").toMatch(/position:\s*absolute/);
   });
 
-  it("dosya sütunu kapalıyken hiç çizilmiyor", () => {
-    // `display: none` DEĞİL: ızgaranın `auto` sütunu sıfıra inmeli, yoksa
-    // kapalı sütun terminalden yer çalardı (kenar çubuğunda aynı karar).
-    expect(APP, "sütun koşulsuz çiziliyor").toMatch(/\{treeOpen && <FilePanel \/>\}/);
+  it("kısayollar paleti doğru sekmede açıyor", () => {
+    // Ctrl+P adla, içerik kısayolu içerikle; başlık çubuğundaki alan ("Dosya
+    // ara") adla. Sekme depoda (`ui.paletteMode`) çünkü açan yer paletin dışı.
+    expect(APP).toMatch(/keys\.filePalette\)\)\s*return run\(\(\) => store\.setUi\(\{ filePaletteOpen: true, paletteMode: "files" \}\)\)/);
+    expect(APP).toMatch(/keys\.textSearch \?\? ""\)\)\s*return run\(\(\) => store\.setUi\(\{ filePaletteOpen: true, paletteMode: "text" \}\)\)/);
+    expect(APP).toMatch(/className="titlebar-search"[\s\S]{0,400}paletteMode: "files"/);
+  });
+
+  it("açık dosya terminali örtüyorsa 'Terminalde ara' önce paneli kapatıyor", () => {
+    // Arama çubuğu terminalin sağ üstünde ve panelin ALTINDA kalırdı: kısayol
+    // hiçbir şey yapmıyormuş gibi görünürdü.
+    const at = APP.indexOf("matchCombo(event, keys.findInTerminal)");
+    expect(at, "kısayol dalı yok").toBeGreaterThan(-1);
+    const branch = APP.slice(at, APP.indexOf(";", APP.indexOf("findOpen: true", at) + 60));
+    expect(branch).toMatch(/store\.ui\.treeOpen && store\.ui\.viewerPath \? \{ findOpen: true, treeOpen: false \}/);
+  });
+
+  it("dosya paneli öneri şeridinin ALTINDA", () => {
+    // Panel açıkken komut kutusuna yazılan komutun önerileri görünmeli; şerit
+    // terminal alanının dibinde yüzüyor ve panelle üst üste biniyor.
+    const z = (sel: string) => Number(/z-index:\s*(\d+)/.exec(CSS.slice(CSS.indexOf(`${sel} {`)))?.[1]);
+    expect(z(".suggest-bar"), "öneri şeridi panelin altında kalıyor").toBeGreaterThan(z(".files-layer"));
+    // Terminalde arama çubuğu (20) panelin altında kalıyor; panel onu örtüyor
+    // ve kısayol açık bir dosya varken paneli kapatıyor (App.tsx).
+    expect(z(".files-layer")).toBeGreaterThan(z(".find-bar"));
+  });
+
+  it("dosya paneli kapalıyken hiç çizilmiyor", () => {
+    // `display: none` DEĞİL: kapalı panelin katmanı terminalin üstünde boş
+    // durmamalı; React onu hiç kurmuyor.
+    expect(APP, "panel koşulsuz çiziliyor").toMatch(/\{treeOpen && <FilePanel \/>\}/);
   });
 
   it("dosya düğmesinin simgesi klasör", () => {

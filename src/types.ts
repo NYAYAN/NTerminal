@@ -316,6 +316,70 @@ export interface FileText {
   size: number;
 }
 
+// ---------------------------------------------------- dosyaların içinde arama
+
+/** İçerik aramasının seçenekleri (bkz. `search.rs` `SearchOptions`). */
+export interface SearchFlags {
+  /** Büyük/küçük harfe duyarlı. Varsayılan kapalı — IDE'lerde de öyle. */
+  caseSensitive: boolean;
+  /** Yalnızca tam sözcük. */
+  wholeWord: boolean;
+  /** Sorgu düzenli ifade (Rust `regex` sözdizimi). */
+  regex: boolean;
+}
+
+/** Eşleşen tek bir satır (bkz. `search.rs` `LineHit`). */
+export interface TextLineHit {
+  /** 1'den başlayan satır numarası. */
+  line: number;
+  /** Satırın gösterilen parçası: girinti atılmış, uzunsa kırpılmış (`…`). */
+  text: string;
+  /** `text` içindeki eşleşmeler, `[başlangıç, bitiş)` — dizenin kendi konumları. */
+  ranges: [number, number][];
+  /** İlk eşleşmenin TAM satırdaki sütunu; görüntüleyici onu işaretliyor. */
+  col: number;
+  /** İlk eşleşmenin uzunluğu. */
+  len: number;
+}
+
+export interface TextFileHits {
+  /** Kök dizine göre yol, platformun ayırıcısıyla (Ctrl+P listesiyle aynı). */
+  path: string;
+  lines: TextLineHit[];
+  matches: number;
+}
+
+export interface TextSearchResult {
+  files: TextFileHits[];
+  matches: number;
+  lines: number;
+  /** İçine bakılan dosya sayısı. */
+  searched: number;
+  /** Satır sınırına takıldı: başka eşleşmeler de var. */
+  truncated: boolean;
+  /** Dosya listesi sınırda kesildi. */
+  filesCapped: boolean;
+  /** Büyük olduğu için atlanan dosya sayısı. */
+  skippedLarge: number;
+  /** Liste git'ten geldi: `.gitignore`a takılanlar aranmadı. */
+  git: boolean;
+  /** Arama iptal edildi; sonuç yok sayılmalı. */
+  cancelled: boolean;
+}
+
+/**
+ * Görüntüleyicide gidilecek yer: satır ve işaretlenecek eşleşme.
+ *
+ * `seq` aynı yere ikinci kez gidebilmek için: aynı satıra yeniden tıklamak da
+ * görüntüleyiciyi oraya kaydırmalı, değer değişmediği için etki koşmazdı.
+ */
+export interface ViewerReveal {
+  line: number;
+  col: number;
+  len: number;
+  seq: number;
+}
+
 /**
  * Fark penceresinin iki tarafı (bkz. `git.rs` `DiffSides`).
  *

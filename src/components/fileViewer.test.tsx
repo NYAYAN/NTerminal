@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
+import { useStore } from "../store/useStore";
 import type { FileText } from "../types";
 import { FileViewer } from "./FileViewer";
 
@@ -219,5 +220,71 @@ describe("dosya başka yerde kaydedildiyse", () => {
     expect(container.querySelector(".viewer-issue")).toBe(null);
     expect(editor(container).value).toBe("baska yerde\n");
     expect(container.querySelector(".viewer-dirty")).toBe(null);
+  });
+});
+
+/*
+ * Aramadan gelinen satır.
+ *
+ * İçerik aramasından açılan dosya eşleşmenin satırına gidiyor ve eşleşme
+ * işaretli duruyor. Konum Rust'tan TAM satırdaki UTF-16 sütunu olarak geliyor
+ * (`search::LineHit.col`); görüntüleyici satırları aynı biçimde böldüğü için
+ * işaret doğrudan `slice` ile kesiliyor.
+ */
+describe("aramadan gelinen satır", () => {
+  const reveal = (line: number, col: number, len: number, seq = 1) => ({ line, col, len, seq });
+
+  it("satır ve eşleşme işaretli", async () => {
+    disk = text("bir\n  ğü foo\nüç\n");
+    const { container } = render(<FileViewer path={PATH} reveal={reveal(2, 5, 3)} />);
+    await settle();
+    const hit = container.querySelectorAll(".viewer-line")[1];
+    expect(hit.classList.contains("hit")).toBe(true);
+    expect(hit.querySelector(".viewer-mark")?.textContent).toBe("foo");
+    // Satırın kalanı kaybolmuyor.
+    expect(hit.querySelector(".viewer-text")?.textContent).toBe("  ğü foo");
+    expect(container.querySelectorAll(".viewer-line.hit")).toHaveLength(1);
+  });
+
+  it("dosya o arada kısaldıysa işaret satırı bozmuyor", async () => {
+    disk = text("kisa\n");
+    const { container } = render(<FileViewer path={PATH} reveal={reveal(1, 40, 3)} />);
+    await settle();
+    const line = container.querySelector(".viewer-line .viewer-text");
+    expect(line?.textContent).toBe("kisa");
+    expect(container.querySelector(".viewer-mark")).toBe(null);
+  });
+
+  it("gösterilen 512 KB'ın dışındaki satır SÖYLENİYOR", async () => {
+    // Sessizce tepede kalmak "eşleşme burada değilmiş" sandırırdı.
+    disk = text("a\nb\n", { truncated: true });
+    const { container } = render(<FileViewer path={PATH} reveal={reveal(900, 0, 1)} />);
+    await settle();
+    const cuts = [...container.querySelectorAll(".viewer-cut")].map((el) => el.textContent);
+    expect(cuts[0]).toBe("900. satır gösterilen ilk 512 KB'ın dışında kaldı");
+  });
+
+  it("düzenlerken eşleşme yazı alanında SEÇİLİYOR", async () => {
+    // İşaret katmanı düzenlerken yok; seçim hem görünüyor hem üzerine yazılabiliyor.
+    disk = text("bir\niki foo\n");
+    const { container, rerender } = render(<FileViewer path={PATH} />);
+    await settle();
+    fireEvent.click(tool(container, "edit"));
+    await settle();
+    rerender(<FileViewer path={PATH} reveal={reveal(2, 4, 3)} />);
+    await settle();
+    const area = editor(container);
+    expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe("foo");
+  });
+
+  it("dosyayı kapatan düğme yalnızca görüntüleyiciyi kapatıyor", async () => {
+    const { container } = render(<FileViewer path={PATH} />);
+    await settle();
+    const close = container.querySelector<HTMLButtonElement>(".viewer-close")!;
+    expect(close.title).toBe("Dosyayı kapat");
+    useStore.setState({ ui: { ...useStore.getState().ui, treeOpen: true, viewerPath: PATH } });
+    fireEvent.click(close);
+    expect(useStore.getState().ui.viewerPath).toBe(null);
+    expect(useStore.getState().ui.treeOpen).toBe(true);
   });
 });

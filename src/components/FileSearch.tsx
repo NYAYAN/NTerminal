@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { joinDir } from "../lib/dirs";
+import { joinDir, sameDir } from "../lib/dirs";
 import { baseName, rankFiles, shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import { useTextSearch } from "../lib/textSearch";
 import { useStore } from "../store/useStore";
+import { SearchStatus, TextResults, type HitRef } from "./TextResults";
 
 /**
  * Gösterilecek en fazla sonuç.
@@ -17,7 +19,7 @@ import { useStore } from "../store/useStore";
 const MAX_ROWS = 100;
 
 /**
- * Dosya sütununun arama sonuçları — DÜZ bir liste, ağaç değil.
+ * Dosya sütununun ad araması — DÜZ bir liste, ağaç değil.
  *
  * ## Neden ağaç süzülmüyor
  *
@@ -33,36 +35,24 @@ const MAX_ROWS = 100;
  * düz bir liste olarak çiziliyor; ağaç biçiminde göstermek eşleşmeyen ara
  * klasörleri de çizmek demekti.
  *
+ * ## Seçim aramayı KAPATMIYOR
+ *
+ * Görüntüleyici artık sütunun içinde değil, YANINDA açılıyor. Eskiden ikisi
+ * aynı yeri paylaşıyordu ve bir sonuca tıklamak aramayı kapatmak zorundaydı —
+ * yoksa liste görüntüleyiciyi örtüyordu (BİLDİRİLEN: "aradığım dosyaya
+ * tıklıyorum, detayı açılmıyor"). Şimdi liste solda kalıyor, dosya sağda
+ * açılıyor; kullanıcı adaylar arasında tıklayarak gezebiliyor. Ağaca dönmek
+ * aramayı kapatmak: büyüteç ya da Esc. Açık olan dosyanın satırı işaretli.
+ *
  * ## Sıralama
  *
  * `rankFiles` ile: en iyi eşleşme önce. O işlev bir kez ters yazılmıştı ve
  * aranan dosya listenin en sonunda kalıyordu; gerekçesi ve testi
  * `lib/fileRank.test.ts` içinde.
  */
-export function FileSearch({
-  cwd,
-  query,
-  onOpened,
-}: {
-  cwd: string;
-  query: string;
-  /**
-   * Bir dosya GÖRÜNTÜLEYİCİDE açıldı — arama kutusunu boşaltmak için.
-   *
-   * BİLDİRİLEN HATA: "aradığım dosyaya tıklıyorum, detayı açılmıyor." Sebep
-   * sütunun çizim sırasıydı: sorgu doluyken sonuç listesi HER ZAMAN
-   * kazanıyordu, dolayısıyla `openFile` yolu ayarlasa da görüntüleyici hiç
-   * çizilmiyordu — kullanıcı tıklıyor ve hiçbir şey olmuyormuş gibi
-   * görünüyordu.
-   *
-   * Çözüm sırayı değiştirmek DEĞİL: yol öne alınsaydı, görüntüleyici açıkken
-   * yazmaya başlamak sonuçları göstermezdi ve arama kullanılamaz hâle
-   * gelirdi. Doğrusu aramanın işini BİTİRMİŞ olması — dosya bulundu ve
-   * seçildi. Kutu yerinde kalıyor, yeni bir arama bir tuş uzakta.
-   */
-  onOpened: () => void;
-}) {
+export function FileSearch({ cwd, query }: { cwd: string; query: string }) {
   const t = useT();
+  const viewerPath = useStore((s) => s.ui.viewerPath);
   const [files, setFiles] = useState<string[] | null>(null);
   /**
    * Hangi dizin için okuduk.
@@ -106,27 +96,23 @@ export function FileSearch({
         // Klasör zinciri ayrı bir satırda ve soluk: dar sütunda ayırt edici
         // olan dosya ADI, yol ise onu doğrulayan ikinci bilgi.
         const dir = path.includes("/") || path.includes("\\") ? shortenPath(path, 2) : null;
+        const shown = !!viewerPath && sameDir(full, viewerPath);
 
         return (
           <button
             key={path}
             type="button"
-            className="file-result"
+            className={shown ? "file-result on" : "file-result"}
+            aria-current={shown || undefined}
             title={full}
             onClick={(e) => {
               // Shift: yolu komut satırına ekle — ağaçtaki tıklamayla aynı
               // ayrım, aynı değiştirici tuş.
-              //
-              // Shift'te sorgu KORUNUYOR: kullanıcı arka arkaya birkaç yol
-              // eklemek isteyebilir ve listeyi elinden almak onu her seferinde
-              // yeniden aramaya zorlardı. Düz tıklamada ise arama işini
-              // bitirdi (bkz. `onOpened`).
               if (e.shiftKey) {
                 useStore.getState().insertPath(full);
                 return;
               }
               useStore.getState().openFile(full);
-              onOpened();
             }}
           >
             <span className="file-result-name">{baseName(path)}</span>
@@ -134,6 +120,50 @@ export function FileSearch({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Dosya sütununun İÇERİK araması — paletin "Dosya içeriği" sekmesiyle aynı
+ * arama ve aynı sonuç listesi (`TextResults`), bir farkla: burada liste seçimde
+ * kapanmıyor.
+ *
+ * Bu kipin asıl işi bu: eşleşmeler solda dururken her birine tıklayıp sağdaki
+ * görüntüleyicide o satırı görmek. Palet seçimde kapanıyor; bir sonraki
+ * eşleşme için yeniden açmak gerekiyor. Sütun ise listeyi elde tutuyor —
+ * VS Code'un arama görünümüyle editörü gibi.
+ *
+ * Dosyalar katlanabilir (kalabalık bir kilit dosyası listeyi doldurmasın);
+ * görüntüleyicide açık olan satır işaretli.
+ */
+export function ContentSearch({ cwd, query }: { cwd: string; query: string }) {
+  const flags = useStore((s) => s.ui.searchFlags);
+  const viewerPath = useStore((s) => s.ui.viewerPath);
+  const reveal = useStore((s) => s.ui.viewerReveal);
+  const state = useTextSearch(cwd, query, flags, true);
+
+  const pick = ({ file, hit }: HitRef, shift: boolean) => {
+    const full = joinDir(cwd, file.path);
+    if (shift) useStore.getState().insertPath(full);
+    else useStore.getState().openFile(full, { line: hit.line, col: hit.col, len: hit.len });
+  };
+
+  const isCurrent = ({ file, hit }: HitRef) =>
+    !!viewerPath && !!reveal && reveal.line === hit.line && sameDir(joinDir(cwd, file.path), viewerPath);
+
+  return (
+    <div className="panel-list file-results content-results">
+      <SearchStatus state={state} />
+      {state.result && state.result.files.length > 0 && (
+        <TextResults
+          result={state.result}
+          collapsible
+          isCurrent={isCurrent}
+          onPick={pick}
+          stale={state.status === "searching"}
+        />
+      )}
     </div>
   );
 }

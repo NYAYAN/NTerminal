@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   applyEdit,
@@ -6,10 +6,12 @@ import {
   EditHistory,
   editableEol,
   indentUnit,
+  offsetOfLine,
   textEdit,
   toDisplay,
   toFile,
 } from "../lib/diffEdit";
+import { folderLabel } from "../lib/dirs";
 import { baseName, formatBytes } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
@@ -17,18 +19,27 @@ import { prettyCombo } from "../lib/keys";
 import { isMac } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import { EditorLayer, type EditorBinding, type EditorHandle } from "./DiffEditor";
-import { ChevronIcon, PencilIcon, RedoIcon, SaveIcon, UndoIcon } from "./Icons";
-import type { FileText } from "../types";
+import { CloseIcon, PencilIcon, RedoIcon, SaveIcon, UndoIcon } from "./Icons";
+import type { FileText, ViewerReveal } from "../types";
 
 /**
- * Dosya görüntüleyici — "Dosyalar" sekmesinin ikinci hâli.
+ * Dosya görüntüleyici — dosya panelinde ağacın YANINDA, terminalin kalan
+ * genişliğinde.
  *
- * ## Neden beşinci bir sekme değil
+ * ## Neden ağacın yanında, onun yerinde değil
  *
- * Görüntüleyici tek başına bir yer değil, bir dosyayı SEÇTİKTEN sonraki hâl.
- * Beşinci bir sekme çoğu zaman boş dururdu ve "hangi dosya açık" sorusunun
- * yanıtı sekme adında olmazdı. Şimdi ağaç ile görüntüleyici aynı sekmenin iki
- * durumu: yol seçilince içerik, geri denince ağaç.
+ * İlk hâli ağaçla aynı sütunu paylaşıyordu: dosya seçilince ağaç gidiyor,
+ * "geri" ile dönüyordu. Sütun dar olduğu için kod bir şeride sıkışıyordu ve
+ * başka bir dosyaya bakmak her seferinde geri-ileri demekti. İSTEK: "bir dosyayı
+ * seçersem yanına full width olarak açılsın." Şimdi ağaç solda kalıyor,
+ * görüntüleyici sağdaki bütün genişliği alıyor; başlıktaki × yalnızca dosyayı
+ * kapatıyor, ağaç yerinde.
+ *
+ * ## Aramadan gelince o satıra gidiyor
+ *
+ * İçerik aramasından açılan dosya (`reveal`) eşleşmenin satırına kaydırılıyor,
+ * satır ve eşleşme işaretleniyor. Aynı dosyada başka bir eşleşmeye tıklamak
+ * dosyayı yeniden okumadan oraya gidiyor (`seq`).
  *
  * ## Düzenleme
  *
@@ -40,8 +51,8 @@ import type { FileText } from "../types";
  * kendi biçiminde kalıyor, Enter girintiyi koruyor.
  *
  * Kayıt AÇIK: Kaydet düğmesi ya da Ctrl+S / Cmd+S. Kaydedilmemiş değişiklik
- * kaybolmasın diye düzenlemeyi kapatırken, başka dosyaya geçerken ya da
- * ağaca dönerken kendiliğinden yazılıyor (IntelliJ de dosyadan çıkınca
+ * kaybolmasın diye düzenlemeyi kapatırken, başka dosyaya geçerken, dosyayı ya
+ * da paneli kapatırken kendiliğinden yazılıyor (IntelliJ de dosyadan çıkınca
  * kaydediyor). Dosya okunduktan sonra başka bir yerde kaydedildiyse üzerine
  * yazılmıyor; kullanıcı seçiyor.
  *
@@ -75,7 +86,49 @@ function byteLength(text: string): number {
 /** Düzenlerken yazı alanının genişliği kaba adımlarla büyüyor (bkz. `DiffPanes` `textWidth`). */
 const WIDTH_STEP = 40;
 
-export function FileViewer({ path }: { path: string }) {
+/**
+ * Satırı kaydırıcının ortasına getirir; eşleşme yatayda görünmüyorsa onu da.
+ *
+ * `scrollIntoView` kullanılmıyor: panelin ATALARINI da kaydırıyor (terminal
+ * alanı `overflow: hidden` ama kaydırılabilir) ve dikey/yatay kararı tek
+ * çağrıda verilemiyor.
+ */
+function bringIntoView(scroller: HTMLElement, row: HTMLElement, mark: HTMLElement | null) {
+  const box = scroller.getBoundingClientRect();
+  const r = row.getBoundingClientRect();
+  scroller.scrollTop += r.top - box.top - (box.height - r.height) / 2;
+  if (!mark) return;
+  const m = mark.getBoundingClientRect();
+  if (m.left < box.left || m.right > box.right) {
+    scroller.scrollLeft += m.left - box.left - box.width / 3;
+  }
+}
+
+/** Satırın metni, eşleşmesi `<mark>` içinde. Satır o arada kısaldıysa kırpılıyor. */
+function markedLine(line: string, col: number, len: number) {
+  const start = Math.min(col, line.length);
+  const end = Math.min(start + len, line.length);
+  if (end <= start) return line || " ";
+  return (
+    <>
+      {line.slice(0, start)}
+      <mark className="viewer-mark">{line.slice(start, end)}</mark>
+      {line.slice(end)}
+    </>
+  );
+}
+
+export function FileViewer({
+  path,
+  root = null,
+  reveal = null,
+}: {
+  path: string;
+  /** Ağacın kökü: başlıktaki klasör ona göre yazılıyor. */
+  root?: string | null;
+  /** Gidilecek satır ve işaretlenecek eşleşme (içerik aramasından). */
+  reveal?: ViewerReveal | null;
+}) {
   const t = useT();
   const [file, setFile] = useState<FileText | null | "err">(null);
   const [editMode, setEditMode] = useState(false);
@@ -253,29 +306,60 @@ export function FileViewer({ path }: { path: string }) {
     return Math.ceil((max + 1) / WIDTH_STEP) * WIDTH_STEP;
   }, [lines]);
 
+  /*
+   * Aramadan gelen satıra git — dosya yüklenince ve her yeni gidişte (`seq`).
+   *
+   * Çizimden HEMEN sonra (`useLayoutEffect`): dosya önce tepeden görünüp sonra
+   * zıplamasın. Okurken satır ortalanıyor ve eşleşme `<mark>` ile işaretli;
+   * düzenlerken eşleşme yazı alanında SEÇİLİYOR — işaret katmanı orada yok,
+   * seçim hem görünüyor hem üzerine yazılabiliyor.
+   */
+  const revealSeq = reveal?.seq ?? null;
+  const revealed = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (!reveal || !loaded || loaded.binary || revealed.current === reveal.seq) return;
+    const scroller = body.current;
+    if (!scroller) return;
+    revealed.current = reveal.seq;
+
+    if (editing && eol) {
+      const start = Math.min(display.length, offsetOfLine(display, reveal.line - 1) + reveal.col);
+      setSelection({ start, end: Math.min(display.length, start + reveal.len), seq: ++selectionSeq.current });
+      const area = scroller.querySelector<HTMLTextAreaElement>(".viewer-editor");
+      area?.focus({ preventScroll: true });
+      const lh = area ? parseFloat(getComputedStyle(area).lineHeight) : NaN;
+      if (Number.isFinite(lh) && lh > 0) {
+        scroller.scrollTop = Math.max(0, (reveal.line - 1) * lh - scroller.clientHeight / 2);
+      }
+      return;
+    }
+    const row = scroller.querySelector(".viewer-code")?.children[reveal.line - 1];
+    if (row instanceof HTMLElement) bringIntoView(scroller, row, row.querySelector(".viewer-mark"));
+    // `reveal` nesnesinin kendisi değil sırası: aynı gidiş ikinci kez koşmasın.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealSeq, loaded]);
+
+  const folder = folderLabel(path, root);
+  /** Satır, gösterilen ilk 512 KB'ın dışında kaldı: söyleniyor, sessizce tepede kalınmıyor. */
+  const outside = !!reveal && !!loaded && !loaded.binary && loaded.truncated && reveal.line > lines.length;
+
   return (
     <div className="viewer">
       <div className={editing ? "viewer-head editing" : "viewer-head"}>
-        <button
-          type="button"
-          className="viewer-back"
-          title={t("viewer.back")}
-          onClick={() => useStore.getState().setUi({ viewerPath: null })}
-        >
-          {/* Sola bakan ok: ağaca dönüş. `ChevronIcon` kapalı hâlde sağa
-              bakıyor, bu yüzden çevriliyor. */}
-          <span className="flip">
-            <ChevronIcon open={false} size={11} />
-          </span>
-        </button>
         <span className="viewer-name" title={path}>
           {baseName(path) || path}
         </span>
+        {folder && (
+          <span className="viewer-dir" title={path}>
+            {folder}
+          </span>
+        )}
         {dirty && (
           <span className="viewer-dirty" title={t("viewer.unsaved")} aria-label={t("viewer.unsaved")}>
             ●
           </span>
         )}
+        <span className="viewer-spacer" />
         {loaded && <span className="viewer-size">{formatBytes(loaded.size)}</span>}
         {loaded && (
           <span className="viewer-tools">
@@ -322,6 +406,17 @@ export function FileViewer({ path }: { path: string }) {
             </button>
           </span>
         )}
+        {/* Yalnızca DOSYAYI kapatıyor; ağaç yerinde kalıyor. Kaydedilmemiş olan
+            sökülürken yazılıyor (yukarıdaki temizlik). */}
+        <button
+          type="button"
+          className="viewer-tool viewer-close"
+          title={t("viewer.close")}
+          aria-label={t("viewer.close")}
+          onClick={() => useStore.getState().setUi({ viewerPath: null, viewerReveal: null })}
+        >
+          <CloseIcon size={12} />
+        </button>
       </div>
 
       {issue && (
@@ -358,18 +453,24 @@ export function FileViewer({ path }: { path: string }) {
         ) : (
           lines.length > 0 && (
             <div className="viewer-code">
-              {lines.map((line, i) => (
-                <div key={i} className="viewer-line">
-                  {/* Satır numarası seçime girmiyor: kodu kopyalayan biri
-                      numaraları da kopyalamak istemiyor. */}
-                  <span className="viewer-no">{i + 1}</span>
-                  <span className="viewer-text">{line || " "}</span>
-                </div>
-              ))}
+              {lines.map((line, i) => {
+                const hit = reveal && reveal.line === i + 1 ? reveal : null;
+                return (
+                  <div key={i} className={hit ? "viewer-line hit" : "viewer-line"}>
+                    {/* Satır numarası seçime girmiyor: kodu kopyalayan biri
+                        numaraları da kopyalamak istemiyor. */}
+                    <span className="viewer-no">{i + 1}</span>
+                    <span className="viewer-text">{hit ? markedLine(line, hit.col, hit.len) : line || " "}</span>
+                  </div>
+                );
+              })}
             </div>
           )
         )}
 
+        {outside && reveal && (
+          <div className="viewer-cut">{t("viewer.revealOutside", { line: reveal.line })}</div>
+        )}
         {loaded?.truncated && <div className="viewer-cut">{t("viewer.truncated")}</div>}
       </div>
     </div>

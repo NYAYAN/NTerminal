@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filterDirs, joinDir, parentDir, sameDir, separatorOf } from "./dirs";
+import { ancestorDirs, filterDirs, joinDir, parentDir, relativePath, sameDir, separatorOf } from "./dirs";
 
 describe("yol ayırıcısı", () => {
   it("ters eğik çizgi varsa Windows", () => {
@@ -105,5 +105,49 @@ describe("aynı klasör mü", () => {
   it("ayrı klasörler ayrı", () => {
     expect(sameDir("C:\\proje", "C:\\proje2")).toBe(false);
     expect(sameDir("C:\\proje", "C:\\proje\\alt")).toBe(false);
+  });
+});
+
+/**
+ * Açılan dosyanın ağaçtaki yeri.
+ *
+ * Görüntüleyici ağacın yanında açılıyor; aramadan ya da paletten açılan
+ * dosyanın dalları ağaçta açılıyor (`openFile`). Ağaç anahtarlarını kökten
+ * `joinDir` ile kuruyor, yani üretilen yollar KÖKÜN yazımında olmalı — dosya
+ * yolu başka biçimde gelse bile. Yanlış yazım sessiz bir hata: dal açılmış
+ * sayılır ama ağaç onu tanımaz.
+ */
+describe("dosyanın ağaçtaki dalları", () => {
+  it("kökle dosya arasındaki klasörler, kökün yazımıyla", () => {
+    expect(ancestorDirs("/home/ali/proje", "/home/ali/proje/src/lib/a.ts")).toEqual([
+      "/home/ali/proje/src",
+      "/home/ali/proje/src/lib",
+    ]);
+    // Fark penceresi git'in eğik çizgisini veriyor, PowerShell sürücü harfini
+    // küçük yazabiliyor: anahtarlar yine kökün biçiminde.
+    expect(ancestorDirs("C:\\Proje", "c:/proje/src/a.ts")).toEqual(["C:\\Proje\\src"]);
+  });
+
+  it("kökün hemen altındaki dosyada açılacak dal yok", () => {
+    expect(ancestorDirs("/p", "/p/a.ts")).toEqual([]);
+  });
+
+  it("kökün altında değilse dokunmuyor", () => {
+    expect(ancestorDirs("/home/ali/proje", "/home/ali/proje2/a.ts")).toBe(null);
+    expect(ancestorDirs("/home/ali/proje", "/home/ali/proje")).toBe(null);
+    // POSIX'te harf gözetiliyor: başka bir klasör.
+    expect(ancestorDirs("/home/Ali", "/home/ali/a.ts")).toBe(null);
+  });
+
+  it("kök sondaki ayırıcıyla ya da sürücü kökü olarak da çalışıyor", () => {
+    expect(ancestorDirs("/p/", "/p/x/a.ts")).toEqual(["/p/x"]);
+    expect(ancestorDirs("/", "/etc/hosts")).toEqual(["/etc"]);
+    expect(ancestorDirs("C:\\", "C:\\src\\a.ts")).toEqual(["C:\\src"]);
+  });
+
+  it("göreli yol dosyanın kendi ayırıcısıyla", () => {
+    expect(relativePath("C:\\Proje", "C:\\Proje\\src\\a.ts")).toBe("src\\a.ts");
+    expect(relativePath("/p", "/p/src/a.ts")).toBe("src/a.ts");
+    expect(relativePath("/p", "/q/a.ts")).toBe(null);
   });
 });

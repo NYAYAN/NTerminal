@@ -1,3 +1,5 @@
+import { dirName, shortenPath } from "./format";
+
 /**
  * Dizin seçicinin yol hesapları.
  *
@@ -92,4 +94,65 @@ export function sameDir(a: string, b: string): boolean {
   const y = duzelt(b);
   if (windowsYolu(a) || windowsYolu(b)) return x.toLowerCase() === y.toLowerCase();
   return x === y;
+}
+
+/**
+ * `path`in `root`a göre yolu (yolun kendi ayırıcısıyla); kökün altında değilse
+ * `null`.
+ *
+ * Kök ve yol farklı biçimde gelebiliyor — fark penceresi git'in eğik çizgisini
+ * veriyor, PowerShell sürücü harfini küçük yazabiliyor. Harf duyarlılığı
+ * `sameDir`deki gibi yolun BİÇİMİNDEN: Windows yolunda gözetilmiyor, POSIX'te
+ * gözetiliyor (orada `/home/Ali` ile `/home/ali` gerçekten iki ayrı yer).
+ */
+export function relativePath(root: string, path: string): string | null {
+  const windows = [root, path].some((p) => /^[a-zA-Z]:/.test(p) || p.includes("\\"));
+  const kok = root.replace(/\\/g, "/").replace(/\/+$/, "");
+  const yol = path.replace(/\\/g, "/");
+  const onEk = `${kok}/`;
+  const ayni = windows ? yol.toLowerCase().startsWith(onEk.toLowerCase()) : yol.startsWith(onEk);
+  if (!ayni) return null;
+  // Ayırıcı değişimi birebir (karakter karakter), konumlar iki yazımda aynı.
+  const rest = path.slice(onEk.length);
+  return rest.length > 0 ? rest : null;
+}
+
+/**
+ * Bir dosyanın `root` ile arasındaki klasörler — dosya ağacının ANAHTARLARIYLA.
+ *
+ * Aramadan ya da paletten açılan dosya ağaçta da gösteriliyor ("burada"):
+ * dalları açmak için ağacın tuttuğu yolları üretmek gerekiyor. Ağaç anahtarı
+ * kökten `joinDir` ile kuruyor, yani sonuç da KÖKÜN yazımıyla kuruluyor —
+ * dosya yolu başka biçimde gelse bile.
+ *
+ * Dosya kökün altında değilse `null`: başka bir dizinin dosyasını açmak ağaca
+ * dokunmamalı.
+ */
+export function ancestorDirs(root: string, path: string): string[] | null {
+  const rel = relativePath(root, path);
+  if (rel === null) return null;
+  const parcalar = rel.split(/[\\/]/).filter(Boolean);
+  // Son parça dosyanın kendisi.
+  parcalar.pop();
+
+  const out: string[] = [];
+  let at = root;
+  for (const ad of parcalar) {
+    at = joinDir(at, ad);
+    out.push(at);
+  }
+  return out;
+}
+
+/**
+ * Görüntüleyici başlığında adın yanındaki klasör: kökün altındaysa ona göre
+ * (`src/components`), değilse mutlak yolun son üç parçası. Ad zaten ayrı
+ * yazılıyor; klasör "hangi `index.ts`" sorusunun yanıtı.
+ */
+export function folderLabel(path: string, root: string | null): string | null {
+  const rel = root ? relativePath(root, path) : null;
+  const dir = dirName(rel ?? path);
+  if (!dir) return null;
+  const clean = dir.slice(0, -1);
+  return rel ? clean : shortenPath(clean, 3);
 }

@@ -106,6 +106,26 @@ export function CommandPalette() {
           setUi({ searchOpen: true });
         },
       },
+      // Dosya araması paletten de bulunabilsin: "her şeyi buradan bul"
+      // refleksi. İkisi aynı dosya paletini farklı sekmede açıyor.
+      {
+        id: "filePalette",
+        label: t("action.filePalette"),
+        keybinding: keybindings.filePalette,
+        run: () => {
+          close();
+          setUi({ filePaletteOpen: true, paletteMode: "files" });
+        },
+      },
+      {
+        id: "textSearch",
+        label: t("action.textSearch"),
+        keybinding: keybindings.textSearch,
+        run: () => {
+          close();
+          setUi({ filePaletteOpen: true, paletteMode: "text" });
+        },
+      },
       {
         id: "settings",
         label: t("app.settings"),

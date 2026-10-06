@@ -529,7 +529,10 @@ export function App() {
       // Ctrl+P: bulunulan dizindeki dosyalarda arama. Seçilen yol komut
       // satırının sonuna ekleniyor.
       if (matchCombo(event, keys.filePalette))
-        return run(() => store.setUi({ filePaletteOpen: true }));
+        return run(() => store.setUi({ filePaletteOpen: true, paletteMode: "files" }));
+      // Aynı palet, "Dosya içeriği" sekmesinde: dosyaların İÇİNDE arama.
+      if (matchCombo(event, keys.textSearch ?? ""))
+        return run(() => store.setUi({ filePaletteOpen: true, paletteMode: "text" }));
       if (matchCombo(event, keys.historyPanel))
         return run(() => store.setUi({ historyOpen: !store.ui.historyOpen }));
       if (matchCombo(event, keys.historySearch)) return run(() => store.setUi({ searchOpen: true }));
@@ -546,7 +549,16 @@ export function App() {
         if (active) return run(() => store.toggleTabLock(active.tab.id));
       }
       if (matchCombo(event, keys.clearTerminal)) return run(() => session?.clear());
-      if (matchCombo(event, keys.findInTerminal)) return run(() => store.setUi({ findOpen: true }));
+      /*
+       * Terminalde ara. Açık bir dosya terminali örtüyorsa önce panel kapanıyor:
+       * arama çubuğu terminalin sağ üstünde ve panelin ALTINDA kalırdı —
+       * kısayol hiçbir şey yapmıyormuş gibi görünürdü. Kısayolun adı da
+       * "terminalde"; terminali öne getirmek istenen şey.
+       */
+      if (matchCombo(event, keys.findInTerminal))
+        return run(() =>
+          store.setUi(store.ui.treeOpen && store.ui.viewerPath ? { findOpen: true, treeOpen: false } : { findOpen: true }),
+        );
       /*
        * Kopyala / yapıştır KOMUT KUTUSUNDA yakalanmıyor.
        *
@@ -656,7 +668,8 @@ export function App() {
           <SidebarIcon size={13} />
         </button>
 
-        {/* Dosya sutunu: bulunulan dizini GRUPLARIN SAGINDA aciyor.
+        {/* Dosya paneli: bulunulan dizini GRUPLARIN SAGINDA, terminalin
+         * USTUNDE aciyor (terminali daraltmiyor - bkz. `FilePanel`).
          *
          * Iki durumlu - acikken ayni dugme kapatiyor. Tek yonlu halinde dugme
          * actigi paneli kapatamiyordu; kapatmak icin panelin kendi "x"
@@ -715,11 +728,20 @@ export function App() {
          * Kisayolu bilmek gerekmemeli - Warp'ta da ustte duran bu alan ayni
          * isi yapiyor. Gercek bir metin kutusu DEGIL, dugme: yazmaya baslamak
          * icin paletin kendi kutusu aciliyor ve odak orada. Iki ayri kutu
-         * tutmak "hangisine yaziyorum" sorusunu doguruyordu. */}
+         * tutmak "hangisine yaziyorum" sorusunu doguruyordu.
+         *
+         * Palet dosya ADI sekmesinde aciliyor (alanin yazisi "Dosya ara");
+         * dosyalarin ICINDE aramak paletin ikinci sekmesi - Tab ya da kendi
+         * kisayolu. Ipucu ikisini de soyluyor. */}
         <button
           className="titlebar-search"
-          title={t("app.searchTitle", { keys: key("filePalette") })}
-          onClick={() => setUi({ filePaletteOpen: true })}
+          title={[
+            t("app.searchTitle", { keys: key("filePalette") }),
+            key("textSearch") ? t("app.searchTextTitle", { keys: key("textSearch") }) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          onClick={() => setUi({ filePaletteOpen: true, paletteMode: "files" })}
         >
           <SearchIcon size={12} />
           <span>{t("app.searchFiles")}</span>
@@ -739,14 +761,15 @@ export function App() {
           iniyor ve terminal o alanı alıyor. */}
       {!sidebarCollapsed && <GroupSidebar />}
 
-      {/* Dosya sütunu grupların SAĞINDA, terminalin solunda — düzenin sırası
-          başlık çubuğundaki düğmelerin sırasıyla aynı. Kapalıyken hiç
-          çizilmiyor, `auto` sütunu sıfıra iniyor. */}
-      {treeOpen && <FilePanel />}
-
       <div className="main">
         <TabBar />
         <TerminalArea />
+        {/* Dosya paneli terminal hücresinin ÜSTÜNDE (ızgarada aynı alan, ayrı
+            bir sütun DEĞİL): açılınca terminal daralmıyor, kabuk ekranı yeniden
+            çizmiyor. Grupların sağında, terminalin sol kenarında — düzenin
+            sırası başlık çubuğundaki düğmelerin sırasıyla hâlâ aynı. Kapalıyken
+            hiç çizilmiyor. */}
+        {treeOpen && <FilePanel />}
         <ContextBar />
         <RunningLinks />
         <CommandInput />

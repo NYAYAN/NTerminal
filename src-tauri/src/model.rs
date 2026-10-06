@@ -418,6 +418,10 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("newGroup", "Ctrl+Shift+N"),
         ("commandPalette", "Ctrl+Shift+P"),
         ("filePalette", "Ctrl+P"),
+        // Dosyalarin icinde arama. IDE'lerin Ctrl+Shift+F'si burada
+        // "terminalde ara" (Windows Terminal'in aliskanligi, ondan once
+        // vardi); G "grep"ten.
+        ("textSearch", "Ctrl+Shift+G"),
         ("historyPanel", "Ctrl+Shift+H"),
         ("historySearch", "Ctrl+R"),
         ("favorites", "Ctrl+Shift+B"),
@@ -446,6 +450,9 @@ pub fn default_keybindings() -> BTreeMap<String, String> {
         ("newGroup", "Cmd+Shift+N"),
         ("commandPalette", "Cmd+Shift+P"),
         ("filePalette", "Cmd+P"),
+        // Dosyalarin icinde arama: mac'te IDE'lerin (VS Code, JetBrains,
+        // Xcode) tusu. Terminalde arama Cmd+F oldugu icin cakismiyor.
+        ("textSearch", "Cmd+Shift+F"),
         ("historyPanel", "Cmd+Shift+H"),
         // Cmd+R: mac'te Ctrl+R kabugun ters aramasi, ona dokunmuyoruz.
         ("historySearch", "Cmd+R"),
