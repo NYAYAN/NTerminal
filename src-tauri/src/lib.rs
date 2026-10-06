@@ -592,12 +592,99 @@ async fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
 /// Karsilastirma da BURADA, arayuzde degil: "hangisi yeni" sorusunun tek bir
 /// dogru yaniti var ve iki yerde ayri yazilirsa biri guncellenip oteki
 /// unutuldugunda ya bildirim hic cikmiyor ya da her acilista cikiyor.
+///
+/// Yenisi varsa uygulamanin onu kendisi kurup kuramayacagi da burada
+/// belirleniyor (`installable`); gerekcesi `update::installable`.
 #[tauri::command]
-async fn update_check(current: String) -> CmdResult<Option<update::ReleaseInfo>> {
+async fn update_check(
+    app: tauri::AppHandle,
+    current: String,
+) -> CmdResult<Option<update::ReleaseInfo>> {
     let found = tauri::async_runtime::spawn_blocking(update::latest)
         .await
         .map_err(fail)?;
-    Ok(found.filter(|r| update::is_newer(&current, &r.version)))
+    let Some(mut release) = found.filter(|r| update::is_newer(&current, &r.version)) else {
+        return Ok(None);
+    };
+    release.installable = update::installable(&app, &release.version).await;
+    Ok(Some(release))
+}
+
+/// Yeni surumu indirir ve imzasini dogrular; KURMAZ. Indirilen surumu dondurur.
+///
+/// Ilerleme `on_progress` kanaliyla geliyor. Kurulum ayri bir adim
+/// (`update_apply`): arada arayuz son durumu diske yaziyor — gerekcesi
+/// `update::Pending`.
+#[tauri::command]
+async fn update_download(
+    app: tauri::AppHandle,
+    pending: State<'_, update::Pending>,
+    on_progress: tauri::ipc::Channel<UpdateProgress>,
+) -> CmdResult<String> {
+    // Windows'ta kurucu baslarken surec `exit(0)` ile bitiyor ve pencere
+    // olaylari (`Destroyed` -> `kill_all`) hic gelmiyor; kabuklar sahipsiz
+    // kalmasin. Tauri'nin kendi temizligi de eklentinin varsayilaniydi.
+    let handle = app.clone();
+    let before_exit = move || {
+        update::EXIT_STARTED.store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Some(state) = handle.try_state::<AppState>() {
+            state.pty.kill_all();
+        }
+        handle.cleanup_before_exit();
+    };
+
+    let mut sent = 0u64;
+    let progress = |received: u64, total: Option<u64>| {
+        let done = total.is_some_and(|t| received >= t);
+        if done || received - sent >= update::progress_step(total) {
+            sent = received;
+            let _ = on_progress.send(UpdateProgress { received, total });
+        }
+    };
+
+    let (found, bytes) = update::download(&app, before_exit, progress).await?;
+    let version = found.version.clone();
+    pending.put(found, bytes);
+    Ok(version)
+}
+
+/// Indirilen guncellemeyi kurar ve uygulamayi yeniden baslatir.
+///
+/// Arayuz durumu diske yazdiktan SONRA cagiriyor. Platforma gore:
+///
+/// - Windows: eklenti kurucuyu (NSIS ya da MSI, sessiz) baslatip sureci
+///   bitiriyor; uygulamayi kurucu yeniden aciyor. Bu cagri basariyla DONMUYOR.
+/// - macOS: paket yerinde degistiriliyor, sonra yeniden baslatma ISTENIYOR.
+///   `request_restart` kapanis olaylarini sirasiyla isletiyor (`restart`
+///   ise ana is parcaciginda onlari atliyor).
+///
+/// `async` olmak ZORUNDA: macOS'ta paket yonetici izni isterse eklenti parola
+/// istemini ana is parcaciginda acip sonucunu bekliyor. Komut ana is
+/// parcaciginda kossaydi kendi kendini bekleyip kilitlenirdi.
+#[tauri::command]
+async fn update_apply(app: tauri::AppHandle, pending: State<'_, update::Pending>) -> CmdResult<()> {
+    let (found, bytes) = pending
+        .take()
+        .ok_or_else(|| "indirilmis guncelleme yok".to_string())?;
+    if let Err(err) = found.install(bytes) {
+        // Windows: kurucu baslatilamadiysa (ornegin bir guvenlik yazilimi
+        // engelledi) kapanis temizligi COKTAN yapilmis olabilir — kabuklar
+        // kapali, pencereler gizli, tepsi simgesi yok. O yarim durumda kalmak
+        // yerine ayni surumu yeniden ac: durum diskte, sekmeler geri geliyor.
+        if update::EXIT_STARTED.load(std::sync::atomic::Ordering::SeqCst) {
+            app.request_restart();
+        }
+        return Err(fail(err));
+    }
+    app.request_restart();
+    Ok(())
+}
+
+/// Indirme ilerlemesi; `types.ts`teki `UpdateProgress`.
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    received: u64,
+    total: Option<u64>,
 }
 
 #[tauri::command]
@@ -1142,7 +1229,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Yalnizca Rust tarafindan kullaniliyor (update.rs); arayuze izin
+        // verilmiyor, `capabilities/default.json`da `updater:*` yok.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
+        .manage(update::Pending::default())
         .setup(move |app| {
             tray::setup(app.handle(), &lang)?;
             // Uygulama yeniden acildiginda gelen haber (bkz. instance.rs).
@@ -1198,6 +1289,8 @@ pub fn run() {
             read_text_file,
             write_text_file,
             update_check,
+            update_download,
+            update_apply,
             git_info,
             git_branches,
             git_diff,

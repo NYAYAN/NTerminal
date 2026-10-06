@@ -2,7 +2,7 @@
 // topluyoruz ki bileşenler string komut adları taşımasın ve tipler tek yerde
 // dursun.
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   DiffSides,
@@ -34,6 +34,7 @@ import type {
   SpawnResult,
   SpawnSpec,
   StashFiles,
+  UpdateProgress,
   Workspace,
 } from "../types";
 
@@ -239,6 +240,24 @@ export const api = {
    * unutulduğunda ya bildirim hiç çıkmıyor ya da her açılışta çıkıyor.
    */
   checkUpdate: (current: string) => invoke<ReleaseInfo | null>("update_check", { current }),
+  /**
+   * Yeni sürümü indirir ve imzasını doğrular; KURMAZ. İndirilen sürümü döndürür.
+   *
+   * İlerleme bir kanalla geliyor, genel bir olayla değil: yalnızca bu çağrıyı
+   * bekleyen dinliyor ve çağrı bitince kanal da bitiyor — sökülmeyi unutulacak
+   * bir dinleyici yok.
+   */
+  downloadUpdate: (onProgress: (progress: UpdateProgress) => void) => {
+    const channel = new Channel<UpdateProgress>();
+    channel.onmessage = onProgress;
+    return invoke<string>("update_download", { onProgress: channel });
+  },
+  /**
+   * İndirilen güncellemeyi kurar ve uygulamayı yeniden başlatır. Önce durum
+   * diske yazılmış olmalı (bkz. `installUpdate`). Windows'ta süreç kurucuya
+   * devrediliyor, yani başarılı çağrı hiç DÖNMÜYOR.
+   */
+  applyUpdate: () => invoke<void>("update_apply"),
 };
 
 // PTY çıktısı base64 geliyor: terminal akışı geçerli UTF-8 olmak zorunda değil

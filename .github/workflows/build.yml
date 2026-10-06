@@ -83,15 +83,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `.sig` ve `.app.tar.gz` yalnizca imza anahtari varken uretiliyor
+          # (asagida "Paketle"); yoksa eslesmiyor ve sorun degil —
+          # `if-no-files-found` yalnizca HIC dosya yoksa dusuruyor.
           - os: windows-latest
             ad: Windows
             cikti: |
               src-tauri/target/release/bundle/nsis/*.exe
+              src-tauri/target/release/bundle/nsis/*.exe.sig
               src-tauri/target/release/bundle/msi/*.msi
+              src-tauri/target/release/bundle/msi/*.msi.sig
           - os: macos-latest
             ad: macOS
             cikti: |
               src-tauri/target/release/bundle/dmg/*.dmg
+              src-tauri/target/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
     steps:
       - uses: actions/checkout@v7
 
@@ -138,10 +145,43 @@ jobs:
       # Platformda desteklenmeyen paket türleri atlanıyor: Windows'ta nsis+msi,
       # macOS'ta app+dmg çıkıyor.
       #
-      # İmzalama YOK: ne Windows sertifikası ne Apple kimliği tanımlı, çıktılar
-      # imzasız. macOS'ta indiren kullanıcı Gatekeeper uyarısı görür.
+      # İşletim sistemi imzası YOK: ne Windows sertifikası ne Apple kimliği
+      # tanımlı. macOS'ta tarayıcıdan indiren kullanıcı Gatekeeper uyarısı görür.
+      #
+      # GÜNCELLEME imzası ise ayrı bir şey ve var: `TAURI_SIGNING_PRIVATE_KEY`
+      # sırrı tanımlıysa kurucular uygulamanın kendi güncellemesi için de
+      # imzalanıyor (`.sig`) ve macOS'a `.app.tar.gz` ekleniyor; uygulama
+      # imzayı `tauri.conf.json`daki açık anahtarla doğrulayıp kuruyor (bkz.
+      # src-tauri/src/update.rs). Sır yoksa paketler eskisi gibi çıkıyor ve
+      # yayın yalnızca HABER veriyor — kurulum düğmesi çıkmıyor.
+      #
+      # `createUpdaterArtifacts` tauri.conf.json'da değil BURADA açılıyor:
+      # orada açık olsaydı anahtarı olmayan her yerel `npm run bundle` imza
+      # isteyip düşerdi. Parola sırrı yoksa değişken BOŞ dize oluyor; parolasız
+      # anahtar için doğrusu bu — değişken hiç tanımlanmazsa CLI parola sormaya
+      # kalkıp terminalsiz ortamda düşüyor (ölçüldü, CLI 2.11).
+      #
+      # macOS paketi AD-HOC imzalanıyor (`APPLE_SIGNING_IDENTITY: "-"`; Windows
+      # bu değişkeni okumuyor). ÖLÇÜLEN (macOS 27, karantinalı kopya): imzasız
+      # pakette yalnızca bağlayıcının imzası var, kaynaklar mühürsüz — macOS
+      # "hasarlı, Çöp'e taşıyın" diyor ve açmanın TEK yolu Terminal'de `xattr`.
+      # Ad-hoc mühürlü pakette uyarı "Apple doğrulayamadı"ya dönüyor ve Sistem
+      # Ayarları › Gizlilik ve Güvenlik'te "Yine de Aç" düğmesi çıkıyor:
+      # kullanıcı Terminal açmadan, bir kez tıklayarak açıyor. Ücretli Apple
+      # Developer ID olmadan gelinebilecek en iyi nokta bu (bkz. README).
       - name: Paketle
-        run: npx tauri build
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            npx tauri build --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY tanımlı değil: güncelleme paketleri üretilmedi, uygulama bu sürümü kendisi kuramayacak (yalnızca haber verecek)."
+            npx tauri build
+          fi
 
       - name: Paketleri yükle
         uses: actions/upload-artifact@v7
@@ -156,6 +196,8 @@ jobs:
   # Neden gerekli: uygulamanın sürüm denetimi `releases/latest` ucundan okuyor
   # (bkz. src-tauri/src/update.rs). Koşu çıktıları (`upload-artifact`) o uca
   # girmiyor ve 14 günde siliniyor, yani yayın olmadan bildirim hiç çalışmıyor.
+  # Uygulama içinden kurulum da aynı yayının `latest.json` dosyasını okuyor
+  # (`releases/latest/download/latest.json`, tauri.conf.json).
   #
   # ## Etiket neden burada oluşuyor
   #
@@ -216,12 +258,30 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           pattern: nterminal-*
-          path: paketler
+          path: indirilen
           merge-multiple: true
+
+      # Paketler platform klasörlerinde geliyor (`nsis/`, `msi/`, `macos/`…).
+      # ÖLÇÜLEN HATA: Release adımı main'deki her koşuda düştü ve 0.2.1 hiç
+      # yayımlanmadı. Sebep doğrudan yüklenen `paketler/*`in bu klasörleri de
+      # yakalaması: `gh` klasörü dosya sanıp yüklemeye çalışıyor (kaynağında
+      # dizin denetimi yok), taslağı silip çıkıyor. Betik yalnızca dosyaları
+      # düz bir klasöre alıyor, beklenen her paketin yerinde olduğunu
+      # denetliyor ve imzalar varsa `latest.json`ı yazıyor (bkz.
+      # scripts/release-files.mjs).
+      - name: Yayın dosyalarını hazırla
+        if: steps.surum.outputs.yayinla == 'evet'
+        env:
+          ETIKET: ${{ steps.surum.outputs.etiket }}
+        run: node scripts/release-files.mjs indirilen paketler "$ETIKET"
 
       # `--target`: etiket yoksa bu commit'te oluşturuluyor; elle itilmiş
       # etikette zaten var ve aynı commit'i gösteriyor. `--generate-notes`
-      # notları bir önceki etiketten bu yana gelen commit'lerden üretiyor.
+      # notları bir önceki etiketten bu yana gelen commit'lerden üretiyor;
+      # `--notes` onların BAŞINA ekleniyor: Release sayfasından indiren kişi
+      # ilk açılışta ne yapacağını (macOS'ta "Yine de Aç", Windows'ta
+      # SmartScreen) README'nin kurulum bölümünde buluyor. Tek satır, çünkü
+      # aynı metin uygulamanın Hakkında bölümünde sürüm notu olarak da görünüyor.
       - name: Etiket ve Release oluştur
         if: steps.surum.outputs.yayinla == 'evet'
         env:
@@ -231,5 +291,6 @@ jobs:
           gh release create "$ETIKET" \
             --target "$GITHUB_SHA" \
             --title "$ETIKET" \
+            --notes "İlk kurulum (macOS'ta Yine de Aç, Windows'ta SmartScreen): https://github.com/${GITHUB_REPOSITORY}#paketi-indirip-kurmak" \
             --generate-notes \
             paketler/*

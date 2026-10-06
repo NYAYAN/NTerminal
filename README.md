@@ -7,15 +7,43 @@ Türkçe/İngilizce arayüz ve ayarların makineler arası taşınması.
 Tauri 2 (Rust) + xterm.js 6 üzerine kurulu. PTY katmanı `portable-pty`
 üzerinden: Windows'ta ConPTY, macOS'ta yerel Unix PTY.
 
-> Yalnızca kurup kullanmak istiyorsan: **[KURULUM.md](KURULUM.md)** — hangi
-> dizinde hangi komut, hangi dosya oluşuyor. Bu dosya nedenleri ve ayrıntıları
-> anlatıyor.
+> Yalnızca kurup kullanmak istiyorsan: aşağıdaki **[Paketi indirip
+> kurmak](#paketi-indirip-kurmak)** — hazır paket, derleme yok. Kaynaktan
+> derleyeceksen: **[KURULUM.md](KURULUM.md)** — hangi dizinde hangi komut, hangi
+> dosya oluşuyor. Bu dosya nedenleri ve ayrıntıları anlatıyor.
 >
 > Geliştirmeye devam edeceksen: **[NOTLAR.md](NOTLAR.md)** — hangi kararın
 > arkasında hangi ölçülmüş hata var, neler açık kaldı ve tekrar ısıracak
 > tuzaklar hangileri.
 
 ---
+
+## Paketi indirip kurmak
+
+Son sürüm: **[Releases › Latest](https://github.com/NYAYAN/NTerminal/releases/latest)**.
+Bir kez kurulduktan sonra yeni sürümler **uygulamanın içinden** geliyor
+(*Ayarlar › Hakkında › Güncelle ve yeniden başlat*); aşağıdaki adımlar
+yalnızca ilk kurulumda.
+
+**Windows 10/11** — `N-Terminal_<sürüm>_x64-setup.exe`yi indirip çalıştırın;
+yönetici izni istemiyor, kullanıcı klasörüne kuruluyor (kurumsal dağıtım için
+aynı sürümün `.msi`si de var). Paket imzasız olduğu için Windows "Windows
+bilgisayarınızı korudu" (*Windows protected your PC*) diyebilir: **Ek bilgi**
+(*More info*) › **Yine de çalıştır** (*Run anyway*).
+
+**macOS 11+ (Apple Silicon)** — `N-Terminal_<sürüm>_aarch64.dmg`yi açıp
+N-Terminal'i **Uygulamalar** klasörüne sürükleyin. İlk açılışta macOS
+"Apple, N-Terminal'in kötü amaçlı yazılım içermediğini doğrulayamadı" der
+(*“N-Terminal” Not Opened*); **Bitti**'ye (*Done*) basın, sonra:
+
+1. **Sistem Ayarları › Gizlilik ve Güvenlik**'i açın (*System Settings ›
+   Privacy & Security*),
+2. en alttaki **Güvenlik** bölümünde "N-Terminal engellendi" satırının
+   yanındaki **Yine de Aç**'a (*Open Anyway*) basın,
+3. parolanızla ya da Touch ID ile onaylayın.
+
+Terminal komutu gerekmiyor. Neden bu adım var ve tamamen nasıl kalkar:
+[macOS: ilk açılış](#macos-ilk-açılış).
 
 ## Ne yapar
 
@@ -513,26 +541,39 @@ silinir — komut bir sonraki açılışta geri gelmez, metni geçmiş dosyasın
 kalmaz. Yazarken açılan öneri listesinde de aynı düğme ve tuş çalışır; o liste
 sekmeye göre süzülmediği için orada silme her zaman bütün sekmeleri kapsar.
 
-**Yeni sürüm bildirimi.** Uygulama her açılışta GitHub'daki son yayına bakar;
-daha yenisi varsa durum çubuğunda **⬆ 0.2.0 hazır** rozeti çıkar. Rozete
-tıklamak *Ayarlar › Hakkında*'yı açıyor — sürüm notları orada, indirme sayfasını
-açan düğme de. Tarayıcı kendiliğinden açılmıyor: dış bağlantı açmak
-kullanıcının kararı, küçük bir rozete kazara tıklamanın sonucu değil.
+**Yeni sürüm ve güncelleme.** Uygulama açılışta ve açık kaldıkça altı saatte
+bir GitHub'daki son yayına bakar; daha yenisi varsa durum çubuğunda
+**⬆ 0.2.2 hazır** rozeti çıkar. Rozete tıklamak *Ayarlar › Hakkında*'yı açıyor:
+sürüm notları orada ve iki düğme:
 
-Uygulama kendini **güncellemiyor**, haber veriyor. Kendi kendine güncelleyen
-bir akış (Tauri updater) bir imza anahtar çifti, imzalı paket üreten bir CI ve
-yayımlanan bir sürüm akışı istiyor; üçü kurulmadan çalışmıyor.
+- **Güncelle ve yeniden başlat** — paketi uygulama kendisi indiriyor, imzasını
+  doğruluyor, kuruyor ve yeniden açılıyor. Önce onay soruluyor; sekmelerde
+  çalışan bir komut varsa (`ng serve` gibi) onun duracağı da yazıyor. Sekmeler
+  yeniden açılışta geri geliyor. Windows'ta kurucu ilerleme çubuğuyla, soru
+  sormadan çalışıyor (MSI ile kurulduysa yönetici onayı istenir); macOS'ta paket
+  yerinde değişiyor ve tarayıcıdan indirilmediği için **ilk açılıştaki "Yine de
+  Aç" adımı tekrar etmiyor** — güncellemeye karantina damgası düşmüyor (ölçüldü).
+- **İndirme sayfasını aç** — elle kurmak için; tarayıcı kendiliğinden
+  açılmıyor, dış bağlantı açmak kullanıcının kararı.
+
+Kurulum düğmesi yalnızca yayın **imzalıysa** (bkz. *Testler › GitHub Actions ›
+Güncelleme imzası*) ve uygulama **kurulu bir paketse** çıkıyor: `npm start`ın
+geliştirme ikilisinde ve kurulumsuz kopyalanmış `nterminal.exe`de yalnızca
+indirme sayfası var. İmza tutmazsa paket kurulmuyor, uygulama olduğu gibi
+çalışmaya devam ediyor ve hata *Hakkında*'da yazıyor.
 
 Denetim *Ayarlar › Hakkında*'dan kapatılabiliyor — kapalıyken hiçbir ağ isteği
 yapılmıyor, aynı yerdeki düğmeyle elle denetlenebiliyor. "Yeni sürüm yok" ile
 "denetleyemedim" ayrı yazılıyor: ağı olmayan bir makinede "bu sürüm güncel"
 demek, bilinmeyen bir şeyi biliyormuş gibi göstermek olurdu.
 
-> İstek `curl` ile yapılıyor, bir HTTP kütüphanesiyle değil. Sebep kurumsal
-> ağlar: rustls kendi kök sertifika listesini taşıyıp sistemin güven deposunu
-> yok sayıyor ve araya giren bir kurumsal TLS proxy'sinde denetim hep
-> başarısız olurdu. `curl` sertifikaları da vekil sunucu ayarlarını da işletim
-> sisteminden alıyor — üstelik yeni bir bağımlılık gerekmiyor.
+> Denetim isteği `curl` ile yapılıyor, bir HTTP kütüphanesiyle değil. Sebep
+> kurumsal ağlar: rustls kendi kök sertifika listesini taşıyıp sistemin güven
+> deposunu yok sayıyor ve araya giren bir kurumsal TLS proxy'sinde denetim hep
+> başarısız olurdu. `curl` sertifikaları işletim sisteminden alıyor — üstelik
+> yeni bir bağımlılık gerekmiyor. Kurulum ise Tauri'nin güncelleme eklentisiyle
+> yapılıyor (indirme, imza ve kurucu bir arada); o da aynı sebeple `native-tls`
+> ile derleniyor: güven deposu ve vekil sunucu ayarı sistemden.
 
 **Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
 Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
@@ -604,15 +645,27 @@ de yalnızca Windows'ta iş görüyor: WiX şablonu CLI'nin Windows derlemesinde
 var, macOS'takinde yok. macOS'ta komut "uygulanamaz" diyor, test de
 atlanıyor.
 
-### macOS: "hasarlı" uyarısı ve açma yolu
+### macOS: ilk açılış
 
-**Paketler imzasız.** İndirilen bir `.dmg`'den kurulan uygulama ilk açılışta
-açılmıyor: macOS uygulamanın **hasarlı olduğunu ve Çöp'e taşınması gerektiğini**
-söyleyen bir diyalog gösteriyor (tam metin macOS sürümüne ve diline göre
-değişiyor).
+**Paket Apple kimliğiyle imzalı değil, ad-hoc imzalı.** Tarayıcıdan indirilen
+bir uygulamayı macOS ilk açılışta denetliyor (Gatekeeper) ve Apple'ın
+onaylamadığı paketi açmıyor: "Apple, N-Terminal'in kötü amaçlı yazılım
+içermediğini doğrulayamadı". Açmanın yolu **Sistem Ayarları › Gizlilik ve
+Güvenlik › Yine de Aç** — adımları [Paketi indirip kurmak](#paketi-indirip-kurmak)
+bölümünde. Bir kez yapılıyor; uygulamanın kendi kurduğu güncellemelerde
+karantina işareti olmadığı için tekrar etmiyor.
 
-Uygulama hasarlı değil. Bu, macOS'un imzalanmamış bir pakete verdiği yanıt.
-Açmak için karantina damgasını kaldırmak yeterli:
+**Eskiden "hasarlı" diyordu.** CI ad-hoc imzayı eklemeden önceki paketlerde
+yalnızca ikilinin bağlayıcı imzası vardı, paketin kaynakları mühürsüzdü;
+macOS o pakete **"hasarlı, Çöp'e taşıyın"** diyor ve "Yine de Aç" düğmesini
+HİÇ göstermiyor. ÖLÇÜLDÜ (macOS 27, aynı kod, karantinalı iki kopya): imzasız
+paket *“…” is damaged and can’t be opened* + yalnızca *Move to Trash / Cancel*;
+ad-hoc paket *“…” Not Opened — Apple could not verify…* ve Gizlilik ve
+Güvenlik'te *“…” was blocked to protect your Mac. [Open Anyway]*. İş akışındaki
+tek fark `APPLE_SIGNING_IDENTITY: "-"`.
+
+Eski bir paket "hasarlı" diyorsa (ya da Terminal tercih ediliyorsa) karantina
+damgasını kaldırmak da açıyor:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/N-Terminal.app
@@ -627,14 +680,12 @@ koşun; yönetici parolası sorulur (yazarken ekranda görünmez, Enter yeterli)
 sudo xattr -dr com.apple.quarantine /Applications/N-Terminal.app
 ```
 
-Komut bir kez koşuluyor; sonrasında uygulama normal açılıyor. Bir terminali
-kurmak için terminal gerekmesi ironik ama macOS'un bıraktığı tek güvenilir yol
-bu: sıradan "tanınmayan geliştirici" uyarısındaki **Yine de Aç** düğmesi bu
-verdiktte belirmiyor ve macOS 15'ten beri Control+tık → Aç kaçış kapısı da
-kaldırıldı.
+Komut bir kez koşuluyor; sonrasında uygulama normal açılıyor. macOS 15'ten
+beri Control+tık → Aç kaçış kapısı yok; Terminal'siz tek yol yukarıdaki
+"Yine de Aç".
 
-**Sebebi.** İkili yalnızca ad-hoc imzalı, paketin kaynakları mühürlü değil ve
-Team ID yok:
+**Eski paketin imzası.** İkili yalnızca bağlayıcı imzalı, paketin kaynakları
+mühürlü değil ve Team ID yok:
 
 ```
 $ codesign -dvv /Applications/N-Terminal.app
@@ -647,17 +698,20 @@ code has no resources but signature indicates they must be present
 ```
 
 `Identifier` `com.nyayan.nterminal` değil, **ikilinin hash'inden türeyen bir
-ad** — yani her derleme macOS için başka bir uygulama. Bunun ikinci bir sonucu
-var ve kendi derlemesini alan herkesi ilgilendiriyor: macOS gizlilik izinlerini
-(Tam Disk Erişimi, Erişilebilirlik, Otomasyon) kod imzası şartına bağlıyor;
-imza ad-hoc olduğu için şart `cdhash`e çivileniyor ve **her yeni derlemede
-verdiğiniz izinler sıfırlanıyor.**
+ad** — yani her derleme macOS için başka bir uygulama. Ad-hoc mühürlü pakette
+`Identifier` artık `com.nyayan.nterminal`, ama ikinci sonuç iki imzada da
+aynı ve herkesi ilgilendiriyor: macOS gizlilik izinlerini (Tam Disk Erişimi,
+Erişilebilirlik, Otomasyon) kod imzası şartına bağlıyor; imza ad-hoc olduğu
+için şart `cdhash`e çivileniyor ve **her yeni sürümde verdiğiniz izinler
+sıfırlanıyor** — uygulama içinden gelen güncellemede de.
 
-**Gerçek çözüm** Apple Developer Program üyeliği (yıllık ücretli), *Developer
-ID Application* sertifikası ve notarization. O zaman son kullanıcı yalnızca
-"internetten indirildi" onayını görüp devam ediyor, izinler de sabit Team ID
-sayesinde derlemeler arası korunuyor. Şimdilik bilinçli olarak yapılmadı:
-proje tek kişilik ve dağıtım GitHub üzerinden.
+**Tamamen uyarısız çözüm** Apple Developer Program üyeliği (yıllık ücretli),
+*Developer ID Application* sertifikası ve notarization. O zaman son kullanıcı
+yalnızca "internetten indirildi, açılsın mı?" onayını görüp **Aç**'a basıyor —
+Sistem Ayarları'na gitmek yok — ve izinler sabit Team ID sayesinde sürümler
+arası korunuyor. Tauri bunu derleme sırasında kendisi yapıyor; gereken,
+sertifikanın ve Apple hesabı bilgilerinin CI'a sır olarak verilmesi. Şimdilik
+yapılmadı: üyelik ücretli ve kararı proje sahibinin.
 
 Kendinden imzalı bir sertifika (`bundle.macOS.signingIdentity`) izin
 sıfırlanmasını **geliştirme makinesinde** çözer ama son kullanıcı için hiçbir
@@ -1317,8 +1371,11 @@ görünüyor.
   Actions oluşturuyor. `package.json`daki sürümün `v<sürüm>` etiketi henüz
   yoksa, testler ve iki platformun paketleri geçtikten sonra etiket o commit'te
   açılıyor ve paketler bir GitHub Release'ine bağlanıyor (notlar commit'lerden).
-  Etiket zaten varsa yayın yok. Yani **yeni bir sürüm çıkarmak için sürüm
-  numarasını üç dosyada — `src-tauri/Cargo.toml`, `package.json` (ve kilidi),
+  Etiket zaten varsa yayın yok. Paketler önce `scripts/release-files.mjs` ile
+  düz bir klasöre alınıyor ve hepsinin yerinde olduğu denetleniyor; imzalıysa
+  `latest.json` da yazılıyor (aşağıda *Güncelleme imzası*). Yani **yeni bir
+  sürüm çıkarmak için sürüm numarasını üç dosyada — `src-tauri/Cargo.toml`,
+  `package.json` (ve kilidi),
   `src-tauri/tauri.conf.json` — yükseltip main'e itmek yeterli**; elle etiket
   gerekmiyor. Üçünün aynı olduğunu bir test denetliyor: uygulama kendi sürümünü
   Release etiketiyle karşılaştırıyor ve ayrışırlarsa her açılışta "yeni sürüm
@@ -1327,15 +1384,69 @@ görünüyor.
   yayın yapmıyor.
 
 Çıktılar koşunun **Artifacts** bölümünde, 14 gün: Windows için NSIS kurucusu
-ve MSI, macOS için DMG. İkisi de **imzasız** — depoda ne Windows sertifikası
-ne Apple kimliği var. Windows'ta SmartScreen uyarısı çıkıyor; macOS'ta uyarı
-değil doğrudan "hasarlı, Çöp Kutusuna taşıyın" diyaloğu geliyor ve açmak için
-karantina damgasının elle kaldırılması gerekiyor. Komut ve sebebi
-"Kurulum ve çalıştırma" bölümündeki **macOS: "hasarlı" uyarısı ve açma yolu**
-başlığında.
+ve MSI, macOS için DMG. İkisi de bir yayıncı kimliğiyle imzalı DEĞİL — depoda
+ne Windows sertifikası ne Apple kimliği var; macOS paketi yalnızca ad-hoc
+mühürlü (`APPLE_SIGNING_IDENTITY: "-"`). Windows'ta SmartScreen uyarısı
+çıkıyor (*Ek bilgi › Yine de çalıştır*); macOS'ta "Apple doğrulayamadı" ve
+*Sistem Ayarları › Gizlilik ve Güvenlik › Yine de Aç* — ayrıntısı
+**[macOS: ilk açılış](#macos-ilk-açılış)**. Ad-hoc mühür olmadan macOS
+"hasarlı" deyip yalnızca Terminal'den açılmaya izin veriyordu. İkisi de
+**tarayıcıdan indirilen** paketin işaretine bakıyor (macOS'ta karantina,
+Windows'ta "internetten indirildi" / Mark of the Web), yani ilk kurulumda
+çıkıyor. Uygulamanın kendi indirip kurduğu güncellemede bu işaret yok —
+macOS'ta ölçüldü; Windows'ta aynı sebepten SmartScreen'in bakacağı bir şey
+kalmıyor.
 
 Linux yok: uygulama orada denenmedi (`src-tauri/src/platform.rs`) ve paket
 türlerinin hiçbiri Linux'ta karşılık bulmuyor.
+
+#### Güncelleme imzası
+
+Uygulama içinden kurulum (*Güncelle ve yeniden başlat*) paketin bu depodan
+çıktığını bir imzayla doğruluyor. Bu, işletim sisteminin kod imzasından
+(Apple / Windows sertifikası) AYRI ve ücretsiz bir şey: bir anahtar çifti
+(minisign). Açık anahtar `src-tauri/tauri.conf.json`da
+(`plugins.updater.pubkey`); özel anahtar yalnızca CI'da, depo sırrı olarak.
+
+**Kurulum (bir kez).** GitHub'da *Settings › Secrets and variables › Actions ›
+New repository secret*:
+
+| Ad | Değer |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | özel anahtar dosyasının içeriği |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | anahtarın parolası — parolasız anahtarda bu sırrı **oluşturmayın** (GitHub boş sır kabul etmiyor; yokken değişken boş geçiyor, doğrusu da bu) |
+
+Sır tanımlıyken *Paketle* adımı `--config '{"bundle":{"createUpdaterArtifacts":true}}'`
+ile derliyor: kurucuların yanında `.sig` imzaları ve macOS için
+`.app.tar.gz` çıkıyor. *Yayın* işi bunları `scripts/release-files.mjs` ile
+düz bir klasöre alıp `latest.json`ı yazıyor; uygulama o dosyayı
+`releases/latest/download/latest.json` adresinden okuyor. Sır yoksa paketler
+eskisi gibi çıkıyor, `latest.json` yazılmıyor ve kurulu uygulamalar o sürüm için
+yalnızca **haber** veriyor (koşuda bir uyarı satırı bunu söylüyor).
+
+**Anahtarı kaybetmeyin.** Kurulu her uygulama açık anahtarı içinde taşıyor;
+özel anahtar kaybolursa yeni sürümler o kurulumlara uygulama içinden
+**kurulamaz** — anahtarı değiştiren sürümü kullanıcılar bir kez elle
+kurmak zorunda kalır. Dosyayı bir parola yöneticisinde yedekleyin.
+
+Yeni anahtar üretmek (yalnızca kaybolduysa ya da sızdıysa):
+
+```bash
+npx tauri signer generate -w ~/.tauri/nterminal.key
+```
+
+Çıkan `.pub` dosyasının içeriği `tauri.conf.json`daki `pubkey`in yerine, özel
+anahtar da yukarıdaki sırra gidiyor.
+
+Yerelde imzalı paket üretmek için (çoğu zaman gerekmiyor):
+
+```bash
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/nterminal.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" npm run bundle -- --config '{"bundle":{"createUpdaterArtifacts":true}}'
+```
+
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""` parolasız anahtarda bile **gerekli**:
+değişken hiç tanımlı değilse CLI parola sormaya kalkıyor ve terminalsiz
+ortamda düşüyor (ölçüldü, Tauri CLI 2.11).
 
 ---
 

@@ -16,7 +16,7 @@ import type { MsgKey } from "../lib/messages";
 import { isMac } from "../lib/platform";
 import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { THEMES } from "../lib/themes";
-import { useStore } from "../store/useStore";
+import { useStore, type UpdateInstall } from "../store/useStore";
 import type {
   Appearance,
   Behavior,
@@ -30,6 +30,7 @@ import type {
   ViewMode,
 } from "../types";
 import { EnvEditor } from "./EnvEditor";
+import { SpinnerIcon } from "./Icons";
 import { HealthPanel } from "./HealthPanel";
 import { SettingHint, SettingHints } from "./SettingHint";
 import { SettingUndo } from "./SettingUndo";
@@ -115,6 +116,16 @@ const CUSTOM_FONT = "__custom__";
 /** Kaynak deposu — "Hakkında › Geliştirici" bölümünde gösteriliyor. */
 const REPO_URL = "https://github.com/NYAYAN/NTerminal";
 
+/** Kurulumun ilerleyişi: "İndiriliyor… %42" ya da "Yeniden başlatılıyor…". */
+function installProgress(install: UpdateInstall, t: Translate): string {
+  if (install.phase === "restarting") return t("update.restarting");
+  if (install.phase === "downloading" && install.total) {
+    const p = Math.min(100, Math.floor((install.received / install.total) * 100));
+    return t("update.downloading", { p });
+  }
+  return t("update.downloadingUnknown");
+}
+
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
@@ -137,6 +148,8 @@ export function SettingsDialog() {
    * "Hakkında"yı açıyor), yoksa düzenlenen grup, yoksa "Genel".
    */
   const update = useStore((s) => s.update);
+  const install = useStore((s) => s.updateInstall);
+  const installing = install.phase === "downloading" || install.phase === "restarting";
   /** Elle denetim sürüyor mu ve son denetimin sonucu ne oldu. */
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<"ok" | "failed" | null>(null);
@@ -1437,10 +1450,10 @@ export function SettingsDialog() {
               {/*
                 Güncelleme.
 
-                Uygulama kendini GÜNCELLEMİYOR, haber veriyor — indirme ve
-                kurulum kullanıcının. Kendi kendine güncelleyen bir akış imza
-                anahtarı, imzalı paket üreten bir CI ve yayımlanan bir sürüm
-                akışı istiyor; üçü kurulmadan çalışmıyor.
+                Yayın imzalıysa ve bu kopya kurulu bir paketse (`installable`)
+                "Güncelle ve yeniden başlat" uygulamanın İÇİNDEN kuruyor;
+                değilse yalnızca indirme sayfası. İndirme sayfası her durumda
+                duruyor: kurulum düşerse elle kurmanın yolu o.
 
                 Sürüm notları BURADA gösteriliyor, bir düğmenin arkasında
                 değil: "güncelleyeyim mi" kararını veren şey tam olarak o
@@ -1485,15 +1498,55 @@ export function SettingsDialog() {
                   <>
                     <div className="field" data-setting="update.newVersion">
                       <label>{t("update.newVersion")}</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {/* `wrap`: dar pencerede iki düğme denetim sütununa
+                          sığmıyor; nowrap düğmeler sütundan taşardı. */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
+                      >
                         <span className="mono">{update.version}</span>
+                        {/* Commit/Push düğmeleriyle aynı dil: sürerken çark,
+                            yazı sabit (genişlik zıplamıyor); ilerleme altta ve
+                            ipucunda. */}
+                        {update.installable && (
+                          <button
+                            className="primary update-install"
+                            disabled={installing}
+                            aria-busy={installing}
+                            title={installing ? installProgress(install, t) : undefined}
+                            onClick={() => void store().installUpdate()}
+                          >
+                            {installing && <SpinnerIcon size={12} />}
+                            <span>{t("update.install")}</span>
+                          </button>
+                        )}
+                        {/* Kurulum varken ikincil; kurulum düşerse elle yol. */}
                         <button
-                          className="primary"
+                          className={update.installable ? "outline" : "primary"}
                           onClick={() => void api.openExternal(update.url).catch(() => {})}
                         >
                           {t("update.openPage")}
                         </button>
                       </div>
+                      {/* Düğmelerin satırında değil ALTINDA: yanda sütuna
+                          sığmayıp alt satıra kayıyor ve etiketi iki satırın
+                          ortasına itiyordu (WebKit'te görüldü). */}
+                      {installing && (
+                        <div className="hintline update-progress">{installProgress(install, t)}</div>
+                      )}
+                      {/* "Seçtiğin şey yürümedi" ipucu (`hintline warn`): neyin
+                          düştüğü ve elle yol; ham hata ikinci satırda. */}
+                      {install.phase === "failed" && (
+                        <div className="hintline warn update-failed">
+                          {t("update.installFailed")}
+                          <br />
+                          <span className="mono">{install.error}</span>
+                        </div>
+                      )}
                     </div>
                     {update.notes && (
                       <div className="field" data-setting="update.notes">

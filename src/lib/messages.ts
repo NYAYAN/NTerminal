@@ -1323,10 +1323,9 @@ export const MESSAGES = {
   ],
   // ---------------------------------------------------------- güncelleme
   //
-  // Uygulama kendini GÜNCELLEMİYOR, haber veriyor: yeni sürümü indirip kuran
-  // bir akış imza anahtarı, imzalı paket üreten bir CI ve yayımlanan bir
-  // sürüm akışı istiyor; üçü kurulmadan çalışmıyor. Bildirim ise bugün
-  // çalışıyor ve hiçbir kuruluma bağlı değil.
+  // İki katman (bkz. `update.rs`): haber her zaman; uygulama içinden kurulum
+  // yalnızca yayın imzalıysa ve bu kopya kurulu bir paketse. Kurulum
+  // olmadığında indirme sayfası yerinde — metinler ikisini de anlatıyor.
   "update.available": ["{v} hazır", "{v} available"],
   "update.availableTitle": [
     "Yeni sürüm yayımlandı. Ayrıntılar için Ayarlar › Hakkında.",
@@ -1336,6 +1335,31 @@ export const MESSAGES = {
   "update.newVersion": ["Yeni sürüm", "New version"],
   "update.upToDate": ["Bu sürüm güncel.", "This version is up to date."],
   "update.openPage": ["İndirme sayfasını aç", "Open the download page"],
+  "update.install": ["Güncelle ve yeniden başlat", "Update and restart"],
+  "update.downloading": ["İndiriliyor… %{p}", "Downloading… {p}%"],
+  "update.downloadingUnknown": ["İndiriliyor…", "Downloading…"],
+  "update.restarting": ["Yeniden başlatılıyor…", "Restarting…"],
+  "update.installFailed": [
+    "Güncelleme kurulamadı. İndirme sayfasından elle kurabilirsiniz.",
+    "Could not install the update. You can install it by hand from the download page.",
+  ],
+  "update.confirmTitle": ["Güncellemeyi kur", "Install update"],
+  "update.confirmMessage": [
+    "N-Terminal {v} sürümüne güncellenip yeniden başlatılacak.",
+    "N-Terminal will be updated to {v} and restarted.",
+  ],
+  "update.confirmDetail": [
+    "Sekmeler yeniden açılışta geri gelir.",
+    "Your tabs come back after the restart.",
+  ],
+  "update.confirmRunning.one": [
+    "{n} sekmede çalışan komut duracak. Sekmeler yeniden açılışta geri gelir.",
+    "The command running in {n} tab will stop. Your tabs come back after the restart.",
+  ],
+  "update.confirmRunning.other": [
+    "{n} sekmede çalışan komutlar duracak. Sekmeler yeniden açılışta geri gelir.",
+    "The commands running in {n} tabs will stop. Your tabs come back after the restart.",
+  ],
   "update.notes": ["Sürüm notları", "Release notes"],
   "update.check": ["Güncellemeleri denetle", "Check for updates"],
   "update.checking": ["Denetleniyor…", "Checking…"],
@@ -1344,12 +1368,12 @@ export const MESSAGES = {
     "Could not check — check your network connection.",
   ],
   "update.autoCheck": [
-    "Açılışta yeni sürüm denetle",
-    "Check for a new version at startup",
+    "Yeni sürümleri kendiliğinden denetle",
+    "Check for new versions automatically",
   ],
   "update.autoCheckHint": [
-    "Uygulama her açılışta GitHub'daki son yayına bakar ve yenisi varsa durum çubuğunda haber verir. İndirme ve kurulum size ait — uygulama kendini değiştirmiyor. Kapalıyken hiçbir ağ isteği yapılmaz; denetlemeyi buradaki düğmeyle elle de yapabilirsiniz.",
-    "The app checks the latest GitHub release at every startup and tells you in the status bar when a newer one exists. Downloading and installing is up to you — the app never replaces itself. When off, no network request is made; you can also check by hand with the button here.",
+    "Uygulama açılışta ve açık kaldıkça altı saatte bir GitHub'daki son yayına bakar; yenisi varsa durum çubuğunda haber verir. Kurmak sizin kararınız: yayın imzalıysa buradaki düğme indirip kurar ve uygulamayı yeniden başlatır, değilse indirme sayfası açılır. Kapalıyken hiçbir ağ isteği yapılmaz; denetlemeyi buradaki düğmeyle elle de yapabilirsiniz.",
+    "The app checks the latest GitHub release at startup and every six hours while it stays open, and tells you in the status bar when a newer one exists. Installing is your call: if the release is signed, the button here downloads and installs it and restarts the app; otherwise the download page opens. When off, no network request is made; you can also check by hand with the button here.",
   ],
   // Menü çubuğu / bildirim alanı simgesi.
   //

@@ -30,7 +30,7 @@ import { isNativeCopyKey, pageSelectionText } from "./lib/focus";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
-import { flushAllState, useStore } from "./store/useStore";
+import { UPDATE_CHECK_INTERVAL_MS, flushAllState, useStore } from "./store/useStore";
 
 export function App() {
   const ready = useStore((s) => s.ready);
@@ -254,6 +254,17 @@ export function App() {
     const timer = window.setInterval(() => {
       void flushAllState();
     }, 120_000);
+    return () => window.clearInterval(timer);
+  }, [ready]);
+
+  // Yeni sürüm denetimi yalnızca açılışta olsaydı haber, uygulamayı günlerce
+  // açık tutan (pencereyi kapatınca arka planda kalan) kullanıcıya hiç
+  // ulaşmazdı. Ayar kapalıysa `checkUpdate` istek yapmıyor.
+  useEffect(() => {
+    if (!ready) return;
+    const timer = window.setInterval(() => {
+      void useStore.getState().checkUpdate();
+    }, UPDATE_CHECK_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [ready]);
 

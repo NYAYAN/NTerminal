@@ -186,6 +186,27 @@ export type SidePanelMode = "history" | "favorites" | "git";
  * temayı/dili taşımıyor ve gömülü webview'de görünmeme riski var — onay
  * penceresinin görünmemesi korumanın tümden kaybı demek.
  */
+/**
+ * Uygulama içinden güncellemenin durumu (bkz. `installUpdate`).
+ *
+ * `failed` kalıcı değil: düğme yeniden denemeye açık, hata metni yanında.
+ */
+export type UpdateInstall =
+  | { phase: "idle" }
+  | { phase: "downloading"; received: number; total: number | null }
+  | { phase: "restarting" }
+  | { phase: "failed"; error: string };
+
+/**
+ * Uygulama açık kaldıkça yeni sürüm denetiminin aralığı: altı saat.
+ *
+ * Neden altı: yayın günü içinde haber veriyor, ama GitHub'ın kimliksiz API
+ * sınırı (IP başına saatte 60 istek) aynı kurumsal ağ çıkışını paylaşan
+ * onlarca kullanıcıda bile dolmuyor. Ayarlar'daki açıklama bu sayıyı yazıyor
+ * (`update.autoCheckHint`); `updateCheck.test.ts` ikisini bağlıyor.
+ */
+export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 export interface ConfirmRequest {
   id: number;
   title: string;
@@ -485,6 +506,8 @@ interface Store {
    * dolu olması "güncelleme var" demek.
    */
   update: ReleaseInfo | null;
+  /** "Güncelle ve yeniden başlat"ın ilerleyişi; `update` doluyken anlamlı. */
+  updateInstall: UpdateInstall;
 
   bootstrap: () => Promise<void>;
   persistNow: () => Promise<void>;
@@ -542,6 +565,14 @@ interface Store {
    * denetimi kapatıyor, düğmeye basmak isteğin kendisi.
    */
   checkUpdate: (manual?: boolean) => Promise<boolean>;
+  /**
+   * Yeni sürümü indirip kurar ve uygulamayı yeniden başlatır.
+   *
+   * Önce onay soruluyor (sekmelerde çalışan komutlar duracak), indirme
+   * bittikten SONRA durum diske yazılıyor, sonra kurulum. Yalnızca
+   * `update.installable` iken anlamlı; değilse hiçbir şey yapmıyor.
+   */
+  installUpdate: () => Promise<void>;
   /** Çalışan komuta SIGINT gönderir. */
   stopRunning: (tabId: string) => void;
   /** Durdurmayı silahlar; pencere dolunca kendiliğinden düşüyor. */
@@ -881,6 +912,7 @@ export const useStore = create<Store>((set, get) => ({
   statusTick: 0,
   stopArmed: null,
   update: null,
+  updateInstall: { phase: "idle" },
   favorites: [],
   suggestHistory: [],
   inputSignals: {},
@@ -1842,8 +1874,57 @@ export const useStore = create<Store>((set, get) => ({
     const found = await api.checkUpdate(current).catch(() => undefined);
     if (found === undefined) return false;
     // `null` da yazılıyor: elle yapılan ikinci denetim eski haberi temizlesin.
+    const before = get().update?.version;
     set({ update: found });
+    // Önceki sürümün kurulum hatası yeni sürümün yanında asılı kalmasın.
+    if (found?.version !== before && get().updateInstall.phase === "failed") {
+      set({ updateInstall: { phase: "idle" } });
+    }
     return true;
+  },
+
+  /**
+   * Uygulama içinden güncelleme: onay → indir → durumu yaz → kur → yeniden başlat.
+   *
+   * Sıra bilinçli. Durum İNDİRMEDEN SONRA yazılıyor: yavaş bir ağda indirme
+   * dakikalar sürebiliyor ve kullanıcı o sırada çalışmaya devam ediyor;
+   * önceden yazmak aradaki çıktıyı kaybederdi. Yazma, pencere kapatılırkenki
+   * kayıtla aynı (`flushAllState`) — yeniden açılış, kapatıp açmaktan farklı
+   * bir şey geri getirmiyor.
+   *
+   * Hata kullanıcıya gösteriliyor (bildirim + Hakkında'daki satır): denetimin
+   * aksine bu, kullanıcının bastığı bir düğmenin sonucu.
+   */
+  async installUpdate() {
+    const { update, updateInstall } = get();
+    if (!update?.installable) return;
+    if (updateInstall.phase === "downloading" || updateInstall.phase === "restarting") return;
+
+    // Yeniden başlatma sekmelerdeki kabukları kapatıyor; sekmeler ve ekran
+    // çıktıları geri geliyor ama çalışan bir sunucu (`ng serve`) duruyor.
+    const running = Object.values(get().running).filter(Boolean).length;
+    const ok = await get().askConfirm({
+      title: t("update.confirmTitle"),
+      message: t("update.confirmMessage", { v: update.version }),
+      detail: running > 0 ? tp("update.confirmRunning", running) : t("update.confirmDetail"),
+      confirmLabel: t("update.install"),
+      danger: running > 0,
+    });
+    if (!ok) return;
+
+    set({ updateInstall: { phase: "downloading", received: 0, total: null } });
+    try {
+      await api.downloadUpdate(({ received, total }) => {
+        if (get().updateInstall.phase !== "downloading") return;
+        set({ updateInstall: { phase: "downloading", received, total } });
+      });
+      set({ updateInstall: { phase: "restarting" } });
+      await flushAllState();
+      await api.applyUpdate();
+    } catch (err) {
+      set({ updateInstall: { phase: "failed", error: String(err) } });
+      get().toast(t("update.installFailed"), "err");
+    }
   },
 
   /**

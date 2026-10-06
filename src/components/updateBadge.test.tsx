@@ -19,7 +19,7 @@ import { StatusBar } from "./StatusBar";
  * kullanıcının kararı olmalı, küçük bir rozete kazara tıklamanın sonucu değil.
  */
 
-const YENI = { version: "0.2.0", url: "https://example/r/0.2.0", notes: "" };
+const YENI = { version: "0.2.0", url: "https://example/r/0.2.0", notes: "", installable: false };
 
 beforeEach(() => {
   setLanguage("tr");

@@ -344,6 +344,20 @@ export interface ReleaseInfo {
   url: string;
   /** Sürüm notları (markdown, olduğu gibi). Boş olabilir. */
   notes: string;
+  /**
+   * Uygulama bu sürümü KENDİSİ kurabilir mi ("Güncelle ve yeniden başlat").
+   *
+   * `false`: yayın imzasız çıkmış, bu kopya kurulu bir paket değil (`npm
+   * start`, kurulumsuz kopya) ya da paket okunamadı. O zaman yalnızca indirme
+   * sayfası sunuluyor. Kararı Rust veriyor (`update::installable`).
+   */
+  installable: boolean;
+}
+
+/** Güncelleme indirilirken gelen ilerleme; `total` sunucu bildirmezse `null`. */
+export interface UpdateProgress {
+  received: number;
+  total: number | null;
 }
 
 // --------------------------------------------------------------------- git

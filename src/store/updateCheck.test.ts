@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Yeni sürüm denetimi.
  *
- * Uygulama kendini GÜNCELLEMİYOR, haber veriyor. Testlerin konusu üç ayrım:
+ * Denetim yalnızca HABER veriyor; kurulum ayrı ve kullanıcının düğmesiyle
+ * başlıyor (`updateInstall.test.ts`). Testlerin konusu üç ayrım:
  *
  * 1. "Yeni sürüm yok" ile "denetleyemedim" AYRI. Birleştirilirse ağı olmayan
  *    bir makinede "bu sürüm güncel" yazılır — bilmediğimiz bir şeyi biliyormuş
@@ -26,9 +27,10 @@ vi.mock("../lib/ipc", () => ({
   onPtyExit: async () => () => {},
 }));
 
-const { useStore } = await import("./useStore");
+const { UPDATE_CHECK_INTERVAL_MS, useStore } = await import("./useStore");
+const { MESSAGES } = await import("../lib/messages");
 
-const YENI = { version: "0.2.0", url: "https://example/r/0.2.0", notes: "not" };
+const YENI = { version: "0.2.0", url: "https://example/r/0.2.0", notes: "not", installable: false };
 
 function seed(checkUpdates = true) {
   const state = useStore.getState();
@@ -115,5 +117,33 @@ describe("sürüm denetimi", () => {
 
     expect(ok).toBe(false);
     expect(h.checkUpdate).not.toHaveBeenCalled();
+  });
+
+  it("yeni sürüm gelince önceki kurulum hatası temizleniyor", async () => {
+    // 0.2.0'ın "kurulamadı" satırı 0.2.1'in yanında asılı kalırsa yeni sürüm
+    // de kurulamıyormuş gibi okunur.
+    useStore.setState({ update: YENI, updateInstall: { phase: "failed", error: "x" } });
+    h.checkUpdate.mockResolvedValue({ ...YENI, version: "0.2.1" });
+    await useStore.getState().checkUpdate(true);
+    expect(useStore.getState().updateInstall).toEqual({ phase: "idle" });
+  });
+
+  it("aynı sürümün kurulum hatası denetimle silinmiyor", async () => {
+    // Periyodik denetim, kullanıcı hatayı okumadan onu silmemeli.
+    useStore.setState({ update: YENI, updateInstall: { phase: "failed", error: "x" } });
+    h.checkUpdate.mockResolvedValue(YENI);
+    await useStore.getState().checkUpdate();
+    expect(useStore.getState().updateInstall.phase).toBe("failed");
+  });
+});
+
+describe("periyodik denetim", () => {
+  it("aralık Ayarlar'daki açıklamayla aynı: altı saat", () => {
+    // Açıklama sayıyı yazıyor ("altı saatte bir"); aralık değişip metin
+    // değişmezse kullanıcıya yanlış söz verilmiş olur.
+    expect(UPDATE_CHECK_INTERVAL_MS).toBe(6 * 60 * 60 * 1000);
+    const [tr, en] = MESSAGES["update.autoCheckHint"];
+    expect(tr).toContain("altı saatte bir");
+    expect(en).toContain("every six hours");
   });
 });

@@ -394,13 +394,14 @@ yerine oradan çıkarıldı. Seçici kapanınca odak da komut kutusuna (komut
 çalışıyorsa terminale) dönüyor; yoksa Escape'ten sonra yine fareye uzanmak
 gerekirdi (`components/dirPicker.test.tsx`).
 
-### 1.11 Yeni sürüm bildirimi
+### 1.11 Yeni sürüm bildirimi ve uygulama içinden güncelleme
 
-Uygulama kendini GÜNCELLEMİYOR, haber veriyor: her açılışta GitHub'ın son
+İki katman. HABER: açılışta ve açık kaldıkça altı saatte bir GitHub'ın son
 yayınını okuyup sürümü karşılaştırıyor, yenisi varsa durum çubuğunda bir rozet
-çıkıyor. Kendi kendine güncelleyen bir akış (Tauri updater) imza anahtarı,
-imzalı paket üreten bir CI ve yayımlanan bir `latest.json` istiyor; üçü
-kurulmadan çalışmıyor — bildirim ise hiçbir kuruluma bağlı değil.
+çıkıyor; hiçbir kuruluma bağlı değil. KURULUM (6 Ekim'den beri): yayın
+imzalıysa *Hakkında*'daki "Güncelle ve yeniden başlat" paketi indirip imzasını
+doğruluyor, kuruyor ve uygulamayı yeniden açıyor (Tauri updater). Aşağıda
+önce haber katmanının kararları, sonra kurulumunki.
 
 **`curl`, HTTP kütüphanesi değil.** `ureq`/`reqwest` + rustls kendi kök
 sertifika listesini taşıyor ve sistemin güven deposunu yok sayıyor; araya giren
@@ -438,9 +439,105 @@ dosyada (Cargo.toml, package.json, tauri.conf.json) yükseltip main'e itmek.**
 hep eski sanıp her açılışta "yeni sürüm var" derdi). Elle itilen etiket hâlâ
 çalışıyor ama sürümle eşleşmezse iş duruyor. main'deki koşular artık
 birbirini iptal etmiyor: yarıda kesilen bir `gh release create` paketsiz bir
-Release bırakır ve sonraki koşu etiketi görüp onu düzeltmezdi. Koşu sonucu bu
-makineden okunamıyor (`gh` yok, depo özel); yayının çıktığını Releases
-sayfasından ya da uygulamanın rozetinden görmek gerekiyor.
+Release bırakır ve sonraki koşu etiketi görüp onu düzeltmezdi.
+
+**Yayın işi hiç başarıyla çalışmadı (6 Ekim'de bulundu).** Depo herkese açık
+olunca Actions sonucu kimliksiz API'den okunabildi: yayın işinin main'de
+koşmaya başladığı 9becc18'den (3 Ekim) bu yana altı koşunun altısı da
+*Yayın › Etiket ve Release oluştur*da düşmüş; ondan önceki koşular (20 Eylül –
+3 Ekim) zaten arayüz testlerinde düşüyordu. Sebep
+`gh release create … paketler/*`: Windows paketleri
+upload-artifact'in ortak ata kuralıyla `nsis/` ve `msi/` alt klasörlerinde
+geliyor, glob klasörleri de yakalıyordu. `gh` klasörü dosya sanıp yüklemeye
+çalıştı (kaynağında dizin denetimi yok), taslak Release'i silip 1 ile çıktı —
+etiket de oluşmadı (taslak etiket açmıyor). Yani 0.2.1 hiç yayımlanmadı ve hiçbir
+kurulu uygulama bir şey duymadı. Çözüm `scripts/release-files.mjs`: yalnızca
+dosyaları düz bir klasöre alıyor, beklenen her paketi (NSIS, MSI, DMG)
+denetliyor; eksikse yayın duruyor. Koşu günlüğü kimliksiz okunamıyor (403),
+ama adım adları ve uyarı satırları `check-runs/<iş>/annotations` ucundan
+okunuyor.
+
+**Uygulama içinden kurulum — neden şimdi.** Haber tek başına kullanıcıyı
+tarayıcıya gönderiyordu ve paketler işletim sistemi için imzasız: macOS'ta her
+sürümde "hasarlı" diyaloğu + elle `xattr`, Windows'ta SmartScreen. Uygulamanın
+kendi indirdiği pakette karantina işareti yok — ölçüldü: güncellemeden sonra
+pakette `com.apple.quarantine` sıfır, yalnızca zararsız `com.apple.provenance`.
+Güncelleme imzası (minisign) ise ücretsiz: açık anahtar `tauri.conf.json`da,
+özel anahtar CI sırrı (`TAURI_SIGNING_PRIVATE_KEY`). Sır yoksa paketler eskisi
+gibi çıkıyor ve uygulama yalnızca haber veriyor — iki katmanın ayrı olmasının
+sebebi bu.
+
+**Kararlar ve ölçümler:**
+
+- *Eklenti yalnızca Rust'ta.* Arayüze `updater:*` izni yok
+  (`capabilities/default.json`); akış `update_download` → arayüz durumu
+  yazar → `update_apply`. İndirme ile kurulum AYRI çünkü durum (sekmeler,
+  ekran çıktısı) indirmeden SONRA yazılmalı: yavaş ağda indirme dakikalar
+  sürebilir, önceden yazmak aradaki çıktıyı kaybettirirdi.
+- *`tauri-plugin-updater = "~2.12"`.* `"2.12"` yazınca Cargo 2.13.1'i seçip
+  tauri'yi 2.12'ye çekti (2.13, tauri 2.12 istiyor); `@tauri-apps/api` 2.11
+  kalınca `tauri build` sürüm uyuşmazlığıyla durur. Eklenti macOS'ta 47,
+  Windows'ta 37 kasa ekliyor (reqwest/hyper; tauri'de yalnızca mobil için vardı).
+- *`native-tls` + `system-proxy`.* Haberdeki `curl` gerekçesinin aynısı:
+  rustls sistem güven deposunu yok sayar, kurumsal TLS vekilinde düşerdi.
+- *macOS'ta yalnızca `.app` paketinin içinden.* Eklentinin `bundle_type()`i
+  macOS'ta tanımsızı `App` sayıyor ve kurulum ikilinin KLASÖRÜNÜ değiştiriyor:
+  `npm start`ın `target/debug/nterminal`inde düğme `target/debug`ı silip
+  yerine paketi açardı. `update::in_app_bundle` bunu engelliyor; Windows'ta
+  kurucunun işlediği tür (NSIS/MSI) şart, kurulumsuz exe güncellenmiyor.
+- *`latest.json`da yalnızca türlü anahtarlar* (`windows-x86_64-nsis`, `-msi`,
+  `darwin-aarch64-app`): genel `windows-x86_64` anahtarı türü bilinmeyen
+  kopyayı NSIS'le "güncelleyip" ikinci bir kurulum yapardı.
+- *Süre sınırları.* Eklentinin indirmesinde varsayılan sınır yok; düşen bağlantı
+  "İndiriliyor %40"ta sonsuza kadar asılı kalırdı. Bağlantı 15 sn, DURMA 30 sn
+  (toplam süre değil: yavaş vekilde birkaç MB dakikalar sürebilir).
+- *Windows'ta çıkış.* Eklenti kurucuyu başlatıp süreci `exit(0)` ile bitiriyor,
+  pencere olayları gelmiyor; `before_exit` kabukları kapatıyor. Kurucu
+  başlatılamazsa (güvenlik yazılımı) temizlik çoktan yapılmış olabilir — o
+  zaman aynı sürüm yeniden açılıyor (`update::EXIT_STARTED`).
+- *Parolasız anahtar + boş parola değişkeni.* CLI 2.11 parola değişkeni HİÇ
+  yoksa terminalsiz ortamda parola sormaya kalkıp düşüyor ("Device not
+  configured"); boş dizeyle imzalıyor. İş akışında sır yoksa değişken boş geçiyor.
+- *`requireSignedVersion` kapalı.* CLI 2.11 imzanın güvenilir yorumuna sürümü
+  yazmıyor (`timestamp:…	file:…`); açılsaydı her güncelleme reddedilirdi.
+  CLI yükseltilince açılmalı: imzalı sürüm `latest.json`daki sürümle
+  karşılaştırılıyor, eski bir paketin yeni sürüm diye sunulmasını kesiyor.
+
+**Uçtan uca doğrulama (macOS, 6 Ekim).** Aynı kodun ayrı kimlikli
+(`com.nyayan.nterminal.e2etest`) 0.2.1 ve 0.2.2 paketleri imzalı derlendi;
+yerel bir sunucu GitHub API yanıtını ve `latest.json`ı verdi. 0.2.1 açılışta
+rozeti gösterdi → *Hakkında* → onay ("0.2.2 sürümüne güncellenip yeniden
+başlatılacak") → bir saniyede indirildi, kuruldu, eski süreç kapandı, yeni süreç
+aynı yoldan 0.2.2 olarak açıldı, sekme geri geldi, rozet kayboldu. Başka bir
+dosyanın imzasıyla sunulan "0.2.3" REDDEDİLDİ ("The signature verification
+failed"), uygulama aynı süreçte 0.2.2 kaldı. Windows yolu burada denenemedi;
+eklentinin kurucu kodu okundu (`/P /UPDATE /R /ARGS`, MSI'da
+`/passive … AUTOLAUNCHAPP=True`; şablonumuzda `AUTOLAUNCHAPP` var).
+
+**İlk kurulum: ad-hoc mühür (6 Ekim).** Güncellemeler uyarısız ama İLK kurulum
+hâlâ "hasarlı" diyalogu + Terminal'de `sudo xattr` istiyordu; kullanıcının
+sözleri: "her kullanıcı yapmakla uğraşamaz". ÖLÇÜLDÜ (macOS 27, aynı kodun iki
+debug paketi, ayrı kimlik `com.nyayan.nterminal.gktest`, Safari karantina
+damgası elle, `open` ile açıldı, diyalog CoreServicesUIAgent'ın AX ağacından
+okundu): imzasız paket `codesign` "code has no resources but signature
+indicates they must be present" → *“…” is damaged and can’t be opened* (yalnızca
+*Move to Trash / Cancel*); `APPLE_SIGNING_IDENTITY="-"` ile mühürlenen paket
+"valid on disk", `spctl` yalnızca "rejected" → *“…” Not Opened — Apple could not
+verify…* ve Sistem Ayarları › Gizlilik ve Güvenlik'te *“…” was blocked to
+protect your Mac. [Open Anyway]*. Yani Terminal'siz, tıklamayla açılıyor. İş
+akışında yalnızca bu değişken eklendi (`tauri.conf.json`a değil: yerel imza
+kararı `scripts/run.mjs`te, ayrı iş). Ad-hoc pakette hardened runtime açık;
+uygulama açıldı, kabuk (zsh) başladı. Gizlilik izinleri yine `cdhash`e bağlı ve
+her sürümde sıfırlanıyor — onu ve "Yine de Aç" adımını kaldıran tek şey
+ücretli Developer ID + notarization. README'ye son kullanıcı için *Paketi indirip
+kurmak* bölümü eklendi; her Release notunun başına o bölümün bağlantısı
+(`gh release create --notes`, üretilen notların önüne ekleniyor).
+
+Testler: `update_tests.rs` (paket tanıma, sürüm eşitliği, ilerleme adımı),
+`store/updateInstall.test.ts` (onay, sıra, hata, çift basış — 7 mutasyonun 7'si
+yakalandı), `components/updateInstall.test.tsx` (düğme, çark, ilerleme, hata
+satırı), `lib/updaterRelease.test.ts` (yapılandırma, iş akışı, betik, ilk kurulum:
+ad-hoc imza ve README bağlantıları — 3 mutasyonun 3'ü yakalandı).
 
 ### 1.12 Komut kutusunda Ctrl+C: karar tek yere indi
 

@@ -106,3 +106,62 @@ fn not_alani_eksikse_bos() {
     let r = parse_release(r#"{"tag_name": "1.0.0", "html_url": "u"}"#).expect("ayristirilamadi");
     assert_eq!(r.notes, "");
 }
+
+#[test]
+fn ayristirma_kurulabilir_demiyor() {
+    // Kurulabilirlik yanittan degil denetimden geliyor (`installable`): API
+    // yaniti imzali paketi, kurucu turunu ve paketin surumunu bilmiyor.
+    let r = parse_release(YANIT).expect("ayristirilamadi");
+    assert!(!r.installable);
+}
+
+// ------------------------------------------------------------------ kurulum
+
+#[test]
+fn ayni_surum_yazimdan_bagimsiz() {
+    // Haber (API, `v0.2.2` etiketi) ile kurulum (`latest.json`, `0.2.2`) ayni
+    // surumu farkli yazabiliyor; dugme ancak ikisi ayni surumse cikiyor.
+    assert!(same_version("0.2.2", "v0.2.2"));
+    assert!(same_version("0.2", "0.2.0"));
+    assert!(!same_version("0.2.2", "0.2.3"));
+    assert!(!same_version("0.2.2", "0.2.2-beta"));
+}
+
+#[test]
+fn uygulama_paketi_icindeki_ikili_taniniyor() {
+    assert!(in_app_bundle(Path::new(
+        "/Applications/N-Terminal.app/Contents/MacOS/nterminal"
+    )));
+    // Kullanici klasorune surukleyip birakilmis kopya da kurulu bir paket.
+    assert!(in_app_bundle(Path::new(
+        "/Users/ali/Applications/N-Terminal.app/Contents/MacOS/nterminal"
+    )));
+}
+
+#[test]
+fn gelistirme_ikilisi_paket_sayilmiyor() {
+    // OLCULEN TEHLIKE: eklenti macOS'ta paketsiz ikiliyi de `app` turunde
+    // sayiyor ve kurulumda ikilinin KLASORUNU degistiriyor. `npm start`in
+    // ikilisi icin bu `target/debug`i silip yerine paketin icerigini acmak
+    // olurdu; dugme orada hic cikmamali.
+    assert!(!in_app_bundle(Path::new("/Users/ali/proje/src-tauri/target/debug/nterminal")));
+    assert!(!in_app_bundle(Path::new("/Users/ali/proje/src-tauri/target/release/nterminal")));
+    // Paket gibi gorunen ama `.app` olmayan klasor.
+    assert!(!in_app_bundle(Path::new("/tmp/N-Terminal/Contents/MacOS/nterminal")));
+    // Paketin icinde ama `MacOS` klasorunde olmayan ikili.
+    assert!(!in_app_bundle(Path::new(
+        "/Applications/N-Terminal.app/Contents/Resources/nterminal"
+    )));
+    assert!(!in_app_bundle(Path::new("nterminal")));
+    assert!(!in_app_bundle(Path::new("")));
+}
+
+#[test]
+fn ilerleme_yuzde_bir_adimla() {
+    // 10 MB'lik pakette yuz civari olay; parca basina (birkac KB) degil.
+    assert_eq!(progress_step(Some(10_000_000)), 100_000);
+    // Kucuk pakette alt sinir: 64 KB.
+    assert_eq!(progress_step(Some(1_000_000)), 64 * 1024);
+    // Boyutu bilinmeyen indirme de seyreltiliyor.
+    assert_eq!(progress_step(None), 64 * 1024);
+}
