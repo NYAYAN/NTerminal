@@ -564,9 +564,20 @@ fn open_external(url: String) -> CmdResult<()> {
 ///
 /// Cagri SEYREK olmali (dizin degisimi, komut sonu): her cagri bir `git`
 /// sureci baslatiyor.
+///
+/// `async` + `spawn_blocking`. BILDIRILEN: "Degisikliklerin hepsini sec
+/// yapinca ufak bir takilma oluyor." OLCULDU (macOS, gercek uygulama, 30
+/// dosyalik bir degisiklik): `git add` bitip liste tazelenirken ana is
+/// parcacigi 21-28 ms, bir seferinde 66 ms cevap vermiyordu - bu komut
+/// `git status` ve `git rev-parse`i ana is parcaciginda kosturuyordu (es
+/// zamanli komutlar orada kosuyor, bkz. `update_check`). Buyuk bir depoda bu
+/// sure `git status` kadar uzar. Asagidaki okuma komutlari da (fark, stash)
+/// ayni sebeple ayni bicimde.
 #[tauri::command]
-fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
-    Ok(git::read(&path))
+async fn git_info(path: String) -> CmdResult<Option<git::GitInfo>> {
+    tauri::async_runtime::spawn_blocking(move || git::read(&path))
+        .await
+        .map_err(fail)
 }
 
 /// Bir metin dosyasinin icerigi - goruntuleyici icin.
@@ -647,16 +658,22 @@ fn git_fingerprint(path: String) -> CmdResult<Option<String>> {
     Ok(git::fingerprint(&path))
 }
 
-/// Tek bir dosyanin farki; okunamazsa `None`.
+/// Tek bir dosyanin farki; okunamazsa `None`. `async`: bir `git` sureci
+/// (bkz. `git_info`).
 #[tauri::command]
-fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<String>> {
-    Ok(git::diff(&path, &file, untracked))
+async fn git_diff(path: String, file: String, untracked: bool) -> CmdResult<Option<String>> {
+    tauri::async_runtime::spawn_blocking(move || git::diff(&path, &file, untracked))
+        .await
+        .map_err(fail)
 }
 
 /// Bir dosyadaki degisiklikleri geri alir. Yikici; onay ARAYUZDE soruluyor.
+/// `async`: `git checkout` / dosya silme (bkz. `git_info`).
 #[tauri::command]
-fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
-    git::revert(&path, &file, untracked)
+async fn git_revert(path: String, file: String, untracked: bool) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || git::revert(&path, &file, untracked))
+        .await
+        .map_err(fail)?
 }
 
 /// Fark penceresinin iki tarafi: dosyanin HEAD'deki ve calisma agacindaki hali.
@@ -932,27 +949,38 @@ async fn git_commit_diff(
 }
 
 /// Deponun stash'leri, en yeni basta; depo degilse bos liste.
+///
+/// `async` (bkz. `git_info`): acik Stash bolumu listeyi depo durumu her
+/// degistiginde yeniden okuyor - "hepsini sec"ten sonra da.
 #[tauri::command]
-fn git_stashes(path: String) -> CmdResult<Vec<git::GitStash>> {
-    Ok(git::stashes(&path))
+async fn git_stashes(path: String) -> CmdResult<Vec<git::GitStash>> {
+    tauri::async_runtime::spawn_blocking(move || git::stashes(&path))
+        .await
+        .map_err(fail)
 }
 
 /// Bir stash'in dosyalari (takipli + takipsiz) ve toplam dosya sayisi.
 #[tauri::command]
-fn git_stash_files(path: String, id: String) -> CmdResult<git::StashFiles> {
-    git::stash_files(&path, &id)
+async fn git_stash_files(path: String, id: String) -> CmdResult<git::StashFiles> {
+    tauri::async_runtime::spawn_blocking(move || git::stash_files(&path, &id))
+        .await
+        .map_err(fail)?
 }
 
 /// Bir stash'teki tek dosyanin farki; okunamazsa `None`.
 #[tauri::command]
-fn git_stash_diff(
+async fn git_stash_diff(
     path: String,
     id: String,
     file: String,
     orig_path: Option<String>,
     untracked: bool,
 ) -> CmdResult<Option<String>> {
-    Ok(git::stash_diff(&path, &id, &file, orig_path.as_deref(), untracked))
+    tauri::async_runtime::spawn_blocking(move || {
+        git::stash_diff(&path, &id, &file, orig_path.as_deref(), untracked)
+    })
+    .await
+    .map_err(fail)
 }
 
 // Stash'in uc yazma komutu da `async` + `spawn_blocking` (bkz. yukaridaki not):

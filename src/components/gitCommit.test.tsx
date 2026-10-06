@@ -465,6 +465,97 @@ describe("toplu kutu", () => {
     expect(container.querySelector(".git-table-count")!.textContent).toBe("1/1 dosya seçili");
   });
 
+  /*
+   * BİLDİRİLEN: "Değişikliklerin hepsini seç yapınca ufak bir takılma oluyor."
+   * ÖLÇÜLDÜ (gerçek uygulama, 30 dosya): kutular basıştan 79-172 ms sonra
+   * değişiyordu. Toplu kutu da satırın kutusu gibi HEMEN hedef durumu
+   * gösteriyor; gerçek durum işlem bitince.
+   */
+  const sayac = (v: HTMLElement) => v.querySelector(".git-table-count")!.textContent;
+
+  it("basar basmaz bütün kutular ve sayaç hedef durumu gösteriyor — git add bitmeden", async () => {
+    seed(repo([c(" M", "a.ts"), c("??", "b.ts"), c("M ", "c.ts")]));
+    gitSays(repo([c("M ", "a.ts"), c("A ", "b.ts"), c("M ", "c.ts")]));
+    const is = bekleyen();
+    vi.spyOn(api, "gitStage").mockImplementation(() => is.soz);
+    const { container } = render(<GitChanges />);
+    expect(master(container).indeterminate).toBe(true);
+    expect(sayac(container)).toBe("1/3 dosya seçili");
+
+    fireEvent.click(master(container));
+    await flush();
+    expect(master(container).checked, "toplu kutu beklemede").toBe(true);
+    expect(master(container).indeterminate).toBe(false);
+    expect(checks(container).map((x) => x.checked), "satırlar beklemede").toEqual([true, true, true]);
+    expect(sayac(container)).toBe("3/3 dosya seçili");
+
+    is.coz();
+    await flush();
+    expect(checks(container).map((x) => x.checked)).toEqual([true, true, true]);
+    expect(sayac(container)).toBe("3/3 dosya seçili");
+  });
+
+  it("seçimi kaldırırken de hemen hepsi boş", async () => {
+    seed(repo([c("M ", "a.ts"), c("A ", "b.ts")]));
+    gitSays(repo([c(" M", "a.ts"), c("??", "b.ts")]));
+    const is = bekleyen();
+    vi.spyOn(api, "gitUnstage").mockImplementation(() => is.soz);
+    const { container } = render(<GitChanges />);
+
+    fireEvent.click(master(container));
+    await flush();
+    expect(master(container).checked).toBe(false);
+    expect(checks(container).map((x) => x.checked)).toEqual([false, false]);
+    expect(sayac(container)).toBe("0/2 dosya seçili");
+    is.coz();
+  });
+
+  it("toplu işlem sürerken satır kutusu ve ikinci toplu basış bir şey yapmıyor", async () => {
+    seed(repo([c(" M", "a.ts"), c(" M", "b.ts")]));
+    gitSays(repo([c("M ", "a.ts"), c("M ", "b.ts")]));
+    const is = bekleyen();
+    const stage = vi.spyOn(api, "gitStage").mockImplementation(() => is.soz);
+    const unstage = vi.spyOn(api, "gitUnstage").mockResolvedValue(undefined);
+    const { container } = render(<GitChanges />);
+
+    fireEvent.click(master(container));
+    await flush();
+    fireEvent.click(checks(container)[0]);
+    fireEvent.click(master(container));
+    await flush();
+
+    // Kuyruk boşalana kadar bekle: koruma yoksa ikinci işlem ilkinin ardında
+    // bekliyor olurdu ve sürerken saymak onu göremezdi.
+    is.coz();
+    await flush();
+    expect(stage).toHaveBeenCalledTimes(1);
+    expect(unstage).not.toHaveBeenCalled();
+  });
+
+  it("hata olursa kutular gerçek duruma dönüyor ve hata gösteriliyor", async () => {
+    seed(repo([c(" M", "a.ts"), c(" M", "b.ts")]));
+    gitSays(repo([c(" M", "a.ts"), c(" M", "b.ts")]));
+    let reddet!: (err: unknown) => void;
+    vi.spyOn(api, "gitStage").mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          reddet = reject;
+        }),
+    );
+    const { container } = render(<GitChanges />);
+
+    fireEvent.click(master(container));
+    await flush();
+    expect(checks(container).map((x) => x.checked)).toEqual([true, true]);
+
+    await act(async () => reddet("kilit"));
+    await flush();
+    expect(master(container).checked).toBe(false);
+    expect(checks(container).map((x) => x.checked)).toEqual([false, false]);
+    expect(sayac(container)).toBe("0/2 dosya seçili");
+    expect(errorBox(container)!.textContent).toContain("kilit");
+  });
+
   it("hepsi seçili değilken basmak seçilmemiş OLANLARI ekliyor", async () => {
     seed(repo([c("M ", "a.ts"), c(" M", "b.ts"), c("??", "c.ts"), c("MM", "d.ts")]));
     gitSays(repo([c("M ", "a.ts")]));

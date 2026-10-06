@@ -131,6 +131,31 @@ describe("IPC sözleşmesi", () => {
     expect(uyusmayan, `argüman adları tutmuyor:\n${uyusmayan.join("\n")}`).toEqual([]);
   });
 
+  /*
+   * Git süreci başlatan komut ANA İŞ PARÇACIĞINDA koşmamalı.
+   *
+   * Tauri'de `async` olmayan komut ana iş parçacığında koşuyor ve o sürede
+   * pencere cevap vermiyor. BİLDİRİLEN: "Değişikliklerin hepsini seç yapınca
+   * ufak bir takılma oluyor." ÖLÇÜLDÜ (gerçek uygulama, 30 dosya): liste
+   * tazelenirken `git_info` ana iş parçacığını 21-66 ms tutuyordu; `async` +
+   * `spawn_blocking` ile 1-5 ms. Kural kaynaktan: `git::` çağıran her komut
+   * `async`. İstisna yalnızca süreç BAŞLATMAYAN `git_fingerprint` (iki dosya
+   * okuması, 5 sn'de bir yoklamada).
+   */
+  it("git süreci başlatan komutlar ana iş parçacığında koşmuyor (async)", () => {
+    const SUREC_YOK = new Set(["git_fingerprint"]);
+    const komutlar = [...RUST.matchAll(/#\[tauri::command[^\]]*\]\s*(async\s+)?fn\s+([a-z_0-9]+)\s*\(/g)].map((m) => {
+      const bas = m.index!;
+      const son = RUST.indexOf("\n}\n", bas);
+      return { ad: m[2], async: !!m[1], govde: RUST.slice(bas, son) };
+    });
+    const gitli = komutlar.filter((k) => /\bgit::/.test(k.govde));
+    // Boş tarama testi anlamsızca geçirirdi.
+    expect(gitli.map((k) => k.ad)).toEqual(expect.arrayContaining(["git_info", "git_stage", "git_diff"]));
+    const esZamanli = gitli.filter((k) => !k.async && !SUREC_YOK.has(k.ad)).map((k) => k.ad);
+    expect(esZamanli, `ana iş parçacığında git süreci başlatan komut:\n${esZamanli.join("\n")}`).toEqual([]);
+  });
+
   describe("tarayıcı gerçekten çalışıyor", () => {
     // Yukarıdaki testler "hiçbir şey bulunamadı" ile de geçer; bilinen örneklerle
     // ayrıştırıcının işlediğini doğruluyoruz.

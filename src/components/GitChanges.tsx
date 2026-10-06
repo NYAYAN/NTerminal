@@ -100,6 +100,19 @@ export function GitChanges() {
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
 
+  /**
+   * "Hepsini seç / kaldır" sürüyor: bütün kutuların HEDEF durumu (`true` hepsi
+   * seçili), sürmüyorsa `null`.
+   *
+   * BİLDİRİLEN: "Değişikliklerin hepsini seç yapınca ufak bir takılma oluyor."
+   * ÖLÇÜLDÜ (gerçek uygulama, 30 dosya): kutular basıştan 79-172 ms sonra
+   * değişiyordu — `git add` ve tazeleme bitene kadar ekranda hiçbir şey
+   * olmuyordu. Satırın kendi kutusu bunu zaten yapıyor (`pending`); toplu kutu
+   * da artık basar basmaz bütün satırları hedef durumda çiziyor. Gerçek durum
+   * işlem bitince geliyor; hata olursa kutular kendiliğinden eski hâline dönüyor.
+   */
+  const [bulk, setBulk] = useState<boolean | null>(null);
+
   return (
     <>
       {/* Commit kutusu listenin DIŞINDA ve üstünde: liste kayarken ileti alanı
@@ -117,7 +130,9 @@ export function GitChanges() {
           kendisi karar veriyor (depo yoksa hiçbir şey çizmiyor). */}
       <StashSection />
       {git && changes.length === 0 && <div className="pop-empty">{t("git.clean")}</div>}
-      {git && cwd && changes.length > 0 && <ChangesHeader cwd={cwd} git={git} changes={changes} />}
+      {git && cwd && changes.length > 0 && (
+        <ChangesHeader cwd={cwd} git={git} changes={changes} bulk={bulk} onBulk={setBulk} />
+      )}
 
       {changes.map((change) => (
         <ChangeRow
@@ -136,6 +151,7 @@ export function GitChanges() {
           root={git?.root || cwd!}
           open={expandedSet.has(change.path)}
           showPaths={showPaths}
+          bulk={bulk}
           onToggle={() => toggle(change.path)}
         />
       ))}
@@ -165,10 +181,15 @@ function ChangesHeader({
   cwd,
   git,
   changes,
+  bulk,
+  onBulk,
 }: {
   cwd: string;
   git: GitInfo;
   changes: readonly GitChange[];
+  /** Toplu işlem sürüyorsa hedef durum (bkz. `GitChanges` `bulk`). */
+  bulk: boolean | null;
+  onBulk: (target: boolean | null) => void;
 }) {
   const t = useT();
   const summary = stageSummary(changes);
@@ -177,7 +198,7 @@ function ChangesHeader({
 
   // "Kısmen" durumu yalnızca DOM özelliği olarak var, öznitelik değil.
   useEffect(() => {
-    if (master.current) master.current.indeterminate = summary.state === "partial";
+    if (master.current) master.current.indeterminate = bulk === null && summary.state === "partial";
   });
 
   // Başka bir depoya geçildi: öncekinin hatası burada anlamsız.
@@ -186,19 +207,29 @@ function ChangesHeader({
   }, [cwd]);
 
   const toggleAll = async () => {
+    // Sürerken ikinci basış ilkini geri alırdı.
+    if (bulk !== null) return;
     const store = useStore.getState();
+    const include = summary.state !== "staged";
     // Yeni bir deneme eski hatayı siliyor: yoksa başarılı bir seçimden sonra da
     // "Dosya seçimi değiştirilemedi" kutusu ekranda kalıyordu.
     setError(null);
+    onBulk(include);
     try {
-      if (summary.state === "staged") await store.unstageFiles(cwd, unstagePaths(changes));
-      else await store.stageFiles(cwd, stagePaths(changes));
+      if (include) await store.stageFiles(cwd, stagePaths(changes));
+      else await store.unstageFiles(cwd, unstagePaths(changes));
     } catch (err) {
       setError(String(err));
+    } finally {
+      // Tazeleme bitti (`gitWrite` onu bekliyor): gerçek durum zaten çizili.
+      onBulk(null);
     }
   };
 
-  const label = t(summary.state === "staged" ? "git.deselectAll" : "git.selectAll");
+  /** Ekrandaki durum: sürerken hedef, değilse gerçek. */
+  const allStaged = bulk ?? summary.state === "staged";
+  const staged = bulk === null ? git.staged : bulk ? changeTotal(git) : 0;
+  const label = t(allStaged ? "git.deselectAll" : "git.selectAll");
   return (
     <>
       <div className="git-table-head">
@@ -206,13 +237,13 @@ function ChangesHeader({
           ref={master}
           type="checkbox"
           className="git-check"
-          checked={summary.state === "staged"}
+          checked={allStaged}
           title={label}
           aria-label={label}
           onChange={() => void toggleAll()}
         />
         <span className="git-table-col">{t("git.colFile")}</span>
-        <span className="git-table-count">{tp("git.selectedOf", git.staged, { total: changeTotal(git) })}</span>
+        <span className="git-table-count">{tp("git.selectedOf", staged, { total: changeTotal(git) })}</span>
       </div>
       {error && (
         <div className="git-commit-error" role="alert">
@@ -301,6 +332,7 @@ function ChangeRow({
   root,
   open,
   showPaths,
+  bulk,
   onToggle,
 }: {
   change: GitChange;
@@ -311,6 +343,8 @@ function ChangeRow({
   open: boolean;
   /** Dosya adının solunda klasör zinciri de gösterilsin mi. */
   showPaths: boolean;
+  /** "Hepsini seç / kaldır" sürüyorsa bütün kutuların hedefi (bkz. `GitChanges`). */
+  bulk: boolean | null;
   onToggle: () => void;
 }) {
   const t = useT();
@@ -494,7 +528,8 @@ function ChangeRow({
    * indeks gibi), toplu kutudaki gibi kalıcı bir kutuyu hak etmiyor.
    */
   const toggleStage = async () => {
-    if (pending !== null) return;
+    // Toplu işlem sürerken tek satırı değiştirmek onunla yarışırdı.
+    if (pending !== null || bulk !== null) return;
     const store = useStore.getState();
     const include = stage !== "staged";
     setPending(include);
@@ -559,9 +594,9 @@ function ChangeRow({
       <input
         type="checkbox"
         className="git-check"
-        checked={pending ?? stage === "staged"}
+        checked={pending ?? bulk ?? stage === "staged"}
         ref={(el) => {
-          if (el) el.indeterminate = pending === null && stage === "partial";
+          if (el) el.indeterminate = pending === null && bulk === null && stage === "partial";
         }}
         onChange={() => void toggleStage()}
         title={t(stage === "staged" ? "git.unstage" : stage === "partial" ? "git.stagePartial" : "git.stage")}
