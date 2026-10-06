@@ -379,6 +379,17 @@ gezilir. İçerik kipinde sonuçlar dosyaya göre gruplu (başlığa tıklamak g
 katlar), satır numarası ve işaretli eşleşmeyle gelir; tıklamak dosyayı **o
 satırda** açar ve eşleşmeyi işaretler. Kutudan aşağı ok sonuçlara iner.
 
+**Görseller.** PNG, JPEG, GIF, WebP, AVIF, BMP, ICO ve SVG görüntüleyicide resim
+olarak açılır (macOS'ta TIFF ve HEIC de). Alandan büyük görsel **sığdırılır**,
+küçüğü büyütülmez (bulanıklaşmasın); başlıkta piksel boyutu, o anki ölçek ve
+dosya boyutu yazar. Görsele ya da başlıktaki düğmeye tıklamak **gerçek boyuta**
+geçer (kaydırılabilir), ikinci tıklama geri sığdırır. Saydam alanlar dama
+zeminde görünür. SVG önizlemeyle açılır; başlıktaki `</>` kaynağı gösterir
+(düzenlenebilir), görsel simgesi önizlemeye döner — içerik aramasından açılan
+SVG doğrudan eşleşmenin satırında, kaynakta açılır. 20 MB'tan büyük görsel
+önizlenmez ve bu, boyutuyla birlikte söylenir; açılamayan biçim de (ör.
+Windows'ta HEIC) boş bir alan değil, bir uyarı gösterir.
+
 **Görüntüleyicide düzenlemek.** Panelde açılan dosya önce salt
 okunur görünür. Başlıktaki kalem (**Düzenle**) düzenlemeyi açar: kalem vurgu
 renginde ve çerçeveli olur, başlığın altında vurgu çizgisi belirir, satır

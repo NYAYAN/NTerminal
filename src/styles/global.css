@@ -1212,6 +1212,77 @@ button.hit-head:hover {
   box-shadow: 0 0 0 1px color-mix(in srgb, #e3b341 70%, transparent);
 }
 
+/* ------------------------------------------------------- gorsel onizlemesi
+ *
+ * PNG, JPEG, SVG... (bkz. `ImageViewer`). Govde kaydiriliyor; sahne iki halde:
+ *  - SIGDIR: govdenin tamami (`inset: 0`), gorsel ortada ve en fazla alan
+ *    kadar. `max-*` ile: kucuk gorsel BUYUTULMUYOR, bulaniklasmasin.
+ *  - GERCEK BOYUT: sahne gorsel kadar (en az govde kadar), govde kayiyor. */
+.image-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.image-stage {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Dolgu `ImageViewer`daki PAD ile ayni: sigdirma olcegi ondan hesaplaniyor. */
+  padding: 16px;
+}
+
+.image-stage.fit {
+  position: absolute;
+  inset: 0;
+}
+
+.image-stage.actual {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* Saydam alanlar DAMA zeminde: duz zeminde saydamlik ile o renk ayirt
+   edilemiyor. Kareler temanin metin renginden: koyu temada acik, acik temada
+   koyu, ikisinde de goze batmayan bir doku. Ince cerceve gorselin nerede
+   bittigini soyluyor (kenari saydam bir simgede gorunmuyordu). */
+.image-stage img {
+  display: block;
+  --checker: color-mix(in srgb, var(--text) 10%, transparent);
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  box-shadow: 0 0 0 1px var(--border);
+  user-select: none;
+}
+
+.image-stage.fit img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Boyut bildirmeyen SVG (yalnizca `viewBox`): kendi olcusu sifir, alanin
+   genisligini alsin. */
+.image-stage.fit img[data-nosize] {
+  width: min(100%, 640px);
+}
+
+.image-stage img[data-zoom="in"] {
+  cursor: zoom-in;
+}
+
+.image-stage img[data-zoom="out"] {
+  cursor: zoom-out;
+}
+
 /* Kesildi bildirimi: sessizce kesmek "dosyanin sonu buymus" sanmaya yol
    acardi. */
 .viewer-cut {

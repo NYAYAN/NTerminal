@@ -22,6 +22,7 @@ import type {
   HistoryFilter,
   HistoryPage,
   HistoryStats,
+  ImageData,
   ImportOptions,
   ImportResult,
   NewFavorite,
@@ -113,6 +114,11 @@ export const api = {
   searchTextCancel: (id: number) => invoke<void>("search_text_cancel", { id }),
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
+  /**
+   * Görselin baytları (base64) — görüntüleyicinin resim önizlemesi. Çok büyükse
+   * `"too-large:<bayt>"` hatası (bkz. `lib/images.ts`).
+   */
+  readImageFile: (path: string) => invoke<ImageData>("read_image_file", { path }),
   gitInfo: (path: string) => invoke<GitInfo | null>("git_info", { path }),
   /**
    * Depodaki dallar, en son commit alan başta. `remotes: false` yalnızca yerel

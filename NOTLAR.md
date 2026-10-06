@@ -1611,6 +1611,40 @@ kayıt seçeneksiz ve kapısız hâlde ilgili olan düşüyor. Uçtan uca: scrat
 düzeneğinde eski biçimli kaydı geri yükleyip fareyi gezdirmek ve odağı
 değiştirmek (ekran dışı WKWebView); kutu açık, kabuğa hiçbir şey yazılmadı.
 
+### 1.27 Dosya panelinde görsel önizlemesi
+
+**İstek:** "Dosyalardan png tıkladığımda görsel olarak göremiyorum." Görüntüleyici
+her dosyayı metin olarak okuyup PNG'ye (ilk 8 KB'ta NUL) "ikili dosya" diyordu.
+
+**Karar uzantıdan** (`lib/images.ts`): dosyayı okumadan hangi görüntüleyicinin
+açılacağı bilinmeli. PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, SVG; TIFF ve HEIC
+listede ama yalnızca WebKit'te çiziliyor — WebView2'de `<img>` hata veriyor ve
+"biçim desteklenmiyor olabilir" deniyor, boş alan kalmıyor.
+
+**Neden `data:` adresi.** CSP (`tauri.conf.json`) görsellere `'self'`, `asset:`
+ve `data:` dışında kaynak tanımıyor: `blob:` geliştirmede (Vite'ta CSP yok)
+çalışıp ÜRETİMDE boş çıkardı. Varlık protokolü (`asset:`) için hem yapılandırma
+hem Cargo özelliği gerekirdi ve kapsamı bütün disk olurdu. Yeni komut
+`read_image_file` (`files::read_image`) dosyayı base64 veriyor, 20 MB sınırıyla
+(`too-large:<bayt>`, arayüz boyutla söylüyor); `async` + `spawn_blocking`.
+CSP'deki `data:` izni testle bağlı (`imageViewer.test.tsx`): düşerse yalnızca
+kurulu sürümde görülen bir hata olurdu.
+
+**Görüntüleyici** (`ImageViewer`): varsayılan sığdır ama BÜYÜTMEDEN (`max-*`;
+`width: 100%` simgeyi bulanıklaştırırdı — kuralı kaynak testi tutuyor). Ölçek
+`ResizeObserver` ile alanın ölçüsünden; görsele ya da düğmeye tıklamak gerçek
+boyut ↔ sığdır. Görsel zaten sığıyorsa düğme yok. Saydamlık dama zeminde,
+görselin kenarı ince çerçeveyle. SVG: önizleme varsayılan, `</>` kaynağa geçiyor
+(metin görüntüleyicisi, düzenlenebilir); seçim dosyaya VE gidişe (`seq`) bağlı,
+içerik aramasından yeni bir eşleşme yine kaynağı açıyor.
+
+**Doğrulama.** Rust `files_tests.rs` (bayt bayt geri dönüş, sınırın tam kendisi,
+klasör/olmayan dosya, alan adları). Arayüz `images.test.ts`,
+`imageViewer.test.tsx` (`data:` adresi, %50 ölçek ve geçiş, küçük görselin
+büyütülmemesi, büyük/bozuk görsel uyarıları, ağaçtan PNG, SVG önizleme ↔ kaynak,
+aramadan SVG). Gözle: düzenekte deponun gerçek simgeleri (`src-tauri/icons`),
+ekran dışı WKWebView, geniş ve dar pencere.
+
 ---
 
 ## 2. Açık işler

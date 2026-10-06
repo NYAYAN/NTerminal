@@ -157,3 +157,48 @@ fn yazma_baglantinin_ardina_yazmiyor() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+
+// ---------------------------------------------------------------- gorsel
+
+#[test]
+fn gorsel_base64_olarak_okunuyor() {
+    // NUL ve 0xFF iceren gercek PNG basligi: metin okuyucusu bunlari "ikili"
+    // diye bos donduruyordu (BILDIRILEN: "png'yi gorsel olarak goremiyorum");
+    // burada bayt bayt geri gelmeli.
+    let root = tree("image");
+    let png = [0x89u8, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n', 0, 0, 0, 0xff];
+    std::fs::write(root.join("a.png"), png).unwrap();
+    let img = read_image(&root.join("a.png")).unwrap();
+    assert_eq!(img.size, png.len() as u64);
+    use base64::Engine;
+    assert_eq!(base64::engine::general_purpose::STANDARD.decode(&img.data).unwrap(), png);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn buyuk_gorsel_boyutuyla_reddediliyor() {
+    // Arayuz boyutu soyluyor ("Gorsel cok buyuk (31 MB)"); sinir sessizce bos
+    // bir alan birakmamali.
+    let root = tree("image-large");
+    std::fs::write(root.join("b.png"), [7u8; 10]).unwrap();
+    let err = read_image_limited(&root.join("b.png"), 4).unwrap_err();
+    assert_eq!(err, format!("{IMAGE_TOO_LARGE}:10"));
+    assert!(read_image_limited(&root.join("b.png"), 10).is_ok(), "sinirin tam kendisi reddedildi");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn klasor_ve_olmayan_dosya_gorsel_degil() {
+    let root = tree("image-dir");
+    assert!(read_image(&root).is_err());
+    assert!(read_image(&root.join("yok.png")).is_err());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn gorsel_arayuzun_bekledigi_adlarla_seriliyor() {
+    // Arayuz `types.ts`teki `ImageData`yi okuyor; alan adi kayarsa derleyici
+    // gormez, goruntuleyici bos kalir.
+    let v = serde_json::to_value(ImageData { data: "AA==".into(), size: 1 }).unwrap();
+    assert_eq!(v, serde_json::json!({ "data": "AA==", "size": 1 }));
+}

@@ -19,7 +19,7 @@ import { prettyCombo } from "../lib/keys";
 import { isMac } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import { EditorLayer, type EditorBinding, type EditorHandle } from "./DiffEditor";
-import { CloseIcon, PencilIcon, RedoIcon, SaveIcon, UndoIcon } from "./Icons";
+import { CloseIcon, ImageIcon, PencilIcon, RedoIcon, SaveIcon, UndoIcon } from "./Icons";
 import type { FileText, ViewerReveal } from "../types";
 
 /**
@@ -122,12 +122,15 @@ export function FileViewer({
   path,
   root = null,
   reveal = null,
+  onPreview,
 }: {
   path: string;
   /** Ağacın kökü: başlıktaki klasör ona göre yazılıyor. */
   root?: string | null;
   /** Gidilecek satır ve işaretlenecek eşleşme (içerik aramasından). */
   reveal?: ViewerReveal | null;
+  /** SVG'nin kaynağına bakılıyor: görsel önizlemesine dönüş (bkz. `ImageViewer`). */
+  onPreview?: () => void;
 }) {
   const t = useT();
   const [file, setFile] = useState<FileText | null | "err">(null);
@@ -405,6 +408,18 @@ export function FileViewer({
               <SaveIcon size={13} />
             </button>
           </span>
+        )}
+        {onPreview && (
+          <button
+            type="button"
+            data-tool="preview"
+            className="viewer-tool"
+            title={t("viewer.showPreview")}
+            aria-label={t("viewer.showPreview")}
+            onClick={onPreview}
+          >
+            <ImageIcon size={13} />
+          </button>
         )}
         {/* Yalnızca DOSYAYI kapatıyor; ağaç yerinde kalıyor. Kaydedilmemiş olan
             sökülürken yazılıyor (yukarıdaki temizlik). */}

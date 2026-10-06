@@ -693,6 +693,17 @@ fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
     Ok(files::read_text(std::path::Path::new(&path)))
 }
 
+/// Bir gorselin icerigi (base64) - goruntuleyicinin resim onizlemesi.
+///
+/// `async` + `spawn_blocking`: yirmi megabayta kadar okuma ve kodlama; ana is
+/// parcaciginda pencereyi dondururdu. Sinir ve neden base64 `files` modulunde.
+#[tauri::command]
+async fn read_image_file(path: String) -> CmdResult<files::ImageData> {
+    tauri::async_runtime::spawn_blocking(move || files::read_image(std::path::Path::new(&path)))
+        .await
+        .map_err(fail)?
+}
+
 /// Dosya goruntuleyicisindeki Kaydet: dosyayi yeni icerikle yazar.
 ///
 /// Dosya okundugu halden ayrilmissa yazmiyor (`changed`); gerekcesi
@@ -1317,6 +1328,7 @@ pub fn run() {
             search_text_cancel,
             list_entries,
             read_text_file,
+            read_image_file,
             write_text_file,
             update_check,
             update_download,

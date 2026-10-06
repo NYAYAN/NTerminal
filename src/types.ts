@@ -316,6 +316,14 @@ export interface FileText {
   size: number;
 }
 
+/** Görsel önizlemesinin içeriği (bkz. `files.rs` `ImageData`). */
+export interface ImageData {
+  /** Dosyanın baytları, base64 — `data:` adresine giriyor. */
+  data: string;
+  /** Dosyanın boyutu (bayt). */
+  size: number;
+}
+
 // ---------------------------------------------------- dosyaların içinde arama
 
 /** İçerik aramasının seçenekleri (bkz. `search.rs` `SearchOptions`). */

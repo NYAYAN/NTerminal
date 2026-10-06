@@ -154,6 +154,21 @@ export const MESSAGES = {
   "tree.reopen": ["Klasörleri geri aç", "Reopen folders"],
   // Görüntüleyici ağacın YANINDA açılıyor; "geri" yok, yalnızca dosya kapanıyor.
   "viewer.close": ["Dosyayı kapat", "Close file"],
+  // Görsel önizlemesi (PNG, JPEG, SVG…; bkz. `lib/images.ts`).
+  "viewer.imageFailed": [
+    "Görsel gösterilemedi — biçimi burada desteklenmiyor olabilir",
+    "Could not show the image — its format may not be supported here",
+  ],
+  "viewer.imageTooLarge": [
+    "Görsel çok büyük ({size}) — 20 MB'a kadar olanlar önizleniyor",
+    "The image is too large ({size}) — images up to 20 MB are previewed",
+  ],
+  "viewer.zoomFit": ["Sığdır", "Fit to view"],
+  "viewer.zoomActual": ["Gerçek boyut", "Actual size"],
+  "viewer.zoomPercent": ["%{n}", "{n}%"],
+  // SVG hem resim hem metin: önizleme ile kaynak arasında geçiş.
+  "viewer.showSource": ["Kaynağı göster", "Show source"],
+  "viewer.showPreview": ["Önizlemeyi göster", "Show preview"],
   "viewer.revealOutside": [
     "{line}. satır gösterilen ilk 512 KB'ın dışında kaldı",
     "Line {line} is beyond the first 512 KB shown",

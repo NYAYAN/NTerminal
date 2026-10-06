@@ -143,6 +143,51 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/*
+ * Görsel önizlemesinin araçları. "Sığdır" köşe çerçevesi (görsel alana
+ * sığıyor), "gerçek boyut" 1:1 — macOS Önizleme ve VS Code'daki karşılıkları.
+ */
+
+/** Dört köşe: görseli alana sığdır. */
+export function FitIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 6 V3 H5.5 M10.5 3 H13.5 V6 M13.5 10 V13 H10.5 M5.5 13 H2.5 V10" />
+    </Svg>
+  );
+}
+
+/** "1:1": görseli gerçek boyutunda göster. */
+export function ActualSizeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 5.2 L4.8 4 V12 M11.2 5.2 L13 4 V12" />
+      <circle cx="8" cy="6.4" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="9.6" r="0.8" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** `</>`: kaynağı (metni) göster — SVG önizlemesinden metne geçiş. */
+export function CodeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5.5 4.5 L2 8 L5.5 11.5 M10.5 4.5 L14 8 L10.5 11.5 M9.2 3.5 L6.8 12.5" />
+    </Svg>
+  );
+}
+
+/** Çerçeveli resim: önizlemeyi göster — SVG kaynağından görsele dönüş. */
+export function ImageIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="3" width="12" height="10" rx="1.6" />
+      <path d="M3.5 11.6 L6.8 8.2 L9.2 10.6 L10.6 9.2 L12.6 11.2" />
+      <circle cx="10.6" cy="6" r="1" />
+    </Svg>
+  );
+}
+
 /**
  * Grup kenar çubuğunu daraltma/açma düğmesi.
  *

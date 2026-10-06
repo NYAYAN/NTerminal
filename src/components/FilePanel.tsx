@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../lib/i18n";
+import { imageMime, isSvgPath } from "../lib/images";
 import { useStore } from "../store/useStore";
 import { ContentSearch, FileSearch } from "./FileSearch";
 import { FileTree, useActiveCwd } from "./FileTree";
 import { FileViewer } from "./FileViewer";
+import { ImageViewer } from "./ImageViewer";
 import { CollapseAllIcon, ExpandAllIcon, SearchIcon } from "./Icons";
 import { flagForKey, SearchToggles, toggleFlag } from "./SearchToggles";
 
@@ -79,6 +81,20 @@ export function FilePanel() {
   const width = useStore((s) => s.settings.appearance.filesWidth);
   const patchAppearance = useStore((s) => s.patchAppearance);
   const cwd = useActiveCwd();
+
+  /**
+   * SVG'de önizleme mi kaynak mı — kullanıcı düğmeyle seçtiyse.
+   *
+   * Seçim dosyaya VE gidişe (`seq`) bağlı: içerik aramasından aynı dosyada yeni
+   * bir eşleşmeye tıklamak, önceden önizlemeye geçilmiş olsa da kaynağı
+   * açmalı — eşleşme bir satırda ve önizlemede görünmez.
+   */
+  const [svgKaynak, setSvgKaynak] = useState<{ path: string; seq: number; source: boolean } | null>(null);
+  const revealSeq = reveal?.seq ?? 0;
+  const svg = !!viewerPath && isSvgPath(viewerPath);
+  const kaynakGoster =
+    svgKaynak && svgKaynak.path === viewerPath && svgKaynak.seq === revealSeq ? svgKaynak.source : !!reveal;
+  const gorsel = !!viewerPath && !!imageMime(viewerPath) && !(svg && kaynakGoster);
 
   /**
    * Arama sorgusu.
@@ -402,11 +418,29 @@ export function FilePanel() {
 
         {/* `key` dosya yolu: başka dosyaya geçmek görüntüleyiciyi baştan
             kuruyor — kaydırma, düzenleme ve geri alma geçmişi önceki dosyadan
-            taşınmasın. Kaydedilmemiş olan sökülürken yazılıyor. */}
+            taşınmasın. Kaydedilmemiş olan sökülürken yazılıyor.
 
+            Görsel (PNG, JPEG, SVG…) resim olarak, gerisi metin olarak. SVG ikisi
+            birden: varsayılan önizleme, içerik aramasından gelince kaynak (eşleşme
+            bir SATIRDA), başlıktaki düğme ikisi arasında geçiyor. */}
         {viewerPath && (
           <section className="file-viewer-pane">
-            <FileViewer key={viewerPath} path={viewerPath} root={cwd} reveal={reveal} />
+            {gorsel ? (
+              <ImageViewer
+                key={viewerPath}
+                path={viewerPath}
+                root={cwd}
+                onSource={svg ? () => setSvgKaynak({ path: viewerPath, seq: revealSeq, source: true }) : undefined}
+              />
+            ) : (
+              <FileViewer
+                key={viewerPath}
+                path={viewerPath}
+                root={cwd}
+                reveal={reveal}
+                onPreview={svg ? () => setSvgKaynak({ path: viewerPath, seq: revealSeq, source: false }) : undefined}
+              />
+            )}
           </section>
         )}
       </div>

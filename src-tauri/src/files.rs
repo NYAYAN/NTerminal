@@ -257,6 +257,66 @@ pub fn list(root: &Path) -> Vec<String> {
     out
 }
 
+// ---------------------------------------------------------------- gorsel
+
+/// Goruntuleyicinin onizledigi en buyuk gorsel (bayt).
+///
+/// Yirmi megabayt: ekran goruntuleri, simgeler ve tasarim ciktilari bunun cok
+/// altinda. Ustu (ham fotograf, dev bir tarama) base64 olarak arayuze tasininca
+/// bellekte birkac kat yer kapliyor; onizleme icin anlamsiz. Sinir BILDIRILIYOR.
+pub const MAX_IMAGE: u64 = 20 * 1024 * 1024;
+
+/// Gorsel cok buyuk: arayuz bu oneki taniyip boyutla birlikte soyluyor
+/// (`too-large:<bayt>`).
+pub const IMAGE_TOO_LARGE: &str = "too-large";
+
+/// Goruntuleyicinin resim onizlemesine giden icerik.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageData {
+    /// Dosyanin baytlari, base64.
+    pub data: String,
+    /// Dosyanin boyutu (bayt).
+    pub size: u64,
+}
+
+/// Bir gorselin baytlari - dosya goruntuleyicisinin resim onizlemesi.
+///
+/// ## Neden base64
+///
+/// Arayuz baytlari `<img>`e `data:` adresiyle veriyor. Uygulamanin CSP'si
+/// (`tauri.conf.json`) gorsellere `'self'`, `asset:` ve `data:` disinda kaynak
+/// tanimiyor: `blob:` adresi gelistirmede calisip uretim derlemesinde bos
+/// cikardi. Varlik protokolunu (`asset:`) acmak ise butun diski adresle
+/// okunabilir yapmak demekti; bu komut yalnizca istenen dosyayi, sinirla okuyor.
+///
+/// Tur denetimi yok (uzanti arayuzde): yanlis uzantili dosyayi tarayici cizemiyor
+/// ve arayuz bunu soyluyor.
+pub fn read_image(path: &Path) -> Result<ImageData, String> {
+    read_image_limited(path, MAX_IMAGE)
+}
+
+pub(crate) fn read_image_limited(path: &Path, limit: u64) -> Result<ImageData, String> {
+    use base64::Engine;
+
+    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if !meta.is_file() {
+        return Err(format!("dosya degil: {}", path.display()));
+    }
+    if meta.len() > limit {
+        return Err(format!("{IMAGE_TOO_LARGE}:{}", meta.len()));
+    }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    // Boyut sorgusu ile okuma arasinda buyumus olabilir; sinir yine gecerli.
+    if bytes.len() as u64 > limit {
+        return Err(format!("{IMAGE_TOO_LARGE}:{}", bytes.len()));
+    }
+    Ok(ImageData {
+        data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        size: bytes.len() as u64,
+    })
+}
+
 #[cfg(test)]
 #[path = "files_tests.rs"]
 mod files_tests;
