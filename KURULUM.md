@@ -62,6 +62,20 @@ ama Başlat menüsüne kısayol koymaz.
 > çubuğundaki simgeye sağ tık → *Görev çubuğundan kaldır*, sonra Başlat
 > menüsünde N-Terminal'e sağ tık → *Görev çubuğuna sabitle*.
 
+> **MSI'dan `setup.exe`'ye geçerken** aynı belirti başka bir sebepten
+> görülüyor. NSIS kurucusu MSI kurulumunu kaldırıp uygulamayı
+> `C:\Program Files\N-Terminal\`dan kullanıcı klasörüne
+> (`%LOCALAPPDATA%\N-Terminal\`) taşıyor. Sabitlenmiş düğme hâlâ eski yolu
+> gösteriyor, resmi boşalıyor, uygulama kapalıyken tıklanınca da açılmıyor.
+> Düzeltmesi yukarıdakiyle aynı: kaldırıp yeniden sabitlemek. Windows tepsi
+> simgesinin görünürlüğünü exe yoluna göre hatırladığı için saatin yanındaki
+> simge de **^** altına düşebilir: *Ayarlar › Kişiselleştirme › Görev çubuğu
+> › Diğer sistem tepsisi simgeleri*'nden N-Terminal'i açın ya da simgeyi
+> **^** altından görev çubuğuna sürükleyin. İki kurucu arasında gidip
+> gelmemek en iyisi. Uygulamanın içinden gelen güncellemeler zaten kurulu
+> olanın türünü koruyor (`latest.json`'da `windows-x86_64-nsis` ve `-msi`
+> ayrı).
+
 ## 3. Kur
 
 `N-Terminal_0.1.0_x64-setup.exe` dosyasına çift tıkla, ileri de. Kurulum

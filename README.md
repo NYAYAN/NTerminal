@@ -29,7 +29,10 @@ yalnızca ilk kurulumda.
 yönetici izni istemiyor, kullanıcı klasörüne kuruluyor (kurumsal dağıtım için
 aynı sürümün `.msi`si de var). Paket imzasız olduğu için Windows "Windows
 bilgisayarınızı korudu" (*Windows protected your PC*) diyebilir: **Ek bilgi**
-(*More info*) › **Yine de çalıştır** (*Run anyway*).
+(*More info*) › **Yine de çalıştır** (*Run anyway*). Daha önce `.msi` ile
+kurduysanız `setup.exe` onu kaldırıp uygulamayı kullanıcı klasörüne taşıyor;
+görev çubuğuna sabitlenmiş düğmeyi bir kez kaldırıp yeniden sabitleyin
+(ayrıntı KURULUM.md'de).
 
 **macOS 11+ (Apple Silicon)** — `N-Terminal_<sürüm>_aarch64.dmg`yi açıp
 N-Terminal'i **Uygulamalar** klasörüne sürükleyin. İlk açılışta macOS
