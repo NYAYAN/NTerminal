@@ -187,6 +187,20 @@ describe("yapı betikleri", () => {
       expect(existsSync(join(process.cwd(), "scripts", f)), `${f} yok`).toBe(true);
     }
   });
+
+  it("test taraması .claude altındaki görev kopyalarını toplamıyor", () => {
+    /*
+     * Uygulama görevler için `.claude/worktrees/` altında git kopyaları
+     * açıyor; her biri deponun tam bir kopyası. ÖLÇÜLEN: dışlama yokken
+     * `npm test` 132 yerine 236 test dosyası topladı — eski bir kaynağa karşı
+     * koşan ikinci bir takım. Varsayılan dışlamaların (`node_modules`)
+     * korunması da şart: yalnızca `.claude/**` yazmak onları ezerdi.
+     */
+    const config = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8");
+    expect(config, ".claude dışlanmıyor").toMatch(
+      /exclude:\s*\[\s*\.\.\.configDefaults\.exclude,\s*"\.claude\/\*\*"\s*\]/,
+    );
+  });
 });
 
 /**
