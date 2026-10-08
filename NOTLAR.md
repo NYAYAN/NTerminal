@@ -1899,6 +1899,29 @@ Bkz. §1.25.
   bakıyor: aradaki eşleşmede görüntüleyici "satır gösterilen kısmın dışında"
   diyor; o satıra gitmenin yolu yok.
 
+### 2.9 Windows'ta dışarıdan dosya bırakmak — DENENMEDİ
+
+**Şüphe.** Gezgin'den N-Terminal penceresine bir dosya bırakılınca WebView2
+dosyayı açıp arayüzün yerine koyabilir; arayüz uygulama yeniden başlayana dek
+gider. Sebep: `dragDropEnabled: false` iken Tauri yakalayıcı takmıyor ve wry
+`SetAllowExternalDrop(false)`ı YALNIZCA yakalayıcı varken çağırıyor
+(`wry/src/webview2/mod.rs`), yani dışarıdan bırakmayı WebView2 kendisi
+işliyor. Sayfada dosya bırakmayı karşılayan bir işleyici, Rust'ta da gezinmeyi
+sınırlayan bir şey (`on_navigation`) yok.
+
+**macOS'ta ölçüldü (8 Ekim): sorun yok.** Ekran dışı WKWebView'de sayfa
+`dragover`da `Files` türünü görüyor ama WebKit bırakmayı reddediyor (işlem 0)
+ve sayfa yerinde kalıyor.
+
+**Denemesi:** Windows'ta bir dosyayı (.txt, .png) Gezgin'den pencerenin
+herhangi bir yerine bırak; arayüz dosyayla değişirse doğrulanmış olur.
+
+**Düzeltme önerisi:** sayfa genelinde, YALNIZCA dosya sürüklemelerinde
+(`dataTransfer.types` içinde `Files`) `dragover`da `preventDefault()` +
+`dropEffect = "none"`, `drop`ta `preventDefault()`. İç sürüklemeler (sekme,
+grup, favori) `Files` taşımadığı için etkilenmez; düzeltmeden sonra onları ve
+mac'teki davranışı yeniden dene.
+
 ---
 
 ## 3. Tekrar ısıracak tuzaklar
