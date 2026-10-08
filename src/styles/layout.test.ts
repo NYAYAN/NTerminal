@@ -1088,3 +1088,28 @@ describe("stash başlığı ve ayar penceresi", () => {
     expect(ruleBody(".stash-toggle")).toMatch(/flex\s*:\s*0\s+1\s+auto\s*;/);
   });
 });
+
+describe("bırakma göstergesi", () => {
+  it("yalnızca işaretli taraf çiziliyor", () => {
+    // `[data-drop]::before, [data-drop]::after` ikisine birden içerik
+    // veriyordu; konum almayan taraf doğal yerine düşüyor ve hedef satırın
+    // ortasından ikinci bir çizgi geçiyordu.
+    expect(CSS).not.toMatch(/\[data-drop\]::(before|after)/);
+  });
+
+  it("sekme çubuğu etkin sekmenin sözde öğelerine yazmıyor", () => {
+    // Etkin sekme ::before'u üst vurgu şeridine, ::after'ı ayırıcı örtüsüne
+    // kullanıyor. Aynı öğelere yazan bırakma kuralı çizgiyi 2x2'lik bir
+    // noktaya çeviriyor ve şeridi siliyordu; çizgi ayrı bir öğe.
+    expect(CSS).not.toMatch(/\.tab\[data-drop[^\]]*\]::(before|after)/);
+    expect(ruleBody(".tab-drop-line")).toMatch(/position\s*:\s*absolute\s*;/);
+  });
+
+  it("ilk sekmenin önündeki çizgi şeridin kırptığı yerde değil", () => {
+    // Şerit (`overflow-x: auto`) ilk sekmenin tam kenarından kırpıyor;
+    // -2px'teki çizgi orada hiç görünmüyordu.
+    expect(ruleBody('.tab:first-child[data-drop="before"] > .tab-drop-line')).toMatch(
+      /left\s*:\s*0\s*;/,
+    );
+  });
+});

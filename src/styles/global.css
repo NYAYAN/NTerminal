@@ -6923,9 +6923,13 @@ button.pop-group {
  * Hedef araligi bir cizgi ile gosteriyoruz - suruklenen ogeyi araya "kaydiran"
  * canlandirmalar yerine sabit bir cizgi, hangi konuma birakilacagini
  * belirsizlige yer birakmadan soyluyor.
+ *
+ * Yalnizca isaretli TARAF ciziliyor. Eskiden `[data-drop]` iki sozde ogeye de
+ * icerik veriyordu; konum almayan oge dogal yerine dusuyordu ve hedef satirin
+ * ortasindan ikinci bir cizgi geciyordu.
  */
-.tab-row[data-drop]::before,
-.tab-row[data-drop]::after {
+.tab-row[data-drop="before"]::before,
+.tab-row[data-drop="after"]::after {
   content: "";
   position: absolute;
   left: 4px;
@@ -6944,9 +6948,15 @@ button.pop-group {
   bottom: -1px;
 }
 
-.tab[data-drop]::before,
-.tab[data-drop]::after {
-  content: "";
+/*
+ * Sekme cubugunda cizgi AYRI bir oge (`.tab-drop-line`, TabBar), sozde oge
+ * degil: etkin sekme ::before'u ust vurgu seridine, ::after'i alttaki
+ * ayiriciyi ortmeye kullaniyor ve ayni ozgullukteki birakma kurali onlarin
+ * alanlarina karisiyordu - etkin sekmenin yaninda cizgi yerine 2x2'lik bir
+ * nokta cikiyor, serit kayboluyordu. Sekmenin golgesiyle cizmek de olmadi:
+ * golge yuvarlak koseyi izleyip cizginin tepesini kivirdi.
+ */
+.tab-drop-line {
   position: absolute;
   top: 4px;
   bottom: 4px;
@@ -6954,17 +6964,22 @@ button.pop-group {
   border-radius: 2px;
   background: var(--accent);
   pointer-events: none;
-  /* Etkin sekmenin ust vurgu seridi de ::before kullaniyor; birakma cizgisi
-     onun ustunde kalmali. */
+  /* Etkin sekmenin ust vurgu seridinin ustunde kalmali. */
   z-index: 2;
 }
 
-.tab[data-drop="before"]::before {
+.tab[data-drop="before"] > .tab-drop-line {
   left: -2px;
 }
 
-.tab[data-drop="after"]::after {
+.tab[data-drop="after"] > .tab-drop-line {
   right: -2px;
+}
+
+/* Ilk sekmenin solunda bosluk yok: serit (`overflow-x: auto`) tam onun
+   kenarindan kirpiyor ve -2px'teki cizgi hic gorunmuyordu. */
+.tab:first-child[data-drop="before"] > .tab-drop-line {
+  left: 0;
 }
 
 /* Baska bir gruba surukleniyor: grup kutusu hedef oldugunu belli ediyor. */

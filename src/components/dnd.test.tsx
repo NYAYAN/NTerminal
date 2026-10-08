@@ -213,6 +213,28 @@ describe("sekme sürükle-bırak (sekme çubuğu)", () => {
     expect(container.querySelector(".tab.dragging")).toBe(null);
   });
 
+  it("bırakma çizgisi yalnızca işaretli sekmelerde, sürükleme bitince kalkıyor", () => {
+    // Çizgi ayrı bir öğe (`.tab-drop-line`): etkin sekmenin sözde öğeleri
+    // şeridi ve ayırıcı örtüsünü çiziyor (gerekçe global.css'te).
+    seed([group("g1", [tab("a"), tab("b"), tab("c")])]);
+    const { container } = render(<TabBar />);
+    const tabs = [...container.querySelectorAll(".tab")];
+
+    const dt = dataTransfer();
+    fireEvent.dragStart(tabs[2], { dataTransfer: dt });
+    withRect(tabs[0], { width: 100, height: 30 });
+    dragOverAt(tabs[0], dt, 80, 15); // a'nın sağ yarısı: a ile b'nin arası
+
+    const lines = [...container.querySelectorAll(".tab-drop-line")];
+    expect(lines.map((l) => l.parentElement!.getAttribute("data-drop"))).toEqual([
+      "after",
+      "before",
+    ]);
+
+    fireEvent.dragEnd(tabs[2], { dataTransfer: dt });
+    expect(container.querySelector(".tab-drop-line")).toBe(null);
+  });
+
   it("aynı yere bırakmak sırayı bozmuyor", () => {
     seed([group("g1", [tab("a"), tab("b"), tab("c")])]);
     const { container } = render(<TabBar />);

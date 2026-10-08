@@ -288,6 +288,7 @@ export function TabBar() {
           // ikisi de okunabilirlik istiyor (bkz. `readableAccent`).
           const accent = readableAccent(profile?.color ?? group.color, themeId) ?? "#6e7681";
           const isRenaming = renamingTabId === tab.id;
+          const drop = dropAt === index ? "before" : dropAt === index + 1 ? "after" : undefined;
 
           return (
             <div
@@ -296,9 +297,7 @@ export function TabBar() {
                 dragTabId === tab.id ? " dragging" : ""
               }`}
               style={{ ["--tab-accent" as string]: accent }}
-              data-drop={
-                dropAt === index ? "before" : dropAt === index + 1 ? "after" : undefined
-              }
+              data-drop={drop}
               title={isRenaming ? undefined : tabTooltip(tab, profile)}
               // Adlandirma sirasinda surukleme kapali: metin secmek isteyen
               // kullanici sekmeyi tasimasin.
@@ -325,6 +324,9 @@ export function TabBar() {
                 }
               }}
             >
+              {/* Bırakma çizgisi ayrı bir öğe, sözde öğe değil: etkin sekme
+                  ::before ve ::after'ı kendisi kullanıyor (gerekçe global.css'te). */}
+              {drop && <span className="tab-drop-line" aria-hidden="true" />}
               {/* Rozet ayarından bağımsız; gerekçe GroupSidebar'da. */}
               {running[tab.id] && isClaudeCommand(tab.lastCommand) ? (
                 <span className="tab-badge claude" title={t("tab.claudeRunningTitle")}>
