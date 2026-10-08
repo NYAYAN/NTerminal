@@ -1995,6 +1995,19 @@ kullanıcının terminalinden CopyBoard imzalı paket üretiyordu. `npm run bund
 artık değişkeni devralmıyor (`scripts/run.mjs` → `macSigningEnv`); `npx tauri
 build`ı doğrudan koşan hâlâ devralır.
 
+**Platform yapılandırması dizileri birleştirmiyor.** `tauri.macos.conf.json`
+temel dosyanın üstüne JSON Merge Patch (RFC 7396) ile biniyor: nesneler alan
+alan birleşiyor ama `app.windows` gibi DİZİLER olduğu gibi değişiyor. Mac
+dosyası pencereyi yalnızca kendi üç farkıyla yazdığı için 30 Ağustos'tan beri
+mac'te `dragDropEnabled: false`, başlık, boyut, asgari boyut ve koyu açılış
+yoktu. Belirti "gruplar mac'te sürüklenmiyor" oldu: açık kalan yakalayıcı
+yüzünden wry sürüklemeyi WKWebView'e hiç iletmiyor; sürükleme başlıyor ama
+sayfaya `dragover`/`drop` gelmiyor (sekme ve favori sürüklemesi de aynı yoldan).
+Platform dosyası pencerenin TAMAMINI yazmalı; temel pencerede bir değer
+değişince mac dosyası da değişmeli — `tauriConfig.test.ts` ikisini bağlıyor.
+Çalışan uygulamada denetim: pencerenin başlığı (Pencere menüsü, AX) "Tauri
+App" ise pencere tanımı uygulanmıyor demektir.
+
 **Terminale yazılan metin yeniden ölçülendirmeye uyum sağlamaz.** Ortalanmış
 ya da tam genişlikte bir şey çizilecekse tampona yazmak yerine DOM katmanında
 çizilmeli (`TerminalBlocks` bunu yapıyor).

@@ -17,20 +17,77 @@ import { describe, expect, it } from "vitest";
  *   "Disabling it is required to use HTML5 drag and drop on the frontend on
  *    Windows."
  *
+ * Şema yalnızca Windows diyor ama macOS'ta da aynı: Tauri'nin yakalayıcısı
+ * her olayda `true` döndürüyor ve wry'nin macOS tarafı (`wkwebview/drag_drop.rs`)
+ * o zaman `draggingEntered:` / `performDragOperation:`ı WKWebView'e (`super`)
+ * hiç iletmiyor — sayfaya `dragover` / `drop` gelmiyor.
+ *
  * Kod tarafında hiçbir belirti yok: derleme geçiyor, testler geçiyor, hata
  * çıkmıyor — yalnızca özellik çalışmıyor. O yüzden yapılandırmayı testle
  * bağlıyoruz.
  */
+type Pencere = { label: string; dragDropEnabled?: boolean; [alan: string]: unknown };
+
 const CONFIG = JSON.parse(
   readFileSync(join(process.cwd(), "src-tauri/tauri.conf.json"), "utf8"),
 ) as {
-  app: { windows: { label: string; dragDropEnabled?: boolean }[]; security: { csp: string } };
+  app: { windows: Pencere[]; security: { csp: string } };
   bundle: {
     targets: string | string[];
     icon: string[];
     macOS?: { minimumSystemVersion?: string };
     windows?: { wix?: { template?: string } };
   };
+};
+
+/**
+ * Platform dosyaları (`tauri.macos.conf.json` …) temel dosyanın üstüne JSON
+ * Merge Patch (RFC 7396) ile biniyor — `tauri_utils::config::parse::read_from`
+ * → `json_patch::merge`. NESNELER alan alan birleşiyor ama DİZİLER olduğu gibi
+ * değişiyor ve `app.windows` bir dizi: platform dosyası bir pencere yazdıysa
+ * temel dosyadaki pencere tanımı o platformda HİÇ YOK.
+ *
+ * BİLDİRİLEN: "gruplar Windows'ta sürükle-bırakla yer değiştiriyor, mac'te
+ * değişmiyor". Mac dosyası pencereyi yalnızca kendi üç farkıyla yazıyordu;
+ * `dragDropEnabled: false` mac'te düşmüş, Tauri'nin varsayılanı (açık)
+ * geçerliydi. Başlık, boyut, asgari boyut, ortalama ve koyu açılış da onunla
+ * gitmişti: kurulu sürümün penceresinin başlığı "Tauri App" (Tauri'nin
+ * varsayılanı) okundu.
+ */
+function mergePatch(target: unknown, patch: unknown): unknown {
+  const nesne = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+  if (!nesne(patch)) return patch;
+  const out: Record<string, unknown> = nesne(target) ? { ...target } : {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete out[key];
+    else out[key] = mergePatch(out[key], value);
+  }
+  return out;
+}
+
+const PLATFORMLAR = readdirSync(join(process.cwd(), "src-tauri"))
+  .filter((file) => /^tauri\.[a-z]+\.conf\.json$/.test(file))
+  .map((file) => {
+    const patch = JSON.parse(readFileSync(join(process.cwd(), "src-tauri", file), "utf8")) as {
+      app?: { windows?: Pencere[] };
+    };
+    return {
+      file,
+      platform: file.split(".")[1],
+      patch,
+      merged: mergePatch(CONFIG, patch) as typeof CONFIG,
+    };
+  });
+
+/**
+ * Platform penceresinin temel pencereden BİLEREK ayrıldığı alanlar; mac'inkilerin
+ * gerekçesi `titlebar.test.tsx`te ("macOS yerel trafik ışıklarını koruyor").
+ * Buraya bir alan eklemek "bu platformda farklı olsun" kararı — eksik ya da
+ * eskimiş bir değeri susturmanın yolu değil.
+ */
+const PLATFORM_FARKI: Record<string, readonly string[]> = {
+  macos: ["decorations", "titleBarStyle", "hiddenTitle"],
 };
 
 describe("tauri yapılandırması", () => {
@@ -40,11 +97,48 @@ describe("tauri yapılandırması", () => {
   });
 
   it("dragDropEnabled kapalı — HTML5 sürükle-bırak için şart", () => {
-    for (const window of CONFIG.app.windows) {
-      expect(
-        window.dragDropEnabled,
-        `${window.label}: dragDropEnabled açıkken sekme ve grup sürüklemesi çalışmaz`,
-      ).toBe(false);
+    // Her platformun BİRLEŞMİŞ hâline bakılıyor: temel dosyada kapalı olması
+    // mac'te kapalı olduğunu göstermiyordu.
+    const hepsi = [
+      { file: "tauri.conf.json", config: CONFIG },
+      ...PLATFORMLAR.map(({ file, merged }) => ({ file, config: merged })),
+    ];
+    for (const { file, config } of hepsi) {
+      for (const window of config.app.windows) {
+        expect(
+          window.dragDropEnabled,
+          `${file} → ${window.label}: dragDropEnabled açıkken sekme ve grup sürüklemesi çalışmaz`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("platform dosyaları bulunuyor", () => {
+    // Dosya adı süzgeci kayarsa aşağıdaki denetimler hiçbir dosyaya bakmadan geçer.
+    expect(PLATFORMLAR.map((p) => p.file)).toContain("tauri.macos.conf.json");
+  });
+
+  it("platform penceresi temel pencerenin tamamını taşıyor", () => {
+    // Kural: platform penceresi = temel pencere + PLATFORM_FARKI. Temel dosyada
+    // bir değer değişince bu test platform dosyasını da güncelletiyor; yoksa
+    // değişiklik o platformda sessizce yok sayılır.
+    for (const { file, platform, patch } of PLATFORMLAR) {
+      const windows = patch.app?.windows;
+      if (!windows) continue; // dizi yazılmadıysa temel pencereler olduğu gibi geçiyor
+      const farki = PLATFORM_FARKI[platform] ?? [];
+      for (const base of CONFIG.app.windows) {
+        const own = windows.find((w) => w.label === base.label);
+        expect(own, `${file}: "${base.label}" penceresi yok — bu platformda hiç açılmaz`).toBeTruthy();
+        const beklenen = {
+          ...base,
+          ...Object.fromEntries(farki.filter((alan) => alan in own!).map((alan) => [alan, own![alan]])),
+        };
+        expect(
+          own,
+          `${file}: "${base.label}" = temel pencere + ${farki.join(", ") || "fark yok"}. ` +
+            "Diziler birleşmiyor; platform dosyası pencerenin TAMAMINI yazmalı.",
+        ).toEqual(beklenen);
+      }
     }
   });
 
