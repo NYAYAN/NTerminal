@@ -90,6 +90,12 @@ const PLATFORM_FARKI: Record<string, readonly string[]> = {
   macos: ["decorations", "titleBarStyle", "hiddenTitle"],
 };
 
+/** Her platformun BİRLEŞMİŞ hâli; temel dosyada bir değerin olması o platformda olduğunu göstermiyor. */
+const HEPSI = [
+  { file: "tauri.conf.json", config: CONFIG },
+  ...PLATFORMLAR.map(({ file, merged }) => ({ file, config: merged })),
+];
+
 describe("tauri yapılandırması", () => {
   it("ana pencere tanımlı", () => {
     const main = CONFIG.app.windows.find((w) => w.label === "main");
@@ -97,18 +103,25 @@ describe("tauri yapılandırması", () => {
   });
 
   it("dragDropEnabled kapalı — HTML5 sürükle-bırak için şart", () => {
-    // Her platformun BİRLEŞMİŞ hâline bakılıyor: temel dosyada kapalı olması
-    // mac'te kapalı olduğunu göstermiyordu.
-    const hepsi = [
-      { file: "tauri.conf.json", config: CONFIG },
-      ...PLATFORMLAR.map(({ file, merged }) => ({ file, config: merged })),
-    ];
-    for (const { file, config } of hepsi) {
+    for (const { file, config } of HEPSI) {
       for (const window of config.app.windows) {
         expect(
           window.dragDropEnabled,
           `${file} → ${window.label}: dragDropEnabled açıkken sekme ve grup sürüklemesi çalışmaz`,
         ).toBe(false);
+      }
+    }
+  });
+
+  it("pencere açılışta ekrana sığdırılıyor (preventOverflow)", () => {
+    // 1480x920; 13 inçlik MacBook'tan (1440/1470 nokta) ve 1366x768'den
+    // büyük. ÖLÇÜLEN (macOS 27, 8 Ekim, ekrandan büyük pencereyle): ayar
+    // yokken sistem pencereyi küçültüyor ama yerini kendisi seçiyor — iki
+    // ekranlı düzende üstteki ekrana kaydı; ayarla ana ekranın kullanılabilir
+    // alanına oturuyor. Windows'ta ölçülmedi.
+    for (const { file, config } of HEPSI) {
+      for (const window of config.app.windows) {
+        expect(window.preventOverflow, `${file} → ${window.label}`).toBe(true);
       }
     }
   });
