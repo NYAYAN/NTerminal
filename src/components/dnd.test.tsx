@@ -391,4 +391,53 @@ describe("grup sürükle-bırak (kenar çubuğu)", () => {
 
     expect(tabIds()).toBe("g1:c,a,b");
   });
+
+  it("sekme sürüklemesi kenar çubuğuna öğe eklemiyor", () => {
+    // Sürüklenirken eklenen her öğe alttaki satırları kaydırıyordu: tutulup
+    // yerinde bırakılan sekme başka bir yere düşüyordu, WebKit (macOS) de fare
+    // basılan noktadan kayan öğenin sürüklemesini hiç başlatmıyordu. jsdom
+    // yerleşim yapmadığı için ölçülen şey sebebin kendisi: öğe sayısı.
+    seed([group("g1", [tab("a")]), group("g2", [tab("b")]), group("g3", [tab("c")])]);
+    const { container } = render(<GroupSidebar />);
+    const count = () => container.querySelectorAll("*").length;
+    const before = count();
+    const tabRows = [...container.querySelectorAll(".tab-row")];
+
+    const dt = dataTransfer();
+    fireEvent.dragStart(tabRows[2], { dataTransfer: dt }); // "c", üçüncü grupta
+    expect(count(), "dragstart'ta öğe eklendi").toBe(before);
+    withRect(tabRows[2], { top: 200, width: 240, height: 24 });
+    dragOverAt(tabRows[2], dt, 20, 204);
+    expect(count(), "dragover'da öğe eklendi").toBe(before);
+  });
+
+  it("listenin sonu 'Sekme ekle' satırı", () => {
+    seed([group("g1", [tab("a"), tab("b")]), group("g2", [tab("c")])]);
+    const { container } = render(<GroupSidebar />);
+    const tabRows = [...container.querySelectorAll(".tab-row")];
+    const addTab = container.querySelectorAll(".add-tab")[0];
+
+    const dt = dataTransfer();
+    fireEvent.dragStart(tabRows[2], { dataTransfer: dt }); // "c"
+    dragOverAt(addTab, dt, 20, 0);
+    // Gösterge son satırın altındaki çizgi.
+    expect(tabRows[1].getAttribute("data-drop")).toBe("after");
+    fireEvent.drop(addTab, { dataTransfer: dt });
+
+    expect(tabIds()).toBe("g1:a,b,c | g2:");
+  });
+
+  it("boş gruba 'Sekme ekle' satırından bırakılıyor", () => {
+    seed([group("g1", [tab("a"), tab("b")]), group("g2", [])]);
+    const { container } = render(<GroupSidebar />);
+    const tabRows = [...container.querySelectorAll(".tab-row")];
+    const addTab = container.querySelectorAll(".add-tab")[1];
+
+    const dt = dataTransfer();
+    fireEvent.dragStart(tabRows[0], { dataTransfer: dt }); // "a"
+    dragOverAt(addTab, dt, 20, 0);
+    fireEvent.drop(addTab, { dataTransfer: dt });
+
+    expect(tabIds()).toBe("g1:b | g2:a");
+  });
 });

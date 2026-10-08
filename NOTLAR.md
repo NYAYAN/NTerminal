@@ -2008,6 +2008,15 @@ değişince mac dosyası da değişmeli — `tauriConfig.test.ts` ikisini bağl�
 Çalışan uygulamada denetim: pencerenin başlığı (Pencere menüsü, AX) "Tauri
 App" ise pencere tanımı uygulanmıyor demektir.
 
+**Sürüklerken düzen değişmemeli.** WebKit (macOS) sürüklemeyi başlatmadan önce
+sürüklenen öğenin hâlâ fare basılan noktada olduğuna bakıyor; `dragstart`ta
+eklenen bir öğe onu kaydırırsa sürüklemeyi sessizce iptal ediyor
+(`dragstart`ın hemen ardından `dragend`). Başlasa bile kayan satırlar yüzünden
+tutulup yerinde bırakılan öğe başka yere düşüyor — ikisi de ölçüldü: kenar
+çubuğu her grubun sonuna bir bırakma alanı ekliyordu. Artık sürükleme hiç öğe
+eklemiyor, listenin sonu "Sekme ekle" satırı; `dnd.test.tsx` öğe sayısını
+bağlıyor. Sürüklenene yalnızca yerleşimi değiştirmeyen stil (opaklık) ver.
+
 **Terminale yazılan metin yeniden ölçülendirmeye uyum sağlamaz.** Ortalanmış
 ya da tam genişlikte bir şey çizilecekse tampona yazmak yerine DOM katmanında
 çizilmeli (`TerminalBlocks` bunu yapıyor).

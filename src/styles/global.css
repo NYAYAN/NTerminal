@@ -6967,18 +6967,6 @@ button.pop-group {
   right: -2px;
 }
 
-/* Sekme listesinin sonuna birakma alani: son sekmenin ALTINA tasimak icin
-   ayri bir hedef gerekiyor. */
-.drop-tail {
-  height: 14px;
-  margin: 1px 4px 0;
-  border-radius: 3px;
-}
-
-.drop-tail.on {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
 /* Baska bir gruba surukleniyor: grup kutusu hedef oldugunu belli ediyor. */
 .group.droppable {
   background: color-mix(in srgb, var(--accent) 10%, transparent);

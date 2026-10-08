@@ -756,35 +756,35 @@ export function GroupSidebar() {
                     );
                   })}
 
-                  {/* Listenin sonuna bırakma hedefi: son sekmenin ALTINA taşımak
-                      için ayrı bir alan gerekiyor, yoksa son satırın alt yarısı
-                      dışında hedef kalmıyor. */}
-                  {dragTabId && (
-                    <div
-                      className={`drop-tail${
-                        dropTarget?.groupId === group.id && dropTarget.index >= group.tabs.length
-                          ? " on"
-                          : ""
-                      }`}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDropTarget({ groupId: group.id, index: group.tabs.length });
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        applyDrop();
-                      }}
-                    />
-                  )}
-
                   {/* Sekme satırlarıyla karıştırılmaması için bilinçli olarak
-                      farklı: rozet kutusu yok, yarım yükseklikte, küçük ve soluk. */}
+                      farklı: rozet kutusu yok, yarım yükseklikte, küçük ve soluk.
+
+                      Sekme sürüklenirken listenin SONU da bu satır: son sekmenin
+                      altına taşımak için son satırın alt yarısından başka bir
+                      hedef gerekiyor. Eskiden sürükleme başlayınca her grubun
+                      sonuna ayrı bir bırakma alanı ekleniyordu; üstteki grupları
+                      uzatıp alttaki satırları farenin altından kaydırıyordu.
+                      Tutulup yerinde bırakılan sekme başka bir yere düşüyordu ve
+                      WebKit (macOS), sürüklenen öğe fare basılan noktadan
+                      kaydığı için sürüklemeyi hiç başlatmıyordu. Bu satır hep
+                      orada, yani sürükleme düzeni değiştirmiyor. Gösterge son
+                      satırın altındaki çizgi ve grubun çerçevesi. */}
                   <button
                     className={group.tabs.length === 0 ? "add-tab prominent" : "add-tab"}
                     title={t("group.newTabHereTitle", { keys: key("newTab") })}
                     onClick={() => store().addTab({ groupId: group.id })}
+                    onDragOver={(e) => {
+                      if (!dragTabId) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDropTarget({ groupId: group.id, index: group.tabs.length });
+                    }}
+                    onDrop={(e) => {
+                      if (!dragTabId) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      applyDrop();
+                    }}
                   >
                     <span className="add-tab-plus">+</span>
                     <span>{t("group.addTab")}</span>
