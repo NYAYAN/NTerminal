@@ -128,11 +128,25 @@ export function TerminalArea() {
     [groups],
   );
 
-  // Bu kipte görünmesi gereken sekmeler. Sekme kipinde bir tane, bölme
-  // kipinde grubun tamamı.
+  /*
+   * Bu kipte görünmesi gereken sekmeler. Sekme kipinde bir tane, bölme
+   * kipinde grubun tamamı.
+   *
+   * Memo'nun anahtarı grup NESNESİ değil, sekme kimlikleri + etkin sekme +
+   * kip. Grup nesnesi her `updateTab`te yenileniyor — kabuk her istemde
+   * başlık ve cwd bildiriyor, komut bitince `lastCommand` yazılıyor — ve
+   * nesneye bağlı memo her seferinde yeni dizi üretip aşağıdaki efekti
+   * tetikliyordu: BÜTÜN oturumlarda `setDisplay`, görünür olanlarda
+   * `invalidateGeometry` + `safeFit` (yerleşim zorlanıyor) + odak. Dört
+   * bölmeli grupta herhangi bir bölmedeki her komut dört terminali yeniden
+   * ölçüyor, odak kenar paneldeki bir düğmedeyken komşu bölmenin istemi odağı
+   * terminale çekiyordu. Çıktı yalnızca bu üç girdiye bağlı; anahtar da öyle.
+   */
+  const tabIdsKey = activeGroup?.tabs.map((t) => t.id).join("\n") ?? "";
   const visibleIds = useMemo(
     () => visibleTabIds(activeGroup, viewMode),
-    [activeGroup, viewMode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- anahtar bilinçli (yukarıda)
+    [tabIdsKey, activeTabId, viewMode],
   );
   const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
 
@@ -158,11 +172,11 @@ export function TerminalArea() {
    * sırasında öne, geri kalan (gizli) barındırıcılar arkaya.
    */
   const ordered = useMemo(() => {
-    const groupIds = activeGroup ? activeGroup.tabs.map((t) => t.id) : [];
+    const groupIds = tabIdsKey ? tabIdsKey.split("\n") : [];
     const inGroup = groupIds.filter((id) => mounted.includes(id));
     const rest = mounted.filter((id) => !groupIds.includes(id));
     return [...inGroup, ...rest];
-  }, [mounted, activeGroup]);
+  }, [mounted, tabIdsKey]);
 
   // WebGL bağlamını ve odağı dağıt: görünür olan çizilir, odaklı olan yazılır.
   useEffect(() => {
