@@ -545,7 +545,7 @@ pub fn diff_sides(
             })
     };
 
-    let target = root.join(file);
+    let target = inside_root(&root, file)?;
     let current = if target.is_file() {
         let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
         let size = bytes.len() as u64;
@@ -555,6 +555,24 @@ pub fn diff_sides(
     };
 
     Ok(DiffSides { base, current, head })
+}
+
+/// Porcelain'den gelen goreli yolu depo kokunun ALTINDA bir yola cevirir.
+///
+/// Yalnizca duz bilesenler: `..`, kok (`/`, `C:\`) ve on ek reddediliyor.
+/// `Path::join` mutlak bir yol ya da `..` ile kokun disina cikar; dosya
+/// silen (`revert`) ve yazan (`write_worktree_file`) komutlar icin bu, depo
+/// disindaki bir dosyaya dokunmak demek. Yol normalde porcelain'den geliyor
+/// ama denetim burada - bu komutlar yikici ve arayuze guvenmek bir sinir
+/// degil.
+fn inside_root(root: &std::path::Path, file: &str) -> Result<std::path::PathBuf, String> {
+    use std::path::Component;
+
+    let rel = std::path::Path::new(file);
+    if file.is_empty() || rel.components().any(|c| !matches!(c, Component::Normal(_))) {
+        return Err(format!("gecersiz yol: {file}"));
+    }
+    Ok(root.join(rel))
 }
 
 
@@ -577,14 +595,8 @@ pub fn diff_sides(
 /// Yol porcelain'den geliyor ama denetim burada: `..` ya da baglanti uzerinden
 /// deponun disina yazmak bu komutun isi degil.
 pub fn write_worktree_file(path: &str, file: &str, expected: &str, text: &str) -> Result<(), String> {
-    use std::path::Component;
-
     let root = repo_root(path).ok_or_else(|| "depo koku bulunamadi".to_string())?;
-    let rel = std::path::Path::new(file);
-    if rel.components().any(|c| !matches!(c, Component::Normal(_))) {
-        return Err(format!("gecersiz yol: {file}"));
-    }
-    crate::files::write_checked(&root.join(rel), expected, text)
+    crate::files::write_checked(&inside_root(&root, file)?, expected, text)
 }
 
 /// Deponun `.git` klasoru; bulunamazsa `None`.
@@ -710,11 +722,17 @@ mod git_tests;
 pub fn revert(path: &str, file: &str, untracked: bool) -> Result<(), String> {
     if untracked {
         let root = repo_root(path).ok_or_else(|| "depo kokü bulunamadi".to_string())?;
-        let target = root.join(file);
+        // Kokun disina cikan yol (`..`, mutlak) reddediliyor: tek yikici
+        // komut bu ve komsusu `write_worktree_file` ayni denetimi yapiyordu.
+        let target = inside_root(&root, file)?;
         // Klasor degil DOSYA siliyoruz: takipsiz bir klasor porcelain'de tek
         // satir olarak gorunebiliyor ve `remove_dir_all` cok sey goturur.
-        if target.is_dir() {
-            return Err("klasor silinmiyor".into());
+        // Sembolik baglanti da degil: `is_dir` baglantiyi izler, `remove_file`
+        // baglantinin kendisini siler - ikisi tutarsiz, denetim baglantiya
+        // bakmadan `symlink_metadata` ile.
+        let meta = std::fs::symlink_metadata(&target).map_err(|e| e.to_string())?;
+        if !meta.file_type().is_file() {
+            return Err("yalnizca duz dosya siliniyor".into());
         }
         return std::fs::remove_file(&target).map_err(|e| e.to_string());
     }

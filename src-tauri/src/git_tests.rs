@@ -374,6 +374,48 @@ fn geri_alma_klasoru_silmiyor() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+#[test]
+fn geri_alma_depo_kokunun_disina_cikmiyor() {
+    // `root.join(file)` mutlak yol ya da `..` ile kokun DISINA cikiyor ve tek
+    // denetim "klasor mu" idi. Yol normalde porcelain'den geliyor; ama bu tek
+    // yikici komut ve komsusu (`write_worktree_file`) ayni denetimi yapiyordu.
+    let root = temp_repo("revert-escape");
+    let yol = root.to_string_lossy().to_string();
+    let disari = root.parent().unwrap().join(format!(
+        "nterminal-disarida-{}.txt",
+        std::process::id()
+    ));
+    std::fs::write(&disari, "dokunma\n").unwrap();
+
+    let goreli = format!("../{}", disari.file_name().unwrap().to_string_lossy());
+    assert!(revert(&yol, &goreli, true).is_err(), "`..` ile kok disina cikildi");
+    assert!(
+        revert(&yol, &disari.to_string_lossy(), true).is_err(),
+        "mutlak yolla kok disina cikildi"
+    );
+    assert!(disari.exists(), "depo disindaki dosya silindi");
+    assert!(diff_sides(&yol, &goreli, None, true).is_err(), "fark kok disini okudu");
+
+    let _ = std::fs::remove_file(&disari);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[cfg(unix)]
+#[test]
+fn geri_alma_sembolik_baglantiyi_silmiyor() {
+    // `is_dir` baglantiyi izliyor ama `remove_file` baglantinin kendisini
+    // siliyor; dosyaya giden baglanti "duz dosya" sanilip siliniyordu. Simdi
+    // yalnizca gercek duz dosya.
+    let root = temp_repo("revert-symlink");
+    let yol = root.to_string_lossy().to_string();
+    yaz(&root, "hedef.txt", "x\n");
+    std::os::unix::fs::symlink(root.join("hedef.txt"), root.join("baglanti")).unwrap();
+
+    assert!(revert(&yol, "baglanti", true).is_err());
+    assert!(root.join("baglanti").exists(), "baglanti silindi");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // ------------------------------------------- alt klasorde calisan kabuk
 
 /*
