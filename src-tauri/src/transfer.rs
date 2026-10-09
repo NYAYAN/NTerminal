@@ -209,9 +209,18 @@ fn path_tokens() -> Vec<(&'static str, String)> {
     tokens
 }
 
+/// `haystack` `needle` ile (ASCII buyuk/kucuk harf gozetmeden) basliyor mu?
+///
+/// `get(..n)`, dilimleme DEGIL. Dilim `[..n]` bir cok baytli karakterin
+/// ortasina denk gelirse panikler ve surum yapisinda (`panic = "abort"`)
+/// uygulama butun kabuklariyla kapanir. Ornegi gercek: ev dizini
+/// `/Users/ali` (10 bayt) iken bir sekmenin klasoru `/Users/alı/x` -
+/// `ı` iki bayt ve 10. bayt onun ortasi. `get` sinirda degilse `None`
+/// donuyor; sinirda degilse zaten eslesme de yok.
 fn starts_with_ci(haystack: &str, needle: &str) -> bool {
-    haystack.len() >= needle.len()
-        && haystack[..needle.len()].eq_ignore_ascii_case(needle)
+    haystack
+        .get(..needle.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(needle))
 }
 
 /// Makineye ozel yolu belirtece cevirir.

@@ -50,6 +50,25 @@ fn eslesmeyen_yol_oldugu_gibi_kalir() {
     assert_eq!(tokenize("", &tokens), "");
 }
 
+/// Cok baytli karakterin ORTASINA dusen on ek karsilastirmasi panik degil
+/// "eslesmiyor" demeli.
+///
+/// Ev dizini `/Users/ali` (10 bayt) iken yol `/Users/alı/x`: `ı` iki
+/// bayt ve 10. bayt onun ortasi. Eski `haystack[..10]` burada
+/// "byte index is not a char boundary" ile panikliyordu; disa aktarma
+/// (tasinabilir yollar acikken, varsayilan) uygulamayi kapatiyordu.
+#[test]
+fn cok_baytli_karakter_sinirinda_panik_yok() {
+    let mut tokens = vec![("${HOME}", "/Users/ali".to_string())];
+    tokens.sort_by_key(|(_, v)| std::cmp::Reverse(v.len()));
+    assert_eq!(tokenize("/Users/alı/x", &tokens), "/Users/alı/x");
+    // Tam eslesen cok baytli on ek yine cevriliyor.
+    let mut tr = vec![("${HOME}", "/Users/çağrı".to_string())];
+    tr.sort_by_key(|(_, v)| std::cmp::Reverse(v.len()));
+    assert_eq!(tokenize("/Users/çağrı/proje", &tr), "${HOME}/proje");
+    assert_eq!(tokenize("/Users/çağ", &tr), "/Users/çağ");
+}
+
 #[test]
 fn belirtec_karsi_makinede_acilir() {
     let mut hedef = vec![("${HOME}", "C:\\Users\\veli".to_string())];
