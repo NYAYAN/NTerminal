@@ -96,14 +96,27 @@ pub struct FileText {
 ///
 /// Yarim megabayttan sonrasi kesiliyor ve bu BILDIRILIYOR. Sessizce kesmek
 /// "dosyanin sonu buymus" sanmaya yol acardi.
+///
+/// ## Sinir OKURKEN uygulaniyor
+///
+/// Eski kod once `fs::read` ile dosyanin TAMAMINI belleğe aliyor, siniri
+/// sonra kesiyordu: goruntuleyicide birkac gigabaytlik bir kutuge tiklamak
+/// gigabaytlarca ayirma (bellek yetersizliginde abort) ve okuma suresince
+/// donan bir pencere demekti. Simdi `take` ile yalnizca sinir + 1 bayt
+/// okunuyor; fazladan bayt "kesildi mi" sorusunun cevabi, `size` ise
+/// `metadata`dan.
 pub fn read_text(path: &Path) -> Option<FileText> {
+    use std::io::Read;
+
     let meta = std::fs::metadata(path).ok()?;
     if !meta.is_file() {
         return None;
     }
     let size = meta.len();
 
-    let bytes = std::fs::read(path).ok()?;
+    let file = std::fs::File::open(path).ok()?;
+    let mut bytes = Vec::with_capacity((size as usize).min(MAX_READ + 1));
+    file.take(MAX_READ as u64 + 1).read_to_end(&mut bytes).ok()?;
     Some(text_from_bytes(&bytes, size, MAX_READ))
 }
 

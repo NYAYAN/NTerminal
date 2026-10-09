@@ -726,9 +726,16 @@ struct UpdateProgress {
     total: Option<u64>,
 }
 
+/// Dosya goruntuleyicisinin okudugu metin (ilk yarim megabayt).
+///
+/// `async` + `spawn_blocking`: ag surucusunde ya da soguk onbellekte okuma
+/// saniyeler surebiliyor; es zamanli komut ana is parcaciginda kosar ve
+/// pencereyi dondurur (gerekce `git_info` basinda).
 #[tauri::command]
-fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
-    Ok(files::read_text(std::path::Path::new(&path)))
+async fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
+    tauri::async_runtime::spawn_blocking(move || files::read_text(std::path::Path::new(&path)))
+        .await
+        .map_err(fail)
 }
 
 /// Bir gorselin icerigi (base64) - goruntuleyicinin resim onizlemesi.

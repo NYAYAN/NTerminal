@@ -98,6 +98,41 @@ fn olmayan_klasor_cokmuyor() {
     assert!(list(&yok).is_empty());
 }
 
+// ------------------------------------------------------------- okuma
+
+/// Buyuk dosya: metin sinirda kesiliyor, kesildigi SOYLENIYOR, boyut gercek.
+///
+/// Sinir okurken uygulaniyor (`take`), sonradan degil: eski kod dosyanin
+/// tamamini belleğe alip sonra kesiyordu; gigabaytlik bir kutuk pencereyi
+/// donduruyor ve bellegi dolduruyordu. Bu test ayirmayi olcemiyor; sinirin
+/// dogru yerde oldugunu ve kesme bayraginin dogru geldigini bagliyor.
+#[test]
+fn buyuk_dosya_sinirda_kesiliyor_ve_bildiriliyor() {
+    let root = tree("read-big");
+    let p = root.join("buyuk.log");
+    let satir = "0123456789abcdef\n";
+    let mut icerik = String::new();
+    while icerik.len() < MAX_READ + 4096 {
+        icerik.push_str(satir);
+    }
+    std::fs::write(&p, &icerik).unwrap();
+
+    let okunan = read_text(&p).expect("dosya okunamadi");
+    assert!(okunan.truncated, "sinir asildi ama bildirilmedi");
+    assert!(!okunan.binary);
+    assert_eq!(okunan.size, icerik.len() as u64, "boyut dosyanin gercek boyutu olmali");
+    assert_eq!(okunan.text.len(), MAX_READ, "metin tam sinirda kesilmeli");
+    assert!(icerik.starts_with(&okunan.text));
+
+    // Sinirin altindaki dosya oldugu gibi.
+    let kucuk = root.join("kucuk.txt");
+    std::fs::write(&kucuk, "merhaba\n").unwrap();
+    let okunan = read_text(&kucuk).unwrap();
+    assert!(!okunan.truncated);
+    assert_eq!(okunan.text, "merhaba\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // ------------------------------------------------------------- yazma
 //
 // Goruntuleyicideki Kaydet ve fark penceresinin sag tarafi buradan yaziyor.
