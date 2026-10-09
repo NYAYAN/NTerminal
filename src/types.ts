@@ -751,6 +751,16 @@ export interface BundleInfo {
   favorites: number;
   scrollback: number;
   notes: ImportNote[];
+  /** Dosyadaki profillerin çalıştırdığı komutlar; ön izlemede açıkça gösteriliyor. */
+  profileList: ProfilePreview[];
+}
+
+export interface ProfilePreview {
+  name: string;
+  kind: ShellKind;
+  shell: string;
+  args: string[];
+  envKeys: string[];
 }
 
 export interface ImportResult {

@@ -1702,6 +1702,15 @@ export const MESSAGES = {
   ],
   "transfer.noteFixed": ["Düzeltildi", "Fixed"],
   "transfer.noteWarn": ["Uyarı", "Warning"],
+  "transfer.profileCommands": [
+    "Dosyadaki profiller ve çalıştırdıkları komutlar",
+    "Profiles in the file and the commands they run",
+  ],
+  "transfer.profileCommandsHint": [
+    "İçe alınan profil ilk sekmesinde bu komutu olduğu gibi çalıştırır. Tanımadığınız bir komut varsa dosyayı almayın.",
+    "An imported profile runs this command as is in its first tab. If a command looks unfamiliar, do not import the file.",
+  ],
+  "transfer.profileEnv": ["Ortam: {keys}", "Env: {keys}"],
   "transfer.howApplied": ["Nasıl uygulanacak?", "How should it be applied?"],
   "transfer.notInFile": ["(dosyada yok)", "(not in the file)"],
   "transfer.settingsLabel": ["Ayarlar", "Settings"],

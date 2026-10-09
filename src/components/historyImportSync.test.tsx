@@ -51,6 +51,7 @@ vi.mock("../lib/ipc", () => ({
         favorites: 0,
         scrollback: 0,
         notes: [],
+        profileList: [],
       }),
       configImportApply: async (_path: string, options: ImportOptions): Promise<ImportResult> => {
         // `HistoryStore::ingest` gibi: üzerine yazmak önce siliyor, aynı

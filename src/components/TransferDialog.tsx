@@ -394,6 +394,34 @@ export function TransferDialog() {
                     </p>
                   </div>
 
+                  {preview.profileList.length > 0 && (
+                    <div className="section">
+                      <h3>{t("transfer.profileCommands")}</h3>
+                      <p className="dim" style={{ fontSize: 11 }}>
+                        {t("transfer.profileCommandsHint")}
+                      </p>
+                      <div className="notes">
+                        {preview.profileList.map((profile, i) => (
+                          <div className="note" key={i}>
+                            <span className="tag">{profile.kind}</span>
+                            <span>
+                              <strong>{profile.name}</strong>{" "}
+                              <span className="mono">
+                                {[profile.shell, ...profile.args].join(" ")}
+                              </span>
+                              {profile.envKeys.length > 0 && (
+                                <span className="dim">
+                                  {" "}
+                                  ({t("transfer.profileEnv", { keys: profile.envKeys.join(", ") })})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {preview.notes.length > 0 && (
                     <div className="section">
                       <h3>{t("transfer.notes")}</h3>

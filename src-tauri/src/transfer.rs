@@ -158,6 +158,25 @@ pub struct BundleInfo {
     pub scrollback: usize,
     /// Profil bazinda uyari/duzeltme raporu.
     pub notes: Vec<ImportNote>,
+    /// Dosyadaki profillerin CALISTIRDIGI komutlar - on izlemede gosteriliyor.
+    ///
+    /// Ice alinan profil ilk sekmede oldugu gibi calisiyor (`pty::spawn`):
+    /// `shell: /bin/sh, args: ["-c", "curl … | sh"]` yazan bir dosya, sayiyi
+    /// gorup "3 profil" diyen biri icin keyfi komut demek. Ad, tur, kabuk ve
+    /// argumanlar goz onunde olunca paylasilan dosyaya bakmadan onaylanmiyor.
+    pub profile_list: Vec<ProfilePreview>,
+}
+
+/// On izlemede bir profilin kimligi: ne calistiriyor, hangi ortam anahtarlari.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfilePreview {
+    pub name: String,
+    pub kind: crate::model::ShellKind,
+    pub shell: String,
+    pub args: Vec<String>,
+    /// Yalnizca anahtarlar: degerler sir olabilir ve ekranda isi yok.
+    pub env_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -496,6 +515,22 @@ pub fn describe(path: &Path, bundle: &Bundle, notes: Vec<ImportNote>) -> BundleI
         favorites: bundle.favorites.as_ref().map(|f| f.len()).unwrap_or(0),
         scrollback: bundle.scrollback.as_ref().map(|s| s.len()).unwrap_or(0),
         notes,
+        profile_list: bundle
+            .settings
+            .as_ref()
+            .map(|s| {
+                s.profiles
+                    .iter()
+                    .map(|p| ProfilePreview {
+                        name: p.name.clone(),
+                        kind: p.kind,
+                        shell: p.shell.clone(),
+                        args: p.args.clone(),
+                        env_keys: p.env.keys().cloned().collect(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 
