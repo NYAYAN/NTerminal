@@ -275,6 +275,19 @@ export class TerminalSession {
   exitCode: number | null = null;
   spawned = false;
   /**
+   * `dispose` çağrıldı.
+   *
+   * `start` üç kez `await` ediyor (iki dinleyici kaydı, bir `ptySpawn`) ve bu
+   * aralıkta sekme kapatılabiliyor: çalışma alanı geri yüklenirken sekmeyi
+   * hemen kapatmak ya da "Kabuk başlatılıyor…" sırasında "Kabuğu yeniden
+   * başlat". Bayrak olmadan `start` kaldığı yerden devam ediyordu: unlisten
+   * işlevlerini artık kimsenin okumadığı yeni diziye itiyor (iki Tauri
+   * dinleyicisi kalıcı), ölü sekme için kabuk doğuruyor (onu `kill_all`
+   * dışında kimse öldürmüyor), çıktıyı dispose edilmiş xterm'e yazıyordu.
+   * Her `await`ten sonra bu bayrağa bakılıyor.
+   */
+  private disposed = false;
+  /**
    * Kayıtlı ekran yazılıyor: terminalin bu arada ürettiği yanıtlar kabuğa
    * GİTMİYOR. Eski biçimli kayıttaki `?1004h`i gören xterm o anki odağı hemen
    * bildiriyor (`ESC [ O`); yeniden başlatmada aynı kimlikle doğan yeni kabuk
@@ -592,6 +605,7 @@ export class TerminalSession {
       await new Promise<void>((resolve) => this.term.write("\r\n", () => resolve()));
       // Geri çağrı geldiğinde kayıt ayrıştırılmış: ürettiği yanıtlar geçti.
       this.restoring = false;
+      if (this.disposed) return;
     }
 
     /*
@@ -617,8 +631,7 @@ export class TerminalSession {
      * yok. Kayıt spawn başarısız olsa da duruyor; o kimlik için hiç olay
      * gelmiyor ve `dispose` ikisini de kapatıyor.
      */
-    this.unlisteners.push(
-      await onPtyData(this.tabId, (bytes) => {
+    const unData = await onPtyData(this.tabId, (bytes) => {
         /*
          * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
          *
@@ -634,11 +647,20 @@ export class TerminalSession {
          */
         this.outputSinceSave = true;
         this.term.write(bytes, () => this.scanNewLines());
-      }),
-    );
-    this.unlisteners.push(
-      await onPtyExit(this.tabId, (code) => this.handleExit(code)),
-    );
+    });
+    // Bekleme sırasında kapatıldıysa kayıt listeye girmeden kaldırılıyor;
+    // `dispose` listeyi çoktan boşalttı, bir daha bakmayacak.
+    if (this.disposed) {
+      unData();
+      return;
+    }
+    this.unlisteners.push(unData);
+    const unExit = await onPtyExit(this.tabId, (code) => this.handleExit(code));
+    if (this.disposed) {
+      unExit();
+      return;
+    }
+    this.unlisteners.push(unExit);
 
     try {
       const result = await api.ptySpawn({
@@ -667,6 +689,12 @@ export class TerminalSession {
         cols: this.term.cols,
         rows: this.term.rows,
       });
+      // Kabuk, sekmesi kapandıktan sonra doğdu. `dispose`un `ptyKill`i PTY
+      // henüz yokken gitti ve boşa düştü; öldürmek artık burada.
+      if (this.disposed) {
+        void api.ptyKill(this.tabId).catch(() => {});
+        return;
+      }
       this.pid = result.pid;
       this.shell = result.shell;
       this.integration = result.integration;
@@ -686,6 +714,8 @@ export class TerminalSession {
       // dogru cevap bu.
       if (result.cwd) this.updateCwd(result.cwd);
     } catch (err) {
+      // Kapanmış sekmenin deposu yok; yazacak terminal de yok.
+      if (this.disposed) return;
       this.term.write(
         `\r\n\x1b[31m${t("term.spawnFailed")}\x1b[0m ${String(err)}\r\n`,
       );
@@ -1233,7 +1263,7 @@ export class TerminalSession {
   private scheduleBlockSync() {
     // Gizli sekmenin katmanini kare basina yeniden cizmek bos is; sekme
     // gorunur olunca `setDisplay` bir kez tazeliyor.
-    if (!this.visible) return;
+    if (!this.visible || this.disposed) return;
     if (this.blockSyncFrame !== null) return;
     this.blockSyncFrame = window.requestAnimationFrame(() => {
       this.blockSyncFrame = null;
@@ -1363,6 +1393,9 @@ export class TerminalSession {
    * tabanlı tarama bunu yapısal olarak dışlıyor.
    */
   private scanNewLines() {
+    // `term.write` geri çağrısı kuyruktan gelir: sekme bu arada kapandıysa
+    // tampon dispose edilmiş durumda, okunmaz.
+    if (this.disposed) return;
     const buf = this.term.buffer.active;
 
     /*
@@ -1579,7 +1612,7 @@ export class TerminalSession {
     // Gorunmeyen terminalde dekorasyon uretmek olculebilir bir maliyet:
     // gorunur satir sayisi kadar `translateToString` + dekorasyon yikip
     // yeniden kurma, 90ms'de bir.
-    if (!this.visible) return;
+    if (!this.visible || this.disposed) return;
     if (this.linkTimer !== null) return;
     this.linkTimer = window.setTimeout(() => {
       this.linkTimer = null;
@@ -1719,7 +1752,15 @@ export class TerminalSession {
   }
 
   async dispose(killShell: boolean) {
+    // Önce bayrak: `start`ın bekleyen adımları ve kuyruktaki `write` geri
+    // çağrıları buna bakıyor.
+    this.disposed = true;
     if (this.fallbackTimer !== null) window.clearTimeout(this.fallbackTimer);
+    // Bir sonraki karede çizilecek blok katmanı dispose edilmiş tamponu
+    // okurdu; kare iptal, dinleyici düşüyor.
+    if (this.blockSyncFrame !== null) window.cancelAnimationFrame(this.blockSyncFrame);
+    this.blockSyncFrame = null;
+    this.blockListener = null;
     // Yarım kalmış bir komut varsa geçmişte "çalışıyor" olarak asılı kalmasın.
     if (this.activeHistoryId) {
       void api
@@ -1985,6 +2026,7 @@ export class TerminalSession {
   }
 
   private handleExit(code: number | null) {
+    if (this.disposed) return;
     this.exited = true;
     this.exitCode = code;
     this.running = false;

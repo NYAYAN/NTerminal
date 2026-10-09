@@ -49,9 +49,18 @@ const h = vi.hoisted(() => {
     reset() {
       handlers.clear();
       yayin.length = 0;
+      h.olduruldu.length = 0;
+      h.kapi = new Promise<void>((resolve) => {
+        h.kapiyiAc = resolve;
+      });
     },
     /** Kabuğa yazılan her şey (`ptyWrite`). */
     yazilan: [] as { id: string; data: string }[],
+    /** `ptyKill` ile öldürülen kimlikler. */
+    olduruldu: [] as string[],
+    /** `yavas-*` kimlikli spawn bu kapı açılana kadar dönmüyor. */
+    kapi: Promise.resolve() as Promise<void>,
+    kapiyiAc: (() => {}) as () => void,
   };
 });
 
@@ -66,6 +75,8 @@ vi.mock("../lib/ipc", () => {
     if (spec.id.startsWith("dogmayan")) {
       throw new Error("kabuk baslatilamadi: C:\\Program Files\\PowerShell\\7\\pwsh.exe");
     }
+    // Yavaş doğan kabuk: makine meşgulken spawn'ın yanıtı gecikiyor.
+    if (spec.id.startsWith("yavas")) await h.kapi;
     // ÇIKTI SPAWN DÖNMEDEN yayımlanıyor: ConPTY okuyucusu Rust tarafında
     // süreç doğduğu anda başlıyor, komutun yanıtı arayüze varmadan önce.
     h.emit(spec.id, ilkIstem);
@@ -76,12 +87,17 @@ vi.mock("../lib/ipc", () => {
     h.yazilan.push({ id, data });
   });
 
+  const ptyKill = vi.fn(async (id: string) => {
+    h.olduruldu.push(id);
+    return true;
+  });
+
   return {
-    // Gerçek `api` yüzeyi geniş; testin ilgilendiği çağrılar `ptySpawn` ve
-    // `ptyWrite`. Vekil, geri kalanını sessiz birer boş çağrıya indiriyor —
-    // yüzey büyüdükçe testin bozulmaması için.
+    // Gerçek `api` yüzeyi geniş; testin ilgilendiği çağrılar `ptySpawn`,
+    // `ptyWrite` ve `ptyKill`. Vekil, geri kalanını sessiz birer boş çağrıya
+    // indiriyor — yüzey büyüdükçe testin bozulmaması için.
     api: new Proxy(
-      { ptySpawn, ptyWrite } as Record<string, unknown>,
+      { ptySpawn, ptyWrite, ptyKill } as Record<string, unknown>,
       {
         get: (target, prop: string) =>
           target[prop] ?? vi.fn(async () => null),
@@ -333,5 +349,61 @@ describe("geri yüklenen ekran", () => {
       expect(kayit, JSON.stringify(parca)).not.toContain(parca);
     }
     void s.dispose(true);
+  });
+});
+
+/**
+ * Kapanan sekme için kabuk DOĞMAMALI; doğduysa ÖLDÜRÜLMELİ.
+ *
+ * `start` üç kez bekliyor (iki dinleyici kaydı, bir `ptySpawn`) ve bu
+ * aralıkta `dispose` çalışabiliyor: çalışma alanı geri yüklenirken sekmeyi
+ * hemen kapatmak, "Kabuk başlatılıyor…" şeridi dururken "Kabuğu yeniden
+ * başlat". Bayrak yokken `start` kaldığı yerden devam ediyordu: dinleyiciler
+ * artık kimsenin okumadığı listeye giriyor (kalıcı sızıntı), kabuk ölü sekme
+ * için doğuyor ve onu `kill_all` dışında kimse öldürmüyordu.
+ */
+describe("spawn sürerken kapatılan sekme", () => {
+  /** Mikro görevleri boşaltır: `start` bir sonraki `await`ine kadar ilerler. */
+  const bosalt = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it("dinleyiciler kurulurken kapatıldı: spawn hiç çağrılmıyor", async () => {
+    h.reset();
+    const { api } = await import("../lib/ipc");
+    const spawnSayisi = vi.mocked(api.ptySpawn).mock.calls.length;
+    const s = session("yavas-erken");
+    const basladi = s.start(null);
+    // İlk `await`te: dinleyici kaydı daha listeye girmedi.
+    await s.dispose(true);
+    h.kapiyiAc();
+    await basladi;
+
+    expect(vi.mocked(api.ptySpawn).mock.calls.length, "ölü sekme için kabuk doğdu").toBe(spawnSayisi);
+    expect(h.handlers.has("yavas-erken"), "veri dinleyicisi kaldı: kalıcı sızıntı").toBe(false);
+  });
+
+  it("spawn beklenirken kapatıldı: geç doğan kabuk öldürülüyor", async () => {
+    h.reset();
+    const s = session("yavas-gec");
+    const basladi = s.start(null);
+    await bosalt();
+    // `start` şu an `ptySpawn`ı bekliyor; dinleyiciler kurulu.
+    expect(h.handlers.has("yavas-gec"), "taklit bozulmuş: spawn'a ulaşılmadı").toBe(true);
+
+    await s.dispose(true);
+    expect(h.handlers.has("yavas-gec"), "dispose dinleyiciyi kaldırmadı").toBe(false);
+    const dispozdaOldurme = h.olduruldu.filter((id) => id === "yavas-gec").length;
+
+    h.kapiyiAc();
+    await basladi;
+    await bosalt();
+
+    // `dispose`un `ptyKill`i PTY yokken gitti ve boşa düştü; kabuk doğunca
+    // `start` kendisi öldürmeli.
+    expect(
+      h.olduruldu.filter((id) => id === "yavas-gec").length,
+      "geç doğan kabuk sahipsiz kaldı",
+    ).toBe(dispozdaOldurme + 1);
+    expect(h.handlers.has("yavas-gec"), "spawn sonrası dinleyici geri geldi").toBe(false);
+    expect(s.pid, "kapanmış oturum doğan kabuğu benimsedi").toBeNull();
   });
 });
