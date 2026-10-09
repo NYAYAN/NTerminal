@@ -584,6 +584,43 @@ mod oturum {
     }
 
     #[test]
+    fn kapatilan_sekmenin_sighup_yok_sayan_torunu_da_oluyor() {
+        // portable-pty `kill` yalnizca kabuga SIGHUP gonderiyor; `trap '' HUP`
+        // ya da `nohup` ile korunan torun slave'i tutup okuyucu is parcasini
+        // sonsuza kadar `read`de birakiyordu. Simdi SIGHUP ve bir saniye
+        // sonra SIGKILL kabugun surec GRUBUNA gidiyor; torun da olmeli.
+        let manager = PtyManager::default();
+        let (_pid, rx) =
+            baslat(&manager, "torun", "(trap '' HUP; exec sleep 30) & echo TORUN=$!; wait");
+        let baslangic = Instant::now();
+        let mut torun: Option<u32> = None;
+        while torun.is_none() && baslangic.elapsed() < Duration::from_secs(10) {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(Olay::Veri(v)) => {
+                    let metin = String::from_utf8_lossy(&v);
+                    if let Some(satir) = metin.lines().find(|l| l.starts_with("TORUN=")) {
+                        torun = satir.trim_start_matches("TORUN=").trim().parse().ok();
+                    }
+                }
+                Ok(Olay::Cikis(_)) => break,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        let torun = torun.expect("torunun pid'i okunamadi");
+        assert!(surec_durumu(torun).is_some(), "torun hic baslamadi");
+
+        assert!(manager.kill("torun"));
+
+        // SIGHUP yok sayiliyor; SIGKILL bir saniye sonra. Ustune pay.
+        let durum = toplanmayi_bekle(torun, Duration::from_secs(5));
+        assert!(
+            durum.is_none() || durum.as_deref() == Some("Z"),
+            "torun (pid {torun}) hala yasiyor: {durum:?}"
+        );
+    }
+
+    #[test]
     fn bloklanan_yazma_oturum_tablosunu_kilitlemiyor() {
         // PTY master'a yazmak on plandaki program okumuyorsa bloklar. Eskiden
         // bu bekleme `sessions` kilidi TUTULURKEN oluyordu: `kill`, `alive`,

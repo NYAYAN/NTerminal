@@ -45,6 +45,12 @@ tauri-plugin-dialog = "2"
 tauri-plugin-updater = { version = "~2.12", default-features = false, features = ["native-tls", "system-proxy"] }
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 
+# pty.rs `kill`: sekme kapanirken SIGHUP ve ardindan SIGKILL kabugun SUREC
+# GRUBUNA gidiyor (`killpg`); portable-pty yalnizca kabugun kendisine
+# gonderiyor. Zaten bagimlilik grafiginde (portable-pty, tauri).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

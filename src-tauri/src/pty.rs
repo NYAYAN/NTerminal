@@ -564,10 +564,17 @@ impl PtyManager {
         let _ = session.killer.kill();
         // Cocugu reaper is parcasi `child.wait()` ile topluyor; sinyal onu
         // uyandiriyor. Toplama artik okuyucunun EOF gormesine bagli degil.
+        #[cfg(unix)]
+        if let Some(pid) = session.pid {
+            kill_process_group(pid);
+        }
         true
     }
 
     pub fn kill_all(&self) {
+        // Kapanista bekleme yok: SIGKILL'i erteleyen is parcasi surec
+        // bitince olur. Asil is `kill` icinde; buradaki SIGHUP yeterli,
+        // cunku kapanan uygulamanin PTY'leri de kapaniyor.
         let ids: Vec<String> = self.sessions.lock().keys().cloned().collect();
         for id in ids {
             self.kill(&id);
@@ -589,6 +596,49 @@ impl PtyManager {
     pub fn list(&self) -> Vec<String> {
         self.sessions.lock().keys().cloned().collect()
     }
+}
+
+/// SIGKILL'den once torunlara taninan sure.
+///
+/// Kabuk SIGHUP'la hemen oluyor; `trap`li ya da `nohup`lu bir torun olmuyor.
+/// Bir saniye, duzgun kapanmak isteyen bir sunucuya (sinyal isleyicisi olan)
+/// zaman tanimak icin; sonrasi zorla.
+#[cfg(unix)]
+const KILL_GRACE: Duration = Duration::from_secs(1);
+
+/// Kabugun SUREC GRUBUNU oldurur: once SIGHUP, bir saniye sonra SIGKILL.
+///
+/// portable-pty'nin `ChildKiller::kill`i Unix'te yalnizca kabugun PID'ine
+/// SIGHUP gonderiyor. Kabuk `setsid` ile oturum ve grup lideri; SIGHUP'i yok
+/// sayan ya da `nohup`/`disown` edilmis bir torun slave'i tutmaya devam
+/// ediyor. O zaman: okuyucu is parcasi master'in dup'inda sonsuza kadar
+/// `read`de kaliyor, yayinci `rx.recv()`de bekliyor - kapatilan her boyle
+/// sekme icin iki is parcasi ve tampon kalici siziyor; ustelik okuyucu
+/// master'i acik tuttugu icin cekirdek PTY'yi "hangup" yapmiyor, torun hic
+/// SIGHUP almiyor (kisir dongu). Windows'ta ConPTY kapaninca agac oluyor;
+/// Unix'te bunu kendimiz yapiyoruz.
+///
+/// `killpg` grubun BUTUN uyelerine gidiyor. Grup kimligi kabugun PID'i ve
+/// grup var oldugu surece o PID yeniden verilmiyor (cekirdek grup lideri
+/// olmus olsa da pgid'yi tutuyor); yani bir saniye sonraki SIGKILL baska
+/// bir surece gitmez. Grup bosalmissa ESRCH doner, zararsiz.
+#[cfg(unix)]
+fn kill_process_group(pid: u32) {
+    let pgid = pid as libc::pid_t;
+    // SAFETY: `killpg` bellege dokunmuyor; gecersiz grup icin ESRCH doner.
+    unsafe {
+        libc::killpg(pgid, libc::SIGHUP);
+    }
+    std::thread::Builder::new()
+        .name(format!("nterm-kill-{pid}"))
+        .spawn(move || {
+            std::thread::sleep(KILL_GRACE);
+            // SAFETY: yukaridaki gibi.
+            unsafe {
+                libc::killpg(pgid, libc::SIGKILL);
+            }
+        })
+        .ok();
 }
 
 /// Kabuk entegrasyon betigini baslatma argumanlarina ekler.
