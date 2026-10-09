@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setPlatform } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
 import type { Group, TabState } from "../types";
 
@@ -93,9 +94,22 @@ describe("kilitli sekmede klasör değişmiyor", () => {
     // Tırnaksız gönderilen böyle bir yol kabukta iki argümana bölünüyor ve
     // `cd` sessizce yanlış yere gidiyor. Seçici eskiden yolu HER ZAMAN
     // tırnaklıyordu; ortak yol `quoteForShell` ile gerektiğinde tırnaklıyor.
+    // Sahte oturumun profili yok; aile platformdan geliyor (Windows → cmd).
+    // jsdom'un tarayıcı tahmini makineye göre değişiyor, o yüzden açıkça.
+    setPlatform("windows");
     const oturum = seed(false);
     expect(useStore.getState().changeDir("C:\\yeni klasor")).toBe(true);
     expect(oturum.insertCommand).toHaveBeenCalledWith('cd "C:\\yeni klasor"', true);
+  });
+
+  it("POSIX kabukta tek tırnak: `$` ve `!` genişlemiyor", () => {
+    // ÖLÇÜLEN HATA: cmd kuralı her kabuğa uygulanıyordu; zsh'de
+    // `cd ~/Work/$RELEASE` `~/Work/`a iniyor, kilitli sekmenin sessiz
+    // düzeltmesi yanlış klasöre `cd` atıp sonraki komutu orada çalıştırıyordu.
+    setPlatform("macos");
+    const oturum = seed(false);
+    expect(useStore.getState().changeDir("/Users/ali/Work/$RELEASE")).toBe(true);
+    expect(oturum.insertCommand).toHaveBeenCalledWith("cd '/Users/ali/Work/$RELEASE'", true);
   });
 
   it("kilitli sekmede cd hiç gönderilmiyor", () => {

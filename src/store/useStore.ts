@@ -16,6 +16,7 @@ import {
 import { setLanguage as applyLanguage, t, tp } from "../lib/i18n";
 import {
   defaultFontStack,
+  platform,
   setFileManager as applyFileManager,
   setPlatform as applyPlatform,
 } from "../lib/platform";
@@ -24,6 +25,7 @@ import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
+import { quoteForShell, shellFamily } from "../lib/shellQuote";
 import { ancestorDirs } from "../lib/dirs";
 import { DEFAULT_FLAGS } from "../lib/textSearch";
 import {
@@ -745,12 +747,19 @@ const GROUP_COLORS = [
 ];
 
 /**
- * Klasor yolunu `cd` icin alintiliyor. Bosluk iceren yollar (Program Files)
- * alintilanmazsa kabuk iki ayri argument goruyor.
+ * Bu oturumun kabuğu için yol alıntılayıcı.
+ *
+ * Kural kabuğa göre değişiyor (bkz. `lib/shellQuote.ts`): eskiden tek kural
+ * (cmd'ninki) her kabuğa uygulanıyor ve zsh'de `$`, `!` içeren yollar yanlış
+ * klasöre gidiyordu. Aile profilin türünden, o yoksa çalıştırılan kabuğun
+ * adından, o da yoksa platformdan.
  */
-function quoteForShell(path: string): string {
-  if (!/[\s&|<>^()]/.test(path)) return path;
-  return `"${path.replace(/"/g, '""')}"`;
+function quoteFor(session: TerminalSession | null): (path: string) => string {
+  const kind = session
+    ? useStore.getState().settings.profiles.find((p) => p.id === session.profileId)?.kind
+    : undefined;
+  const family = shellFamily(kind, session?.shell, platform());
+  return (path) => quoteForShell(path, family);
 }
 
 /**
@@ -764,7 +773,7 @@ function quoteForShell(path: string): string {
  * yazmakta olan birinin yazmayı bırakması demek (bkz. `runQuietly`).
  */
 function sendCd(session: TerminalSession, path: string, opts?: { quiet?: boolean }) {
-  const command = `cd ${quoteForShell(path)}`;
+  const command = `cd ${quoteFor(session)(path)}`;
   if (opts?.quiet) session.runQuietly(command);
   else session.insertCommand(command, true);
 }
@@ -2405,8 +2414,9 @@ export const useStore = create<Store>((set, get) => ({
        */
       const exact = exactDir(query, names);
       const children = exact ? dirNames(descend(query, exact).dir, rerun) : null;
-      const inner = exact && children ? cdSuggestions(descend(query, exact), children, quoteForShell) : [];
-      const siblings = cdSuggestions(query, names, quoteForShell);
+      const quote = quoteFor(get().activeSession());
+      const inner = exact && children ? cdSuggestions(descend(query, exact), children, quote) : [];
+      const siblings = cdSuggestions(query, names, quote);
       // Sınır geçmişinki (beş) değil: dizin listesinde her satır olası bir
       // hedef, kullanıcı hepsini ok tuşlarıyla gezebilmeli. Kutu kaydırıyor.
       const dirs = [...inner, ...siblings].slice(0, MAX_CD_SUGGESTIONS);
@@ -2628,10 +2638,11 @@ export const useStore = create<Store>((set, get) => ({
    * geçmesini değil, arkasına eklenmesini bekliyor.
    *
    * Boşluk içeren yol tırnaklanıyor: tırnaksız gönderilen böyle bir yol kabukta
-   * iki ayrı argümana bölünüyor ve komut sessizce yanlış çalışıyor.
+   * iki ayrı argümana bölünüyor ve komut sessizce yanlış çalışıyor. Kural
+   * `cd` ile aynı yerden (`quoteFor`): kabuğa göre.
    */
   insertPath(path) {
-    const text = /[\s'"`]/.test(path) ? `"${path}"` : path;
+    const text = quoteFor(get().activeSession())(path);
     const sink = get().appInputSink;
     if (sink) {
       sink(text, "append");
