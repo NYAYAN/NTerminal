@@ -46,7 +46,8 @@ pub struct AppState {
     paths: DataPaths,
     settings: Mutex<Settings>,
     workspace: Mutex<Workspace>,
-    history: HistoryStore,
+    /// `Arc`: silme/temizleme komutlari `spawn_blocking` icin klonluyor.
+    history: std::sync::Arc<HistoryStore>,
     favorites: FavoriteStore,
     pty: PtyManager,
     integration_dir: PathBuf,
@@ -282,14 +283,27 @@ fn pty_list(state: State<AppState>) -> Vec<String> {
 
 // ------------------------------------------------------------ scrollback
 
+/// Ekran ciktisi kaydi ve yuklemesi.
+///
+/// `async` + `spawn_blocking`: dosya sekme basina megabaytlara varabiliyor ve
+/// yazma/okuma soguk onbellekte ya da ag surucusunde saniyeler suruyor; es
+/// zamanli komut ana is parcaciginda kosar ve pencereyi dondurur (gerekce
+/// `git_info` basinda). `DataPaths` klonu ucuz (iki alan).
 #[tauri::command]
-fn scrollback_save(state: State<AppState>, tab_id: String, data: String) -> CmdResult<()> {
-    store::save_scrollback(&state.paths, &tab_id, &data).map_err(fail)
+async fn scrollback_save(state: State<'_, AppState>, tab_id: String, data: String) -> CmdResult<()> {
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || store::save_scrollback(&paths, &tab_id, &data))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
 }
 
 #[tauri::command]
-fn scrollback_load(state: State<AppState>, tab_id: String) -> Option<String> {
-    store::load_scrollback(&state.paths, &tab_id)
+async fn scrollback_load(state: State<'_, AppState>, tab_id: String) -> CmdResult<Option<String>> {
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || store::load_scrollback(&paths, &tab_id))
+        .await
+        .map_err(fail)
 }
 
 #[tauri::command]
@@ -297,9 +311,13 @@ fn scrollback_delete(state: State<AppState>, tab_id: String) {
     store::delete_scrollback(&state.paths, &tab_id);
 }
 
+/// `async`: klasor listesi ve silmeler; gerekce `scrollback_save` ustunde.
 #[tauri::command]
-fn scrollback_prune(state: State<AppState>, keep: Vec<String>) -> usize {
-    store::prune_scrollback(&state.paths, &keep)
+async fn scrollback_prune(state: State<'_, AppState>, keep: Vec<String>) -> CmdResult<usize> {
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || store::prune_scrollback(&paths, &keep))
+        .await
+        .map_err(fail)
 }
 
 // --------------------------------------------------------------- gecmis
@@ -324,14 +342,26 @@ fn history_query(state: State<AppState>, filter: HistoryFilter) -> HistoryPage {
     state.history.query(&filter)
 }
 
+/// Silme ve temizleme gunlugu HEMEN sikistiriyor (bkz. `history.rs`
+/// `delete`): elli bin satirlik dosya bastan yaziliyor. `async` +
+/// `spawn_blocking`, yoksa her silmede pencere dosya kadar donuyor. Ekleme ve
+/// bitirme tek satir append, onlar es zamanli kaliyor.
 #[tauri::command]
-fn history_delete(state: State<AppState>, ids: Vec<String>) -> CmdResult<usize> {
-    state.history.delete(&ids).map_err(fail)
+async fn history_delete(state: State<'_, AppState>, ids: Vec<String>) -> CmdResult<usize> {
+    let history = state.history.clone();
+    tauri::async_runtime::spawn_blocking(move || history.delete(&ids))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
 }
 
 #[tauri::command]
-fn history_clear(state: State<AppState>, filter: HistoryFilter) -> CmdResult<usize> {
-    state.history.clear(&filter).map_err(fail)
+async fn history_clear(state: State<'_, AppState>, filter: HistoryFilter) -> CmdResult<usize> {
+    let history = state.history.clone();
+    tauri::async_runtime::spawn_blocking(move || history.clear(&filter))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
 }
 
 #[tauri::command]
@@ -771,26 +801,40 @@ async fn write_text_file(path: String, expected: String, text: String) -> CmdRes
 /// `list_files` ile ayri isler: o TUM agaci duz bir liste olarak veriyor
 /// (arama icin), bu ise TEK bir seviyeyi (agaci tembel acmak icin). Derin bir
 /// agacta hepsini onden okumak gereksiz.
+///
+/// `async` + `spawn_blocking`: ag surucusunde ya da soguk onbellekte bir
+/// `read_dir` bile saniyeler alabiliyor (gerekce `git_info` basinda).
 #[tauri::command]
-fn list_entries(path: String) -> CmdResult<Vec<files::Entry>> {
-    let p = std::path::Path::new(&path);
-    if !p.is_dir() {
-        return Err(format!("klasor degil: {path}"));
-    }
-    Ok(files::entries(p))
+async fn list_entries(path: String) -> CmdResult<Vec<files::Entry>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        if !p.is_dir() {
+            return Err(format!("klasor degil: {path}"));
+        }
+        Ok(files::entries(p))
+    })
+    .await
+    .map_err(fail)?
 }
 
 /// Dizin altindaki dosyalar (goreli yollar) - Ctrl+P dosya arama icin.
 ///
 /// Sinirli: atlanan klasorler ve azami sayi/derinlik `files` modulunde
 /// belgelenmis. Eksik liste, donmus bir arayuzden iyi.
+///
+/// `async` + `spawn_blocking`: yirmi bin dosyaya kadar on derinlikte yuruyus;
+/// ana is parcaciginda pencereyi saniyelerce dondururdu.
 #[tauri::command]
-fn list_files(path: String) -> CmdResult<Vec<String>> {
-    let p = std::path::Path::new(&path);
-    if !p.is_dir() {
-        return Err(format!("klasor degil: {path}"));
-    }
-    Ok(files::list(p))
+async fn list_files(path: String) -> CmdResult<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        if !p.is_dir() {
+            return Err(format!("klasor degil: {path}"));
+        }
+        Ok(files::list(p))
+    })
+    .await
+    .map_err(fail)?
 }
 
 /// Dosyalarin ICINDE arama - paletin "Dosya icerigi" sekmesi ve dosya sutunu.
@@ -1293,7 +1337,7 @@ pub fn run() {
         .collect();
     store::prune_scrollback(&data_paths, &live_tabs);
 
-    let history = HistoryStore::load(data_paths.clone(), settings.behavior.history_limit);
+    let history = std::sync::Arc::new(HistoryStore::load(data_paths.clone(), settings.behavior.history_limit));
 
     let favorites = FavoriteStore::load(data_paths.clone());
 
