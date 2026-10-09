@@ -165,9 +165,31 @@ struct ExitEvent {
     code: Option<u32>,
 }
 
+/// Bir oturumun yazma ucu; `sessions` kilidinden BAGIMSIZ kilitli.
+///
+/// PTY master'a yazmak bloklayici: on plandaki program girdiyi okumuyorsa
+/// (takilmis `ssh`, yanit vermeyen bir TUI) slave'in girdi kuyrugu dolar ve
+/// `write_all` kuyruk bosalana kadar doner. Eskiden bu bekleme `sessions`
+/// kilidi TUTULURKEN oluyordu: o anda `kill`, `resize`, `spawn`, `alive`
+/// hepsi ayni kilidi istedigi icin pencere donuyor ve sekmeyi kapatarak
+/// kurtulmak da mumkun olmuyordu - buyuk bir yapistirma bunu tetiklemenin en
+/// kolay yolu. Simdi global kilit yalnizca bu tutamaci klonlayacak kadar
+/// tutuluyor; bekleme oturumun kendi kilidinde ve komut `spawn_blocking`
+/// icinde (bkz. lib.rs `pty_write`).
+pub type Writer = Arc<Mutex<Box<dyn Write + Send>>>;
+
+/// Oturumun yazma ucuna yazar ve bosaltir. `writer()` ile alinan tutamacla
+/// `sessions` kilidinin disinda cagrilmali.
+pub fn write_to(writer: &Writer, data: &[u8]) -> Result<()> {
+    let mut w = writer.lock();
+    w.write_all(data)?;
+    w.flush()?;
+    Ok(())
+}
+
 struct Session {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: Writer,
     killer: Box<dyn ChildKiller + Send + Sync>,
     pid: Option<u32>,
     alive: Arc<AtomicBool>,
@@ -492,7 +514,7 @@ impl PtyManager {
             id.to_string(),
             Session {
                 master: pair.master,
-                writer,
+                writer: Arc::new(Mutex::new(writer)),
                 killer,
                 pid,
                 alive,
@@ -502,14 +524,19 @@ impl PtyManager {
         Ok(pid)
     }
 
+    /// Oturumun yazma tutamaci. Global kilit yalnizca arama suresince tutuluyor;
+    /// yazmanin kendisi (`write_to`) kilidin disinda.
+    pub fn writer(&self, id: &str) -> Result<Writer> {
+        self.sessions
+            .lock()
+            .get(id)
+            .map(|s| s.writer.clone())
+            .ok_or_else(|| anyhow!("oturum bulunamadi: {id}"))
+    }
+
     pub fn write(&self, id: &str, data: &[u8]) -> Result<()> {
-        let mut sessions = self.sessions.lock();
-        let session = sessions
-            .get_mut(id)
-            .ok_or_else(|| anyhow!("oturum bulunamadi: {id}"))?;
-        session.writer.write_all(data)?;
-        session.writer.flush()?;
-        Ok(())
+        let writer = self.writer(id)?;
+        write_to(&writer, data)
     }
 
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<()> {

@@ -584,6 +584,42 @@ mod oturum {
     }
 
     #[test]
+    fn bloklanan_yazma_oturum_tablosunu_kilitlemiyor() {
+        // PTY master'a yazmak on plandaki program okumuyorsa bloklar. Eskiden
+        // bu bekleme `sessions` kilidi TUTULURKEN oluyordu: `kill`, `alive`,
+        // `resize` hepsi ayni kilidi istedigi icin pencere donuyor ve sekmeyi
+        // kapatarak kurtulmak da mumkun olmuyordu. Burada bloklanan yazma,
+        // yazma tutamacini baska bir is parcasinda tutarak taklit ediliyor;
+        // tablo islemleri o sirada hemen donmeli.
+        let manager = PtyManager::default();
+        let (_pid, rx) = baslat(&manager, "yazma-kilidi", "echo HAZIR; sleep 30");
+        assert!(veri_bekle(&rx, "HAZIR", Duration::from_secs(10)), "kabuk baslamadi");
+
+        let writer = manager.writer("yazma-kilidi").expect("yazma tutamaci yok");
+        let (tutuldu_tx, tutuldu_rx) = mpsc::channel::<()>();
+        let (birak_tx, birak_rx) = mpsc::channel::<()>();
+        let tutucu = std::thread::spawn(move || {
+            let _kilit = writer.lock();
+            tutuldu_tx.send(()).unwrap();
+            let _ = birak_rx.recv_timeout(Duration::from_secs(10));
+        });
+        tutuldu_rx.recv_timeout(Duration::from_secs(5)).expect("kilit tutulmadi");
+
+        let basla = Instant::now();
+        assert!(manager.alive("yazma-kilidi"));
+        assert_eq!(manager.list(), vec!["yazma-kilidi".to_string()]);
+        assert!(manager.kill("yazma-kilidi"));
+        let gecen = basla.elapsed();
+        assert!(
+            gecen < Duration::from_millis(500),
+            "tablo islemleri bloklanan yazmayi bekledi: {gecen:?}"
+        );
+
+        let _ = birak_tx.send(());
+        tutucu.join().unwrap();
+    }
+
+    #[test]
     fn cikis_olayi_okuyucu_eof_gormese_de_geliyor() {
         // Kabuk kendi kendine bitiyor ve arkada slave'i tutan bir torun
         // kaliyor. Okuyucunun EOF gorup gormedigi platforma bagli (bkz.

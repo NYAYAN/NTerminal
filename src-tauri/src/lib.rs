@@ -221,19 +221,38 @@ fn pty_spawn(
         .map_err(fail)
 }
 
+/// Kabuga yazma.
+///
+/// `async` + `spawn_blocking`: PTY master'a yazmak on plandaki program girdiyi
+/// okumuyorsa (takilmis `ssh`, yanit vermeyen TUI) kuyruk bosalana kadar
+/// bloklar. Es zamanli komut ana is parcaciginda kosar ve buyuk bir
+/// yapistirma pencereyi dondururdu; tutamac (`pty::Writer`) global kilitten
+/// bagimsiz oldugu icin bu arada `kill` ve `resize` calismaya devam ediyor.
 #[tauri::command]
-fn pty_write(state: State<AppState>, id: String, data: String) -> CmdResult<()> {
-    state.pty.write(&id, data.as_bytes()).map_err(fail)
+async fn pty_write(state: State<'_, AppState>, id: String, data: String) -> CmdResult<()> {
+    let writer = state.pty.writer(&id).map_err(fail)?;
+    tauri::async_runtime::spawn_blocking(move || pty::write_to(&writer, data.as_bytes()))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
 }
 
 /// Arayuzun ham bayt gondermesi gereken durumlar icin (ornek: pano icerigi
 /// gecerli UTF-8 olmayan bir baytla geldiyse) base64 kabul eden yazma.
 #[tauri::command]
-fn pty_write_bytes(state: State<AppState>, id: String, base64_data: String) -> CmdResult<()> {
+async fn pty_write_bytes(
+    state: State<'_, AppState>,
+    id: String,
+    base64_data: String,
+) -> CmdResult<()> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(base64_data.as_bytes())
         .map_err(fail)?;
-    state.pty.write(&id, &bytes).map_err(fail)
+    let writer = state.pty.writer(&id).map_err(fail)?;
+    tauri::async_runtime::spawn_blocking(move || pty::write_to(&writer, &bytes))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
 }
 
 #[tauri::command]
