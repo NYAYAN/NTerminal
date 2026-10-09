@@ -1316,10 +1316,17 @@ export const useStore = create<Store>((set, get) => ({
       danger: true,
     });
     if (!ok) return;
-    // Onay beklerken grup silinmis olabilir.
-    if (!get().groups.some((g) => g.id === id)) return;
+    // Onay beklerken grup silinmiş, sekme eklenmiş ya da kilitlenmiş olabilir;
+    // bundan sonrası onay ÖNCESİ kopyadan değil taze durumdan (gerekçesi
+    // `closeTab` içinde: eski kopyadan türeyen `set` o arada olanı siliyordu).
+    const fresh = get().groups.find((g) => g.id === id);
+    if (!fresh) return;
+    if (!canDeleteGroup(fresh)) {
+      get().toast(t("store.groupHasLocked", { n: lockedTabs(fresh.tabs).length }), "err");
+      return;
+    }
 
-    for (const tab of group.tabs) {
+    for (const tab of fresh.tabs) {
       const session = sessions.get(tab.id);
       if (session) {
         await session.dispose(true);
@@ -1328,7 +1335,8 @@ export const useStore = create<Store>((set, get) => ({
       await api.scrollbackDelete(tab.id).catch(() => {});
     }
 
-    const remaining = groups.filter((g) => g.id !== id);
+    const remaining = get().groups.filter((g) => g.id !== id);
+    if (remaining.length === 0) return;
     set({
       groups: remaining,
       activeGroupId: get().activeGroupId === id ? remaining[0].id : get().activeGroupId,
@@ -1445,7 +1453,7 @@ export const useStore = create<Store>((set, get) => ({
 
   async closeTab(tabId, options) {
     const { groups, settings } = get();
-    const group = groups.find((g) => g.tabs.some((t) => t.id === tabId));
+    let group = groups.find((g) => g.tabs.some((t) => t.id === tabId));
     if (!group) return;
 
     // Kilit her kapatma yolunda burada karsilaniyor: dugme, orta tus, Ctrl+W,
@@ -1456,7 +1464,7 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
-    const session = sessions.get(tabId);
+    let session = sessions.get(tabId);
 
     // Onay: kullanicinin en sik sikayeti "yanlislikla carpiya bastim".
     // `options.confirm === false` yalnizca coklu kapatma yollari icin;
@@ -1475,12 +1483,25 @@ export const useStore = create<Store>((set, get) => ({
           danger: true,
         });
         if (!ok) return;
-        // Onay beklerken sekme kapanmis olabilir (baska bir yol,
-        // kabugun olmesi). Durumu yeniden okuyup dogruluyoruz.
-        const still = get()
-          .groups.flatMap((g) => g.tabs)
-          .some((tabItem) => tabItem.id === tabId);
-        if (!still) return;
+        /*
+         * Onay saniyeler sürebiliyor ve bu arada durum DEĞİŞİYOR: kabuklar
+         * her istemde başlık/cwd bildiriyor (`updateTab`), gruba yeni sekme
+         * eklenebiliyor, kabuk ölüp yeniden başlatılabiliyor.
+         *
+         * ÖLÇÜLEN HATA: aşağıdaki hesaplar onay ÖNCESİ alınan `group`tan
+         * türüyor ve `set` grubun sekme listesini o eski hâle döndürüyordu:
+         * onay sırasında gelen başlık yamaları geri alınıyor, eklenen sekme
+         * durumdan siliniyor ama oturumu `sessions`ta ve DOM'da kalıyordu
+         * (xterm + PTY sızıntısı). Eski `session` referansı da yanlıştı:
+         * kabuk ölüp `restartTab` yeni oturum kurduysa eskisi `ptyKill` ile
+         * YENİ kabuğu öldürüyor, `sessions.delete` yeni oturumu dispose
+         * etmeden düşürüyordu. Onaydan sonra her şey taze durumdan okunuyor;
+         * sekme bu arada kapandıysa iş bitmiş demek.
+         */
+        const fresh = get().groups.find((g) => g.tabs.some((tabItem) => tabItem.id === tabId));
+        if (!fresh) return;
+        group = fresh;
+        session = sessions.get(tabId);
       }
     }
 

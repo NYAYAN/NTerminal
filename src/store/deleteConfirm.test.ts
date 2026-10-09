@@ -221,3 +221,79 @@ describe("öneri panelinden geçmiş silme", () => {
     expect(useStore.getState().ui.suggest?.items).toEqual(["npm test"]);
   });
 });
+
+/**
+ * Onay beklerken değişen durum korunuyor.
+ *
+ * Onay saniyeler sürüyor ve o sırada kabuklar başlık/cwd bildiriyor
+ * (`updateTab`), gruba sekme ekleniyor. ÖLÇÜLEN HATA: `closeTab` ve
+ * `deleteGroup` hesaplarını onay ÖNCESİ alınan kopyadan türetiyor ve `set`
+ * listeyi o eski hâle döndürüyordu: başlık yamaları geri alınıyor, eklenen
+ * sekme durumdan siliniyor (oturumu DOM'da ve `sessions`ta kalıyor: xterm +
+ * PTY sızıntısı), onay sırasında eklenen grup kayboluyordu.
+ */
+describe("onay beklerken değişen durum", () => {
+  function sekme(id: string, title = id) {
+    return {
+      id,
+      title,
+      customTitle: null,
+      profileId: "p1",
+      cwd: null,
+      createdAt: 0,
+      lastActiveAt: 0,
+      hasScrollback: false,
+      lastCommand: null,
+      locked: false,
+    };
+  }
+
+  /** Cevabı testin verdiği, bekleyen bir onay. */
+  function bekleyenOnay() {
+    let cevapla: (ok: boolean) => void = () => {};
+    useStore.setState({
+      askConfirm: () =>
+        new Promise<boolean>((resolve) => {
+          cevapla = resolve;
+        }),
+    });
+    return (ok: boolean) => cevapla(ok);
+  }
+
+  it("sekme kapatma: bu arada gelen başlık ve eklenen sekme kalıyor", async () => {
+    const settings = useStore.getState().settings;
+    useStore.setState({
+      settings: { ...settings, behavior: { ...settings.behavior, confirmCloseTab: "always" } },
+      groups: [{ ...group("g1"), tabs: [sekme("t1"), sekme("t2", "eski")], activeTabId: "t1" }],
+      activeGroupId: "g1",
+    });
+    const cevapla = bekleyenOnay();
+
+    const kapanis = useStore.getState().closeTab("t1");
+    await Promise.resolve();
+    // Onay açıkken: komşu sekmenin kabuğu başlık bildiriyor, gruba sekme ekleniyor.
+    useStore.getState().updateTab("t2", { title: "yeni" });
+    useStore.setState({
+      groups: useStore.getState().groups.map((g) => ({ ...g, tabs: [...g.tabs, sekme("t3")] })),
+    });
+    cevapla(true);
+    await kapanis;
+
+    const tabs = useStore.getState().groups[0].tabs;
+    expect(tabs.map((t) => t.id), "kapanan gitti, eklenen kaldı").toEqual(["t2", "t3"]);
+    expect(tabs[0].title, "onay sırasında gelen başlık geri alındı").toBe("yeni");
+    useStore.setState({ settings });
+  });
+
+  it("grup silme: bu arada eklenen grup kalıyor", async () => {
+    const cevapla = bekleyenOnay();
+
+    const silme = useStore.getState().deleteGroup("g2");
+    await Promise.resolve();
+    useStore.setState({ groups: [...useStore.getState().groups, group("g3", "Sonradan")] });
+    cevapla(true);
+    await silme;
+
+    expect(useStore.getState().groups.map((g) => g.id)).toEqual(["g1", "g3"]);
+  });
+});
