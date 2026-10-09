@@ -25,6 +25,14 @@ pub fn new_id(prefix: &str) -> String {
 
 /// Atomik yazma. Ayni klasorde .tmp dosyasi olusturup rename ediyoruz;
 /// Windows'ta ayni surucu icindeki rename atomiktir.
+///
+/// Hedef `rename`den once SILINMIYOR. Eski kod "Windows'ta hedef varsa
+/// rename hata verir" diye once siliyordu; gerekce yanlis: Rust'in
+/// `std::fs::rename`i Windows'ta `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`
+/// cagiriyor ve var olan hedefin uzerine yaziyor. Silme ile tasima arasinda
+/// gelen bir cokme ya da guc kesintisi `settings.json`/`workspace.json`u
+/// BUSBUTUN yok ediyordu - ne eski ne yeni; bu islevin tek amaci olan "yarim
+/// yazilmis dosya kalmasin" tam o aralikta deliniyordu.
 pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -41,11 +49,11 @@ pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
         f.flush()?;
         f.sync_all()?;
     }
-    // Windows'ta hedef varsa rename hata verir; once siliyoruz.
-    if path.exists() {
-        let _ = fs::remove_file(path);
+    if let Err(err) = fs::rename(&tmp, path) {
+        // Tasinamayan gecici dosya klasorde birikmesin.
+        let _ = fs::remove_file(&tmp);
+        return Err(err).with_context(|| format!("dosya tasinamadi: {}", path.display()));
     }
-    fs::rename(&tmp, path).with_context(|| format!("dosya tasinamadi: {}", path.display()))?;
     Ok(())
 }
 

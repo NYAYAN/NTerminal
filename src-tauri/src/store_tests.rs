@@ -15,6 +15,35 @@ fn temp_paths(name: &str) -> DataPaths {
     paths
 }
 
+/// Atomik yazma var olan dosyanin uzerine tek adimda yaziyor.
+///
+/// Eski kod hedefi `rename`den once siliyordu ("Windows'ta rename hata
+/// verir" diye - yanlis, `MoveFileExW` REPLACE_EXISTING ile cagriliyor).
+/// Silme ile tasima arasindaki cokme ayar dosyasini busbutun yok ediyordu.
+/// Burada: ustune yazma iki platformda da calisiyor, gecici dosya kalmiyor ve
+/// kaynak `rename`den once `remove_file(path)` cagirmiyor.
+#[test]
+fn atomik_yazma_hedefi_silmeden_ustune_yaziyor() {
+    let paths = temp_paths("atomik");
+    let dosya = paths.root.join("ayar.json");
+    write_atomic(&dosya, "eski").unwrap();
+    write_atomic(&dosya, "yeni").unwrap();
+    assert_eq!(std::fs::read_to_string(&dosya).unwrap(), "yeni");
+    assert!(!dosya.with_extension("json.tmp").exists(), "gecici dosya kaldi");
+
+    let kaynak = include_str!("store.rs");
+    let govde = kaynak
+        .split("pub fn write_atomic")
+        .nth(1)
+        .and_then(|s| s.split("\n}\n").next())
+        .expect("write_atomic bulunamadi");
+    assert!(
+        !govde.contains("remove_file(path)"),
+        "write_atomic hedefi rename'den once siliyor: cokmede dosya busbutun gider"
+    );
+    let _ = std::fs::remove_dir_all(&paths.root);
+}
+
 /// Yeni bir alan eklendiginde eski settings.json okunmaya devam etmeli.
 ///
 /// Bu testin sebebi gercek bir hata: `panelWidth` alani eklendiginde
