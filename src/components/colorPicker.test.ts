@@ -19,7 +19,8 @@ import { describe, expect, it } from "vitest";
  *     renk sonda dursun.
  */
 
-const SRC = readFileSync(join(process.cwd(), "src/components/GroupSidebar.tsx"), "utf8");
+// Seçici tek bileşen; kenar çubuğu ve Kokpit'in grup rayı onu kullanıyor.
+const SRC = readFileSync(join(process.cwd(), "src/components/GroupColorPicker.tsx"), "utf8");
 
 /** Seçicinin işaretlemesi: `color-swatches` kabının gövdesi. */
 function swatchesBlock(): string {
@@ -43,12 +44,12 @@ describe("grup rengi seçicisi", () => {
      * menüyü yeniden açmak gerekiyordu. Renk seçmek tek hamlelik bir iş
      * değil — kullanıcı birkaçını deneyip grubun listedeki hâline bakıyor.
      *
-     * Ölçüt: kutuların hiçbirinin tıklamasında `setColorFor(null)` olmamalı.
+     * Ölçüt: kutuların hiçbirinin tıklamasında `onClose` olmamalı.
      * Kapatma yalnızca kapatma düğmesinin işi.
      */
-    expect(swatchesBlock(), "seçim hâlâ seçiciyi kapatıyor").not.toContain("setColorFor(null)");
+    expect(swatchesBlock(), "seçim hâlâ seçiciyi kapatıyor").not.toContain("onClose");
     // Kapatma yolu yine DURUYOR; yalnızca yeri değişti.
-    expect(SRC, "kapatma düğmesi kalkmış").toContain("setColorFor(null)");
+    expect(SRC, "kapatma düğmesi kalkmış").toContain("onClick={onClose}");
     expect(SRC, "kapatma düğmesi işaretlenmemiş").toContain("color-close");
   });
 

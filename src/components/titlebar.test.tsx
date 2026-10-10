@@ -64,7 +64,13 @@ beforeEach(() => {
   setPlatform("windows");
   const state = useStore.getState();
   useStore.setState({
-    settings: { ...state.settings, profiles: [PROFILE], defaultProfileId: "p1" },
+    // Sekme şeridi Premium/Klasik yerleşiminde; varsayılan Kokpit'te yerinde yol.
+    settings: {
+      ...state.settings,
+      profiles: [PROFILE],
+      defaultProfileId: "p1",
+      appearance: { ...state.settings.appearance, design: "premium" },
+    },
     groups: [
       {
         id: "g1",
@@ -300,7 +306,8 @@ describe("başlık çubuğu içeriği", () => {
     // Bir eylemi çubuktan çıkarmak onu erişilemez kılmamalı.
     expect(tabbar, "yeni sekme için düğme kalmadı").toContain("addTab(");
     expect(sidebar, "yeni grup için düğme kalmadı").toContain("addGroup()");
-    expect(settings, "aktarım Ayarlar'dan açılmıyor").toContain("transferOpen: true");
+    // İçe / dışa aktarım Ayarlar'ın kendi bölümü (Yedekleme).
+    expect(settings, "aktarım Ayarlar'da yok").toContain('section === "backup"');
     expect(statusbar, "geçmiş paneli açılamıyor").toContain("app.historyTitle");
     expect(statusbar, "favoriler paneli açılamıyor").toContain("app.favoritesTitle");
   });

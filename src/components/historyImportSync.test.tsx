@@ -84,7 +84,7 @@ vi.mock("../lib/ipc", () => ({
 }));
 
 const { useStore } = await import("../store/useStore");
-const { TransferDialog } = await import("./TransferDialog");
+const { BackupPanel } = await import("./BackupPanel");
 const { setLanguage } = await import("../lib/i18n");
 
 function record(id: string, command: string, startedAt: number): HistoryEntry {
@@ -138,7 +138,7 @@ async function startWith(local: HistoryEntry[], incoming: HistoryEntry[]) {
 
 /** Yedek dosyasını seçip yalnızca geçmişi verilen kiple uygular. */
 async function importHistory(mode: "Üzerine ekle" | "Üzerine yaz") {
-  const { getByText, findByText } = render(<TransferDialog />);
+  const { getByText, findByText } = render(<BackupPanel />);
   fireEvent.click(getByText("İçe al"));
   fireEvent.click(getByText("Dosya seç…"));
   const field = (await findByText("Komut geçmişi")).closest(".field")!;

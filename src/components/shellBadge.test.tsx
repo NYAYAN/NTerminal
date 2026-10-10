@@ -82,7 +82,9 @@ function seed(tabs: TabState[], showShellBadge = true, defaultProfileId = "p1") 
       ...state.settings,
       profiles: [PWSH, CMD],
       defaultProfileId,
-      appearance: { ...state.settings.appearance, showShellBadge },
+      // Rozetin iki yeri (şerit ve kenar çubuğu) Premium/Klasik yerleşimi;
+      // varsayılan Kokpit'te şeridin yerinde yol var.
+      appearance: { ...state.settings.appearance, showShellBadge, design: "premium" },
     },
     groups: [group(tabs)],
     activeGroupId: "g1",

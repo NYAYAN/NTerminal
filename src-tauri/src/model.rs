@@ -135,6 +135,16 @@ pub struct Appearance {
     pub ui_font_size: u16,
     /// Arayuzde tanimli palet anahtari.
     pub theme: String,
+    /// Arayuz tasarimi: "classic" | "premium" | "kokpit".
+    ///
+    /// Renk temasindan AYRI bir eksen: tema renkleri, tasarim bicimi (kose,
+    /// golge, katman, cam etkisi) soyluyor. Dogrulama ve uygulama arayuzde
+    /// (`lib/design.ts`); burasi yalnizca tasiyor. Varsayilan "kokpit" (ISTEK:
+    /// guncelleyen de ilk kuran da Kokpit'le acsin): alani olmayan eski bir
+    /// settings.json Kokpit'le aciliyor, baska tasarim isteyen Ayarlar >
+    /// Gorunum > Tasarim'dan donuyor. `lib/design.ts`
+    /// icindeki `DEFAULT_DESIGN` ile AYNI kalmali.
+    pub design: String,
     pub cursor_style: String,
     pub cursor_blink: bool,
     pub scrollback: u32,
@@ -171,6 +181,10 @@ pub struct Appearance {
     /// Ayarda tutuluyor, gecici arayuz durumunda degil: kullanici cubugu
     /// kapattiysa uygulamayi yeniden actiginda da kapali bekliyor.
     pub sidebar_collapsed: bool,
+    /// Kokpit'in grup rayi genis mi: genisken grup adlari karolarin yaninda
+    /// yaziyor. Ayarda, cunku genisletilen ray yeniden acilista da genis
+    /// bekleniyor (ISTEK: "grubu genislet daralt da yapabilir miyiz").
+    pub rail_expanded: bool,
     /// Favoriler panelinde DARALTILMIS grup adlari.
     ///
     /// Neden liste: favori grubu ayri bir varlik degil, favorinin uzerinde
@@ -203,6 +217,7 @@ impl Default for Appearance {
             ui_font_family: String::new(),
             ui_font_size: 14,
             theme: "nterminal-dark".into(),
+            design: "kokpit".into(),
             cursor_style: "bar".into(),
             cursor_blink: true,
             scrollback: 10_000,
@@ -216,6 +231,7 @@ impl Default for Appearance {
             // adina ayrilan yeri yiyor. Isteyen Ayarlar > Gorunum'dan aciyor.
             show_shell_badge: false,
             sidebar_collapsed: false,
+            rail_expanded: false,
             collapsed_favorite_folders: Vec::new(),
         }
     }

@@ -17,6 +17,7 @@ export type Section =
   | "profiles"
   | "groups"
   | "keys"
+  | "backup"
   | "about";
 
 export const SECTIONS: { id: Section; key: MsgKey }[] = [
@@ -28,6 +29,9 @@ export const SECTIONS: { id: Section; key: MsgKey }[] = [
   { id: "profiles", key: "settings.profiles" },
   { id: "groups", key: "settings.groups" },
   { id: "keys", key: "settings.keys" },
+  // Yedekleme: içe / dışa aktarım. Önceden Ayarlar'ın alt çubuğundan açılan
+  // ayrı bir pencereydi (gerekçe `BackupPanel` başında).
+  { id: "backup", key: "settings.backup" },
   { id: "about", key: "settings.about" },
 ];
 
@@ -85,6 +89,12 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { section: "general", group: "view.heading", key: "view.label", hint: "view.panesHint" },
 
   // ---------------------------------------------------------------- görünüm
+  {
+    section: "appearance",
+    group: "settings.design",
+    key: "settings.designLabel",
+    hint: "settings.designHint",
+  },
   {
     section: "appearance",
     group: "settings.theme",
@@ -242,6 +252,12 @@ export const SETTINGS_INDEX: SettingEntry[] = [
 
   // ------------------------------------------------------------- kısayollar
   { section: "keys", key: "settings.keysHeading", hint: "settings.keysHint" },
+
+  // -------------------------------------------------------------- yedekleme
+  // İki kip düğmesi `BackupPanel` içinde `data-setting` taşıyor; aramada
+  // "Dışa aktar" / "İçe al" seçilince o düğme vurgulanıyor.
+  { section: "backup", key: "transfer.export" },
+  { section: "backup", key: "transfer.import" },
 
   // --------------------------------------------------------------- hakkında
   // Satırın etiketi "Yüklü sürüm" ama aranan şey düğmenin işi: sonuç

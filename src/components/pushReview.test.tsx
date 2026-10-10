@@ -436,6 +436,34 @@ describe("bağlam şeridindeki rozet", () => {
     expect(ui.panelMode).toBe("git");
   });
 
+  it("iki durumlu: panel değişikliklerde açıkken ikinci tıklama kapatıyor", async () => {
+    // İSTEK: "değişiklikler butonu toggle değil, yapalım." Durum çubuğundaki
+    // Geçmiş / Favoriler düğmeleriyle aynı davranış.
+    const { container } = await serit(repo({ ahead: 0, changes: [] }));
+    const r = rozet(container)!;
+    expect(r.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(r);
+    await flush();
+    expect(useStore.getState().ui.historyOpen).toBe(true);
+    expect(useStore.getState().ui.panelMode).toBe("git");
+    expect(r.classList.contains("on")).toBe(true);
+    expect(r.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(r);
+    await flush();
+    expect(useStore.getState().ui.historyOpen).toBe(false);
+    expect(r.classList.contains("on")).toBe(false);
+
+    // Panel BAŞKA kipte açıkken tıklama kapatmıyor, değişikliklere geçiriyor.
+    useStore.getState().setUi({ historyOpen: true, panelMode: "history" });
+    await flush();
+    fireEvent.click(r);
+    await flush();
+    expect(useStore.getState().ui.historyOpen).toBe(true);
+    expect(useStore.getState().ui.panelMode).toBe("git");
+  });
+
   it("commit'ten sonra gönderilmemiş commit varken ± 0, ipucu söylüyor, paneli açıyor", async () => {
     const { container } = await serit(repo({ ahead: 2, changes: [] }));
     const r = rozet(container)!;

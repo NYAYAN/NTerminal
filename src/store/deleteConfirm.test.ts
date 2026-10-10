@@ -92,6 +92,7 @@ function favorite(id: string, command: string) {
     groupId: null,
     folder: null,
     cwd: null,
+    alias: null,
     createdAt: 0,
     usedCount: 0,
     lastUsedAt: null,

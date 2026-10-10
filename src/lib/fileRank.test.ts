@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fileScore, fuzzyScore, rankFiles } from "./format";
+import { fileMatch, fileScore, fuzzyScore, rankFiles } from "./format";
 
 /**
  * Ctrl+P dosya aramasının sıralaması.
@@ -132,5 +132,80 @@ describe("dağınık eşleşme sınırı", () => {
     expect(fuzzyScore("git checkout main", "cm"), "komut aramasında dağınık eşleşme kalkmış")
       .not.toBe(null);
     expect(fuzzyScore("git commit", "commit")).toBe(4);
+  });
+});
+
+/**
+ * Eşleşen harflerin YERLERİ (`fileMatch`): Ctrl+P satırındaki vurgu ve
+ * "Yakın eşleşmeler" ayracı bunlara bakıyor.
+ *
+ * Vurgu sıralamayla AYNI kararı vermeli: başka harfleri gösterirse kullanıcı
+ * bir dosyanın neden o sırada olduğunu yanlış okur.
+ */
+describe("eşleşen harfler", () => {
+  const harfler = (yol: string, q: string) =>
+    fileMatch(yol, q)!
+      .positions.map((i) => yol[i])
+      .join("");
+
+  it("adda birebir: adın içindeki harfler", () => {
+    expect(fileMatch("src/components/FilePalette.tsx", "palet")).toEqual({
+      positions: [19, 20, 21, 22, 23],
+      scattered: false,
+    });
+  });
+
+  it("yolda birebir: klasördeki harfler", () => {
+    expect(harfler("src/lib/format.ts", "src/lib")).toBe("src/lib");
+    expect(fileMatch("src/lib/format.ts", "src/lib")!.scattered).toBe(false);
+  });
+
+  it("adda dağınık: harf harf ve 'dağınık' işaretli", () => {
+    // u-P-d-A-terRe-LE-ase.-T-est.ts
+    expect(fileMatch("src/lib/updaterRelease.test.ts", "palet")).toEqual({
+      positions: [9, 11, 17, 18, 23],
+      scattered: true,
+    });
+  });
+
+  it("yolda dağınık: klasöre taşan harfler klasörde işaretli", () => {
+    // `default.json`da "p" yok; ilk dört harf `capabilities` klasöründen.
+    expect(fileMatch("src-tauri/capabilities/default.json", "palet")).toEqual({
+      positions: [12, 13, 16, 20, 29],
+      scattered: true,
+    });
+  });
+
+  it("Türkçe büyük İ vurguyu kaydırmıyor", () => {
+    // "İ" küçülünce İKİ birim ("i" + birleşen nokta). Küçük metindeki konumu
+    // olduğu gibi taşımak vurguyu bir harf sağa kaydırırdı: "çer" → "eri".
+    expect(harfler("docs/İçerik.md", "çer")).toBe("çer");
+    expect(harfler("docs/İçerik.md", "rik")).toBe("rik");
+  });
+
+  it("iki birimlik karakter bütün işaretleniyor", () => {
+    expect(harfler("a/😀b.ts", "😀")).toBe("😀");
+  });
+
+  it("karar `fileScore`la aynı: eşleşme var/yok ve dağınık = 1000+", () => {
+    const ornekler: [string, string][] = [
+      ["src/README.md", "readme"],
+      ["readme/notlar.txt", "readme/no"],
+      ["src/GitChanges.tsx", "gtchngs"],
+      ["src/components/GitChanges.tsx", "compgit"],
+      ["src-tauri/shell-integration/modules/PSReadLine/System.Runtime.InteropServices.RuntimeInformation.dll", "README.md"],
+      ["a.ts", "zzzq"],
+      ["docs/İçerik.md", "içerik"],
+    ];
+    for (const [yol, q] of ornekler) {
+      const puan = fileScore(yol, q);
+      const eslesme = fileMatch(yol, q);
+      expect(eslesme === null, `${yol} / ${q}`).toBe(puan === null);
+      if (puan !== null) expect(eslesme!.scattered, `${yol} / ${q}`).toBe(puan >= 1000);
+    }
+  });
+
+  it("boş sorguda işaret yok", () => {
+    expect(fileMatch("a.ts", "  ")).toEqual({ positions: [], scattered: false });
   });
 });

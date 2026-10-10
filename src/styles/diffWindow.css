@@ -430,6 +430,7 @@
   white-space: pre;
   tab-size: 4;
   cursor: text;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -561,6 +562,7 @@
 .dw-line.fold,
 .dw-gutter-row.fold {
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -600,6 +602,7 @@
   height: 100%;
   overflow: hidden;
   background: var(--dw-bg);
+  -webkit-user-select: none;
   user-select: none;
 }
 

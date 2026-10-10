@@ -26,7 +26,7 @@ import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
 import { quoteForShell, shellFamily } from "../lib/shellQuote";
-import { ancestorDirs } from "../lib/dirs";
+import { ancestorDirs, sameDir } from "../lib/dirs";
 import { DEFAULT_FLAGS } from "../lib/textSearch";
 import {
   canSuggest,
@@ -35,6 +35,7 @@ import {
   recentCommands,
   type SuggestEntry,
 } from "../lib/suggest";
+import { applyDesignToDocument } from "../lib/design";
 import type { Section } from "../lib/settingsIndex";
 import {
   SYSTEM_THEME,
@@ -81,6 +82,9 @@ export const sessions = new Map<string, TerminalSession>();
 
 /** `ViewerReveal.seq` için: aynı satıra ikinci gidiş de görüntüleyiciyi kaydırsın. */
 let revealSeq = 0;
+
+/** "Son açılanlar"da tutulan en fazla dosya (bkz. `UiState.recentFiles`). */
+export const RECENT_FILES_MAX = 10;
 
 /**
  * Durdurma silahının açık kalma süresi (ms).
@@ -259,7 +263,6 @@ export interface UiState {
    * ötekinde kapalı kalsaydı aynı sorgu iki yerde iki ayrı sonuç verirdi.
    */
   searchFlags: SearchFlags;
-  transferOpen: boolean;
   searchOpen: boolean;
   /**
    * Dizin seçicinin açık olduğu yol; kapalıyken null.
@@ -345,6 +348,18 @@ export interface UiState {
    * aramasından açılan dosyada dolu, ağaçtan açılanda null.
    */
   viewerReveal: ViewerReveal | null;
+  /**
+   * Görüntüleyicide son açılan dosyalar (mutlak yol), en yenisi başta; en çok
+   * `RECENT_FILES_MAX`. Ctrl+P boş açılınca "Son açılanlar" bölümü bunlar.
+   *
+   * `openFile` dolduruyor, yani nereden açıldığı fark etmiyor: palet, ağaç,
+   * Değişiklikler listesi — "az önce baktığım dosya" her yoldan aynı şey.
+   *
+   * Yalnızca BU OTURUMUN listesi: diske yazılmıyor (`persistNow` yalnızca
+   * çalışma alanını yazıyor), uygulama kapanınca gidiyor — `gitDrafts` gibi
+   * geçici arayüz durumu.
+   */
+  recentFiles: readonly string[];
   /**
    * "Değişiklikler" listesinde AÇIK dosyaların yolları; listede olmayan satır kapalı.
    *
@@ -644,6 +659,8 @@ interface Store {
    */
   moveFavoriteTo: (id: string, target: DropTarget) => Promise<void>;
   runFavorite: (id: string, execute: boolean) => Promise<void>;
+  /** Kullanım sayacını artırır: listeden çalıştırma ve kısaltma aynı yoldan. */
+  markFavoriteUsed: (id: string) => Promise<void>;
   isFavorite: (command: string) => boolean;
 
   setUi: (patch: Partial<UiState>) => void;
@@ -947,6 +964,8 @@ export const useStore = create<Store>((set, get) => ({
       uiFontFamily: "",
       uiFontSize: 14,
       theme: "nterminal-dark",
+      // `lib/design.ts` içindeki `DEFAULT_DESIGN` ve `model.rs` ile aynı.
+      design: "kokpit",
       cursorStyle: "bar",
       cursorBlink: true,
       scrollback: 10000,
@@ -957,6 +976,7 @@ export const useStore = create<Store>((set, get) => ({
       viewMode: "tabs",
       showShellBadge: false,
       sidebarCollapsed: false,
+      railExpanded: false,
       collapsedFavoriteFolders: [],
     },
     behavior: {
@@ -1018,7 +1038,6 @@ export const useStore = create<Store>((set, get) => ({
     paletteMode: "files",
     paletteQuery: "",
     searchFlags: DEFAULT_FLAGS,
-    transferOpen: false,
     searchOpen: false,
     dirPicker: null,
     branchPicker: null,
@@ -1031,6 +1050,7 @@ export const useStore = create<Store>((set, get) => ({
     treeOpen: false,
     viewerPath: null,
     viewerReveal: null,
+    recentFiles: [],
     gitExpanded: [],
     gitShowPaths: false,
     gitDrafts: {},
@@ -1060,6 +1080,7 @@ export const useStore = create<Store>((set, get) => ({
       // Dil temadan once: hata iletileri de dogru dilde cikabilsin.
       applyLanguage(settings.language);
       applyThemeToDocument(getTheme(settings.appearance.theme));
+      applyDesignToDocument(settings.appearance.design);
       applyUiFont(settings.appearance.uiFontFamily, settings.appearance.uiFontSize);
       set({
         ready: true,
@@ -1138,6 +1159,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ settings: next });
     applyLanguage(next.language);
     applyThemeToDocument(getTheme(next.appearance.theme));
+    applyDesignToDocument(next.appearance.design);
     applyUiFont(next.appearance.uiFontFamily, next.appearance.uiFontSize);
     // Terminaller yakınlaştırılmış boyutu görüyor (bkz. `terminalSettings`).
     const forTerminals = terminalSettings(next);
@@ -1197,6 +1219,7 @@ export const useStore = create<Store>((set, get) => ({
       const fresh = sanitizeSettings(await api.resetSettings());
       set({ settings: fresh });
       applyThemeToDocument(getTheme(fresh.appearance.theme));
+      applyDesignToDocument(fresh.appearance.design);
       applyUiFont(fresh.appearance.uiFontFamily, fresh.appearance.uiFontSize);
       const forTerminals = terminalSettings(fresh);
       for (const session of sessions.values()) session.applySettings(forTerminals);
@@ -2254,6 +2277,10 @@ export const useStore = create<Store>((set, get) => ({
       if (!get().changeDir(favorite.cwd)) return;
     }
     get().insertCommand(favorite.command, execute);
+    await get().markFavoriteUsed(id);
+  },
+
+  async markFavoriteUsed(id) {
     await api.favoritesMarkUsed(id).catch(() => {});
     await get().loadFavorites();
   },
@@ -2662,6 +2689,7 @@ export const useStore = create<Store>((set, get) => ({
     const active = get().activeTab();
     const root = active ? (sessions.get(active.tab.id)?.cwd ?? active.tab.cwd) : null;
     const eksik = (root ? (ancestorDirs(root, path) ?? []) : []).filter((d) => !ui.treeExpanded.includes(d));
+    const recent = ui.recentFiles;
     set({
       ui: {
         ...ui,
@@ -2670,6 +2698,12 @@ export const useStore = create<Store>((set, get) => ({
         viewerReveal: at ? { ...at, seq: ++revealSeq } : null,
         // Değişmediyse AYNI dizi: yeni bir dizi ağacı boşuna yeniden çizerdi.
         treeExpanded: eksik.length > 0 ? [...ui.treeExpanded, ...eksik] : ui.treeExpanded,
+        // Yeniden açılan dosya başa geçiyor, iki kez girmiyor. `sameDir` aynı
+        // dosyanın iki yazımını (ayırıcı, Windows'ta harf) bir sayıyor.
+        recentFiles:
+          recent.length > 0 && sameDir(recent[0], path)
+            ? recent
+            : [path, ...recent.filter((p) => !sameDir(p, path))].slice(0, RECENT_FILES_MAX),
       },
     });
   },

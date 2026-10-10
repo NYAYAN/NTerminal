@@ -3,7 +3,7 @@ import { Fragment, useState } from "react";
 import { baseName, dirName } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { searchSummary, segments, type TextSearchState } from "../lib/textSearch";
-import { ChevronIcon, SpinnerIcon } from "./Icons";
+import { ChevronIcon, FileKindIcon, SpinnerIcon } from "./Icons";
 import type { TextFileHits, TextLineHit, TextSearchResult } from "../types";
 
 /** Seçilen eşleşme: hangi dosyanın hangi satırı. */
@@ -33,7 +33,9 @@ export function flatHits(result: TextSearchResult | null): HitRef[] {
  * bir yerde düzeltilen işaret hatası ötekinde kalırdı.
  *
  * Grup başlığında dosyanın ADI önde, klasörü soluk ve arkada — Ctrl+P
- * satırındaki kararla aynı gerekçe: ayırt edici olan ad.
+ * satırındaki kararla aynı gerekçe: ayırt edici olan ad. Klasör de Ctrl+P'nin
+ * ad sekmesindeki gibi yazılıyor (`src/components`, sonda ayırıcı yok): iki
+ * sekme arasında Tab'a basan aynı klasörü iki ayrı biçimde görmesin.
  */
 export function TextResults({
   result,
@@ -43,6 +45,8 @@ export function TextResults({
   collapsible = false,
   isCurrent,
   stale = false,
+  kindIcons = false,
+  listbox,
 }: {
   result: TextSearchResult;
   /** Klavyeyle seçili satırın düz sıradaki yeri (bkz. `flatHits`). */
@@ -54,6 +58,14 @@ export function TextResults({
   isCurrent?: (ref: HitRef) => boolean;
   /** Yeni arama sürüyor; liste bir öncekinin sonucu. */
   stale?: boolean;
+  /** Dosya başlığında türün simgesi (palet; dar sütunda yer kaplamasın diye isteğe bağlı). */
+  kindIcons?: boolean;
+  /**
+   * Palette liste bir `listbox`, satırlar kimlikli `option`: odak kutuda
+   * kalıyor, seçili satırı kutu `aria-activedescendant` ile gösteriyor.
+   * Satır kimliği `${id}-${düz sıra}`.
+   */
+  listbox?: { id: string; label: string };
 }) {
   const t = useT();
   /**
@@ -64,15 +76,26 @@ export function TextResults({
 
   let index = -1;
   return (
-    <div className={stale ? "hits stale" : "hits"} aria-busy={stale}>
+    <div
+      className={stale ? "hits stale" : "hits"}
+      aria-busy={stale}
+      role={listbox ? "listbox" : undefined}
+      id={listbox?.id}
+      aria-label={listbox?.label}
+    >
       {result.files.map((file) => {
         const closed = collapsible && kapali.has(file.path);
-        const dir = dirName(file.path);
+        const dir = dirName(file.path)?.slice(0, -1);
         const head = (
           <>
             {collapsible && (
               <span className="hit-caret" aria-hidden="true">
                 <ChevronIcon open={!closed} size={10} />
+              </span>
+            )}
+            {kindIcons && (
+              <span className="file-ico" aria-hidden="true">
+                <FileKindIcon path={file.path} size={14} />
               </span>
             )}
             <span className="hit-name">{baseName(file.path)}</span>
@@ -85,7 +108,13 @@ export function TextResults({
         // dosyada alt alta dururken metin aynı sütundan başlamalı.
         const digits = String(file.lines[file.lines.length - 1]?.line ?? 0).length;
         return (
-          <div key={file.path} className="hit-file" style={{ "--hit-no": `${Math.max(2, digits)}ch` } as React.CSSProperties}>
+          <div
+            key={file.path}
+            className="hit-file"
+            role={listbox ? "group" : undefined}
+            aria-label={listbox ? file.path : undefined}
+            style={{ "--hit-no": `${Math.max(2, digits)}ch` } as React.CSSProperties}
+          >
             {collapsible ? (
               <button
                 type="button"
@@ -103,7 +132,9 @@ export function TextResults({
                 {head}
               </button>
             ) : (
-              <div className="hit-head" title={file.path}>
+              // Listbox'ta grubun adı zaten yol (`aria-label`); başlık okunursa
+              // her dosya iki kez söylenirdi.
+              <div className="hit-head" title={file.path} aria-hidden={listbox ? true : undefined}>
                 {head}
               </div>
             )}
@@ -120,6 +151,9 @@ export function TextResults({
                     type="button"
                     className={on || shown ? "hit-line on" : "hit-line"}
                     data-hit={i}
+                    id={listbox ? `${listbox.id}-${i}` : undefined}
+                    role={listbox ? "option" : undefined}
+                    aria-selected={listbox ? on : undefined}
                     aria-current={shown || undefined}
                     title={t("search.lineTitle", { path: file.path, line: hit.line })}
                     onMouseEnter={onActive ? () => onActive(i) : undefined}

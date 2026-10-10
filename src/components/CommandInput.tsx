@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { expandAlias } from "../lib/aliases";
 import { tokenizeCommand } from "../lib/cmdline";
 import { typingOutsideTerminal } from "../lib/focus";
 import { passThroughSequence, resolveInputMode, SIGINT, stdinKeyAction } from "../lib/inputMode";
@@ -94,6 +95,7 @@ export function CommandInput() {
   const stopArmed = useStore((s) => s.stopArmed);
   // Kopyalama kısayolu kutuda KUTU tarafından karşılanıyor (bkz. onKeyDown).
   const keys = useStore((s) => s.settings.keybindings);
+  const favorites = useStore((s) => s.favorites);
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
@@ -148,6 +150,9 @@ export function CommandInput() {
   const active = mode !== "raw";
   const stdin = mode === "stdin";
   const value = stdin ? reply : draft;
+  // İlk sözcük bir favori kısaltması mı (bkz. `lib/aliases.ts`). Yalnızca
+  // kabuğun satırında: çalışan programa giden yanıt açılmıyor.
+  const aliasHit = stdin ? null : expandAlias(value, favorites, activeGroupId);
   const setValue = stdin ? setReply : setDraft;
 
   useEffect(() => {
@@ -696,12 +701,16 @@ export function CommandInput() {
         store.acceptSuggestion();
         return;
       }
-      const text = value;
+      // Kısaltma burada açılıyor: kabuk, geçmiş ve blok başlığı TAM komutu
+      // görüyor. Komut bulunulan klasörde çalışıyor; favorinin kayıtlı
+      // klasörüne geçilmiyor (gerekçe `lib/aliases.ts` içinde).
+      const text = aliasHit ? aliasHit.text : value;
       // Boş satırda Enter da kabuğa gitmeli: kullanıcı istemi tazelemek
       // isteyebilir, kabuk da yeni bir istem çiziyor.
       send(`${text}\r`);
       setValue("");
       store.closeSuggestions();
+      if (aliasHit) void store.markFavoriteUsed(aliasHit.favorite.id);
     }
   };
 
@@ -784,6 +793,16 @@ export function CommandInput() {
             }}
           />
         </div>
+
+        {/* Kısaltmanın neye açılacağı, Enter'dan ÖNCE: "nrb" yazan kişi
+            hangi komutun gideceğini görmeli. Kutunun içinde değil yanında —
+            renkli katmanla metin kutusunun hizasına dokunmuyor. */}
+        {aliasHit && (
+          <span className="alias-hint" title={t("input.aliasTitle", { command: aliasHit.text })}>
+            <span aria-hidden="true">→</span>
+            <span className="alias-hint-cmd">{aliasHit.favorite.command}</span>
+          </span>
+        )}
 
         {stdin && (
           <button

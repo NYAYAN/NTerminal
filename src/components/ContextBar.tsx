@@ -43,6 +43,9 @@ export function ContextBar() {
   const allGit = useStore((s) => s.gitInfo);
   const node = useStore((s) => s.nodeEnv);
   const setUi = useStore((s) => s.setUi);
+  // Değişiklikler rozeti durum çubuğundaki Geçmiş / Favoriler gibi İKİ DURUMLU:
+  // panel zaten değişikliklerde açıksa ikinci tıklama kapatıyor.
+  const gitPanelOpen = useStore((s) => s.ui.historyOpen && s.ui.panelMode === "git");
 
   const group = groups.find((g) => g.id === activeGroupId);
   const tab = group?.tabs.find((item) => item.id === group.activeTabId) ?? group?.tabs[0];
@@ -171,7 +174,8 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
               (bkz. `PushReview`). */}
           <button
             type="button"
-            className="ctx-chip changes"
+            className={gitPanelOpen ? "ctx-chip changes on" : "ctx-chip changes"}
+            aria-pressed={gitPanelOpen}
             data-empty={changeTotal(git) === 0 ? "1" : undefined}
             title={
               git.ahead > 0
@@ -179,7 +183,9 @@ ${t(locked ? "dirs.lockedTitle" : "dirs.open")}`}
 ${tp("git.unpushed", git.ahead)}`
                 : t("git.viewChanges")
             }
-            onClick={() => setUi({ historyOpen: true, panelMode: "git" })}
+            onClick={() =>
+              setUi(gitPanelOpen ? { historyOpen: false } : { historyOpen: true, panelMode: "git" })
+            }
           >
             {`± ${changeTotal(git)}`}
           </button>

@@ -1,6 +1,7 @@
 // Rust tarafındaki model.rs / transfer.rs ile birebir eşleşen tipler.
 // serde `rename_all = "camelCase"` kullanıyor, o yüzden alanlar camelCase.
 
+import type { Design } from "./lib/design";
 import type { Platform } from "./lib/platform";
 
 export type { Platform };
@@ -82,6 +83,13 @@ export interface Appearance {
    */
   uiFontSize: number;
   theme: string;
+  /**
+   * Arayüz tasarımı: `classic` (düz, yoğun), `premium` (katmanlı, yumuşak
+   * gölgeli, cam etkili) ya da `kokpit` (premium görünüşü, grup rayı ve sabit
+   * panelli yerleşim). Renk temasından BAĞIMSIZ — gerekçe `lib/design.ts`
+   * içinde.
+   */
+  design: Design;
   cursorStyle: "block" | "bar" | "underline";
   cursorBlink: boolean;
   scrollback: number;
@@ -113,6 +121,12 @@ export interface Appearance {
    * yeniden açtığında da kapalı bekliyor.
    */
   sidebarCollapsed: boolean;
+  /**
+   * Kokpit'in grup rayı geniş mi: genişken grup adları karoların yanında
+   * yazıyor (bkz. `GroupRail`). Ayar, çünkü kullanıcı rayı genişlettiyse
+   * yeniden açılışta da öyle bekliyor.
+   */
+  railExpanded: boolean;
   /**
    * Favoriler panelinde DARALTILMIŞ grup adları.
    *
@@ -677,6 +691,13 @@ export interface Favorite {
   folder: string | null;
   /** Bu klasörde çalıştırılsın. null = aktif sekmenin klasörü. */
   cwd: string | null;
+  /**
+   * Komut kutusunda bu favoriyi çalıştıran kısaltma (`nrb`); yoksa null.
+   *
+   * Tek sözcük ve favoriler arasında tekil — kural ve gerekçesi
+   * `lib/aliases.ts` ile Rust `favorites.rs` içinde.
+   */
+  alias: string | null;
   createdAt: number;
   usedCount: number;
   lastUsedAt: number | null;
@@ -689,6 +710,7 @@ export interface NewFavorite {
   groupId?: string | null;
   folder?: string | null;
   cwd?: string | null;
+  alias?: string | null;
 }
 
 /**
@@ -702,6 +724,7 @@ export interface FavoritePatch {
   groupId?: string | null;
   folder?: string | null;
   cwd?: string | null;
+  alias?: string | null;
 }
 
 // ----------------------------------------------------------- import/export

@@ -1,6 +1,6 @@
 import { baseName, shortenPath } from "./format";
 import { t } from "./i18n";
-import type { Profile, ShellKind, TabState } from "../types";
+import type { Group, Profile, ShellKind, TabState } from "../types";
 
 /**
  * Sekme etiketleri. Sekme çubuğu ile kenar çubuğu aynı adı göstermek zorunda,
@@ -151,4 +151,28 @@ export function tabTooltip(tab: TabState, profile: Profile | undefined): string 
  */
 export function groupLabel(group: { name: string; ungrouped?: boolean }): string {
   return group.ungrouped ? t("group.ungrouped") : group.name;
+}
+
+/**
+ * Grubun rayda görünen iki harfi.
+ *
+ * Adda iki büyük harf varsa onlar ("NTerminal" → NT, "CopyBoard" → CB); yoksa
+ * birden çok sözcükte ilk iki sözcüğün baş harfleri ("Yeni grup" → YG); tek
+ * sözcükte ilk iki harf ("Sunucular" → Su). Türkçe büyük harf kuralı geçerli
+ * ("istemci" → İs).
+ */
+export function groupInitials(group: Pick<Group, "name">): string {
+  const name = group.name.trim();
+  if (!name) return "·";
+  const capitals = [...name].filter((ch) => ch !== ch.toLocaleLowerCase("tr") && /\p{L}/u.test(ch));
+  if (capitals.length >= 2) return capitals.slice(0, 2).join("");
+  const words = name.split(/[\s_\-./]+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words
+      .slice(0, 2)
+      .map((word) => [...word][0].toLocaleUpperCase("tr"))
+      .join("");
+  }
+  const letters = [...name];
+  return letters[0].toLocaleUpperCase("tr") + (letters[1] ?? "").toLocaleLowerCase("tr");
 }

@@ -6,6 +6,7 @@ import { FilePalette } from "./components/FilePalette";
 import { FolderIcon, GearIcon, SearchIcon, SidebarIcon } from "./components/Icons";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FilePanel } from "./components/FilePanel";
+import { GroupRail } from "./components/GroupRail";
 import { GroupSidebar } from "./components/GroupSidebar";
 import { HistoryRecall } from "./components/HistoryRecall";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -21,7 +22,6 @@ import { SuggestionBar } from "./components/SuggestionBar";
 import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { StashDialog } from "./components/StashDialog";
-import { TransferDialog } from "./components/TransferDialog";
 import { WindowControls } from "./components/WindowControls";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
@@ -43,6 +43,8 @@ export function App() {
   const nodeEnv = useStore((s) => s.nodeEnv);
   const setUi = useStore((s) => s.setUi);
   const sidebarCollapsed = settings.appearance.sidebarCollapsed;
+  // Kokpit yerleşimi: grupların rayı ayrı bir sütun (bkz. `GroupRail`).
+  const kokpit = settings.appearance.design === "kokpit";
 
   /*
    * `ui` nesnesinin TAMAMINA abone OLMUYORUZ, alan alan abone oluyoruz.
@@ -72,7 +74,6 @@ export function App() {
   const dirPicker = useStore((s) => s.ui.dirPicker);
   const branchPicker = useStore((s) => s.ui.branchPicker);
   const settingsOpen = useStore((s) => s.ui.settingsOpen);
-  const transferOpen = useStore((s) => s.ui.transferOpen);
   const stashDialog = useStore((s) => s.ui.stashDialog);
   const nodePicker = useStore((s) => s.ui.nodePicker);
   const toast = useStore((s) => s.ui.toast);
@@ -355,7 +356,6 @@ export function App() {
       // Ctrl+W onay beklerken ikinci bir kapatma istegi baslatir.
       const anyOverlayOpen =
         store.ui.settingsOpen ||
-        store.ui.transferOpen ||
         store.ui.paletteOpen ||
         store.ui.filePaletteOpen ||
         store.ui.searchOpen ||
@@ -377,7 +377,6 @@ export function App() {
         if (store.ui.filePaletteOpen) return store.setUi({ filePaletteOpen: false });
         if (store.ui.searchOpen) return store.setUi({ searchOpen: false });
         if (store.ui.settingsOpen) return store.setUi({ settingsOpen: false });
-        if (store.ui.transferOpen) return store.setUi({ transferOpen: false });
         return;
       }
       if (anyOverlayOpen) return;
@@ -748,7 +747,7 @@ export function App() {
             bunu ayarlar ikonu yapalım; N-Terminal yazısını sağına alalım."
             Adı ipucunda ve erişilebilir adında duruyor. */}
         <button
-          className="icon-btn view-btn"
+          className="icon-btn view-btn settings-btn"
           title={t("app.settingsTitle", { keys: key("settings") })}
           aria-label={t("app.settings")}
           onClick={() => setUi({ settingsOpen: true })}
@@ -800,6 +799,11 @@ export function App() {
         <WindowControls />
       </div>
 
+      {/* Kokpit'te gruplar soldaki rayda; kenar çubuğu yalnızca etkin grubun
+          sekmelerini gösteriyor. Ray kenar çubuğu kapalıyken de duruyor:
+          gruplar arası geçişin tek yolu o. */}
+      {kokpit && <GroupRail />}
+
       {/* Daraltılmışken hiç çizilmiyor: ızgaranın `auto` sütunu sıfıra
           iniyor ve terminal o alanı alıyor. */}
       {!sidebarCollapsed && <GroupSidebar />}
@@ -838,7 +842,6 @@ export function App() {
         <NodePicker env={nodeEnv} onClose={() => useStore.getState().setUi({ nodePicker: false })} />
       )}
       {settingsOpen && <SettingsDialog />}
-      {transferOpen && <TransferDialog />}
       {stashDialog && <StashDialog cwd={stashDialog.cwd} />}
 
       <ConfirmDialog />

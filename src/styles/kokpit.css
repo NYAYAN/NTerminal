@@ -1,0 +1,681 @@
+/*
+ * KOKPİT yerleşimi.
+ *
+ * Premium'un görünüşü, farklı bir iskelet: solda grup rayı (`GroupRail`),
+ * yanında etkin grubun sekme kartları (`GroupSidebar`), sekme şeridinin yerinde
+ * "grup › sekme" yolu (`TabBar`) ve terminalin YANINDA duran yan panel.
+ * Kokpit seçilince kökte `data-design="premium"` ve `data-layout="kokpit"`
+ * birlikte yazılıyor (`lib/design.ts`): renk, köşe, gölge premium.css'ten
+ * geliyor; bu dosya yalnızca yerleşimi ve Kokpit'e özgü öğeleri biçimliyor.
+ *
+ * HER kural `:root[data-layout="kokpit"]` ile başlıyor (testle bağlı,
+ * `styles/kokpit.test.ts`): Premium ve Klasik bu dosyadan hiç etkilenmiyor.
+ *
+ * Terminalin ölçülerine (yazı tipi, dolgu, kaydırma çubuğu) dokunulmuyor;
+ * gerekçe premium.css başında.
+ */
+
+:root[data-layout="kokpit"] {
+  --rail-bg: color-mix(in srgb, #000 16%, var(--surface-alt));
+}
+
+:root[data-layout="kokpit"][data-tone="light"] {
+  --rail-bg: color-mix(in srgb, var(--text) 5%, var(--surface-alt));
+}
+
+/* ---------------------------------------------------------------- iskelet */
+
+:root[data-layout="kokpit"] .app {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "titlebar titlebar titlebar"
+    "rail sidebar main";
+}
+
+/* Ayarlar rayın dibinde; başlık çubuğundaki dişli aynı düğmenin ikinci
+   kopyası olurdu. */
+:root[data-layout="kokpit"] .titlebar .settings-btn {
+  display: none;
+}
+
+/* -------------------------------------------------------------- grup rayı */
+
+:root[data-layout="kokpit"] .grail {
+  grid-area: rail;
+  width: 60px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--rail-bg);
+  border-right: 1px solid var(--hairline);
+}
+
+/* Gruplar kayıyor, araçlar dipte sabit: çok grupta da Ayarlar'a ulaşılsın.
+   Kaydırma çubuğu gizli — 60px'lik rayda çubuk karoları yana itiyordu;
+   tekerlek ve dokunmatik yüzey kaydırmaya devam ediyor. */
+:root[data-layout="kokpit"] .grail-groups {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+:root[data-layout="kokpit"] .grail-groups::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+:root[data-layout="kokpit"] .grail-item,
+:root[data-layout="kokpit"] .grail-add {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+/* Karo grubun renginde; harfler `--group-ink`: aynı rengin zeminde okunur
+   hâli (`readableAccent`). */
+:root[data-layout="kokpit"] .grail-item {
+  border: none;
+  background: color-mix(in srgb, var(--group-color) 18%, transparent);
+  color: var(--group-ink);
+  font-size: 0.9615rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+:root[data-layout="kokpit"] .grail-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--group-color) 28%, transparent);
+}
+
+/* Etkin grup: karodan rayın zemini kadar boşlukla ayrılan bir halka. Boşluk
+   olmadan halka karonun kenarı gibi okunuyordu. */
+:root[data-layout="kokpit"] .grail-item.on {
+  background: color-mix(in srgb, var(--group-color) 26%, transparent);
+  box-shadow:
+    0 0 0 2px var(--rail-bg),
+    0 0 0 4px var(--group-ink);
+}
+
+:root[data-layout="kokpit"] .grail button:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--rail-bg),
+    0 0 0 4px var(--accent-ring);
+}
+
+/* Grupta komut çalışıyor: kenar çubuğundaki meşgul noktasıyla aynı dil
+   (vurgu rengi, nabız). Rayın zemini kadar bir kesik onu karodan ayırıyor. */
+:root[data-layout="kokpit"] .grail-busy {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--rail-bg);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+:root[data-layout="kokpit"] .grail-add {
+  border: 1px dashed var(--hairline-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+:root[data-layout="kokpit"] .grail-add:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+:root[data-layout="kokpit"] .grail-tools {
+  flex: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+:root[data-layout="kokpit"] .grail-tool {
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-dim);
+}
+
+:root[data-layout="kokpit"] .grail-tool:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+/* Açık panelin düğmesi: üzerine gelince de "açık" kalıyor; genel üzerine
+   gelme kuralı onu nötr griye çeviriyordu. */
+:root[data-layout="kokpit"] .grail-tool.on,
+:root[data-layout="kokpit"] .grail-tool.on:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* Sürüklenen karo soluk; bırakma yeri boşluğa çizilen bir çizgi. Çizgi
+   özniteliğe bağlı sözde öğe: sürüklerken eklenen bir öğe karoları
+   kaydırırdı ve WebKit kayan öğenin sürüklemesini başlatmıyor. */
+:root[data-layout="kokpit"] .grail-item.dragging {
+  opacity: 0.4;
+}
+
+:root[data-layout="kokpit"] .grail-item[data-drop]::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Karolar arası boşluk 10px; çizgi tam ortasında. */
+:root[data-layout="kokpit"] .grail-item[data-drop="before"]::after {
+  top: -6.5px;
+}
+
+:root[data-layout="kokpit"] .grail-item[data-drop="after"]::after {
+  bottom: -6.5px;
+}
+
+/* Yanında ad ya da renk kutusu açık olan karo halkalı: kutu karonun yanında
+   da olsa hangi grubun düzenlendiği belli olsun. */
+:root[data-layout="kokpit"] .grail-item.editing {
+  box-shadow:
+    0 0 0 2px var(--rail-bg),
+    0 0 0 4px var(--accent-ring);
+}
+
+/* Karonun yanındaki kutu (ad ya da renk): yüzen menülerle aynı cam yüzey. */
+:root[data-layout="kokpit"] .grail-pop {
+  position: fixed;
+  z-index: 301;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-layout="kokpit"] .grail-pop .rename-input {
+  flex: none;
+  width: 14rem;
+  height: 28px;
+  padding: 0 8px;
+}
+
+/* Kenar çubuğundaki girinti (grup adının hizası) kutuda yok. */
+:root[data-layout="kokpit"] .grail-pop .color-picker {
+  gap: 10px;
+  padding: 2px;
+}
+
+/* Rayın kendi ipucu: üzerine gelir gelmez, dayanağın sağında ve ortasına
+   hizalı (konum `GroupRail`de). Tarayıcının `title` ipucu ancak bir saniye
+   sonra çıkıyordu; karoda yalnız baş harf durduğu için ad bilgisinin tek
+   kaynağı oydu. Tıklamayı yutmasın diye `pointer-events: none`. */
+:root[data-layout="kokpit"] .grail-tip {
+  position: fixed;
+  z-index: 302;
+  transform: translateY(-50%);
+  padding: 5px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 0.9231rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Geniş ray: karonun yanında grubun adı, araçlar dipte tek sıra.
+   Genişlik GEÇİŞSİZ değişiyor: kayarak açılan bir ray terminali her karede
+   yeniden ölçtürür (`fit` → PTY'ye yeni ölçü → kabuk istemi yeniden çizer). */
+:root[data-layout="kokpit"] .grail.expanded {
+  width: 220px;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-groups {
+  align-items: stretch;
+  padding: 12px;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-item,
+:root[data-layout="kokpit"] .grail.expanded .grail-add {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 12px 0 0;
+}
+
+/* Baş harfler ve "+" daraltılmış raydaki karonun yerinde: 40px'lik sütun. */
+:root[data-layout="kokpit"] .grail.expanded .grail-initials {
+  flex: none;
+  width: 40px;
+  display: grid;
+  place-items: center;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-add > svg {
+  flex: none;
+  margin: 0 13px;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9615rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-add .grail-name {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+/* Meşgul noktası karonun köşesinde kalıyor, satırın ucunda değil. */
+:root[data-layout="kokpit"] .grail.expanded .grail-busy {
+  right: auto;
+  left: 31px;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-tools {
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 8px 12px 12px;
+}
+
+/* Aç-kapa oku: kapalıyken "genişlet" (sağa), açıkken "daralt" (sola). */
+:root[data-layout="kokpit"] .grail-toggle[aria-pressed="true"] svg {
+  transform: scaleX(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-layout="kokpit"] .grail-busy,
+  :root[data-layout="kokpit"] .tab-row-last.running::before {
+    animation: none;
+  }
+}
+
+/* ----------------------------------------------------------- sekme sütunu */
+
+/* Grupların başlığı ve araçları (favori süzgeci, hepsini katla, yeni grup)
+   rayda ya da bu sütunda karşılığı olmayan şeyler: sütun tek grup gösteriyor. */
+:root[data-layout="kokpit"] .sidebar-head {
+  display: none;
+}
+
+:root[data-layout="kokpit"] .sidebar-scroll {
+  padding: 0 10px 12px;
+}
+
+/* Grup kartı yok: sütunun kendisi grubun kartı. */
+:root[data-layout="kokpit"] .group,
+:root[data-layout="kokpit"] .group.active,
+:root[data-layout="kokpit"] .group.loose {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* Grubun başlığı sütunun başlığı: renk noktası, ad, sayı. Sürüklenmiyor
+   (tek grup var) ve katlanmıyor. */
+:root[data-layout="kokpit"] .group-row {
+  min-height: 46px;
+  margin: 0 -10px 8px;
+  padding: 0 8px 0 18px;
+  gap: 8px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--hairline);
+  cursor: default;
+}
+
+:root[data-layout="kokpit"] .group-row:hover {
+  background: none;
+}
+
+:root[data-layout="kokpit"] .group-row:active {
+  cursor: default;
+}
+
+:root[data-layout="kokpit"] .group-caret {
+  display: none;
+}
+
+:root[data-layout="kokpit"] .group-rail,
+:root[data-layout="kokpit"] .group.active .group-rail {
+  position: static;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  opacity: 1;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--group-color) 60%, transparent);
+}
+
+:root[data-layout="kokpit"] .group-name {
+  font-size: 1.0769rem;
+}
+
+/* Gruplanmamış kovanın başlığında eylem yok; üzerine gelince sayı yerinde
+   kalsın (genel kural sayıyı eylemlere yer açmak için gizliyor). */
+:root[data-layout="kokpit"] .group-row.loose-head:hover .group-count {
+  display: block;
+}
+
+/* Sekmeler KART: üstte rozet ve ad, altında klasör, en altta son komut. */
+:root[data-layout="kokpit"] .group-tabs,
+:root[data-layout="kokpit"] .group.active .group-tabs,
+:root[data-layout="kokpit"] .group.loose .group-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+:root[data-layout="kokpit"] .group-tabs::before {
+  display: none;
+}
+
+:root[data-layout="kokpit"] .tab-row {
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 0;
+  padding: 10px 8px 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+:root[data-layout="kokpit"] .tab-row:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+:root[data-layout="kokpit"] .tab-row.active {
+  background: color-mix(in srgb, var(--group-color) 10%, var(--raised));
+  border-color: color-mix(in srgb, var(--group-color) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-layout="kokpit"] .tab-row-badge {
+  margin-top: 1px;
+}
+
+:root[data-layout="kokpit"] .tab-row-body {
+  gap: 4px;
+}
+
+:root[data-layout="kokpit"] .tab-row.active .tab-row-title {
+  font-weight: 600;
+}
+
+:root[data-layout="kokpit"] .tab-row-path,
+:root[data-layout="kokpit"] .tab-row-last {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono-font);
+  font-size: 0.8077rem;
+  color: color-mix(in srgb, var(--text) 45%, var(--text-dim));
+}
+
+:root[data-layout="kokpit"] .tab-row-last {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Son komutun önünde istem işareti; komut sürüyorsa yerinde nabız gibi atan
+   nokta. Sağ üstteki meşgul noktası o zaman gizleniyor (aşağıda). */
+:root[data-layout="kokpit"] .tab-row-last::before {
+  content: "❯";
+  flex: none;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+:root[data-layout="kokpit"] .tab-row-last.running::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 1;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+:root[data-layout="kokpit"] .tab-row-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-layout="kokpit"] .tab-row-port {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+  line-height: 16px;
+}
+
+:root[data-layout="kokpit"] .tab-row:has(.tab-row-last.running) > .tab-dot.busy {
+  display: none;
+}
+
+/* Sağdaki göstergeler adın satırına hizalı. */
+:root[data-layout="kokpit"] .tab-row > .tab-dot,
+:root[data-layout="kokpit"] .tab-row > .tab-row-idle {
+  margin-top: 5px;
+}
+
+:root[data-layout="kokpit"] .tab-row > .tab-row-lock {
+  margin-top: 1px;
+}
+
+/* Kapat düğmesi kartın sağ üst köşesinde, akışın DIŞINDA: gizliyken de yer
+   kaplıyordu ve alt satırlar (klasör, son komut, port) kartın sağ kenarından
+   27px önce bitiyordu. Üzerine gelince durum noktasının yerini alıyor; adın
+   satırı ona yer bırakıyor. */
+:root[data-layout="kokpit"] .tab-row > .tab-row-close {
+  position: absolute;
+  top: 9px;
+  right: 7px;
+}
+
+:root[data-layout="kokpit"] .tab-row:hover > :is(.tab-dot, .tab-row-idle) {
+  visibility: hidden;
+}
+
+:root[data-layout="kokpit"] .tab-row-title {
+  padding-right: 18px;
+}
+
+:root[data-layout="kokpit"] .group-tabs > .add-tab {
+  width: 100%;
+  min-height: 34px;
+  margin: 4px 0 0;
+  padding: 0 10px;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.9231rem;
+}
+
+:root[data-layout="kokpit"] .group-tabs > .add-tab:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ----------------------------------------------------------- durum çubuğu
+ *
+ * Sağdaki düğmeler (⋯, Geçmiş, Favoriler; varsa güncelleme rozeti ve yolu
+ * kopyala) daha küçük: Kokpit'te Geçmiş ve Favoriler rayda da var, burada
+ * ikincil kopya. İSTEK: "kokpitte geçmiş favoriler ve ... bunları biraz
+ * ufaltmak iyi olabilir." ÖLÇÜLEN: düğmeler genel `button` kuralının 26px
+ * taban yüksekliğini alıyordu (metinleri 15px) ve 31px'lik çubuğu
+ * dolduruyordu. Yazı boyu aynı kalıyor; küçülen hap. */
+:root[data-layout="kokpit"] .statusbar .status-btn {
+  min-height: 0;
+  height: 20px;
+  padding: 0 7px;
+  line-height: 18px;
+}
+
+:root[data-layout="kokpit"] .statusbar .status-more {
+  width: 20px;
+  padding: 0;
+  justify-content: center;
+}
+
+:root[data-layout="kokpit"] .statusbar .copy-cwd {
+  padding: 0 4px;
+}
+
+/* ------------------------------------------------------------ yol çubuğu */
+
+:root[data-layout="kokpit"] .tabbar {
+  padding-left: 16px;
+}
+
+/* Yükseklik sekme hapıyla aynı (28px): kenar çubuğu kapatılınca şerit geri
+   geliyor ve terminal satır sayısı bu yüzden değişmesin. */
+:root[data-layout="kokpit"] .tabbar-crumb {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9615rem;
+  white-space: nowrap;
+}
+
+:root[data-layout="kokpit"] .crumb-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--group-color);
+}
+
+:root[data-layout="kokpit"] .crumb-group {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
+:root[data-layout="kokpit"] .crumb-sep {
+  flex: none;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+:root[data-layout="kokpit"] .crumb-tab {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-weight: 600;
+}
+
+:root[data-layout="kokpit"] .tabbar-crumb .tab-rename {
+  flex: 0 1 18rem;
+}
+
+/* -------------------------------------------------------- sabit yan panel
+ *
+ * Premium ve Klasik'te yan panel terminalin ÜSTÜNDE açılıyor ki terminal ölçü
+ * değiştirmesin (gerekçe global.css `.side-panel`). Kokpit'te panel sürekli
+ * açık duran bir denetim yüzeyi: terminalin sağ kenarını örtmemeli, kendi
+ * sütununda duruyor. Bedeli bilinçli: panel açılıp kapanınca terminal
+ * yeniden ölçülüyor — pencereyi daraltmak gibi.
+ *
+ * Durum çubuğu iki sütunun altında boydan boya. */
+:root[data-layout="kokpit"] .main {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "tabbar panel"
+    "terminal panel"
+    "context panel"
+    "links panel"
+    "input panel"
+    "status status";
+  /* Panel terminali örtmüyor: global.css'teki "panelin solunda dur"
+     kaydırmaları (blok başlığı, araçları, en alta in düğmesi, arama çubuğu,
+     dosya katmanı) sıfıra iniyor. `SidePanel` genişliği satır içi stille
+     yazıyor; onu yenmek için `!important` şart. */
+  --side-panel-w: 0px !important;
+}
+
+/* Üst sınır pencereye göre: `auto` sütunda yüzde, sütunu panelin kendisi
+   belirlediği için döngüye giriyordu. */
+:root[data-layout="kokpit"] .side-panel {
+  grid-area: panel;
+  justify-self: stretch;
+  max-width: min(720px, 45vw);
+  border-left-color: var(--hairline);
+  box-shadow: none;
+}
+
+/* Panelin başlığı sekme çubuğuyla aynı satırda: alt çizgileri tek bir yatay
+   çizgi olsun. ÖLÇÜLEN: çubuk 45px (6 + 32'lik görünüm düğmesi + 6 + 1
+   kenarlık, hepsi px — yazı ölçüsüyle değişmiyor), başlık 39px'ti ve iki
+   çizgi 6px kayıktı. */
+:root[data-layout="kokpit"] .side-panel .panel-head {
+  min-height: 45px;
+}

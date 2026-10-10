@@ -292,6 +292,7 @@ fn disa_aktar_ice_al_zinciri() {
             group_id: None,
             folder: None,
             cwd: dirs::home_dir().map(|p| p.to_string_lossy().to_string()),
+            alias: None,
         })
         .unwrap();
     history

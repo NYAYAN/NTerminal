@@ -67,7 +67,9 @@ export const MESSAGES = {
   // birini değiştirip ötekini unutmanın yolu.
   "common.pathCopied": ["Yol kopyalandı", "Path copied"],
   "dirs.search": ["Klasör ara…", "Search directories…"],
-  "files.search": ["Bu dizinde dosya ara…", "Search files in this directory…"],
+  // Ctrl+P'nin ad sekmesi. Kutu NEYİ aradığını söylüyor; NEREDE aradığını
+  // şeridin sağındaki dizin rozeti (`files.rootTitle`).
+  "files.search": ["Dosya adı yazın…", "Type a file name…"],
   "app.searchFiles": ["Dosya ara", "Search files"],
   "app.searchTitle": [
     "Bulunduğun dizinde dosya ara ({keys})",
@@ -76,11 +78,35 @@ export const MESSAGES = {
   // İpucunun ikinci yarısı; içerik kısayolu tanımsızsa (ayar dosyasından
   // silinmiş) hiç yazılmıyor — boş bir "()" göstermesin.
   "app.searchTextTitle": ["Dosyaların içinde ara ({keys})", "Search inside files ({keys})"],
-  "files.empty": ["Eşleşen dosya yok", "No matching files"],
-  "files.hint": [
-    "Enter dosyayı açar · Shift+Enter yolunu komut satırına ekler · Tab içeriklerde arar",
-    "Enter opens the file · Shift+Enter appends its path to the command line · Tab searches contents",
+  "files.rootTitle": ["Aranan dizin: {path}", "Searching in: {path}"],
+  // Boş sorgunun bölümleri ve dağınık eşleşmelerin ayracı (bkz. `fileSections`).
+  "files.changed": ["Değişenler", "Changed"],
+  "files.recent": ["Son açılanlar", "Recently opened"],
+  "files.all": ["Tüm dosyalar", "All files"],
+  "files.near": ["Yakın eşleşmeler", "Close matches"],
+  // Görüntüleyicide açık dosyanın satırındaki rozet.
+  "files.openTag": ["açık", "open"],
+  "files.results.one": ["{n} sonuç", "{n} result"],
+  "files.results.other": ["{n} sonuç", "{n} results"],
+  // Liste iki yüz satırda kesiliyor; kesildiyse sayı "en az" diyor.
+  "files.resultsCapped": ["{n}+ sonuç", "{n}+ results"],
+  "files.reading": ["{dir} okunuyor…", "Reading {dir}…"],
+  "files.none": ["{dir} altında dosya yok", "No files under {dir}"],
+  "files.noMatch": ["“{query}” adında dosya yok", "No file name matches “{query}”"],
+  "files.lookedAt.one": ["{dir} altındaki {n} dosyaya bakıldı", "Looked at {n} file under {dir}"],
+  "files.lookedAt.other": ["{dir} altındaki {n} dosyaya bakıldı", "Looked at {n} files under {dir}"],
+  "files.noDirDetail": [
+    "Etkin sekmenin kabuğu bulunduğu dizini henüz bildirmedi",
+    "The active tab's shell hasn't reported its directory yet",
   ],
+  "files.searchNames": ["Dosya adlarında ara", "Search file names"],
+  // Alt şeridin tuş açıklamaları: her biri bir TUŞ ROZETİNİN ardından geliyor
+  // ("[↩] aç"), cümle başı değil — öneri listesindeki `suggest.hint*` gibi.
+  "files.hintNav": ["gez", "navigate"],
+  "files.hintOpen": ["aç", "open"],
+  "files.hintInsert": ["yolu ekle", "insert path"],
+  "files.hintContent": ["içerikte ara", "search contents"],
+  "files.hintClose": ["kapat", "close"],
   "action.filePalette": ["Dosya ara", "Search files"],
   // Dosyaların İÇİNDE arama: paletin ikinci sekmesi ve dosya sütunundaki
   // aramanın ikinci kipi. Arama Rust'ta (`search.rs`); sınırlar söyleniyor.
@@ -120,11 +146,20 @@ export const MESSAGES = {
   "search.gitIgnored": ["Git'in yok saydığı dosyalar aranmadı", "Files ignored by git were not searched"],
   "search.badRegex": ["Geçersiz düzenli ifade: {detail}", "Invalid regular expression: {detail}"],
   "search.failed": ["Arama yapılamadı: {detail}", "Search failed: {detail}"],
-  "search.contentHint": [
-    "Enter dosyayı o satırda açar · Shift+Enter yolunu komut satırına ekler · Tab dosya adlarına döner",
-    "Enter opens the file at that line · Shift+Enter appends its path to the command line · Tab goes back to file names",
-  ],
   "search.lineTitle": ["{path} — {line}. satır", "{path} — line {line}"],
+  // Paletin içerik sekmesi: alt şeritteki tuş açıklamaları (`files.hint*` gibi
+  // parça) ve boş / sonuçsuz / süren aramanın ortadaki yazıları.
+  "search.hintOpenLine": ["o satırda aç", "open at line"],
+  "search.hintNames": ["dosya adları", "file names"],
+  "search.emptyTitle": ["Aranacak metni yazın", "Type the text to search for"],
+  "search.emptyWhere": ["{dir} altındaki dosyaların içinde aranır", "Searches inside the files under {dir}"],
+  "search.groupsHint": ["{keys} ile dosyadan dosyaya atlayın", "Use {keys} to jump between files"],
+  "search.searchingIn": ["{dir} içinde aranıyor…", "Searching {dir}…"],
+  "search.noMatchIn": ["“{query}” hiçbir dosyada geçmiyor", "“{query}” doesn't appear in any file"],
+  // Eşleşme yokken açık bir seçeneği kapatan düğmeler: basınca ne olacağını söylüyor.
+  "search.offCase": ["Büyük/küçük harfi önemseme", "Ignore case"],
+  "search.offWord": ["Sözcük içinde de ara", "Match inside words"],
+  "search.offRegex": ["Düz metin olarak ara", "Search as plain text"],
   "dirs.parent": ["Üst klasör", "Parent directory"],
   "dirs.empty": ["Alt klasör yok", "No subdirectories"],
   "dirs.open": ["Klasör değiştir", "Change directory"],
@@ -825,6 +860,9 @@ export const MESSAGES = {
 
   // ----------------------------------------------------------------- gruplar
   "group.heading": ["Gruplar", "Groups"],
+  // Kokpit rayının dibindeki düğme: rayı genişletip grup adlarını yazıyor.
+  "rail.showNames": ["Grup adlarını göster", "Show group names"],
+  "rail.hideNames": ["Grup adlarını gizle", "Hide group names"],
   "group.namePlaceholder": ["Grup adı", "Group name"],
   "group.showAll": ["Tüm grupları göster ({n})", "Show all groups ({n})"],
   "group.showFavoritesOnly": [
@@ -985,6 +1023,23 @@ export const MESSAGES = {
     "Double-click: run · click: insert at prompt",
   ],
   "fav.lastUsed": ["Son: {when}", "Last: {when}"],
+  // Kısaltma: komut kutusunda favoriyi çalıştıran tek sözcük (`lib/aliases.ts`).
+  "fav.aliasPlaceholder": [
+    "Kısaltma (isteğe bağlı) — ör. nrb",
+    "Alias (optional) — e.g. nrb",
+  ],
+  "fav.aliasSpace": [
+    "Kısaltma tek sözcük olmalı, boşluk içeremez.",
+    "An alias must be a single word without spaces.",
+  ],
+  "fav.aliasTaken": [
+    "“{alias}” kısaltması zaten “{command}” için kullanılıyor.",
+    "The alias “{alias}” is already used for “{command}”.",
+  ],
+  "fav.aliasTitle": [
+    "Kısaltma: komut kutusuna {alias} yazıp Enter'a basın",
+    "Alias: type {alias} in the command box and press Enter",
+  ],
 
   // -------------------------------------------------------------- arama çubuğu
   "find.placeholder": ["Terminalde ara…", "Search in terminal…"],
@@ -1195,6 +1250,7 @@ export const MESSAGES = {
   "settings.profiles": ["Profiller", "Profiles"],
   "settings.groups": ["Gruplar", "Groups"],
   "settings.keys": ["Kısayollar", "Shortcuts"],
+  "settings.backup": ["Yedekleme", "Backup"],
   "settings.about": ["Hakkında", "About"],
   "settings.savedInstantly": [
     "Değişiklikler anında kaydedilir.",
@@ -1238,6 +1294,61 @@ export const MESSAGES = {
   ],
 
   "settings.theme": ["Tema", "Theme"],
+  // Bölüm başlığının altındaki tek satırlık açıklama. Yalnızca premium
+  // tasarımda görünüyor (sayfa başlığı; bkz. `SettingsDialog`, `.settings-page`).
+  "settings.descGeneral": [
+    "Arayüz dili ve terminal alanının düzeni.",
+    "Interface language and the terminal area's layout.",
+  ],
+  "settings.descAppearance": [
+    "Tasarım, renk teması, yazı tipleri, imleç ve sekmeler.",
+    "Design, color theme, fonts, cursor and tabs.",
+  ],
+  "settings.descTerminal": [
+    "Kopyalama, bağlantılar, komut satırı ve öneriler.",
+    "Copying, links, the command line and suggestions.",
+  ],
+  "settings.descSession": [
+    "Açılışta neyin geri geleceği ve sekmelerin nasıl kapanacağı.",
+    "What comes back on launch and how tabs close.",
+  ],
+  "settings.descHistory": [
+    "Komut geçmişinin ne kadarının saklanacağı.",
+    "How much command history is kept.",
+  ],
+  "settings.descProfiles": [
+    "Kabuklar, başlangıç klasörleri ve ortam değişkenleri.",
+    "Shells, start folders and environment variables.",
+  ],
+  "settings.descGroups": [
+    "Her grubun rengi, varsayılan profili ve ortamı.",
+    "Each group's color, default profile and environment.",
+  ],
+  "settings.descKeys": [
+    "Her eylemin klavye kısayolu.",
+    "The keyboard shortcut for every action.",
+  ],
+  "settings.descBackup": [
+    "Ayarları, grupları ve geçmişi bir dosyaya yedekleyin ya da bir yedekten geri yükleyin.",
+    "Back up settings, groups and history to a file, or restore from a backup.",
+  ],
+  "settings.descAbout": [
+    "Sürüm, güncellemeler, dosya konumları ve sağlık durumu.",
+    "Version, updates, file locations and health.",
+  ],
+  // Tasarım renk temasından ayrı bir eksen (gerekçe `lib/design.ts`).
+  "settings.design": ["Tasarım", "Design"],
+  "settings.designLabel": ["Arayüz tasarımı", "Interface design"],
+  "settings.designHint": [
+    "Renk temasından bağımsız: Premium katmanlı yüzeyler, yumuşak gölgeler ve yüzen menülerde cam etkisi getirir; Kokpit aynı görünüşle solda grupların ikon rayını, etkin grubun sekme kartlarını ve sabit bir yan paneli kullanır; Klasik uygulamanın düz ve yoğun ilk düzeni. Terminal çıktısı hepsinde aynı.",
+    "Independent of the color theme: Premium brings layered surfaces, soft shadows and a glass effect on floating menus; Cockpit keeps that look with an icon rail of groups, cards for the active group's tabs and a docked side panel; Classic is the app's flat, dense original layout. Terminal output is identical in all of them.",
+  ],
+  "design.premium": ["Premium", "Premium"],
+  "design.premiumDesc": ["Katmanlı, yumuşak, cam etkili", "Layered, soft, glass-like"],
+  "design.kokpit": ["Kokpit", "Cockpit"],
+  "design.kokpitDesc": ["İkon rayı, sekme kartları, sabit panel", "Icon rail, tab cards, docked panel"],
+  "design.classic": ["Klasik", "Classic"],
+  "design.classicDesc": ["Düz yüzeyler, sıkı düzen", "Flat surfaces, dense layout"],
   "settings.colorTheme": ["Renk teması", "Color theme"],
   // Başlık "Terminal" diyor çünkü artık iki yazı tipi ayarı var ve ikisi de
   // aynı bölümde. Ayrımı başlıkta yapmak, iki alanın etiketini kısa
@@ -1299,6 +1410,8 @@ export const MESSAGES = {
     "With no selection Ctrl+C always goes to the shell (interrupting the running command). The selection is cleared after copying, so a second Ctrl+C interrupts.",
   ],
   "input.placeholder": ["Komut yazın", "Type a command"],
+  // Satırın ilk sözcüğü bir favori kısaltması: Enter'ın ne göndereceği.
+  "input.aliasTitle": ["Kısaltma — Enter şunu çalıştırır: {command}", "Alias — Enter runs: {command}"],
   // Hem şeridin metni hem komut çalışırken kutunun yer tutucusu. Kısa ve
   // durum bildiren: kutunun yazılacak yer olduğunu odak ve imleç zaten
   // söylüyor, arayüzün kendini anlatması gerekmiyor.
@@ -1570,7 +1683,6 @@ export const MESSAGES = {
   // Egik cizgi IKI PARALEL etiketi birlestiriyor ("Ice aktar" / "Disa
   // aktar"). Birinin buyuk otekinin kucuk olmasi tutarsiz duruyor; iki taraf
   // da kendi bas harfini aliyor.
-  "settings.openTransfer": ["İçe / Dışa aktar…", "Import / Export…"],
   "settings.groupEnvHint": [
     "Profilin değişkenlerinin üstüne yazılır. Örnek: bir proje grubunda {example}.",
     "Overrides the profile's variables. For example, {example} in a project group.",
@@ -1639,7 +1751,6 @@ export const MESSAGES = {
   "settings.integrationDir": ["Kabuk entegrasyonu", "Shell integration"],
 
   // ----------------------------------------------------------- aktarım penceresi
-  "transfer.title": ["Yapılandırma aktarımı", "Configuration transfer"],
   "transfer.export": ["Dışa aktar", "Export"],
   "transfer.import": ["İçe al", "Import"],
   // "Değiştir" neyin neyle değiştiğini söylemiyordu ve kullanıcı seçeneği

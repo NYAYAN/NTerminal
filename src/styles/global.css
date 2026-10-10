@@ -1,5 +1,17 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "./fonts.css";
+/*
+ * Premium tasarım: yalnızca `:root[data-design="premium"]` altında kurallar.
+ * Bu dosya KLASİK tasarımın kendisi; premium onun üstüne biniyor, yerine
+ * geçmiyor (gerekçe `lib/design.ts` ve `premium.css` başında).
+ */
+@import "./premium.css";
+/*
+ * Kokpit yerleşimi: premium görünüşün üstüne farklı bir iskelet, yalnızca
+ * `:root[data-layout="kokpit"]` altında. Premium'dan SONRA: aynı özgüllükte
+ * iki kuraldan Kokpit'inki kazanmalı.
+ */
+@import "./kokpit.css";
 
 :root {
   /* themes.ts bu değişkenleri çalışma anında yazar; buradakiler ilk boyama içindir. */
@@ -89,6 +101,16 @@ body {
   color: var(--text);
   background: var(--surface);
   -webkit-font-smoothing: antialiased;
+  /* Önekli biçim ŞART: WebKit (macOS'taki WKWebView) önsüz `user-select`i
+   * tanımıyor — ölçülen: `CSS.supports("user-select", "none") === false`.
+   * Yalnız önsüz yazıldığında bu dosyadaki her "seçilmesin" kuralı macOS'ta
+   * yok sayılıyordu: raydaki karo, grup adı, yol, durum çubuğu... hepsi
+   * seçilebiliyordu. BİLDİRİLEN: "Kokpit görünümde soldaki gruptan bir
+   * tanesinin yazısına çift tıklayınca yazı seçilebilir olduğu için mac'in
+   * Spotlight araması açılıyor." Windows'ta (WebView2, Chromium) önsüzü
+   * yeterli. Her `user-select` yanında önekli kardeşi duruyor; kuralı
+   * `styles/userSelect.test.ts` bağlıyor. */
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -267,6 +289,7 @@ textarea {
   border-radius: var(--radius);
   padding: 5px 8px;
   outline: none;
+  -webkit-user-select: text;
   user-select: text;
   min-width: 0;
 }
@@ -1119,6 +1142,7 @@ button.hit-head:hover {
   color: var(--text-dim);
   opacity: 0.55;
   text-align: right;
+  -webkit-user-select: none;
   user-select: none;
   font: inherit;
   line-height: inherit;
@@ -1170,6 +1194,10 @@ button.hit-head:hover {
   font-family: var(--mono-font);
   font-size: 0.8846rem;
   line-height: 1.55;
+  /* Kod kopyalanabilmeli; numaralar `.viewer-no`da seçim dışı. Gövdenin
+     "seçilmesin" kuralı burayı da kapatıyordu (bkz. `.diff-text`). */
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .viewer-line {
@@ -1186,6 +1214,7 @@ button.hit-head:hover {
   color: var(--text-dim);
   opacity: 0.55;
   text-align: right;
+  -webkit-user-select: none;
   user-select: none;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -1261,6 +1290,7 @@ button.hit-head:hover {
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   box-shadow: 0 0 0 1px var(--border);
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -3113,6 +3143,7 @@ button.hit-head:hover {
   color: var(--text-dim);
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -3121,6 +3152,11 @@ button.hit-head:hover {
 .diff-text {
   flex: 1;
   min-width: 0;
+  /* Kod kopyalanabilmeli (numaralar `.diff-no`da seçim dışı). Gövdenin
+     "seçilmesin" kuralı burayı da kapatıyordu; macOS'ta önek eksikliği
+     yüzünden fark edilmiyordu (bkz. `body`). */
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Zeminler cok soluk: renk isareti olarak yeterli ve altindaki metin okunur
@@ -3589,6 +3625,7 @@ button[aria-busy="true"]:disabled {
   font-family: var(--mono-font);
   font-size: 0.7692rem;
   /* Kopyalanabilmeli; genel kural bazi yuzeylerde secimi kapatiyor. */
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -4169,6 +4206,22 @@ button.pop-group {
   color: var(--text);
 }
 
+/* Panel değişikliklerde açıkken rozet BASILI: durum çubuğundaki
+   `.status-btn.on` ile aynı dil (dolgu + vurgu kenarlık). Sıfır sayısıyla da
+   geçerli — açık olan panel, sayı değil. */
+.ctx-chip.changes.on,
+.ctx-chip.changes[data-empty].on {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+}
+
+.ctx-chip.changes.on:hover,
+.ctx-chip.changes[data-empty].on:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text);
+}
+
 /* Node rozeti: dizinle ayni notr govde, altigen simge ayirt ediyor.
    Yesil dala, mavi degisikliklere ait; ucuncu bir renk seridi bayrak
    diregine cevirirdi. Surum numarasi tablo rakamlariyla ki 24.9.0 ile
@@ -4475,6 +4528,32 @@ button.pop-group {
 
 /* Durdur dugmesi: kirmizi ama DOLGUSUZ. Dolgulu kirmizi bir dugme surekli
    ekranda dururken tehlike bildiriyor; oysa komutu durdurmak siradan bir is. */
+/* Kısaltmanın açılımı: kutunun yanında, Enter'dan önce. Durdur düğmesiyle
+   aynı satır ölçüsü — yazarken belirip kaybolduğunda kutu boyu oynamamalı.
+   Uzun komut kutuyu ezmesin diye yarım satırla sınırlı, gerisi üç nokta. */
+.alias-hint {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 45%;
+  height: var(--cmd-row-h, 20px);
+  padding: 0 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+  font-size: 0.8462rem;
+  white-space: nowrap;
+}
+
+.alias-hint-cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
 .running-stop {
   flex: none;
   /* Dugme KUTUNUN satir yuksekliginde. Temel dugme kurali 26px taban veriyor
@@ -4628,6 +4707,7 @@ button.pop-group {
   border-bottom: 1px solid var(--border);
   font-size: 0.8462rem;
   color: var(--text-dim);
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -5067,6 +5147,7 @@ button.pop-group {
   font-size: 0.8462rem;
   line-height: 1.5;
   white-space: pre-wrap;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -5328,6 +5409,7 @@ button.pop-group {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -5485,6 +5567,17 @@ button.pop-group {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Favorinin kısaltması başlığın yanında: komut kutusuna aynen yazılacak şey. */
+.fav-alias {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.7692rem;
+  font-weight: 500;
 }
 
 .fav-cmd {
@@ -5860,6 +5953,11 @@ button.pop-group {
 
 .settings-result:hover {
   background: var(--hover);
+}
+
+/* Klavyeyle seçili sonuç: Enter'ın hedefi (başta ilk sonuç, oklarla değişiyor). */
+.settings-result.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .settings-result-label {
@@ -6361,6 +6459,7 @@ button.pop-group {
   line-height: 1.5;
   text-align: left;
   white-space: normal;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -6477,6 +6576,7 @@ button.pop-group {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -6578,6 +6678,325 @@ button.pop-group {
   display: none;
 }
 
+/* ------------------------------------------------------- tasarım kartları
+ *
+ * Tema kartlarıyla aynı mantık: adını okumak yerine görünüşüne bakarak seç.
+ * Her kart kendi tasarımının küçük bir şeması (başlık çubuğu, kenar çubuğu,
+ * sekme şeridi, komut kutusu); renkler geçerli temadan, biçim kartın kendi
+ * `data-design` özniteliğinden. Premium şemanın tokenları KARTIN üzerinde
+ * tanımlı — kökteki tasarımdan bağımsız, yani Klasik seçiliyken Premium
+ * kartı yine yuvarlak ve gölgeli görünüyor (yoksa ne seçtiğini göremezdin). */
+.design-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 8px;
+  max-width: 40rem;
+}
+
+.design-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+}
+
+.design-card:hover:not(.on) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.design-card.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.design-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.design-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px 2px;
+}
+
+.design-name {
+  color: var(--text);
+  font-size: 0.8846rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.design-desc {
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+  line-height: 1.3;
+}
+
+.design-preview {
+  --dp-chrome: var(--surface-alt);
+  --dp-line: var(--border);
+  position: relative;
+  display: block;
+  height: 4.8rem;
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+  background: var(--term-bg);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 30%, transparent);
+}
+
+.design-preview i,
+.design-preview b {
+  position: absolute;
+  display: block;
+}
+
+.dp-title {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 14%;
+  background: var(--dp-chrome);
+  border-bottom: 1px solid var(--dp-line);
+}
+
+.dp-side {
+  left: 0;
+  top: 14%;
+  bottom: 0;
+  width: 27%;
+  background: var(--dp-chrome);
+  border-right: 1px solid var(--dp-line);
+}
+
+.dp-tabs {
+  left: 27%;
+  right: 0;
+  top: 14%;
+  height: 17%;
+  background: var(--dp-chrome);
+  border-bottom: 1px solid var(--dp-line);
+}
+
+.dp-tabs b {
+  top: 3px;
+  bottom: -1px;
+  width: 24%;
+  background: var(--term-bg);
+}
+
+.dp-tabs b.on {
+  left: 5%;
+  border-top: 2px solid var(--accent);
+}
+
+.dp-tabs b:not(.on) {
+  left: 33%;
+  background: color-mix(in srgb, var(--text) 6%, var(--dp-chrome));
+}
+
+/* Terminal şemanın zemini; ayrı kutu çizilmiyor. */
+.dp-term {
+  display: none;
+}
+
+.dp-input {
+  left: 27%;
+  right: 0;
+  bottom: 0;
+  height: 17%;
+  border-top: 1px solid var(--dp-line);
+  background: var(--term-bg);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .design-preview {
+  --dp-line: color-mix(in srgb, var(--text) 10%, transparent);
+  --dp-hair: color-mix(in srgb, var(--text) 16%, transparent);
+  background: radial-gradient(
+      60% 50% at 0% 0%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 70%
+    ),
+    var(--term-bg);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-title {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--text) 4%, transparent), transparent);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-side {
+  background: color-mix(in srgb, var(--text) 2%, transparent);
+  border-right-color: var(--dp-line);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-tabs {
+  background: color-mix(in srgb, var(--surface-alt) 72%, var(--term-bg));
+  height: 20%;
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-tabs b {
+  top: 18%;
+  bottom: 18%;
+  border-top: none;
+  border-radius: 3px;
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-tabs b.on {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-alt));
+  box-shadow:
+    inset 0 0 0 1px var(--dp-hair),
+    0 1px 2px rgb(0 0 0 / 30%);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-tabs b.on::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-tabs b:not(.on) {
+  background: transparent;
+}
+
+.design-card:is([data-design="premium"], [data-design="kokpit"]) .dp-input {
+  left: 31%;
+  right: 4%;
+  bottom: 5%;
+  height: 17%;
+  border: 1px solid var(--dp-hair);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 3%, var(--term-bg));
+  box-shadow: 0 3px 8px -3px rgb(0 0 0 / 45%);
+}
+
+/* Kokpit şeması: premium'un biçimi, başka bir iskelet — solda grup rayı
+   (etkin karo vurgu halkalı), yanında sekme kartları, sekme şeridinin yerinde
+   yol çizgisi, sağda sabit panel. Ray ve panel öbür şemalarda yok. */
+/* `.design-preview` öneki şart: `.design-preview i` (özgüllük 0,1,1) hepsini
+   `display: block` yapıyor ve yalın sınıf seçicisi ondan zayıf kalıyordu. */
+.design-preview .dp-rail,
+.design-preview .dp-panel {
+  display: none;
+}
+
+.design-card[data-design="kokpit"] .dp-rail {
+  display: block;
+  left: 0;
+  top: 14%;
+  bottom: 0;
+  width: 10%;
+  background: color-mix(in srgb, #000 16%, var(--surface-alt));
+  border-right: 1px solid var(--dp-line);
+}
+
+.design-card[data-design="kokpit"] .dp-rail::before {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 7px;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 11px 0 color-mix(in srgb, var(--text) 16%, transparent),
+    0 22px 0 color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.design-card[data-design="kokpit"] .dp-side {
+  left: 10%;
+  width: 25%;
+}
+
+.design-card[data-design="kokpit"] .dp-side::before {
+  content: "";
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: 6px;
+  height: 11px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 15px 0 color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.design-card[data-design="kokpit"] .dp-tabs {
+  left: 35%;
+  right: 24%;
+}
+
+.design-card[data-design="kokpit"] .dp-tabs b.on {
+  left: 8%;
+  width: 40%;
+  top: 42%;
+  bottom: 42%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+  box-shadow: none;
+}
+
+.design-card[data-design="kokpit"] .dp-tabs b.on::after {
+  display: none;
+}
+
+.design-card[data-design="kokpit"] .dp-input {
+  left: 37%;
+  right: 26%;
+}
+
+.design-card[data-design="kokpit"] .dp-panel {
+  display: block;
+  right: 0;
+  top: 14%;
+  bottom: 0;
+  width: 24%;
+  background: var(--dp-chrome);
+  border-left: 1px solid var(--dp-line);
+}
+
+/* ------------------------------------------------------- ayarlar › yedekleme
+ *
+ * Sayfanın başında kip anahtarı (dışa aktar / içe al), ayarların altında
+ * eylem satırı (kaydet / uygula). Eskiden ayrı bir pencerenin sekme şeridi ve
+ * alt çubuğuydu (gerekçe `BackupPanel` başında). */
+.modal-body > .backup-mode {
+  width: fit-content;
+  margin-bottom: 12px;
+}
+
+.modal-body > .backup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+/* Premium tasarımın Ayarlar penceresi için işaretlemeye eklenen öğeler: bölüm
+   simgesi, arama simgesi, sayfa başlığı ve Hakkında'daki uygulama simgesi.
+   KLASİKTE GİZLİ — klasik pencere eskisinin aynısı kalsın; premium bunları
+   `premium.css` › "Ayarlar penceresi" içinde gösteriyor. */
+.settings-nav .nav-ico,
+.settings-search-ico,
+.modal-head .settings-page,
+.about-hero > .about-icon {
+  display: none;
+}
+
 .env-editor {
   display: flex;
   flex-direction: column;
@@ -6658,12 +7077,67 @@ button.pop-group {
   font-weight: 600;
 }
 
+/* Sekmenin kendi kısayolu (⌘P / ⇧⌘F): paleti doğrudan o sekmede açan tuş. */
+.palette-tab .keycap {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 .palette-tabs-spacer {
   flex: 1;
 }
 
-.palette-tabs .search-toggles {
-  padding-bottom: 4px;
+/* Aramanın KÖKÜ: şeridin sağ ucunda, iki sekmenin de aradığı dizin.
+   Kısaltılmış yazılıyor, tam yol ipucunda; uzun bir yol sekmeleri itmesin diye
+   daralabiliyor. */
+.palette-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 45%;
+  margin-bottom: 3px;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  white-space: nowrap;
+}
+
+.palette-root > svg {
+  flex: none;
+}
+
+.palette-root > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Kutu satırı: büyüteç solda, içerik seçenekleri kutunun SAĞ ucunda (üçü
+   kutunun ayarı, şeridin değil). Alt çizgi kutunun değil SATIRIN: odakta vurgu
+   rengi bütün satırın altında. */
+.palette-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-search:focus-within {
+  border-bottom-color: var(--accent);
+}
+
+.palette-search > svg {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.palette .palette-search input,
+.palette .palette-search input:focus {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 0;
+  border: none;
+  box-shadow: none;
 }
 
 /* Icerik aramasinin durum satiri: kutunun hemen altinda, listenin ustunde. */
@@ -6684,7 +7158,10 @@ button.pop-group {
  * harften ayrisiyor.
  *
  * Yer darsa once KLASOR kisaliyor (`flex-shrink: 3`): ad kirpildiginda satir
- * ise yaramaz hale gelir, klasor kirpildiginda yalnizca baglam azalir. */
+ * ise yaramaz hale gelir, klasor kirpildiginda yalnizca baglam azalir.
+ *
+ * Premium'da klasor adin HEMEN YANINDA (icerik sekmesindeki `.hit-dir` gibi);
+ * sag uc orada meta verinin (git durumu, acik dosya) yeri. */
 .file-row .file-name {
   flex: 0 1 auto;
   min-width: 0;
@@ -6697,6 +7174,7 @@ button.pop-group {
   /* Sag kenara itiliyor: iki bilgi arasindaki bosluk sabit degil, satirin
      kalani. Ayni klasordeki dosyalar boylece ayni sutunda hizalaniyor. */
   margin-left: auto;
+  order: 1;
   flex: 0 3 auto;
   min-width: 0;
   max-width: 55%;
@@ -6714,10 +7192,121 @@ button.pop-group {
   text-align: right;
 }
 
-/* Dosya paletinin alt ipucusu: Enter'in ne yaptigi yazili.
-   Gerekli cunku davranis tahmin edilebilir degil - dosyayi ACMIYOR, yolunu
-   komut satirina EKLIYOR. Dosyada iki kez tanimliydi ve ikincisi (dolgu, yazi
-   boyu) birinciyi sessizce eziyordu; tek tanim, etkin degerler. */
+/* Satırın başındaki tür simgesi: görsel, kod ya da belge (`fileKind`). */
+.file-ico {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-dim);
+}
+
+/* Eşleşen harfler vurgu renginde ve kalın, ZEMİNSİZ: sarı zemin içerik
+   aramasının işareti (`.hit-text mark`) ve harf harf dağılan bir eşleşmede adı
+   parçalara bölerdi. */
+.file-row mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+/* Meta veri: açık dosyanın rozeti ve git durumu. Burada ADIN yanında, klasörden
+   önce (`.file-dir`in `order`ı): klasör sütunu sağ kenarda hizalı kalsın —
+   meta sağ uçta olsaydı yalnızca onu taşıyan satırların klasörü sola kayardı.
+   Premium'da klasör adın yanında, meta sağ uçta (bkz. premium.css). */
+.file-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+}
+
+/* "açık": görüntüleyicide şu an duran dosya. */
+.open-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  line-height: 16px;
+}
+
+.open-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Bölüm başlığı: Değişenler / Son açılanlar / Tüm dosyalar / Yakın
+   eşleşmeler. Satır değil — seçilmiyor, oklar üstünden geçiyor. */
+.palette-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 3px;
+  color: var(--text-dim);
+  font-size: 0.7308rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.palette-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Listenin yerindeki durum: dizin bilinmiyor, okunuyor, boş, sonuç yok.
+   Ortada; nerede ve kaç dosyaya bakıldığı yazıyor, varsa bir sonraki adım
+   düğme olarak altında. */
+.palette-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 24px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.palette-empty strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.palette-tip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.palette-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.palette-chip {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* Paletin alt şeridi.
+   Dosya paletinde tuş rozetleri ve ne yaptıkları: Enter dosyayı GÖRÜNTÜLEYİCİDE
+   açıyor, Shift+Enter yolunu komut satırına ekliyor, Tab öbür sekmeye geçiyor.
+   Yazılı olması şart çünkü iki seçim eylemi var ve hangisinin hangi tuşta
+   olduğu tahmin edilemiyor. Kural dosyada iki kez tanımlıydı ve ikincisi
+   (dolgu, yazı boyu) birinciyi sessizce eziyordu; tek tanım, etkin değerler. */
 .palette-foot {
   display: flex;
   align-items: center;
@@ -6726,6 +7315,29 @@ button.pop-group {
   border-top: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 0.8462rem;
+}
+
+/* Dosya paletinde rozetler solda, sonuç sayısı sağda. Dar pencerede rozetler
+   kırpılıyor, sayı değil. */
+.palette-keys {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Rozetle açıklaması arası dar, sonraki rozete kadar geniş: "tuş + ne yaptığı"
+   ikilisi birlikte okunsun (öneri listesinin `.suggest-foot`u gibi). */
+.palette-keys .dim + .keycap {
+  margin-left: 7px;
+}
+
+.palette-count {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .palette-row {

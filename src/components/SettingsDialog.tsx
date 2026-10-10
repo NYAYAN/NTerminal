@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { focusEscaped } from "../lib/focus";
@@ -38,8 +38,24 @@ import type {
   ViewMode,
 } from "../types";
 import { ArgsInput } from "./ArgsInput";
+import { BackupPanel } from "./BackupPanel";
+import { DesignPicker } from "./DesignPicker";
 import { EnvEditor } from "./EnvEditor";
-import { SpinnerIcon } from "./Icons";
+import {
+  AppIcon,
+  AppearanceIcon,
+  ArchiveIcon,
+  ClockIcon,
+  InfoIcon,
+  KeyboardIcon,
+  LayersIcon,
+  ProfileIcon,
+  SearchIcon,
+  SessionIcon,
+  SlidersIcon,
+  SpinnerIcon,
+  TerminalIcon,
+} from "./Icons";
 import { HealthPanel } from "./HealthPanel";
 import { NumberField } from "./NumberField";
 import { SettingHint, SettingHints } from "./SettingHint";
@@ -56,6 +72,72 @@ const VIEW_MODES: { value: ViewMode; key: MsgKey }[] = [
  * Kabuk adlari cevrilmiyor: "PowerShell 7+ (pwsh)" bir urun adi. Yalnizca
  * aciklama tasiyan iki girdi (cmd, ozel) ceviriden geliyor.
  */
+/*
+ * Premium tasarımın Ayarlar penceresi: bölüm simgeleri ve sayfa başlığının
+ * altındaki açıklama. İşaretleme iki tasarımda da var, CSS yalnızca premium'da
+ * gösteriyor (`global.css` klasikte gizliyor) — klasik görünüm aynen kalıyor.
+ */
+const SECTION_ICONS: Record<Section, (props: { size?: number }) => React.ReactElement> = {
+  general: SlidersIcon,
+  appearance: AppearanceIcon,
+  terminal: TerminalIcon,
+  session: SessionIcon,
+  history: ClockIcon,
+  profiles: ProfileIcon,
+  groups: LayersIcon,
+  keys: KeyboardIcon,
+  backup: ArchiveIcon,
+  about: InfoIcon,
+};
+
+const SECTION_DESC: Record<Section, MsgKey> = {
+  general: "settings.descGeneral",
+  appearance: "settings.descAppearance",
+  terminal: "settings.descTerminal",
+  session: "settings.descSession",
+  history: "settings.descHistory",
+  profiles: "settings.descProfiles",
+  groups: "settings.descGroups",
+  keys: "settings.descKeys",
+  backup: "settings.descBackup",
+  about: "settings.descAbout",
+};
+
+/**
+ * Kaydırıcının dolu kısmı (premium): izin rengi `--fill` yüzdesine kadar vurgu.
+ *
+ * CSS bir `range`in değerini okuyamıyor; yüzdeyi buradan veriyoruz. Klasikte
+ * bu değişkeni okuyan kural yok, yani etkisiz.
+ */
+function rangeFill(value: number, min: number, max: number): CSSProperties {
+  const ratio = max > min ? (value - min) / (max - min) : 0;
+  return { "--fill": `${Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 10}%` } as CSSProperties;
+}
+
+/**
+ * Sol menüde yön tuşunun karşılığı: bir aşağı / bir yukarı / baş / son.
+ *
+ * Değiştirici tuşlu bileşimler (⌘↑, ⌥↓ …) listeye ait değil: metin gezinme ya
+ * da uygulama kısayolu olabilirler, dokunulmuyor.
+ */
+type ListStep = 1 | -1 | "first" | "last";
+
+function listStep(e: React.KeyboardEvent, withHomeEnd: boolean): ListStep | null {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return null;
+  if (e.key === "ArrowDown") return 1;
+  if (e.key === "ArrowUp") return -1;
+  if (withHomeEnd && e.key === "Home") return "first";
+  if (withHomeEnd && e.key === "End") return "last";
+  return null;
+}
+
+/** Listede `from`dan `step` kadar ilerlenen sıra; uçlarda durur (dönmez). */
+function stepIndex(from: number, step: ListStep, length: number): number {
+  if (step === "first") return 0;
+  if (step === "last") return length - 1;
+  return Math.min(length - 1, Math.max(0, from + step));
+}
+
 type ShellKindOption = { value: ShellKind; label?: string; key?: MsgKey };
 
 const SHELL_KINDS_WINDOWS: ShellKindOption[] = [
@@ -280,7 +362,13 @@ export function SettingsDialog() {
 
   const modalRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const navRef = useRef<HTMLElement>(null);
   const titleId = useId();
+  /**
+   * Arama sonuçlarında Enter'ın hedefi. Sorgu değişince ilk sonuca dönüyor
+   * (`onChange`); görünen sonuç sayısından büyükse son sonuca kırpılıyor.
+   */
+  const [activeHit, setActiveHit] = useState(0);
 
   /*
    * Klavye odağı pencerede.
@@ -302,9 +390,6 @@ export function SettingsDialog() {
     document.addEventListener("focusin", onFocusIn);
     return () => {
       document.removeEventListener("focusin", onFocusIn);
-      // Aktarma penceresine geçildiyse odak onun: terminale döndürmek, yazılanı
-      // yine kabuğa gönderirdi.
-      if (useStore.getState().ui.transferOpen) return;
       if (back?.isConnected) back.focus();
     };
   }, []);
@@ -612,6 +697,48 @@ export function SettingsDialog() {
   }, [highlight, section]);
 
   const hits = searchSettings(query, t);
+  const active = Math.min(activeHit, hits.length - 1);
+
+  /*
+   * Sol menüde yön tuşları.
+   *
+   * İSTEK: "Ayarlarda sol menüde geçişleri yön tuşları ile de yapabileyim."
+   *
+   * - Bölüm düğmesinde ↑/↓ bir önceki / sonraki bölümü AÇIYOR ve odağı ona
+   *   taşıyor; Home/End ilk / son bölüm. Uçlarda duruyor, başa sarmıyor.
+   * - Arama kutusu boşken ↑/↓ aynı işi yapıyor, odak kutuda kalıyor: pencere
+   *   açılınca odak zaten orada (bkz. odak etkisi) ve macOS'ta Tab varsayılan
+   *   olarak düğmelere gitmiyor — tek klavye yolu bu.
+   * - Arama varken ↑/↓ sonuçlar arasında geziniyor (vurgulu satır), Enter onu
+   *   açıyor. Bir sonuç düğmesindeyken de oklar sonuçlar arasında; ilk sonuçta
+   *   ↑ arama kutusuna dönüyor, yazmaya devam edilebilsin.
+   *
+   * Sekme sırası "gezici": listede yalnızca seçili öğe Tab ile odaklanıyor
+   * (`tabIndex`), liste içinde oklarla geziliyor — dokuz bölümü tek tek
+   * Tab'lamak gerekmiyor.
+   */
+  const moveSection = (from: Section, step: ListStep, focus: boolean) => {
+    const index = SECTIONS.findIndex((s) => s.id === from);
+    const next = SECTIONS[stepIndex(index, step, SECTIONS.length)].id;
+    if (next !== section) setSection(next);
+    const button = navRef.current?.querySelector<HTMLElement>(`[data-section="${next}"]`);
+    if (focus) button?.focus();
+    else button?.scrollIntoView?.({ block: "nearest" });
+  };
+
+  const moveHit = (from: number, step: ListStep, focus: boolean) => {
+    if (hits.length === 0) return;
+    const next = stepIndex(from, step, hits.length);
+    setActiveHit(next);
+    const row = navRef.current?.querySelectorAll<HTMLElement>(".settings-result")[next];
+    if (focus) row?.focus();
+    else row?.scrollIntoView?.({ block: "nearest" });
+  };
+
+  const openHit = (hit: (typeof hits)[number]) => {
+    setSection(hit.section);
+    setHighlight(hit.key);
+  };
   const conflicts = comboConflicts(settings.keybindings);
 
   return (
@@ -628,6 +755,14 @@ export function SettingsDialog() {
             konumları'nda duruyor ve başlığın en göze çarpan şeyi oydu. */}
         <div className="modal-head">
           <h2 id={titleId}>{t("settings.title")}</h2>
+          {/* Sayfa başlığı: yalnızca premium tasarımda görünüyor (klasikte
+              bölüm adı gezinmede zaten seçili duruyor). */}
+          <div className="settings-page">
+            <h3 className="settings-page-title">
+              {t(SECTIONS.find((s) => s.id === section)!.key)}
+            </h3>
+            <p className="settings-page-desc">{t(SECTION_DESC[section])}</p>
+          </div>
           <button
             className="icon-btn"
             title={t("common.close")}
@@ -641,8 +776,31 @@ export function SettingsDialog() {
         <div className="settings-body">
           {/* Dikey gezinme: dokuz bölüm yatay bir şeride sığmıyor ve her
               yeni ayar şeridi biraz daha daraltıyordu. */}
-          <nav className="settings-nav">
+          <nav
+            className="settings-nav"
+            ref={navRef}
+            onKeyDown={(e) => {
+              const target = e.target as HTMLElement;
+              const step = listStep(e, true);
+              if (step === null) return;
+              if (target.dataset.section) {
+                e.preventDefault();
+                moveSection(target.dataset.section as Section, step, true);
+                return;
+              }
+              if (target.classList.contains("settings-result")) {
+                e.preventDefault();
+                const rows = [...(navRef.current?.querySelectorAll(".settings-result") ?? [])];
+                const index = rows.indexOf(target);
+                if (step === -1 && index === 0) searchRef.current?.focus();
+                else moveHit(index, step, true);
+              }
+            }}
+          >
             <div className="settings-search">
+              <span className="settings-search-ico" aria-hidden="true">
+                <SearchIcon size={13} />
+              </span>
               <input
                 ref={searchRef}
                 value={query}
@@ -650,16 +808,23 @@ export function SettingsDialog() {
                 // Doluyken Esc aramayı temizliyor, boşken pencereyi kapatıyor
                 // (bkz. `escapeOwnedBy`).
                 data-owns-escape={query ? "" : undefined}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActiveHit(0);
+                }}
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === "Escape") setQuery("");
-                  // Enter: ilk sonuca git. Arama kutusundan elini çekmeden
-                  // en olası hedefe ulaşmak için.
-                  if (e.key === "Enter" && hits.length > 0) {
-                    setSection(hits[0].section);
-                    setHighlight(hits[0].key);
+                  // Yalnız ↑/↓: Home/End kutuda imleci taşımaya devam ediyor.
+                  const step = listStep(e, false);
+                  if (step !== null) {
+                    e.preventDefault();
+                    if (query) moveHit(active, step, false);
+                    else moveSection(section, step, false);
                   }
+                  // Enter: vurgulu sonuca (başta ilki) git. Arama kutusundan
+                  // elini çekmeden en olası hedefe ulaşmak için.
+                  if (e.key === "Enter" && hits.length > 0) openHit(hits[active]);
                 }}
               />
               {query && (
@@ -681,14 +846,12 @@ export function SettingsDialog() {
                     {tp("settings.searchCount", hits.length)}
                   </div>
                 )}
-                {hits.map((hit) => (
+                {hits.map((hit, i) => (
                   <button
                     key={`${hit.section}:${hit.key}`}
-                    className="settings-result"
-                    onClick={() => {
-                      setSection(hit.section);
-                      setHighlight(hit.key);
-                    }}
+                    className={i === active ? "settings-result on" : "settings-result"}
+                    tabIndex={i === active ? 0 : -1}
+                    onClick={() => openHit(hit)}
                   >
                     <span className="settings-result-label">{hit.label}</span>
                     {/* Bölüm › başlık: iki "Boyut" (terminal ve arayüz) ancak
@@ -703,16 +866,30 @@ export function SettingsDialog() {
                 ))}
               </div>
             ) : (
-              SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  className={section === s.id ? "on" : ""}
-                  aria-current={section === s.id}
-                  onClick={() => setSection(s.id)}
-                >
-                  {t(s.key)}
-                </button>
-              ))
+              SECTIONS.map((s) => {
+                const Icon = SECTION_ICONS[s.id];
+                return (
+                  <button
+                    key={s.id}
+                    data-section={s.id}
+                    className={section === s.id ? "on" : ""}
+                    aria-current={section === s.id}
+                    tabIndex={section === s.id ? 0 : -1}
+                    onClick={(e) => {
+                      setSection(s.id);
+                      // macOS (WebKit) tıklanan düğmeye odak vermiyor; odak
+                      // pencerenin gövdesine düşüyor ve ardından basılan ok
+                      // tuşu hiçbir yere gitmiyordu. Odağı açıkça veriyoruz.
+                      e.currentTarget.focus();
+                    }}
+                  >
+                    <span className="nav-ico" aria-hidden="true">
+                      <Icon size={13} />
+                    </span>
+                    {t(s.key)}
+                  </button>
+                );
+              })
             )}
           </nav>
 
@@ -772,6 +949,21 @@ export function SettingsDialog() {
 
           {section === "appearance" && (
             <>
+              <div className="section">
+                <h3>{t("settings.design")}</h3>
+                {/* Tasarım renk temasından ayrı bir eksen (gerekçe `lib/design.ts`):
+                    tema RENGİ, tasarım BİÇİMİ seçiyor. Kartlar `DesignPicker` içinde. */}
+                <div className="field top" data-setting="settings.designLabel">
+                  <label>{t("settings.designLabel")}</label>
+                  <DesignPicker
+                    value={settings.appearance.design}
+                    onChange={(design) => void store().patchAppearance({ design })}
+                  />
+                  <SettingHint>{t("settings.designHint")}</SettingHint>
+                  {undoAppearance("design")}
+                </div>
+              </div>
+
               <div className="section">
                 <h3>{t("settings.theme")}</h3>
                 {/* Renk örnekli kartlar (gerekçe `ThemePicker` içinde). İlk
@@ -867,6 +1059,11 @@ export function SettingsDialog() {
                     min={LIMITS.fontSize.min}
                     max={LIMITS.fontSize.max}
                     value={settings.appearance.fontSize}
+                    style={rangeFill(
+                      settings.appearance.fontSize,
+                      LIMITS.fontSize.min,
+                      LIMITS.fontSize.max,
+                    )}
                     onChange={(e) =>
                       void store().patchAppearance({
                         fontSize: Number(e.target.value),
@@ -896,6 +1093,11 @@ export function SettingsDialog() {
                     max={LIMITS.lineHeight.max}
                     step={0.05}
                     value={settings.appearance.lineHeight}
+                    style={rangeFill(
+                      settings.appearance.lineHeight,
+                      LIMITS.lineHeight.min,
+                      LIMITS.lineHeight.max,
+                    )}
                     onChange={(e) =>
                       void store().patchAppearance({ lineHeight: Number(e.target.value) })
                     }
@@ -915,6 +1117,11 @@ export function SettingsDialog() {
                     max={LIMITS.letterSpacing.max}
                     step={1}
                     value={settings.appearance.letterSpacing}
+                    style={rangeFill(
+                      settings.appearance.letterSpacing,
+                      LIMITS.letterSpacing.min,
+                      LIMITS.letterSpacing.max,
+                    )}
                     onChange={(e) =>
                       void store().patchAppearance({ letterSpacing: Number(e.target.value) })
                     }
@@ -989,6 +1196,11 @@ export function SettingsDialog() {
                     min={LIMITS.uiFontSize.min}
                     max={LIMITS.uiFontSize.max}
                     value={settings.appearance.uiFontSize}
+                    style={rangeFill(
+                      settings.appearance.uiFontSize,
+                      LIMITS.uiFontSize.min,
+                      LIMITS.uiFontSize.max,
+                    )}
                     onChange={(e) =>
                       void store().patchAppearance({ uiFontSize: Number(e.target.value) })
                     }
@@ -1773,9 +1985,12 @@ export function SettingsDialog() {
             </>
           )}
 
+          {section === "backup" && <BackupPanel />}
+
           {section === "about" && (
             <>
-              <div className="section">
+              <div className="section about-hero">
+                <AppIcon className="about-icon" size={56} />
                 <h3>N-Terminal {appVersion}</h3>
                 <p className="dim">{t("settings.aboutBlurb")}</p>
               </div>
@@ -2012,9 +2227,6 @@ export function SettingsDialog() {
               uzakta. Altlik her bolumde gorunuyor. */}
           <button className="outline" onClick={resetAll}>
             {t("settings.resetAll")}
-          </button>
-          <button className="outline" onClick={() => setUi({ settingsOpen: false, transferOpen: true })}>
-            {t("settings.openTransfer")}
           </button>
           <button className="primary" onClick={close}>
             {t("common.close")}

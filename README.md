@@ -409,11 +409,13 @@ dosya düzenlenemez; kalem kapalıdır ve üzerine gelince nedenini söyler.
 **Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
 bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı dosya
 panelindeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler
-(`code ` yazıp `Ctrl+P`). Satırda dosya **adı solda**, klasörü sağda ve soluk:
-klasör zinciri çoğu satırda aynı, yani ayırt etmeyen kısmı önce okutmak gözü
-boşuna yoruyordu. Ad öne alınınca satırlar ilk harften ayrışıyor. Liste açılışta
-bir kez okunuyor, süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten
-geçirmemek için.
+(`code ` yazıp `Ctrl+P`). Satırda dosya **adı önde**, klasörü hemen yanında ve
+soluk (Klasik tasarımda sağa hizalı): klasör zinciri çoğu satırda aynı, yani
+ayırt etmeyen kısmı önce okutmak gözü boşuna yoruyordu. Eşleşen harfler vurgulu;
+harfleri dağınık eşleşen dosyalar "Yakın eşleşmeler" başlığının altında. Kutu
+boşken liste **Değişenler**, **Son açılanlar** ve **Tüm dosyalar** diye
+bölünüyor; `Alt+↑` / `Alt+↓` (mac'te `⌥↑` / `⌥↓`) bölümden bölüme atlar. Liste açılışta bir kez okunuyor,
+süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten geçirmemek için.
 
 **Dosyaların içinde arama (`Ctrl+Shift+G`, mac'te `⌘⇧F`).** Aynı paletin ikinci
 sekmesi: **Dosya içeriği**. Kutu ve sorgu iki sekmede ortak; `Tab` sekmeyi
@@ -436,6 +438,27 @@ ilk 2000 satır gösterilir, 2 MB'tan büyük ve ikili dosyalara bakılmaz, en f
 20.000 dosya taranır — sınıra takılan arama durum satırında bunu yazar. Bu
 depoda bir arama ilk seferde ~40 ms, sonrakiler ~3 ms; 20.000 dosyalık git'siz
 bir klasörde ilk tarama ~1 sn.
+
+**Tasarım: Premium, Kokpit ya da Klasik.** *Ayarlar › Görünüm › Tasarım* üç
+kartla seçiliyor ve renk temasından **bağımsız**: tema rengi, tasarım biçimi belirler.
+**Premium** katmanlı yüzeyler, ince hat kenarlıklar, yumuşak gölgeler,
+hap biçimli sekmeler, yüzen bir komut kutusu ve menü/palet gibi kısa ömürlü
+yüzeylerde cam etkisi getirir. Premium'da Ayarlar penceresi de yeniden
+düzenlenir: renkli bölüm simgeleriyle tam boy bir kenar çubuğu, kartlara
+toplanmış ayarlar ve onay kutuları yerine açık/kapalı anahtarları.
+**Kokpit** (varsayılan; yeni kurulum da güncellenen uygulama da bununla açılır,
+seçilen tasarım ise korunur) Premium'un görünüşüyle başka bir yerleşim: solda grupların baş
+harfleriyle duran bir ray (komut çalışan grupta nokta; altta Geçmiş, Favoriler,
+Değişiklikler ve Ayarlar), yanında yalnızca etkin grubun sekmeleri kart olarak
+(klasör, son komut, çalışan sunucunun portu), sekme şeridinin yerinde "grup ›
+sekme" yolu ve terminalin üstüne açılmak yerine yanında sabit duran yan panel.
+Kenar çubuğu kapatılınca sekme şeridi geri gelir. Raydaki karo sağ tıkla
+yönetilir (ad, renk, favori, yeni sekme, sıra, silme), sürüklenerek sıralanır;
+rayın dibindeki düğme grup adlarını karoların yanına yazar.
+**Klasik** uygulamanın düz ve yoğun ilk düzeni.
+Terminalin ızgarası üçünde de aynı ölçülerde çizilir; geçiş anında uygulanır,
+yeniden başlatma gerekmez. Gerekçe `src/lib/design.ts`, `src/styles/premium.css`
+ve `src/styles/kokpit.css` başlarında.
 
 **Arayüz yazı tipi.** *Ayarlar › Görünüm* altında terminalin yazı tipinden
 **ayrı** bir aile ve boyut var: menüler, paneller, sekme adları ve ayarlar
@@ -1011,10 +1034,12 @@ da *Ayarlar › Oturum › Kapatma düğmesi*ni *Uygulamadan tamamen çık* yap�
 
 ## Ayarları başka makineye taşımak
 
-**Dışa aktarma** (`Aktar` → `Dışa aktar`) neyin dosyaya yazılacağını
-seçtiriyor: ayarlar, çalışma alanı, favori komutlar, komut geçmişi, ekran
-çıktıları. Favoriler varsayılan olarak dahil — başka makinede ilk isteyeceğiniz
-şeylerden biri.
+İçe ve dışa aktarma *Ayarlar › Yedekleme* bölümünde; komut paletindeki
+"Ayarları içe / dışa aktar" da oraya açılır.
+
+**Dışa aktarma** neyin dosyaya yazılacağını seçtiriyor: ayarlar, çalışma alanı,
+favori komutlar, komut geçmişi, ekran çıktıları. Favoriler varsayılan olarak
+dahil — başka makinede ilk isteyeceğiniz şeylerden biri.
 
 *Taşınabilir yollar* açıkken makineye özel ön ekler belirteçlere çevrilir:
 

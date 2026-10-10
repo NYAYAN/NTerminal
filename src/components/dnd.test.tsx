@@ -54,7 +54,16 @@ function group(id: string, tabs: TabState[], patch: Partial<Group> = {}): Group 
 }
 
 function seed(groups: Group[], activeGroupId = groups[0]?.id ?? null) {
-  useStore.setState({ groups, activeGroupId, ready: true });
+  // Sekme şeridi ve çok gruplu kenar çubuğu Premium/Klasik yerleşimi; varsayılan
+  // Kokpit'te şeridin yerinde yol, sütunda tek grup var (onlar `kokpit.test.tsx`
+  // ve `groupRail.test.tsx` içinde).
+  const settings = useStore.getState().settings;
+  useStore.setState({
+    groups,
+    activeGroupId,
+    ready: true,
+    settings: { ...settings, appearance: { ...settings.appearance, design: "premium" } },
+  });
 }
 
 /**

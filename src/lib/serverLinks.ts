@@ -118,3 +118,16 @@ export function extractServerUrls(text: string, limit = 4): string[] {
 export function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
+
+/**
+ * Adresin yalnızca PORTU: `http://localhost:5273/` → `:5273`.
+ *
+ * Kokpit'in sekme kartında yer bir rozet kadar ve aynı makinedeki sunucuları
+ * ayıran şey port. Portsuz adreste (`http://intranet.local/`) kısa adresin
+ * kendisi.
+ */
+export function portLabel(url: string): string {
+  const short = shortUrl(url);
+  const port = /:(\d+)(?:[/?#]|$)/.exec(short)?.[1];
+  return port ? `:${port}` : short;
+}

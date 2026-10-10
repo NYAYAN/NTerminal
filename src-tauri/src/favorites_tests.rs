@@ -22,6 +22,7 @@ fn req(command: &str) -> NewFavorite {
         group_id: None,
         folder: None,
         cwd: None,
+        alias: None,
     }
 }
 
@@ -36,6 +37,7 @@ fn ekleme_ve_listeleme() {
             group_id: None,
             folder: None,
             cwd: None,
+            alias: None,
         })
         .unwrap();
 
@@ -74,6 +76,7 @@ fn guncelleme_alanlari_ayirt_eder() {
             group_id: None,
             folder: None,
             cwd: None,
+            alias: None,
         })
         .unwrap();
 
@@ -198,6 +201,7 @@ fn diskten_yeniden_okunabilir() {
                 group_id: Some("g1".into()),
                 folder: None,
                 cwd: Some("C:\\proje".into()),
+                alias: None,
             })
             .unwrap();
     }
@@ -236,6 +240,7 @@ fn ice_alma_ayni_komutu_tekrarlamaz() {
             group_id: None,
             folder: None,
             cwd: None,
+            alias: None,
             created_at: 1,
             used_count: 0,
             last_used_at: None,
@@ -248,6 +253,7 @@ fn ice_alma_ayni_komutu_tekrarlamaz() {
             group_id: None,
             folder: None,
             cwd: None,
+            alias: None,
             created_at: 2,
             used_count: 5,
             last_used_at: Some(9),
@@ -271,6 +277,7 @@ fn ice_alma_replace_temizler() {
         group_id: None,
         folder: None,
         cwd: None,
+        alias: None,
         created_at: 2,
         used_count: 0,
         last_used_at: None,
@@ -301,6 +308,7 @@ fn favori_klasoru_kaydediliyor_ve_temizlenebiliyor() {
             group_id: None,
             folder: Some("  Yayin  ".into()),
             cwd: None,
+            alias: None,
         })
         .unwrap();
     // Bosluklar kirpiliyor: "Yayin " ile "Yayin" iki ayri klasor olmamali.
@@ -379,9 +387,123 @@ fn json_yamada_null_temizle_demek() {
             group_id: None,
             folder: None,
             cwd: Some(r"C:\proje".into()),
+            alias: None,
         })
         .unwrap();
     let yama: FavoritePatch = serde_json::from_str(r#"{"cwd":null}"#).unwrap();
     let sonra = store.update(&eklenen.id, yama).unwrap().unwrap();
     assert_eq!(sonra.cwd, None, "klasor yolu silinmedi");
+}
+
+fn with_alias(command: &str, alias: &str) -> NewFavorite {
+    NewFavorite { alias: Some(alias.into()), ..req(command) }
+}
+
+/// Kisaltma (ISTEK: "npm run build --configuration icin nrb dediginde
+/// calissin"): kirpiliyor, bos birakmak kaldiriyor, JSON'da null temizliyor.
+#[test]
+fn kisaltma_kaydediliyor_ve_temizlenebiliyor() {
+    let paths = temp_paths("alias");
+    let dir = paths.root.clone();
+    let store = FavoriteStore::load(paths);
+
+    let eklenen = store.add(with_alias("npm run build --configuration", "  nrb  ")).unwrap();
+    assert_eq!(eklenen.alias.as_deref(), Some("nrb"));
+
+    // Alan gonderilmezse kisaltmaya dokunulmuyor.
+    let yama: FavoritePatch = serde_json::from_str(r#"{"label":"Derle"}"#).unwrap();
+    let dokunulmadi = store.update(&eklenen.id, yama).unwrap().unwrap();
+    assert_eq!(dokunulmadi.alias.as_deref(), Some("nrb"), "yama kisaltmayi dusurdu");
+
+    // Diskten yeniden okununca duruyor.
+    let yeniden = FavoriteStore::load(DataPaths { root: dir.clone(), portable: true });
+    assert_eq!(yeniden.list()[0].alias.as_deref(), Some("nrb"));
+
+    // null ve bos metin kaldiriyor.
+    let null: FavoritePatch = serde_json::from_str(r#"{"alias":null}"#).unwrap();
+    assert_eq!(store.update(&eklenen.id, null).unwrap().unwrap().alias, None);
+    store
+        .update(&eklenen.id, FavoritePatch { alias: Some(Some("ysd".into())), ..Default::default() })
+        .unwrap();
+    let bos = store
+        .update(&eklenen.id, FavoritePatch { alias: Some(Some("   ".into())), ..Default::default() })
+        .unwrap()
+        .unwrap();
+    assert_eq!(bos.alias, None);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Kisaltma satirin ILK sozcugu olarak araniyor; icinde bosluk olan bir
+/// kisaltma hicbir zaman eslesmezdi. Reddediliyor ve kayda dokunulmuyor.
+#[test]
+fn kisaltma_tek_sozcuk() {
+    let store = FavoriteStore::load(temp_paths("alias-space"));
+    assert!(store.add(with_alias("npm test", "n t")).is_err());
+    assert!(store.list().is_empty(), "gecersiz kisaltmayla favori eklendi");
+
+    let fav = store.add(with_alias("npm test", "nt")).unwrap();
+    let yama = FavoritePatch {
+        label: Some(Some("Testler".into())),
+        alias: Some(Some("n t".into())),
+        ..Default::default()
+    };
+    assert!(store.update(&fav.id, yama).is_err());
+    let kayit = &store.list()[0];
+    assert_eq!(kayit.alias.as_deref(), Some("nt"));
+    assert_eq!(kayit.label, None, "gecersiz yamanin diger alanlari yazildi");
+}
+
+/// Iki favori ayni kisaltmayi alirsa hangisinin calisacagi belirsiz kalirdi.
+#[test]
+fn kisaltma_tekil() {
+    let store = FavoriteStore::load(temp_paths("alias-unique"));
+    let nrb = store.add(with_alias("npm run build", "nrb")).unwrap();
+    assert!(store.add(with_alias("yarn build", "nrb")).is_err());
+
+    let ysd = store.add(with_alias("yarn start:dev", "ysd")).unwrap();
+    let cakisan = FavoritePatch { alias: Some(Some("nrb".into())), ..Default::default() };
+    assert!(store.update(&ysd.id, cakisan).is_err());
+
+    // Kendi kisaltmasini yeniden yazmak cakisma degil.
+    let ayni = FavoritePatch { alias: Some(Some("nrb".into())), ..Default::default() };
+    assert_eq!(store.update(&nrb.id, ayni).unwrap().unwrap().alias.as_deref(), Some("nrb"));
+}
+
+/// Ice alma favoriyi KAYBETMIYOR: kisaltmasi burada baskasindaysa kayit
+/// kisaltmasiz geliyor.
+#[test]
+fn ice_almada_cakisan_kisaltma_dusuyor() {
+    let store = FavoriteStore::load(temp_paths("alias-ingest"));
+    store.add(with_alias("npm run build", "nrb")).unwrap();
+    let gelen = |id: &str, command: &str, alias: &str| Favorite {
+        id: id.into(),
+        command: command.into(),
+        label: None,
+        note: None,
+        group_id: None,
+        folder: None,
+        cwd: None,
+        alias: Some(alias.into()),
+        created_at: 0,
+        used_count: 0,
+        last_used_at: None,
+    };
+    let incoming = vec![gelen("f1", "yarn build", "nrb"), gelen("f2", "yarn start:dev", "ysd")];
+    assert_eq!(store.ingest(incoming, false).unwrap(), 2);
+
+    let list = store.list();
+    let alias_of = |command: &str| list.iter().find(|f| f.command == command).unwrap().alias.clone();
+    assert_eq!(alias_of("npm run build").as_deref(), Some("nrb"));
+    assert_eq!(alias_of("yarn build"), None, "cakisan kisaltma ice alindi");
+    assert_eq!(alias_of("yarn start:dev").as_deref(), Some("ysd"));
+}
+
+/// Kisaltma alanini BILMEYEN eski bir favorites.json okunabilmeli.
+#[test]
+fn eski_favori_dosyasi_kisaltmasiz_okunuyor() {
+    let paths = temp_paths("alias-eski");
+    std::fs::write(paths.favorites_file(), r#"[{"id":"f1","command":"ls","createdAt":0,"usedCount":0}]"#).unwrap();
+    let store = FavoriteStore::load(paths);
+    assert_eq!(store.list()[0].alias, None);
 }

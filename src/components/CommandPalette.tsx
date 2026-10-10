@@ -149,7 +149,8 @@ export function CommandPalette() {
         label: t("palette.transfer"),
         run: () => {
           close();
-          setUi({ transferOpen: true });
+          // İçe / dışa aktarım Ayarlar › Yedekleme'de (bkz. `BackupPanel`).
+          setUi({ settingsOpen: true, settingsSection: "backup" });
         },
       },
       {

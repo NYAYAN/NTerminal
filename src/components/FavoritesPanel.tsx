@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { aliasProblem } from "../lib/aliases";
 import { formatWhen, fuzzyScore, shortenPath } from "../lib/format";
 import { tp, tSplit, useT } from "../lib/i18n";
 import { folderNames, sectionsOf } from "../lib/favoriteGroups";
@@ -19,6 +20,8 @@ interface DraftForm {
   groupId: string;
   /** Favorinin klasörü; boş = gruplanmamış. */
   folder: string;
+  /** Komut kutusundaki kısaltma; boş = yok. */
+  alias: string;
 }
 
 const EMPTY: DraftForm = {
@@ -29,6 +32,7 @@ const EMPTY: DraftForm = {
   cwd: "",
   groupId: "",
   folder: "",
+  alias: "",
 };
 
 function toDraft(favorite: Favorite): DraftForm {
@@ -40,6 +44,7 @@ function toDraft(favorite: Favorite): DraftForm {
     cwd: favorite.cwd ?? "",
     groupId: favorite.groupId ?? "",
     folder: favorite.folder ?? "",
+    alias: favorite.alias ?? "",
   };
 }
 
@@ -140,7 +145,7 @@ export function FavoritesPanel() {
     return items
       .map((f) => ({
         f,
-        score: fuzzyScore(`${f.label ?? ""} ${f.command} ${f.note ?? ""}`, needle),
+        score: fuzzyScore(`${f.label ?? ""} ${f.command} ${f.note ?? ""} ${f.alias ?? ""}`, needle),
       }))
       .filter((r): r is { f: Favorite; score: number } => r.score !== null)
       .sort((a, b) => a.score - b.score)
@@ -154,6 +159,21 @@ export function FavoritesPanel() {
       store().toast(t("fav.commandEmpty"), "err");
       return;
     }
+    // Kısaltma kaydetmeden ÖNCE denetleniyor: Rust da reddediyor ama onun
+    // iletisi tek dilde; form da açık kalıyor, yazılan kaybolmuyor.
+    const problem = aliasProblem(form.alias, favorites, form.id);
+    if (problem) {
+      store().toast(
+        problem.kind === "space"
+          ? t("fav.aliasSpace")
+          : t("fav.aliasTaken", {
+              alias: form.alias.trim(),
+              command: problem.favorite.label || problem.favorite.command,
+            }),
+        "err",
+      );
+      return;
+    }
     if (form.id) {
       await store().updateFavorite(form.id, {
         command,
@@ -162,6 +182,7 @@ export function FavoritesPanel() {
         cwd: form.cwd.trim() || null,
         groupId: form.groupId || null,
         folder: form.folder.trim() || null,
+        alias: form.alias.trim() || null,
       });
     } else {
       await store().addFavorite({
@@ -171,6 +192,7 @@ export function FavoritesPanel() {
         cwd: form.cwd.trim() || null,
         groupId: form.groupId || null,
         folder: form.folder.trim() || null,
+        alias: form.alias.trim() || null,
       });
     }
     setForm(null);
@@ -276,6 +298,20 @@ export function FavoritesPanel() {
             placeholder={t("fav.labelPlaceholder")}
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") void submit();
+              if (e.key === "Escape") setForm(null);
+            }}
+          />
+          {/* Kısaltma komutun hemen altında: ikisi birlikte okunuyor ("nrb" →
+              "npm run build …"). Kod yazı tipi, çünkü komut kutusuna aynen
+              böyle yazılacak. */}
+          <input
+            className="mono"
+            placeholder={t("fav.aliasPlaceholder")}
+            value={form.alias}
+            onChange={(e) => setForm({ ...form, alias: e.target.value })}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === "Enter") void submit();
@@ -449,7 +485,14 @@ export function FavoritesPanel() {
             >
               <span className="fav-star">★</span>
               <div className="fav-body">
-                <div className="fav-title">{favorite.label || favorite.command}</div>
+                <div className="fav-title">
+                  {favorite.label || favorite.command}
+                  {favorite.alias && (
+                    <span className="fav-alias mono" title={t("fav.aliasTitle", { alias: favorite.alias })}>
+                      {favorite.alias}
+                    </span>
+                  )}
+                </div>
                 {favorite.label && <div className="fav-cmd mono">{favorite.command}</div>}
                 <div className="fav-meta">
                   {group && <span className="fav-tag" style={{ color: group.color ?? undefined }}>{groupLabel(group)}</span>}

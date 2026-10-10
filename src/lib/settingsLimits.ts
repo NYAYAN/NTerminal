@@ -1,5 +1,7 @@
 import type { Appearance, Behavior, Settings } from "../types";
 
+import { DEFAULT_DESIGN, isDesign } from "./design";
+
 /**
  * Sayısal ayarların sınırları — TEK yerden.
  *
@@ -77,6 +79,10 @@ export function sanitizeAppearance(a: Appearance): Appearance {
     scrollback: clampInt(a.scrollback, LIMITS.scrollback),
     fontZoom: clampZoom(a.fontZoom, fontSize),
     cursorStyle: CURSOR_STYLES.includes(a.cursorStyle) ? a.cursorStyle : "bar",
+    // Elle yazılmış ya da gelecekteki bir sürümün bildiği bir tasarım adı
+    // bilinmiyorsa varsayılana düşüyor; CSS tanımadığı bir değerde hiçbir
+    // kural uygulamaz ve arayüz "yarım" kalırdı.
+    design: isDesign(a.design) ? a.design : DEFAULT_DESIGN,
   };
   return sameFields(a, next) ? a : next;
 }

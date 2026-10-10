@@ -39,6 +39,15 @@ export function TabBar() {
   const themeId = useStore((s) => s.settings.appearance.theme);
   const renamingTabId = useStore((s) => s.ui.renamingTabId);
   const viewMode = useStore((s) => s.settings.appearance.viewMode);
+  /*
+   * Kokpit yerleşiminde sekmeler soldaki sütunda kart olarak duruyor; şerit
+   * aynı listeyi ikinci kez çizerdi. Yerine "grup › sekme" yolu geliyor.
+   * Sütun kapatılmışsa (başlık çubuğundaki kenar çubuğu düğmesi) sekmelere
+   * başka yoldan ulaşılamaz — o zaman şerit geri geliyor.
+   */
+  const crumb = useStore(
+    (s) => s.settings.appearance.design === "kokpit" && !s.settings.appearance.sidebarCollapsed,
+  );
   const keybindings = useStore((s) => s.settings.keybindings);
   const setUi = useStore((s) => s.setUi);
   const store = useStore.getState;
@@ -54,6 +63,28 @@ export function TabBar() {
   const stripRef = useRef<HTMLDivElement | null>(null);
 
   const group = groups.find((g) => g.id === activeGroupId);
+
+  /*
+   * Adlandırma kutusu sekmenin o anki adıyla açılıyor — adlandırma hangi
+   * yoldan başlarsa başlasın.
+   *
+   * ÖLÇÜLEN HATA: taslağı yalnızca çift tıklama ve sağ tık menüsü
+   * dolduruyordu. Kısayol (`App`) ve paletteki karşılığı yalnızca
+   * `renamingTabId` yazıyor; kutu bir önceki adlandırmadan kalan metinle
+   * açılıyor, odak kaçınca da o metin bu sekmeye yazılıyordu (ilk açılışta
+   * metin boş: özel ad siliniyordu). Bkz. `tabRename.test.tsx`.
+   *
+   * Etkiyle değil çizim sırasında: etki kutuyu önce eski metinle çizip sonra
+   * düzeltirdi; burada React bileşeni yeni taslakla hemen yeniden çiziyor,
+   * eski metin ekrana hiç çıkmıyor. Yalnızca kimlik DEĞİŞİNCE doluyor:
+   * kutu açıkken sekmenin adı (klasörü) değişse de yazılan metin kalıyor.
+   */
+  const [draftFor, setDraftFor] = useState<string | null>(null);
+  if (draftFor !== renamingTabId) {
+    setDraftFor(renamingTabId);
+    const renamed = group?.tabs.find((tab) => tab.id === renamingTabId);
+    if (renamed) setDraft(renamed.customTitle ?? tabLabel(renamed));
+  }
 
   // Etkin sekme görünür kalsın: klavyeyle sekme değiştirirken çubuk kaysın.
   useEffect(() => {
@@ -102,14 +133,12 @@ export function TabBar() {
       strip.removeEventListener("scroll", olc);
       gozlemci.disconnect();
     };
-  }, [group?.tabs, group?.activeTabId, renamingTabId]);
+  }, [group?.tabs, group?.activeTabId, renamingTabId, crumb]);
 
   if (!group) return <div className="tabbar" />;
 
-  const beginRename = (tab: TabState) => {
-    setDraft(tab.customTitle ?? tabLabel(tab));
-    setUi({ renamingTabId: tab.id });
-  };
+  // Kutunun metnini yukarıdaki blok dolduruyor (kısayol ve paletle aynı yol).
+  const beginRename = (tab: TabState) => setUi({ renamingTabId: tab.id });
 
   const commitRename = (tabId: string) => {
     const name = draft.trim();
@@ -279,6 +308,18 @@ export function TabBar() {
     // Etkin grubun rengi sekme cubugunun altindaki cizgiye gidiyor: kenar
     // cubugu kapaliyken de hangi grupta oldugunuz gorunuyor.
     <div className="tabbar" style={{ ["--group-color" as string]: group.color ?? "#6e7681" }}>
+      {crumb ? (
+        <TabCrumb
+          groupName={groupLabel(group)}
+          tab={group.tabs.find((tab) => tab.id === group.activeTabId) ?? group.tabs[0]}
+          renaming={renamingTabId}
+          draft={draft}
+          setDraft={setDraft}
+          onRename={beginRename}
+          onCommit={commitRename}
+          onCancel={() => setUi({ renamingTabId: null })}
+        />
+      ) : (
       <div className="tabbar-strip" ref={stripRef} onDragEnd={endDrag}>
         {group.tabs.map((tab, index) => {
           const isActive = group.activeTabId === tab.id;
@@ -401,6 +442,7 @@ export function TabBar() {
           );
         })}
       </div>
+      )}
 
       <div className="tabbar-actions">
         {/* Taşma göstergesi.
@@ -411,7 +453,7 @@ export function TabBar() {
          * Sayı düğmenin üstünde: "iki sekme daha var" bilgisi düğmeye
          * basmadan önce görünmeli, yoksa kullanıcı menüyü açıp kapatarak
          * öğrenmek zorunda kalıyor. */}
-        {gizliSekme > 0 && (
+        {!crumb && gizliSekme > 0 && (
           <button
             className="icon-btn tab-overflow"
             title={t("tab.hiddenTabs", { n: String(gizliSekme) })}
@@ -475,6 +517,65 @@ export function TabBar() {
       </div>
 
       {menu.state && <ContextMenu state={menu.state} onClose={menu.close} />}
+    </div>
+  );
+}
+
+/**
+ * Kokpit'te şeridin yerindeki yol: grubun adı › etkin sekmenin adı.
+ *
+ * Sekmeyi yeniden adlandırma kısayolu (ve paletteki karşılığı) yalnızca bu
+ * çubuktaki kutuyu açıyor; şerit yokken kutu burada, sekmenin adının yerinde
+ * açılıyor. Çift tıklama da şeritteki gibi adlandırmayı başlatıyor.
+ */
+function TabCrumb({
+  groupName,
+  tab,
+  renaming,
+  draft,
+  setDraft,
+  onRename,
+  onCommit,
+  onCancel,
+}: {
+  groupName: string;
+  tab: TabState | undefined;
+  renaming: string | null;
+  draft: string;
+  setDraft: (value: string) => void;
+  onRename: (tab: TabState) => void;
+  onCommit: (tabId: string) => void;
+  onCancel: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="tabbar-crumb">
+      <span className="crumb-dot" aria-hidden="true" />
+      <span className="crumb-group">{groupName}</span>
+      {tab && (
+        <>
+          <ChevronIcon open={false} size={11} className="crumb-sep" />
+          {renaming === tab.id ? (
+            <input
+              className="tab-rename"
+              autoFocus
+              value={draft}
+              placeholder={t("tab.namePlaceholder")}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => onCommit(tab.id)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") onCommit(tab.id);
+                if (e.key === "Escape") onCancel();
+              }}
+            />
+          ) : (
+            <span className="crumb-tab" onDoubleClick={() => onRename(tab)}>
+              {tabLabel(tab)}
+            </span>
+          )}
+        </>
+      )}
     </div>
   );
 }

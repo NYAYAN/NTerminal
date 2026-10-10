@@ -123,6 +123,19 @@ describe("komut paleti", () => {
     expect(useStore.getState().ui.paletteOpen).toBe(false);
   });
 
+  it("içe / dışa aktarma eylemi Ayarlar › Yedekleme'yi açıyor", () => {
+    // Aktarım artık ayrı bir pencere değil, Ayarlar'ın bölümü (`BackupPanel`).
+    const { container } = render(<CommandPalette />);
+    fireEvent.change(input(container), { target: { value: "dışa aktar" } });
+    const row = [...container.querySelectorAll(".palette-row")].find((r) =>
+      r.textContent?.includes("Ayarları içe / dışa aktar"),
+    )!;
+    fireEvent.click(row);
+    const ui = useStore.getState().ui;
+    expect(ui.settingsOpen).toBe(true);
+    expect(ui.settingsSection).toBe("backup");
+  });
+
   it("Esc ve örtüye tıklamak kapatıyor, hiçbir eylem çalışmıyor", () => {
     const { container } = render(<CommandPalette />);
     fireEvent.keyDown(input(container), { key: "Escape" });

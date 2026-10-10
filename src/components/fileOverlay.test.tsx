@@ -6,7 +6,7 @@ import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
 import { DEFAULT_FLAGS } from "../lib/textSearch";
-import { sessions, useStore } from "../store/useStore";
+import { RECENT_FILES_MAX, sessions, useStore } from "../store/useStore";
 import type { TerminalSession } from "../terminal/TerminalSession";
 import type { DirEntry, Group, TabState, TextSearchResult } from "../types";
 import { FilePanel } from "./FilePanel";
@@ -361,5 +361,29 @@ describe("openFile", () => {
     useStore.getState().openFile("/baska/yer/x.ts");
     expect(useStore.getState().ui.treeExpanded).toEqual([]);
     expect(useStore.getState().ui.viewerPath).toBe("/baska/yer/x.ts");
+  });
+
+  it("son açılanlar: en yenisi başta, tekrar yok, en çok RECENT_FILES_MAX", () => {
+    // Ctrl+P'nin "Son açılanlar" bölümü buradan; nereden açıldığı fark etmiyor.
+    seed({ recentFiles: [] });
+    const ac = (ad: string) => useStore.getState().openFile(`${CWD}/${ad}`);
+    for (let i = 0; i < RECENT_FILES_MAX + 2; i++) ac(`f${i}.ts`);
+    const liste = useStore.getState().ui.recentFiles;
+    expect(liste).toHaveLength(RECENT_FILES_MAX);
+    expect(liste[0]).toBe(`${CWD}/f${RECENT_FILES_MAX + 1}.ts`);
+    expect(liste, "en eskiler düşmedi").not.toContain(`${CWD}/f0.ts`);
+
+    // Yeniden açılan başa geçiyor, iki kez girmiyor.
+    ac("f5.ts");
+    const sonra = useStore.getState().ui.recentFiles;
+    expect(sonra[0]).toBe(`${CWD}/f5.ts`);
+    expect(sonra.filter((p) => p === `${CWD}/f5.ts`)).toHaveLength(1);
+    expect(sonra).toHaveLength(RECENT_FILES_MAX);
+    // Zaten baştaki dosya: AYNI dizi (boşuna yeniden çizim yok).
+    ac("f5.ts");
+    expect(useStore.getState().ui.recentFiles).toBe(sonra);
+
+    // Yalnızca bu oturumun listesi: uygulama her açılışta boş başlıyor.
+    expect(useStore.getInitialState().ui.recentFiles).toEqual([]);
   });
 });

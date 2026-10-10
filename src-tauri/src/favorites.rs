@@ -43,6 +43,16 @@ pub struct Favorite {
     /// Bu klasorde calistirilsin. None = aktif sekmenin klasoru.
     #[serde(default)]
     pub cwd: Option<String>,
+    /// Komut kutusunda bu favoriyi calistiran kisaltma: `nrb` yazip Enter'a
+    /// basmak favorinin komutunu calistiriyor (arkasina yazilanlar sona
+    /// ekleniyor). ISTEK: "npm run build --configuration icin nrb dediginde
+    /// calissin ... bu kisaltmalari biz belirlemeliyiz".
+    ///
+    /// TEK sozcuk, cunku satirin ilk sozcugu olarak araniyor; favoriler arasinda
+    /// TEKIL, cunku iki favori ayni kisaltmayi alirsa hangisinin calisacagi
+    /// belirsiz kalirdi. Ikisini de `clean_alias` ve `alias_taken` bagliyor.
+    #[serde(default)]
+    pub alias: Option<String>,
     #[serde(default)]
     pub created_at: i64,
     #[serde(default)]
@@ -65,6 +75,8 @@ pub struct NewFavorite {
     pub folder: Option<String>,
     #[serde(default)]
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub alias: Option<String>,
 }
 
 /// serde `Option<Option<T>>` alanlarini "yok" ile "null" arasinda ayirir.
@@ -97,12 +109,32 @@ pub struct FavoritePatch {
     pub folder: Option<Option<String>>,
     #[serde(default, deserialize_with = "double_option")]
     pub cwd: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub alias: Option<Option<String>>,
 }
 
 fn clean(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+/// Kisaltmayi temizler: bos ise yok, icinde bosluk varsa hata.
+fn clean_alias(value: Option<String>) -> Result<Option<String>> {
+    let alias = clean(value);
+    if let Some(a) = &alias {
+        if a.chars().any(char::is_whitespace) {
+            anyhow::bail!("kisaltma tek sozcuk olmali, bosluk iceremez: {a}");
+        }
+    }
+    Ok(alias)
+}
+
+/// Kisaltma baska bir favoride (kimligi `except` olmayan) kullaniliyor mu.
+fn alias_taken(items: &[Favorite], alias: &str, except: Option<&str>) -> bool {
+    items
+        .iter()
+        .any(|f| f.alias.as_deref() == Some(alias) && except != Some(f.id.as_str()))
 }
 
 pub struct FavoriteStore {
@@ -139,6 +171,12 @@ impl FavoriteStore {
         if command.is_empty() {
             anyhow::bail!("bos komut favoriye eklenemez");
         }
+        let alias = clean_alias(req.alias)?;
+        if let Some(a) = &alias {
+            if alias_taken(&inner.items, a, None) {
+                anyhow::bail!("bu kisaltma baska bir favoride kullaniliyor: {a}");
+            }
+        }
         // Ayni komut zaten favorideyse tekrar eklemiyoruz; kullanici yildiza
         // iki kez bastiginda liste kirlenmesin.
         if let Some(existing) = inner.items.iter().find(|f| f.command == command) {
@@ -152,6 +190,7 @@ impl FavoriteStore {
             group_id: clean(req.group_id),
             folder: clean(req.folder),
             cwd: clean(req.cwd),
+            alias,
             created_at: now_ms(),
             used_count: 0,
             last_used_at: None,
@@ -163,6 +202,17 @@ impl FavoriteStore {
 
     pub fn update(&self, id: &str, patch: FavoritePatch) -> Result<Option<Favorite>> {
         let mut inner = self.inner.lock();
+        if !inner.items.iter().any(|f| f.id == id) {
+            return Ok(None);
+        }
+        // Kisaltma kayda dokunmadan ONCE denetleniyor: gecersizse ya da baska
+        // bir favorideyse yamanin hicbir alani yazilmamali.
+        let alias = patch.alias.map(clean_alias).transpose()?;
+        if let Some(Some(a)) = &alias {
+            if alias_taken(&inner.items, a, Some(id)) {
+                anyhow::bail!("bu kisaltma baska bir favoride kullaniliyor: {a}");
+            }
+        }
         let Some(item) = inner.items.iter_mut().find(|f| f.id == id) else {
             return Ok(None);
         };
@@ -187,6 +237,9 @@ impl FavoriteStore {
         }
         if let Some(cwd) = patch.cwd {
             item.cwd = clean(cwd);
+        }
+        if let Some(alias) = alias {
+            item.alias = alias;
         }
         let updated = item.clone();
         inner.flush()?;
@@ -257,7 +310,7 @@ impl FavoriteStore {
             inner.items.clear();
         }
         let mut added = 0;
-        for favorite in incoming {
+        for mut favorite in incoming {
             let exists = inner
                 .items
                 .iter()
@@ -265,6 +318,13 @@ impl FavoriteStore {
             if exists {
                 continue;
             }
+            // Kisaltma tekil kalmali: ice alinan kayittaki kisaltma gecersizse
+            // ya da burada baska bir favorideyse kayit kisaltmasiz geliyor.
+            // Favorinin kendisi kaybolmuyor; kisaltma elle yeniden verilebilir.
+            favorite.alias = clean_alias(favorite.alias.take())
+                .ok()
+                .flatten()
+                .filter(|a| !alias_taken(&inner.items, a, None));
             inner.items.push(favorite);
             added += 1;
         }

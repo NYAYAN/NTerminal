@@ -38,6 +38,7 @@ import {
   type IgnorePolicy,
   type TextDiff,
 } from "../lib/textDiff";
+import { applyDesignToDocument } from "../lib/design";
 import { applyThemeToDocument, getTheme } from "../lib/themes";
 import { terminalFontSize } from "../lib/settingsLimits";
 import type { DiffSides, FileText, GitChange, Settings } from "../types";
@@ -371,6 +372,7 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
   const applySettings = useCallback((next: Settings) => {
     setLanguage(next.language);
     applyThemeToDocument(getTheme(next.appearance.theme));
+    applyDesignToDocument(next.appearance.design);
     applyUiFont(next.appearance.uiFontFamily, next.appearance.uiFontSize);
     setSettings(next);
   }, []);

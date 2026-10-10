@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { api } from "../lib/ipc";
@@ -13,18 +14,14 @@ import {
   tabSubtitle,
   tabTooltip,
 } from "../lib/labels";
-import {
-  canDeleteGroup,
-  dropIndex,
-  isLocked,
-  lockedTabs,
-  nextCollapsedAll,
-  visibleGroups,
-} from "../lib/tabs";
+import { dropIndex, isLocked, nextCollapsedAll, visibleGroups } from "../lib/tabs";
+import { portLabel } from "../lib/serverLinks";
 import { readableAccent } from "../lib/themes";
 import { sessions, useStore } from "../store/useStore";
 import type { Group, TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
+import { GroupColorPicker } from "./GroupColorPicker";
+import { groupMenu } from "./groupMenu";
 import {
   ChevronIcon,
   ClaudeIcon,
@@ -33,21 +30,6 @@ import {
   PlusIcon,
   StarIcon,
 } from "./Icons";
-
-/**
- * Seçicideki HAZIR renkler — dört tane.
- *
- * Sekiz hazır renk vardı ve dar kenar çubuğunda ikinci satıra sarıyordu; seçici
- * bir renk kutusu tarlasına dönüşüyordu. Dört, birbirinden açıkça ayrılan bir
- * yelpaze veriyor (mavi / yeşil / amber / mor) ve tek satırda duruyor. Bunların
- * dışındaki her renk özel renk seçicisinden geliyor, yani kısıtlama değil
- * sadeleştirme.
- *
- * `useStore` içindeki AYNI ADLI liste bununla ilgisiz: o yeni grupların
- * rengini sırayla atıyor ve daha geniş olması iyi — iki grup aynı renge daha
- * geç düşüyor.
- */
-const GROUP_COLORS = ["#58a6ff", "#3fb950", "#d29922", "#bc8cff"];
 
 type Editing = { kind: "group" | "tab"; id: string } | null;
 type DropTarget = { groupId: string; index: number } | null;
@@ -64,6 +46,7 @@ export function GroupSidebar() {
   const themeId = useStore((s) => s.settings.appearance.theme);
   const sidebarWidth = useStore((s) => s.settings.appearance.sidebarWidth);
   const onlyFavorites = useStore((s) => s.settings.behavior.showOnlyFavoriteGroups);
+  const kokpit = useStore((s) => s.settings.appearance.design === "kokpit");
   const patchAppearance = useStore((s) => s.patchAppearance);
   const patchBehavior = useStore((s) => s.patchBehavior);
   const keybindings = useStore((s) => s.settings.keybindings);
@@ -107,7 +90,18 @@ export function GroupSidebar() {
     };
   }, [sidebarWidth, patchAppearance]);
 
-  const shown = visibleGroups(groups, onlyFavorites);
+  /*
+   * Kokpit yerleşiminde gruplar arası geçiş soldaki raydan (`GroupRail`); bu
+   * sütun yalnızca ETKİN grubun sekmelerini kart olarak gösteriyor. Favori
+   * süzgeci burada uygulanmıyor: etkin grubu süzgeç yüzünden gizlemek sütunu
+   * boşaltırdı.
+   */
+  const activeGroup = groups.find((g) => g.id === activeGroupId) ?? groups[0];
+  const shown = kokpit
+    ? activeGroup
+      ? [activeGroup]
+      : []
+    : visibleGroups(groups, onlyFavorites);
   const favoriteCount = groups.filter((g) => g.favorite).length;
   const allCollapsed = groups.length > 0 && !nextCollapsedAll(groups);
 
@@ -224,66 +218,17 @@ export function GroupSidebar() {
 
   // ------------------------------------------------------------------ menüler
 
-  const groupMenu = (group: Group, index: number): MenuEntry[] => [
-    {
-      kind: "item",
-      label: t("common.rename"),
-      hint: t("common.doubleClick"),
-      run: () => startEditGroup(group),
-    },
-    {
-      kind: "item",
-      label: t(group.favorite ? "group.removeFavoriteMenu" : "group.addFavoriteMenu"),
-      run: () => store().toggleGroupFavorite(group.id),
-    },
-    { kind: "item", label: t("group.changeColor"), run: () => setColorFor(group.id) },
-    {
-      kind: "item",
-      label: t("group.settings"),
-      run: () => store().setUi({ settingsOpen: true, editingGroupId: group.id }),
-    },
-    { kind: "separator" },
-    {
-      kind: "item",
-      label: t("group.newTabHere"),
-      hint: key("newTab"),
-      run: () => store().addTab({ groupId: group.id }),
-    },
-    {
-      kind: "item",
-      label: t(group.collapsed ? "group.expand" : "group.collapse"),
-      run: () => store().updateGroup(group.id, { collapsed: !group.collapsed }),
-    },
-    {
-      kind: "item",
-      label: t(allCollapsed ? "group.expandAll" : "group.collapseAll"),
-      run: () => store().toggleAllCollapsed(),
-    },
-    { kind: "separator" },
-    {
-      kind: "item",
-      label: t("common.moveUp"),
-      disabled: index === 0,
-      run: () => store().moveGroup(group.id, -1),
-    },
-    {
-      kind: "item",
-      label: t("common.moveDown"),
-      disabled: index === groups.length - 1,
-      run: () => store().moveGroup(group.id, 1),
-    },
-    { kind: "separator" },
-    {
-      kind: "item",
-      label: canDeleteGroup(group)
-        ? t("group.delete")
-        : t("group.deleteLockedCount", { n: lockedTabs(group.tabs).length }),
-      danger: true,
-      disabled: groups.length <= 1 || !canDeleteGroup(group),
-      // Onay deponun icinde: her silme yolu ayni soruyu soruyor.
-      run: () => void store().deleteGroup(group.id),
-    },
-  ];
+  // Liste Kokpit'in grup rayıyla ortak (bkz. `groupMenu`); burada yalnızca
+  // adlandırma kutusunun ve renk seçicisinin satırın içinde açılması.
+  const menuForGroup = (group: Group): MenuEntry[] =>
+    groupMenu(group, {
+      groups,
+      newTabHint: key("newTab"),
+      rename: () => startEditGroup(group),
+      changeColor: () => setColorFor(group.id),
+      doubleClickRenames: true,
+      collapse: kokpit ? undefined : { allCollapsed },
+    });
 
   /**
    * Kenar çubuğunun BOŞ yerine sağ tık.
@@ -319,19 +264,32 @@ export function GroupSidebar() {
       hint: key("newGroup"),
       run: () => store().addGroup(),
     },
-    { kind: "separator" },
-    {
-      kind: "item",
-      label: t(allCollapsed ? "group.expandAll" : "group.collapseAll"),
-      disabled: groups.length === 0,
-      run: () => store().toggleAllCollapsed(),
-    },
-    {
-      kind: "check",
-      label: t("group.favoritesOnly"),
-      checked: onlyFavorites,
-      run: () => void patchBehavior({ showOnlyFavoriteGroups: !onlyFavorites }),
-    },
+    /*
+     * Katlama ve favori süzgeci Kokpit'te YOK. BİLDİRİLEN: "kokpit görünümde
+     * grupları daralt, yalnızca favori gruplar sağ tıklayınca geliyor.
+     * Bunlara tıklayınca da bir şey yapmıyor." Sütun yalnızca etkin grubu
+     * gösteriyor (katlanmış grubu da açık çiziyor) ve süzgeç orada
+     * uygulanmıyor; başlıktaki aynı düğmeler de bu yüzden gizli (bkz.
+     * kokpit.css `.sidebar-head`). Ayarlar kalıcı: Kokpit'ten çıkınca
+     * bıraktığınız gibi dönüyorlar.
+     */
+    ...(kokpit
+      ? []
+      : ([
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: t(allCollapsed ? "group.expandAll" : "group.collapseAll"),
+            disabled: groups.length === 0,
+            run: () => store().toggleAllCollapsed(),
+          },
+          {
+            kind: "check",
+            label: t("group.favoritesOnly"),
+            checked: onlyFavorites,
+            run: () => void patchBehavior({ showOnlyFavoriteGroups: !onlyFavorites }),
+          },
+        ] satisfies MenuEntry[])),
   ];
 
   const tabMenu = (group: Group, tab: TabState, index: number): MenuEntry[] => {
@@ -452,14 +410,13 @@ export function GroupSidebar() {
       </div>
 
       <div className="sidebar-scroll" onDragEnd={endDrag}>
-        {onlyFavorites && favoriteCount === 0 && (
+        {!kokpit && onlyFavorites && favoriteCount === 0 && (
           <div className="hint">
             {t("group.noFavorites")}
           </div>
         )}
 
         {shown.map((group) => {
-          const groupIndex = groups.findIndex((g) => g.id === group.id);
           const isActiveGroup = group.id === activeGroupId;
           const groupRunning = group.tabs.some((t) => running[t.id]);
           const color = group.color ?? "#6e7681";
@@ -498,11 +455,12 @@ export function GroupSidebar() {
               <header
                 className="group-row"
                 // Adlandırma sırasında sürükleme kapalı: metin seçmek isteyen
-                // kullanıcı grubu taşımasın.
-                draggable={!(editing?.kind === "group" && editing.id === group.id)}
+                // kullanıcı grubu taşımasın. Kokpit'te de kapalı: sütunda tek
+                // grup var, sıralanacak bir şey yok.
+                draggable={!kokpit && !(editing?.kind === "group" && editing.id === group.id)}
                 onClick={() => store().setActiveGroup(group.id)}
                 onDoubleClick={() => startEditGroup(group)}
-                onContextMenu={(e) => menu.open(e, groupMenu(group, groupIndex))}
+                onContextMenu={(e) => menu.open(e, menuForGroup(group))}
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = "move";
                   e.dataTransfer.setData("text/plain", group.id);
@@ -570,7 +528,7 @@ export function GroupSidebar() {
                       <button
                         className="icon-btn"
                         title={t("group.menuTitle")}
-                        onClick={(e) => menu.open(e, groupMenu(group, groupIndex))}
+                        onClick={(e) => menu.open(e, menuForGroup(group))}
                       >
                         ⋯
                       </button>
@@ -580,71 +538,27 @@ export function GroupSidebar() {
               </header>
               )}
 
-              {/* Renk seçici.
-               *
-               * ## Seçmek KAPATMIYOR
-               *
-               * BİLDİRİLEN HATA: bir renge basınca seçici hemen kapanıyordu.
-               * Renk seçmek tek hamlelik bir iş değil — kullanıcı birkaç
-               * rengi deneyip grubun listedeki hâline bakarak karar veriyor.
-               * Kapanan seçici her deneme için menüyü yeniden açmayı
-               * gerektiriyordu. Artık seçim ANINDA uygulanıyor (grup rengi
-               * canlı değişiyor) ve seçici açık kalıyor; kapatma ayrı bir
-               * eylem.
-               *
-               * ## Kapatma düğmesi kutuların DIŞINDA
-               *
-               * Kutular dar kenar çubuğunda alt satıra sarıyor. "×" onlarla
-               * aynı sarma akışındayken en alta düşüyor ve arandığı yerde
-               * bulunmuyordu. Şimdi seçici iki parça: saran kutu ızgarası ve
-               * onun sağında, ilk satıra hizalı sabit bir kapatma düğmesi. */}
+              {/* Renk seçici: satırın hemen altında, seçmek KAPATMIYOR —
+                  davranışın ve düzenin gerekçesi `GroupColorPicker` içinde. */}
               {colorFor === group.id && (
-                <div className="color-picker">
-                  {/* Sıra: temizle → dört hazır renk → (boşluk) → özel renk.
-                   *
-                   * "Temizle" BAŞTA çünkü "rengi yok" bir renk seçeneği değil,
-                   * listenin sıfır noktası — soldan sağa okuyan göz önce onu
-                   * geçiyor. Özel renk ise SONDA ve araya nefes payı konuyor
-                   * (`.swatch.custom` kenar boşluğu): hazır renkler bir küme,
-                   * o ayrı bir kapı. */}
-                  <div className="color-swatches">
-                    {/* Rengi kaldırmak da bir seçim: burada da kapatmıyor,
-                        kullanıcı temizleyip başka bir renk deneyebilir. */}
-                    <button
-                      className={group.color === null ? "swatch clear on" : "swatch clear"}
-                      title={t("group.clearColor")}
-                      aria-pressed={group.color === null}
-                      onClick={() => store().updateGroup(group.id, { color: null })}
-                    />
-                    {GROUP_COLORS.map((option) => (
-                      <button
-                        key={option}
-                        className={group.color === option ? "swatch on" : "swatch"}
-                        style={{ background: option }}
-                        title={option}
-                        aria-pressed={group.color === option}
-                        onClick={() => store().updateGroup(group.id, { color: option })}
-                      />
-                    ))}
-                    <label className="swatch custom" title={t("group.customColor")}>
-                      <input
-                        type="color"
-                        value={group.color ?? "#58a6ff"}
-                        onChange={(e) => store().updateGroup(group.id, { color: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <button
-                    className="icon-btn color-close"
-                    title={t("group.colorClose")}
-                    onClick={() => setColorFor(null)}
-                  >
-                    ×
-                  </button>
-                </div>
+                <GroupColorPicker group={group} onClose={() => setColorFor(null)} />
               )}
 
-              {(loose || !group.collapsed) && (
+              {/* Kokpit'te sütunun başlığı: gruplanmamış kovanın da bir adı
+                  olsun, sütun hangi grupta olunduğunu her durumda söylesin.
+                  Rayda da aynı adla duruyor; burada bir grup kimliği
+                  kazanmıyor (yıldız, katlama, menü yok). */}
+              {loose && kokpit && (
+                <header className="group-row loose-head">
+                  <span className="group-rail" />
+                  <span className="group-name">{t("group.ungrouped")}</span>
+                  <span className="group-count">{group.tabs.length}</span>
+                </header>
+              )}
+
+              {/* Kokpit'te katlama yok: sütun yalnızca bu grubu gösteriyor,
+                  katlanmış bir grup sütunu boşaltırdı. */}
+              {(loose || kokpit || !group.collapsed) && (
                 <div className="group-tabs" title={loose ? t("group.looseHint") : undefined}>
                   {group.tabs.map((tab, tabIndex) => {
                     const session = sessions.get(tab.id);
@@ -722,7 +636,11 @@ export function GroupSidebar() {
                                 </span>
                               )}
                             </span>
-                            {subtitle && <span className="tab-row-sub">{subtitle}</span>}
+                            {kokpit ? (
+                              <KokpitLines tab={tab} running={!!running[tab.id]} />
+                            ) : (
+                              subtitle && <span className="tab-row-sub">{subtitle}</span>
+                            )}
                           </span>
                         )}
 
@@ -806,5 +724,39 @@ export function GroupSidebar() {
 
       {menu.state && <ContextMenu state={menu.state} onClose={menu.close} />}
     </aside>
+  );
+}
+
+/**
+ * Kokpit sekme kartının alt satırları: bulunulan klasör ve son komut.
+ *
+ * Komut sürerken yanında sunucu adresinin portu duruyor: "hangi sekmede hangi
+ * sunucu" sorusu kart listesinden okunuyor. Adres `RunningLinks` ile aynı
+ * kaynaktan, OTURUMDAN okunuyor ve komut bitince gösterilmiyor (gerekçeler
+ * orada).
+ *
+ * Çıkış kodu ve süre gösterilmiyor: sekme başına tutulmuyorlar ve kart,
+ * olmayan bir bilgiyi uyduramaz.
+ */
+function KokpitLines({ tab, running }: { tab: TabState; running: boolean }) {
+  // Yeniden çizim tetikleyicisi; değer oturumdan okunuyor (bkz. RunningLinks).
+  useStore((s) => s.runLinks[tab.id]);
+  const path = shortenPath(tab.cwd, 3);
+  const command = tab.lastCommand?.trim() ?? "";
+  const url = running ? sessions.get(tab.id)?.runUrls()[0] : undefined;
+  return (
+    <>
+      {path && <span className="tab-row-path">{path}</span>}
+      {command && (
+        <span className={running ? "tab-row-last running" : "tab-row-last"}>
+          <span className="tab-row-cmd">{command}</span>
+          {url && (
+            <span className="tab-row-port" title={url}>
+              {portLabel(url)}
+            </span>
+          )}
+        </span>
+      )}
+    </>
   );
 }

@@ -1,3 +1,7 @@
+import { useId } from "react";
+
+import { fileKind } from "../lib/images";
+
 /**
  * Küçük satır içi SVG simgeler.
  *
@@ -186,6 +190,24 @@ export function ImageIcon(props: IconProps) {
       <circle cx="10.6" cy="6" r="1" />
     </Svg>
   );
+}
+
+/** Köşesi kıvrık sayfa: kod ya da görsel olmayan dosya (belge, lisans, not). */
+export function FileIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 2.5 H9.5 L12.5 5.5 V13.5 H4 Z" />
+      <path d="M9.5 2.5 V5.5 H12.5" />
+    </Svg>
+  );
+}
+
+/** Dosya listesinde satırın türü: görsel, kod ya da belge (bkz. `fileKind`). */
+export function FileKindIcon({ path, ...props }: IconProps & { path: string }) {
+  const kind = fileKind(path);
+  if (kind === "image") return <ImageIcon {...props} />;
+  if (kind === "code") return <CodeIcon {...props} />;
+  return <FileIcon {...props} />;
 }
 
 /**
@@ -594,6 +616,159 @@ export function ClaudeIcon({ size = 17, className }: IconProps) {
         d="M2 0H15V4H17V6H15V8H2V6H0V4H2Z M2 8H3V10H2Z M4 8H5V10H4Z M12 8H13V10H12Z M14 8H15V10H14Z"
       />
       <path fill="#000" d="M4 2H5V4H4Z M12 2H13V4H12Z" />
+    </svg>
+  );
+}
+
+/*
+ * Ayarlar penceresinin bölüm simgeleri.
+ *
+ * Yalnızca premium tasarımda görünüyorlar: gezinme listesinde her bölümün
+ * önünde renkli bir karonun içinde (bkz. `premium.css`, "Ayarlar penceresi").
+ * Klasikte işaretlemede duruyor ama çizilmiyor — klasik görünüm değişmesin.
+ * Hepsi aynı 16'lık ızgara ve çizgi kalınlığı; karonun içinde 13px.
+ */
+
+/** Genel — üç kaydırıcı. */
+export function SlidersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 4.5 H13.5 M2.5 8 H13.5 M2.5 11.5 H13.5" />
+      <circle cx="10.2" cy="4.5" r="1.7" fill="currentColor" />
+      <circle cx="5.6" cy="8" r="1.7" fill="currentColor" />
+      <circle cx="9" cy="11.5" r="1.7" fill="currentColor" />
+    </Svg>
+  );
+}
+
+/** Görünüm — yarısı dolu daire (açık / koyu). */
+export function AppearanceIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M8 2.4 A5.6 5.6 0 0 1 8 13.6 Z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Terminal — pencere içinde istem. */
+export function TerminalIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="1.9" y="2.9" width="12.2" height="10.2" rx="2.2" />
+      <path d="M4.9 6.4 L6.9 8.1 L4.9 9.8" />
+      <path d="M8.5 9.9 H11" />
+    </Svg>
+  );
+}
+
+/** Oturum — uygulama penceresi (sekmeleriyle geri gelen düzen). */
+export function SessionIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="1.9" y="2.9" width="12.2" height="10.2" rx="2.2" />
+      <path d="M1.9 6.2 H14.1" />
+      <path d="M4.3 4.6 h0.01 M6.3 4.6 h0.01" />
+    </Svg>
+  );
+}
+
+/** Geçmiş — saat. */
+export function ClockIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="5.8" />
+      <path d="M8 4.9 V8 L10.3 9.4" />
+    </Svg>
+  );
+}
+
+/** Profiller — kişi. */
+export function ProfileIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="5.4" r="2.6" />
+      <path d="M2.9 13.3 C3.5 10.9 5.5 9.6 8 9.6 C10.5 9.6 12.5 10.9 13.1 13.3" />
+    </Svg>
+  );
+}
+
+/** Gruplar — üst üste katmanlar. */
+export function LayersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 2.4 L14 5.6 L8 8.8 L2 5.6 Z" />
+      <path d="M2 9 L8 12.2 L14 9" />
+    </Svg>
+  );
+}
+
+/** Yedekleme — arşiv kutusu. */
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="1.9" y="2.6" width="12.2" height="3.6" rx="1.1" />
+      <path d="M3 6.2 V12.2 C3 12.9 3.6 13.5 4.3 13.5 H11.7 C12.4 13.5 13 12.9 13 12.2 V6.2" />
+      <path d="M6.4 9 H9.6" />
+    </Svg>
+  );
+}
+
+/** Kısayollar — klavye. */
+export function KeyboardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="1.7" y="3.8" width="12.6" height="8.6" rx="1.9" />
+      <path d="M4.4 6.6 h0.01 M6.8 6.6 h0.01 M9.2 6.6 h0.01 M11.6 6.6 h0.01" />
+      <path d="M5.1 9.6 H10.9" />
+    </Svg>
+  );
+}
+
+/**
+ * Uygulamanın kendi simgesi (`src-tauri/icons`): koyu kare, mavi `>`, yeşil `_`.
+ *
+ * Görüntü dosyası değil vektör: Hakkında kartında her ölçekte keskin kalsın ve
+ * pakete ikinci bir PNG girmesin. Renkler temadan BAĞIMSIZ — marka simgesi
+ * her temada aynı görünmeli. Yalnızca premium tasarımda çiziliyor.
+ */
+export function AppIcon({ size = 56, className }: IconProps) {
+  const id = useId();
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id={`${id}-bg`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#273142" />
+          <stop offset="1" stopColor="#0e131b" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="60" height="60" rx="14" fill={`url(#${id}-bg)`} />
+      <rect
+        x="2.5"
+        y="2.5"
+        width="59"
+        height="59"
+        rx="13.5"
+        fill="none"
+        stroke="#ffffff"
+        strokeOpacity="0.14"
+      />
+      <path
+        d="M18 19.5 L30.5 32 L18 44.5"
+        fill="none"
+        stroke="#4ea6ff"
+        strokeWidth="6.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="34.5" y="38" width="13" height="6.4" rx="1.6" fill="#3fb950" />
     </svg>
   );
 }

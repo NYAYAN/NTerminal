@@ -100,7 +100,7 @@ describe("ayarlar penceresi", () => {
     expect(container.querySelector(".tabs-strip"), "yatay şerit kalmış").toBe(null);
   });
 
-  it("dokuz bölüm listeleniyor", () => {
+  it("on bölüm listeleniyor", () => {
     const { container } = render(<SettingsDialog />);
     expect(navLabels(container)).toEqual([
       "Genel",
@@ -111,6 +111,7 @@ describe("ayarlar penceresi", () => {
       "Profiller",
       "Gruplar",
       "Kısayollar",
+      "Yedekleme",
       "Hakkında",
     ]);
   });
@@ -131,6 +132,7 @@ describe("ayarlar penceresi", () => {
     await settle();
     // Kaydırma tamponu Oturum › Ekran çıktısı'na taşındı; başlık "İmleç".
     expect(headings(container)).toEqual([
+      "Tasarım",
       "Tema",
       "Terminal yazı tipi",
       "Arayüz yazı tipi",
@@ -363,6 +365,176 @@ describe("ayarlarda arama", () => {
     fireEvent.change(input(container), { target: { value: "gorunum" } });
     await settle();
     expect(results(container).length).toBeGreaterThan(0);
+  });
+});
+
+describe("yedekleme bölümü", () => {
+  // İSTEK: "içe dışa aktarıda solda menüye yedekleme diye birşey yapmak daha
+  // doğru olur." Aktarım ayrı bir pencereydi; şimdi Ayarlar'ın bölümü.
+  const open = async () => {
+    const view = render(<SettingsDialog />);
+    await settle();
+    const button = [...view.container.querySelectorAll<HTMLElement>(".settings-nav button")].find(
+      (b) => b.textContent === "Yedekleme",
+    );
+    expect(button, "sol menüde Yedekleme yok").toBeTruthy();
+    fireEvent.click(button!);
+    await settle();
+    return view;
+  };
+
+  it("dışa aktarma ile açılıyor, eylem düğmesi sayfanın içinde", async () => {
+    const { container } = await open();
+    expect(headings(container)).toContain("Neler aktarılsın?");
+    const save = [...container.querySelectorAll(".backup-actions button")].map((b) => b.textContent);
+    expect(save).toEqual(["Dosyaya kaydet…"]);
+    // Alt çubukta artık ayrı bir aktarma düğmesi yok.
+    const foot = [...container.querySelectorAll(".modal-foot button")].map((b) => b.textContent);
+    expect(foot.some((x) => x?.includes("aktar"))).toBe(false);
+  });
+
+  it("içe al kipine geçiliyor; dosya seçilmeden uygula düğmesi yok", async () => {
+    const { container } = await open();
+    const importButton = [...container.querySelectorAll<HTMLElement>(".backup-mode button")].find(
+      (b) => b.textContent === "İçe al",
+    )!;
+    fireEvent.click(importButton);
+    await settle();
+    expect(importButton.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("Dosya seç…");
+    expect(container.querySelector(".backup-actions")).toBe(null);
+  });
+
+  it("aramada bulunuyor: 'yedek' bölüme götürüyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    fireEvent.change(container.querySelector(".settings-search input")!, {
+      target: { value: "yedek" },
+    });
+    await settle();
+    const sections = [...container.querySelectorAll(".settings-result-section")].map(
+      (s) => s.textContent,
+    );
+    expect(sections).toContain("Yedekleme");
+  });
+});
+
+describe("sol menüde yön tuşları", () => {
+  // İSTEK: "Ayarlarda sol menüde geçişleri yön tuşları ile de yapabileyim."
+  const nav = (c: HTMLElement) => [...c.querySelectorAll<HTMLElement>(".settings-nav button")];
+  const selected = (c: HTMLElement) => c.querySelector(".settings-nav button.on")!.textContent;
+  const search = (c: HTMLElement) => c.querySelector(".settings-search input") as HTMLInputElement;
+
+  it("bölüm düğmesinde ↑/↓ bölümü değiştiriyor ve odağı taşıyor; uçlarda duruyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    nav(container)[0].focus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    await settle();
+    expect(selected(container)).toBe("Görünüm");
+    expect(document.activeElement!.textContent).toBe("Görünüm");
+
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    await settle();
+    expect(selected(container)).toBe("Genel");
+    // İlk bölümde ↑ başa sarmıyor.
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    await settle();
+    expect(selected(container)).toBe("Genel");
+  });
+
+  it("Home / End ilk ve son bölüm", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    nav(container)[0].focus();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    await settle();
+    expect(selected(container)).toBe("Hakkında");
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    await settle();
+    expect(selected(container)).toBe("Genel");
+  });
+
+  it("değiştirici tuşlu ok listeye dokunmuyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    nav(container)[0].focus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown", metaKey: true });
+    await settle();
+    expect(selected(container)).toBe("Genel");
+  });
+
+  it("arama kutusu boşken ↑/↓ bölüm değiştiriyor, odak kutuda kalıyor", async () => {
+    // Pencere açılınca odak kutuda ve macOS'ta Tab düğmelere gitmiyor.
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    expect(document.activeElement).toBe(search(container));
+    fireEvent.keyDown(search(container), { key: "ArrowDown" });
+    fireEvent.keyDown(search(container), { key: "ArrowDown" });
+    await settle();
+    expect(selected(container)).toBe("Terminal");
+    expect(document.activeElement).toBe(search(container));
+  });
+
+  it("aramada ↑/↓ sonuçlarda geziniyor, Enter vurgulu sonucu açıyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    fireEvent.change(search(container), { target: { value: "boyut" } });
+    await settle();
+    const rows = () => [...container.querySelectorAll(".settings-result")];
+    const on = () => rows().findIndex((r) => r.classList.contains("on"));
+    expect(rows().length).toBeGreaterThan(1);
+    expect(on(), "başta ilk sonuç seçili").toBe(0);
+
+    fireEvent.keyDown(search(container), { key: "ArrowDown" });
+    await settle();
+    expect(on()).toBe(1);
+    const target = rows()[1].querySelector(".settings-result-group")!.textContent!;
+
+    fireEvent.keyDown(search(container), { key: "Enter" });
+    await settle();
+    // İkinci "Boyut" arayüz yazı tipininki: o satır vurgulanmalı.
+    expect(target).toContain("Arayüz yazı tipi");
+    const row = container.querySelector('[data-setting="settings.uiFontSize"]');
+    expect(row!.classList.contains("found")).toBe(true);
+  });
+
+  it("sonuç düğmesinde oklar sonuçlar arasında; ilk sonuçta ↑ arama kutusuna dönüyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    fireEvent.change(search(container), { target: { value: "boyut" } });
+    await settle();
+    const rows = () => [...container.querySelectorAll<HTMLElement>(".settings-result")];
+    rows()[0].focus();
+    fireEvent.keyDown(rows()[0], { key: "ArrowDown" });
+    await settle();
+    expect(document.activeElement).toBe(rows()[1]);
+    expect(rows()[1].classList.contains("on")).toBe(true);
+    fireEvent.keyDown(rows()[1], { key: "ArrowUp" });
+    fireEvent.keyDown(rows()[0], { key: "ArrowUp" });
+    await settle();
+    expect(document.activeElement).toBe(search(container));
+  });
+
+  it("sekme sırası gezici: yalnızca seçili bölüm Tab ile odaklanıyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    fireEvent.click(nav(container)[3]);
+    await settle();
+    const tabbable = nav(container).filter((b) => b.tabIndex === 0);
+    expect(tabbable.map((b) => b.textContent)).toEqual(["Oturum"]);
+  });
+
+  it("tıklanan bölüm odağı alıyor (macOS'ta ardından oklar çalışsın)", async () => {
+    // WebKit tıklanan düğmeye kendiliğinden odak vermiyor; jsdom da vermiyor.
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    fireEvent.click(nav(container)[2]);
+    await settle();
+    expect(document.activeElement!.textContent).toBe("Terminal");
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    await settle();
+    expect(selected(container)).toBe("Oturum");
   });
 });
 
@@ -661,6 +833,38 @@ describe("Esc sahipliği", () => {
   });
 });
 
+describe("premium ayarlar penceresi işaretlemesi", () => {
+  /*
+   * Premium tasarım bölüm simgelerini, sayfa başlığını ve arama simgesini
+   * işaretlemeden alıyor; klasik onları `global.css` ile gizliyor. Burada
+   * işaretlemenin kendisi bağlı: simge sayısı bölüm sayısıyla aynı, simge
+   * düğmenin METNİNE karışmıyor (testler ve ekran okuyucu bölüm adını okuyor),
+   * sayfa başlığı seçili bölümü izliyor.
+   */
+  it("her bölümün simgesi var, düğme metni yalnızca bölüm adı", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    const buttons = [...container.querySelectorAll(".settings-nav button")];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.querySelector(".nav-ico svg"), button.textContent!).not.toBe(null);
+      expect(button.getAttribute("data-section")).toBeTruthy();
+    }
+    expect(buttons[0].textContent).toBe("Genel");
+  });
+
+  it("sayfa başlığı seçili bölümü ve açıklamasını gösteriyor", async () => {
+    const { container } = render(<SettingsDialog />);
+    await settle();
+    const title = () => container.querySelector(".settings-page-title")!.textContent;
+    expect(title()).toBe("Genel");
+    fireEvent.click([...container.querySelectorAll(".settings-nav button")][2]);
+    await settle();
+    expect(title()).toBe("Terminal");
+    expect(container.querySelector(".settings-page-desc")!.textContent).toContain("Kopyalama");
+  });
+});
+
 describe("görünüm bölümü", () => {
   async function openAppearance() {
     const view = render(<SettingsDialog />);
@@ -677,6 +881,54 @@ describe("görünüm bölümü", () => {
     await settle();
     expect(useStore.getState().settings.appearance.theme).toBe("system");
     expect(cards[0].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("tasarım kartlarla seçiliyor ve klasiğe dönülebiliyor", async () => {
+    const { container } = await openAppearance();
+    const cards = [...container.querySelectorAll(".design-card")] as HTMLElement[];
+    expect(cards.map((c) => c.dataset.design)).toEqual(["premium", "kokpit", "classic"]);
+    expect(cards.map((c) => c.querySelector(".design-name")!.textContent)).toEqual([
+      "Premium",
+      "Kokpit",
+      "Klasik",
+    ]);
+    // Varsayılan Kokpit seçili (bkz. `DEFAULT_DESIGN`).
+    expect(cards[1].getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(cards[2]);
+    await settle();
+    expect(useStore.getState().settings.appearance.design).toBe("classic");
+    expect(cards[2].getAttribute("aria-checked")).toBe("true");
+    expect(document.documentElement.dataset.design).toBe("classic");
+
+    fireEvent.click(cards[0]);
+    await settle();
+    expect(useStore.getState().settings.appearance.design).toBe("premium");
+    expect(document.documentElement.dataset.design).toBe("premium");
+  });
+
+  /*
+   * Kokpit premium'un görünüşüyle farklı bir yerleşim: kök hem premium
+   * tasarımını hem Kokpit yerleşimini taşımalı, başka bir tasarıma geçince
+   * yerleşim izi kalmamalı (yoksa premium ekranda ray sütunu boş kalırdı).
+   */
+  it("Kokpit seçilince yerleşim de yazılıyor, geri dönünce kalkıyor", async () => {
+    const { container } = await openAppearance();
+    const cards = [...container.querySelectorAll(".design-card")] as HTMLElement[];
+    fireEvent.click(cards[1]);
+    await settle();
+    expect(useStore.getState().settings.appearance.design).toBe("kokpit");
+    expect(cards[1].getAttribute("aria-checked")).toBe("true");
+    expect(document.documentElement.dataset.design).toBe("premium");
+    expect(document.documentElement.dataset.layout).toBe("kokpit");
+    // Şemada ray ve sabit panel var (yalnızca Kokpit kartında görünüyor).
+    expect(cards[1].querySelector(".dp-rail")).not.toBeNull();
+    expect(cards[1].querySelector(".dp-panel")).not.toBeNull();
+
+    fireEvent.click(cards[0]);
+    await settle();
+    expect(document.documentElement.dataset.design).toBe("premium");
+    expect(document.documentElement.dataset.layout).toBeUndefined();
   });
 
   it("fabrika yazı tipi menüde: 'Özel…' olarak görünmüyor", async () => {

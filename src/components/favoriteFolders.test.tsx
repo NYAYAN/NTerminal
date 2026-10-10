@@ -27,6 +27,7 @@ function fav(id: string, folder: string | null, command = `cmd-${id}`): Favorite
     groupId: null,
     folder,
     cwd: null,
+    alias: null,
     createdAt: 0,
     usedCount: 0,
     lastUsedAt: null,

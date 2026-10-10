@@ -216,14 +216,107 @@ export function fileScore(path: string, query: string): number | null {
   return null;
 }
 
+/** `fileScore`un bulduğu eşleşmenin harfleri (bkz. `fileMatch`). */
+export interface FileMatch {
+  /** Eşleşen karakterlerin `path` içindeki yerleri (UTF-16 birimi), artan. */
+  positions: number[];
+  /** Harfler bitişik değil — bant 3 ve 4, yani puan 1000+. */
+  scattered: boolean;
+}
+
+/**
+ * `fileScore`un eşleştirdiği harflerin YOLDAKİ yerleri; eşleşmezse `null`.
+ *
+ * Ctrl+P satırında eşleşen harfler vurgulanıyor ve dağınık eşleşmelerin önüne
+ * "Yakın eşleşmeler" ayracı giriyor. İkisi de `fileScore`la AYNI kararı
+ * vermeli: vurgu başka harfleri gösterirse sıralama yanlış okunur. Bantlar bu
+ * yüzden aynı sırada ve aynı `subsequence` ile.
+ *
+ * Ayrı bir işlev, çünkü konum dizisi bedava değil: `fileScore` her tuşta
+ * binlerce dosyada koşuyor, bu ise yalnızca ÇİZİLEN satırlarda (en çok iki yüz).
+ */
+export function fileMatch(path: string, query: string): FileMatch | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return { positions: [], scattered: false };
+
+  const { lower, at } = lowerWithMap(path);
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  // Adın küçültülmüş metindeki başı: kesiciden sonraki ilk karakter.
+  let nameFrom = 0;
+  while (nameFrom < at.length && at[nameFrom] <= cut) nameFrom++;
+  const name = lower.slice(nameFrom);
+
+  const span = (from: number) => Array.from({ length: q.length }, (_, k) => from + k);
+  const back = (found: number[], scattered: boolean): FileMatch => {
+    const out = new Set<number>();
+    for (const p of found) {
+      const start = at[p];
+      if (start === undefined) continue;
+      out.add(start);
+      // İki birimlik karakterin (emoji gibi) ikinci yarısı da işaretli.
+      if ((path.codePointAt(start) ?? 0) > 0xffff) out.add(start + 1);
+    }
+    return { positions: [...out].sort((a, b) => a - b), scattered };
+  };
+
+  const inName = name.indexOf(q);
+  if (inName !== -1) return back(span(nameFrom + inName), false);
+
+  const inPath = lower.indexOf(q);
+  if (inPath !== -1) return back(span(inPath), false);
+
+  const nameHits: number[] = [];
+  if (subsequence(name, q, nameHits)) return back(nameHits.map((p) => p + nameFrom), true);
+
+  const pathHits: number[] = [];
+  const pathSub = subsequence(lower, q, pathHits);
+  if (pathSub && pathSub.span <= q.length * MAX_SPREAD) return back(pathHits, true);
+
+  return null;
+}
+
+/**
+ * Küçük harfe çevrilmiş metin ve her biriminin ASIL metindeki yeri.
+ *
+ * `toLowerCase` boyu değiştirebiliyor: Türkçe "İ" küçülünce iki birim oluyor
+ * ("i" + birleşen nokta). Küçük metinde bulunan konumu asıl metne olduğu gibi
+ * taşımak `İçerik.md`de vurguyu bir harf sağa kaydırırdı.
+ *
+ * Karşılaştırma tüm metnin küçüğüyle (`fileScore` gibi); harf başına boylar
+ * yalnızca eşlemeyi kuruyor. Bağlama göre değişen tek varsayılan eşleme
+ * (sözcük sonundaki Σ → ς) boyu değiştirmiyor, yani iki boy denk düşüyor —
+ * düşmezse birebir eşlemeye dönülüyor.
+ */
+function lowerWithMap(text: string): { lower: string; at: number[] } {
+  const lower = text.toLowerCase();
+  const at: number[] = [];
+  let i = 0;
+  for (const ch of text) {
+    const units = ch.toLowerCase().length;
+    for (let k = 0; k < units; k++) at.push(i);
+    i += ch.length;
+  }
+  if (at.length !== lower.length) {
+    return { lower, at: Array.from({ length: lower.length }, (_, k) => Math.min(k, text.length - 1)) };
+  }
+  return { lower, at };
+}
+
 /**
  * Harfler sırayla geçiyor mu; geçiyorsa ne kadar dağıldığı.
  *
  * `spread` atlanan harf sayısı (sıralama için), `span` ilk ve son eşleşme
  * arasındaki toplam genişlik (yoğunluk sınırı için). İkisi ayrı: `spread`
  * "ne kadar kötü", `span` "ne kadar uzağa yayıldı" sorusunu yanıtlıyor.
+ *
+ * `positions` verilirse bulunan harflerin yerleri ona ekleniyor (bkz.
+ * `fileMatch`); sıralamanın sıcak yolu diziyi hiç kurmuyor.
  */
-function subsequence(text: string, query: string): { spread: number; span: number } | null {
+function subsequence(
+  text: string,
+  query: string,
+  positions?: number[],
+): { spread: number; span: number } | null {
   let at = 0;
   let first = -1;
   let last = -1;
@@ -235,6 +328,7 @@ function subsequence(text: string, query: string): { spread: number; span: numbe
     last = found;
     spread += found - at;
     at = found + 1;
+    if (positions) for (let k = 0; k < ch.length; k++) positions.push(found + k);
   }
   return { spread, span: last - first + 1 };
 }

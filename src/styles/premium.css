@@ -1,0 +1,2331 @@
+/*
+ * PREMIUM tasarım.
+ *
+ * Bu dosyadaki HER kural `:root[data-design="premium"]` ile başlıyor; tasarım
+ * ayarı "classic" iken dosyanın hiçbir satırı eşleşmiyor ve klasik tasarım
+ * `global.css`in kendisi olarak kalıyor. Bu kısıt testle bağlı
+ * (`styles/premium.test.ts`): klasik tasarımın bozulma riski sıfır olsun diye.
+ *
+ * ## Ne değişiyor, ne değişmiyor
+ *
+ * Değişen BİÇİM: köşe yarıçapı, kenarlık ağırlığı (düz `--border` yerine metin
+ * renginden türetilmiş ince hat), katman ve gölge, yüzen menülerde cam
+ * (bulanıklık) etkisi, sekmelerin "yapışık" yerine "hap" biçimi, komut
+ * kutusunun yüzen bir kart olması. Değişmeyen RENK: tema değişkenleri
+ * (`--surface`, `--accent`, …) aynen kullanılıyor, yani her tema her iki
+ * tasarımla çalışıyor ve `themes.ts` içindeki karşıtlık güvenceleri geçerli
+ * kalıyor. Dolgulu düğmede geçiş yalnızca KOYUYA doğru (siyaha karışım):
+ * `--accent-solid` beyaz yazıya tam 4.5 karşıtlık verecek kadar koyu, yukarı
+ * doğru açmak o güvenceyi bozardı.
+ *
+ * Değişmeyen ÖLÇÜLER: `.term-host .xterm` dolgusu, kaydırma çubuğu genişliği
+ * ve "en alta in" düğmesinin konumu birbirine bağlı üç sayı
+ * (`styles/layout.test.ts`) ve burada hiçbirine dokunulmuyor. Terminalin
+ * ızgarası iki tasarımda da aynı sütun sayısını veriyor.
+ *
+ * ## Gölge rengi
+ *
+ * Gölgeler `rgb(var(--shadow-rgb) / a)` ile yazılıyor: koyu tonda siyah, açık
+ * tonda (bkz. `data-tone`, `themes.ts` yazıyor) lacivert-gri. Açık zeminde
+ * saf siyah gölge "kirli" duruyor; mavi-gri gölge kâğıt üzerindeki gerçek
+ * gölgeye daha yakın.
+ *
+ * ## Cam etkisi
+ *
+ * `backdrop-filter` yalnızca KISA ÖMÜRLÜ ve KÜÇÜK yüzeylerde: bağlam menüsü,
+ * komut paleti, bildirim, arama çubuğu, öneri listesi. Ayarlar penceresi gibi
+ * büyük ve uzun süre açık kalan yüzeyler opak: altındaki terminal her karede
+ * yeniden bulanıklaştırılmasın ve metin okunurken dikkat dağıtmasın.
+ * WKWebView (macOS) için `-webkit-` ön eki şart.
+ */
+
+:root[data-design="premium"] {
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  /* İnce hat kenarlıklar: metin renginden türetiliyor, yani tema ne olursa
+     olsun zeminle uyumlu bir ayırıcı. `--border` düz bir renk ve açık temalarda
+     fazla ağır duruyordu. */
+  --hairline: color-mix(in srgb, var(--text) 9%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--text) 15%, transparent);
+
+  --shadow-rgb: 0 0 0;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-rgb) / 0.22);
+  --shadow-md:
+    0 8px 24px -10px rgb(var(--shadow-rgb) / 0.5),
+    0 2px 6px -2px rgb(var(--shadow-rgb) / 0.3);
+  --shadow-lg:
+    0 24px 64px -18px rgb(var(--shadow-rgb) / 0.65),
+    0 10px 24px -10px rgb(var(--shadow-rgb) / 0.4);
+
+  /* Kabartılmış yüzey: yüzeyin bir ton açığı; kartlar ve haplar bunun üstünde. */
+  --raised: color-mix(in srgb, var(--text) 3%, var(--surface-alt));
+  --glass: color-mix(in srgb, var(--surface-alt) 90%, transparent);
+  --glass-blur: blur(18px) saturate(1.35);
+
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+:root[data-design="premium"][data-tone="light"] {
+  --shadow-rgb: 15 23 42;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-rgb) / 0.1);
+  --shadow-md:
+    0 8px 24px -10px rgb(var(--shadow-rgb) / 0.22),
+    0 2px 6px -2px rgb(var(--shadow-rgb) / 0.12);
+  --shadow-lg:
+    0 24px 64px -18px rgb(var(--shadow-rgb) / 0.3),
+    0 10px 24px -10px rgb(var(--shadow-rgb) / 0.18);
+  --glass: color-mix(in srgb, var(--surface-alt) 94%, transparent);
+}
+
+/* ---------------------------------------------------------------- iskelet */
+
+/* Çerçeve (başlık çubuğu + kenar çubuğu) tek bir malzeme: üst sol köşeden
+   vurgu renginin çok hafif bir ışıması. Her ikisi de saydam, gradyan altta. */
+:root[data-design="premium"] .app {
+  background:
+    radial-gradient(
+      900px 420px at -10% -20%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent 70%
+    ),
+    var(--surface-alt);
+}
+
+:root[data-design="premium"] .titlebar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text) 3%, transparent),
+    transparent
+  );
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .titlebar .brand .mark {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+:root[data-design="premium"] .titlebar-search {
+  border-color: var(--hairline-strong);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 3%, transparent);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+:root[data-design="premium"] .titlebar-search:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+}
+
+/* --------------------------------------------------------------- denetimler */
+
+:root[data-design="premium"] button {
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
+}
+
+:root[data-design="premium"] button:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--surface-alt),
+    0 0 0 4px var(--accent-ring);
+}
+
+:root[data-design="premium"] button.primary {
+  background: linear-gradient(
+    180deg,
+    var(--accent-solid),
+    color-mix(in srgb, var(--accent-solid) 88%, #000)
+  );
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+}
+
+:root[data-design="premium"] button.primary:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-solid) 92%, #000),
+    color-mix(in srgb, var(--accent-solid) 78%, #000)
+  );
+}
+
+:root[data-design="premium"] button.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-solid) 74%, #000);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] button.primary.destructive {
+  background: linear-gradient(
+    180deg,
+    var(--err-solid),
+    color-mix(in srgb, var(--err-solid) 88%, #000)
+  );
+}
+
+:root[data-design="premium"] button.primary.destructive:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--err-solid) 92%, #000),
+    color-mix(in srgb, var(--err-solid) 78%, #000)
+  );
+}
+
+/* Devre dışı: klasiğin soluk zemini. Premium'un gradyan kuralı klasiğin
+   `:disabled` kuralından ÖZGÜL olduğu için burada yeniden yazılıyor
+   (kademe denetimi: `scratchpad/cascade-lint.mjs` tarzı tarama). */
+:root[data-design="premium"] button.primary:disabled {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] button.primary.destructive:disabled {
+  background: color-mix(in srgb, var(--err) 30%, transparent);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] button.outline {
+  border-color: var(--hairline-strong);
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-design="premium"] button.outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, var(--surface-alt));
+  border-color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+:root[data-design="premium"] .icon-btn {
+  border-radius: 7px;
+}
+
+:root[data-design="premium"] input,
+:root[data-design="premium"] select,
+:root[data-design="premium"] textarea {
+  border-color: var(--hairline-strong);
+  box-shadow: inset 0 1px 2px rgb(var(--shadow-rgb) / 0.14);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+:root[data-design="premium"] input:focus,
+:root[data-design="premium"] select:focus,
+:root[data-design="premium"] textarea:focus,
+:root[data-design="premium"] .search-field:focus-within {
+  border-color: var(--accent-ring);
+  box-shadow:
+    inset 0 1px 2px rgb(var(--shadow-rgb) / 0.1),
+    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+:root[data-design="premium"] .search-field {
+  border-color: var(--hairline-strong);
+}
+
+:root[data-design="premium"] .search-field input,
+:root[data-design="premium"] .search-field input:focus {
+  box-shadow: none;
+}
+
+:root[data-design="premium"] input[type="range"],
+:root[data-design="premium"] input[type="checkbox"],
+:root[data-design="premium"] input[type="color"] {
+  box-shadow: none;
+}
+
+/* Klasikte kenarlıksız olan alanlar: komut kutusunun metin alanı (kart zaten
+   halkayı taşıyor), dosya düzenleyici ve fark penceresinin düzenleyicisi.
+   Genel `textarea:focus` halkası bunların üstüne bindiğinde kartın içinde
+   İKİNCİ bir çerçeve çıkıyordu. */
+:root[data-design="premium"] .command-input-field,
+:root[data-design="premium"] .command-input-field:focus,
+:root[data-design="premium"] .viewer-editor,
+:root[data-design="premium"] .viewer-editor:focus,
+:root[data-design="premium"] .dw-editor,
+:root[data-design="premium"] .dw-editor:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Açılır listelerin arama kutusu (dal / Node sürümü seçici): yalnız alt çizgi. */
+:root[data-design="premium"] .pop-search,
+:root[data-design="premium"] .pop-search:focus {
+  border-color: var(--hairline);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] .pop-search:focus {
+  border-bottom-color: var(--accent-ring);
+}
+
+:root[data-design="premium"] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border-width: 3px;
+  border-radius: 8px;
+  background-clip: content-box;
+}
+
+:root[data-design="premium"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 36%, transparent);
+  background-clip: content-box;
+}
+
+/* Bölümlü düğme (sekme/bölme, arama kipleri): iOS tarzı — çukur bir ray,
+   seçili parça kabartılmış bir hap. */
+:root[data-design="premium"] .seg,
+:root[data-design="premium"] .seg-mini {
+  gap: 2px;
+  padding: 2px;
+  border-color: var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+:root[data-design="premium"] .seg button,
+:root[data-design="premium"] .seg-mini button {
+  border-radius: 6px;
+}
+
+:root[data-design="premium"] .seg button.on,
+:root[data-design="premium"] .seg-mini button.on {
+  background: color-mix(in srgb, var(--text) 10%, var(--surface-alt));
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-design="premium"] .keycap {
+  border-color: var(--hairline-strong);
+  border-radius: 5px;
+  background: var(--raised);
+}
+
+/* -------------------------------------------------------------- kenar çubuğu */
+
+:root[data-design="premium"] .sidebar {
+  background: transparent;
+  border-right-color: var(--hairline);
+}
+
+:root[data-design="premium"] .sidebar-head {
+  font-size: 0.7692rem;
+  letter-spacing: 0.9px;
+  padding-top: 11px;
+}
+
+:root[data-design="premium"] .sidebar-scroll {
+  padding: 2px 8px 12px;
+}
+
+/* Grup = kart. Düz renk yerine kabartılmış yüzey, ince hat ve hafif gölge;
+   etkin grup kendi rengiyle ışıyor. */
+:root[data-design="premium"] .group {
+  margin-bottom: 7px;
+  border-radius: 12px;
+  border-color: var(--hairline);
+  background: color-mix(in srgb, var(--group-color) 5%, var(--raised));
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+:root[data-design="premium"] .group.active {
+  background: color-mix(in srgb, var(--group-color) 10%, var(--raised));
+  border-color: color-mix(in srgb, var(--group-color) 38%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--group-color) 18%, transparent),
+    0 10px 24px -14px color-mix(in srgb, var(--group-color) 55%, transparent),
+    var(--shadow-sm);
+}
+
+:root[data-design="premium"] .group.loose {
+  margin-bottom: 2px;
+  border-radius: 0;
+  border-bottom-color: var(--hairline);
+  background: none;
+  box-shadow: none;
+}
+
+:root[data-design="premium"] .group.droppable {
+  background: color-mix(in srgb, var(--accent) 10%, var(--raised));
+}
+
+:root[data-design="premium"] .group-row {
+  min-height: 32px;
+  border-radius: 11px;
+}
+
+:root[data-design="premium"] .group-rail {
+  left: 4px;
+  border-radius: 3px;
+}
+
+:root[data-design="premium"] .group.active .group-rail {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--group-color) 65%, transparent);
+}
+
+:root[data-design="premium"] .group-tabs::before {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+:root[data-design="premium"] .group.active .group-tabs {
+  border-radius: 0 0 12px 12px;
+}
+
+:root[data-design="premium"] .tab-row {
+  border-radius: 8px;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+:root[data-design="premium"] .tab-row.active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--group-color) 22%, transparent),
+    color-mix(in srgb, var(--group-color) 9%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group-color) 26%, transparent);
+}
+
+:root[data-design="premium"] .tab-row-badge {
+  border-radius: 6px;
+}
+
+:root[data-design="premium"] .add-tab.prominent {
+  border-radius: 9px;
+  border-color: var(--hairline-strong);
+}
+
+:root[data-design="premium"] .add-tab.prominent:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ------------------------------------------------------------ sekme çubuğu
+ *
+ * Sekmeler terminale yapışık "klasör sekmesi" değil, şeridin ortasında duran
+ * HAPLAR. Etkin hap kabarık (gölge + ince hat), altında vurgu renginde kısa
+ * bir gösterge şeridin alt çizgisine oturuyor. Grubun 2px rengi (`.tabbar::after`)
+ * kalkıyor: rengi artık gösterge taşıyor, iki çizgi birden gürültü olurdu. */
+:root[data-design="premium"] .tabbar {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--surface-alt) 72%, var(--term-bg));
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .tabbar::after {
+  display: none;
+}
+
+:root[data-design="premium"] .tabbar-strip {
+  align-items: center;
+  gap: 4px;
+}
+
+:root[data-design="premium"] .tabbar-actions {
+  padding-bottom: 0;
+}
+
+:root[data-design="premium"] .tabbar-sep {
+  background: var(--hairline-strong);
+}
+
+:root[data-design="premium"] .tab {
+  min-height: 28px;
+  padding: 0 6px 0 9px;
+  border-radius: 8px;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+:root[data-design="premium"] .tab:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+:root[data-design="premium"] .tab.active {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-alt));
+  box-shadow:
+    inset 0 0 0 1px var(--hairline-strong),
+    var(--shadow-sm);
+}
+
+/* Gösterge hapın İÇİNDE, alt kenara oturuyor: şerit (`.tabbar-strip`) yatay
+   kaydırma için `overflow-y: hidden` ve hapın dışına taşan her şeyi kırpıyor. */
+:root[data-design="premium"] .tab.active::before {
+  top: auto;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+:root[data-design="premium"] .tab.active::after {
+  display: none;
+}
+
+:root[data-design="premium"] .tab-badge {
+  border-radius: 5px;
+}
+
+/* Kapatma düğmeleri (sekme şeridi, kenar çubuğu, bölme başlığı).
+ *
+ * ÖLÇÜLDÜ: `.tab-close:hover` kırmızı zemin tanımlıyor ama genel
+ * `button:hover:not(:disabled)` ondan özgül ve kazanıyor — üzerine gelince
+ * 16×26'lık GRİ bir kutu çıkıyordu (düğmenin taban yüksekliği 26px). Klasikte
+ * koyu zeminde kabul edilebilir; premium'un açık hapı üstünde çirkin bir
+ * dikdörtgen. Burada: 18×18 yuvarlak hedef, kırmızı tonlu zemin, kırmızı ×. */
+:root[data-design="premium"] .tab-close,
+:root[data-design="premium"] .tab-row-close,
+:root[data-design="premium"] .pane-close {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+:root[data-design="premium"] .tab-close:hover:not(:disabled),
+:root[data-design="premium"] .tab-row-close:hover:not(:disabled),
+:root[data-design="premium"] .pane-close:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--err) 18%, transparent);
+  color: var(--err);
+}
+
+/* ------------------------------------------------------------- terminaller */
+
+/* Sekme şeridinin altında terminale düşen hafif gölge: çerçeve ile içerik
+   arasında derinlik. Yalnızca sekme kipinde; bölmelerde her bölme kendi
+   kartı. Katman kaplama (`.blocks-layer`, z 4) ve örtülerin (z 22) altında. */
+:root[data-design="premium"] .terminal-area[data-view="tabs"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 10px;
+  background: linear-gradient(180deg, rgb(var(--shadow-rgb) / 0.16), transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+:root[data-design="premium"] .terminal-area[data-view="panes"] {
+  gap: 6px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--surface-alt) 72%, var(--term-bg));
+}
+
+:root[data-design="premium"] .terminal-area[data-view="panes"] > .pane[data-visible="true"] {
+  border-radius: 10px;
+  overflow: hidden;
+  outline-color: var(--hairline);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 160ms ease;
+}
+
+:root[data-design="premium"] .terminal-area[data-view="panes"] > .pane[data-focused="true"] {
+  outline-color: var(--accent-ring);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent),
+    var(--shadow-md);
+}
+
+:root[data-design="premium"] .terminal-area[data-view="panes"] .pane-head {
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .scroll-bottom {
+  border-color: var(--hairline-strong);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-md);
+}
+
+:root[data-design="premium"] .scroll-bottom:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline-strong));
+}
+
+:root[data-design="premium"] .term-exited {
+  border-color: var(--hairline-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-design="premium"] .block-cwd,
+:root[data-design="premium"] .ctx-chip,
+:root[data-design="premium"] .statusbar .status-btn {
+  border-color: var(--hairline-strong);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+:root[data-design="premium"] .ctx-chip:hover:not(:disabled),
+:root[data-design="premium"] .statusbar .status-btn:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+:root[data-design="premium"] .block-cwd.as-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Çip türleri: klasiğin renkleri (dal yeşil, değişiklik sayısı vurgu) premium
+   temel kuralından özgül olmadığı için burada yineleniyor. */
+:root[data-design="premium"] .ctx-chip.branch {
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--hairline-strong));
+}
+
+:root[data-design="premium"] .ctx-chip.branch:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+:root[data-design="premium"] .ctx-chip.changes {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hairline-strong));
+}
+
+:root[data-design="premium"] .ctx-chip.changes:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+:root[data-design="premium"] .ctx-chip.changes[data-empty] {
+  border-color: var(--hairline-strong);
+}
+
+:root[data-design="premium"] .ctx-chip.changes[data-empty]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+:root[data-design="premium"] .ctx-chip.changes.on,
+:root[data-design="premium"] .ctx-chip.changes[data-empty].on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+:root[data-design="premium"] .ctx-chip.changes.on:hover:not(:disabled),
+:root[data-design="premium"] .ctx-chip.changes[data-empty].on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+:root[data-design="premium"] .statusbar .copy-cwd {
+  border-color: transparent;
+  background: transparent;
+}
+
+:root[data-design="premium"] .statusbar .status-btn.update,
+:root[data-design="premium"] .statusbar .status-btn.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+:root[data-design="premium"] .statusbar .status-btn.update:hover,
+:root[data-design="premium"] .statusbar .status-btn.on:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+:root[data-design="premium"] .block-tools button {
+  border-color: var(--hairline-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-design="premium"] .block-tools button:hover {
+  background: color-mix(in srgb, var(--text) 10%, var(--surface-alt));
+}
+
+/* Komut bloğu ayıracı ve "istem altta" çizgisi de ince hat. */
+:root[data-design="premium"] .block::before,
+:root[data-design="premium"] .term-host[data-prompt-bottom="1"]::after {
+  border-top-color: var(--hairline-strong);
+}
+
+/* ------------------------------------------------------------ komut kutusu
+ *
+ * Komut satırı terminalin dibine yapışık bir şerit değil, YÜZEN bir kart:
+ * kenarlarından 10px içeride, yuvarlak, ince hatlı, altına gölge düşüyor;
+ * odaklanınca vurgu halkası. Öneri listesi (`.suggest-bar`) kutunun DOM
+ * ölçüsüne göre konumlanıyor (`SuggestionBar`), yani kartın genişliğini
+ * kendiliğinden izliyor; 6px yukarı kaydırılıp ayrı bir kart olarak
+ * yüzüyor. */
+/* Klasör rozeti komut kartıyla AYNI SÜTUNDA: rozetin sol kenarı kartın sol
+   kenarıyla (ikisi de 10px içeride), klasör simgesi kartın `>_` işaretiyle,
+   yolun metni yazılan komutla aynı hizada.
+
+   BİLDİRİLEN: "komut yazın üstündeki klasör yolu komut yazın kısmı ile dikeyde
+   aynı hizada değil." ÖLÇÜLEN: rozet kartın 8px sağından başlıyor, simge `>_`
+   işaretinin 5px sağında duruyordu; yalnızca metinler denk geliyordu. Kartın
+   içi 1px kenarlık + 10px dolgu, işaret 2ch + 8px boşluk; rozette de aynı
+   1 + 10 ve 11px'lik simgeden sonra 9px boşluk. */
+:root[data-design="premium"] .context-bar {
+  border-top: none;
+  padding: 8px 14px 4px 10px;
+}
+
+:root[data-design="premium"] .ctx-chip.dir {
+  padding-left: 10px;
+  gap: 9px;
+}
+
+:root[data-design="premium"] .run-links {
+  margin: 4px 10px 6px;
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 10px;
+}
+
+:root[data-design="premium"] .command-input,
+:root[data-design="premium"] .command-running,
+:root[data-design="premium"] .context-bar + .command-input,
+:root[data-design="premium"] .context-bar + .command-running,
+:root[data-design="premium"] .run-links + .command-input,
+:root[data-design="premium"] .run-links + .command-running {
+  margin: 0 10px 10px;
+  padding: 8px 12px 9px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 3%, var(--term-bg));
+  box-shadow: var(--shadow-md);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+/* Komutlar arası yükseklik tutucu (`CommandInput`, "idle"): klasikte görünmez
+   bir şerit; premium'da kart çerçevesi çizilse her komut sonunda BOŞ bir kutu
+   belirip kaybolurdu. Ölçüler aynı kalıyor (kenarlık saydam), görünüm yok. */
+:root[data-design="premium"] .command-running.idle {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-design="premium"] .command-input:focus-within {
+  border-color: var(--accent-ring);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent),
+    var(--shadow-md);
+}
+
+:root[data-design="premium"] .command-input.armed,
+:root[data-design="premium"] .command-running.armed {
+  border-color: color-mix(in srgb, var(--err) 55%, transparent);
+  background: color-mix(in srgb, var(--err) 10%, var(--term-bg));
+}
+
+:root[data-design="premium"] .command-input.armed:focus-within {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--err) 14%, transparent),
+    var(--shadow-md);
+}
+
+:root[data-design="premium"] .suggest-bar {
+  transform: translateY(-6px);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-design="premium"] .suggest-head,
+:root[data-design="premium"] .suggest-foot {
+  border-color: var(--hairline);
+}
+
+:root[data-design="premium"] .suggest-list {
+  padding: 3px;
+}
+
+:root[data-design="premium"] .suggest-row {
+  border-radius: 8px;
+  border-left-width: 0;
+}
+
+:root[data-design="premium"] .suggest-row.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ------------------------------------------------------------ durum çubuğu */
+
+:root[data-design="premium"] .statusbar {
+  min-height: 26px;
+  background: color-mix(in srgb, var(--surface-alt) 55%, var(--term-bg));
+  border-top-color: var(--hairline);
+}
+
+/* ---------------------------------------------------------------- paneller */
+
+:root[data-design="premium"] .side-panel {
+  border-left-color: var(--hairline-strong);
+  box-shadow: -24px 0 56px -28px rgb(var(--shadow-rgb) / 0.7);
+}
+
+:root[data-design="premium"] .file-panel {
+  border-right-color: var(--hairline-strong);
+  box-shadow: 24px 0 56px -28px rgb(var(--shadow-rgb) / 0.7);
+}
+
+:root[data-design="premium"] .panel-head {
+  padding: 6px 8px;
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .panel-tabs button {
+  margin-bottom: 0;
+  padding: 5px 10px;
+  border-bottom: none;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .panel-tabs button.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+:root[data-design="premium"] .panel-controls,
+:root[data-design="premium"] .file-panel-head,
+:root[data-design="premium"] .viewer-head,
+:root[data-design="premium"] .git-commit,
+:root[data-design="premium"] .stash-section,
+:root[data-design="premium"] .fav-form {
+  border-color: var(--hairline);
+}
+
+:root[data-design="premium"] .git-table-head {
+  border-radius: 8px 8px 0 0;
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .git-item.open {
+  border-radius: 10px;
+}
+
+/* ----------------------------------------------------- yüzen menüler (cam) */
+
+:root[data-design="premium"] .ctx-menu,
+:root[data-design="premium"] .info-pop,
+:root[data-design="premium"] .push-review,
+:root[data-design="premium"] .stash-settings-pop,
+:root[data-design="premium"] .find-bar,
+:root[data-design="premium"] .toast {
+  border-color: var(--hairline-strong);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-design="premium"] .ctx-menu {
+  padding: 5px;
+  border-radius: 12px;
+}
+
+:root[data-design="premium"] .ctx-item {
+  padding: 6px 9px;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .ctx-sep {
+  margin: 5px 8px;
+  background: var(--hairline);
+}
+
+:root[data-design="premium"] .info-pop {
+  border-radius: 10px;
+  padding: 8px 11px;
+}
+
+:root[data-design="premium"] .toast {
+  border-radius: 12px;
+  padding: 10px 16px;
+}
+
+:root[data-design="premium"] .toast.ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+:root[data-design="premium"] .toast.err {
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+}
+
+:root[data-design="premium"] .find-bar {
+  border-radius: 12px;
+  padding: 6px 7px;
+}
+
+/* ------------------------------------------------------- örtüler ve pencereler */
+
+:root[data-design="premium"] .overlay {
+  background: rgb(var(--shadow-rgb) / 0.42);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+:root[data-design="premium"] .modal {
+  border-color: var(--hairline-strong);
+  border-radius: 16px;
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px rgb(var(--shadow-rgb) / 0.18);
+}
+
+:root[data-design="premium"] .modal-head {
+  padding: 12px 16px;
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .modal-head h2 {
+  letter-spacing: -0.01em;
+}
+
+:root[data-design="premium"] .modal-body {
+  padding: 14px 16px;
+}
+
+:root[data-design="premium"] .modal.confirm .modal-body {
+  padding: 18px 16px 14px;
+}
+
+:root[data-design="premium"] .modal-foot {
+  padding: 10px 16px;
+  border-top-color: var(--hairline);
+  background: var(--sunken);
+}
+
+:root[data-design="premium"] .section > h3 {
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .tabs-strip,
+:root[data-design="premium"] .palette-tabs {
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .profile-list,
+:root[data-design="premium"] .notes,
+:root[data-design="premium"] .release-notes,
+:root[data-design="premium"] .summary-grid .cell {
+  border-color: var(--hairline-strong);
+  border-radius: 10px;
+}
+
+:root[data-design="premium"] .theme-card,
+:root[data-design="premium"] .design-card {
+  border-radius: 10px;
+  border-color: var(--hairline-strong);
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-design="premium"] .theme-card:hover:not(.on),
+:root[data-design="premium"] .design-card:hover:not(.on) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline-strong));
+  box-shadow: var(--shadow-md);
+}
+
+:root[data-design="premium"] .theme-card.on,
+:root[data-design="premium"] .design-card.on {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 10px 20px -12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+:root[data-design="premium"] .theme-swatch,
+:root[data-design="premium"] .design-preview {
+  border-radius: 7px;
+}
+
+/* ----------------------------------------------------------- komut paleti */
+
+:root[data-design="premium"] .palette {
+  border-color: var(--hairline-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-alt) 92%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px rgb(var(--shadow-rgb) / 0.18);
+}
+
+:root[data-design="premium"] .palette input,
+:root[data-design="premium"] .palette input:focus {
+  padding: 13px 16px;
+  font-size: 1.1rem;
+  box-shadow: none;
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .palette input:focus {
+  border-bottom-color: var(--accent-ring);
+}
+
+:root[data-design="premium"] .palette-list {
+  padding: 6px;
+}
+
+:root[data-design="premium"] .palette-row {
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .palette-row.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+:root[data-design="premium"] .palette-foot {
+  border-top-color: var(--hairline);
+}
+
+/* ---------------------------------------------------- dosya paleti (Ctrl+P)
+ *
+ * Seçim komut paletiyle AYNI dil (yumuşak zemin + ince halka); önceden üç ayrı
+ * stil vardı: sol çizgi (dosya satırı), halka (komut), düz dolgu (içerik
+ * satırı). Sekmeler hap, satırlar 32px, klasör adın yanında. Kokpit de bu
+ * görünüşü taşıyor (kökte `data-design="premium"`). */
+
+/* Sabit yükseklik: Tab ile sekme değişince ve yazarken palet zıplamasın.
+   ÖLÇÜLEN (önceki hâl): ad sekmesinde 560px, içerik sekmesinde 372px, sonuç
+   yokken 147/136px. */
+:root[data-design="premium"] .palette.file-palette {
+  height: min(560px, 70vh);
+}
+
+:root[data-design="premium"] .file-palette .palette-list {
+  flex: 1;
+  min-height: 0;
+  /* Üst dolgu 0: yapışkan dosya başlığı WebKit'te dolgunun ALTINA yapışıyor,
+     arada kayan satırlar görünüyordu. Boşluk listenin kenar payında. */
+  padding: 0 8px 8px;
+}
+
+:root[data-design="premium"] .file-palette .palette-list > [role="listbox"] {
+  margin-top: 6px;
+}
+
+/* Klavyeyle seçilen satır yapışkan başlığın ALTINDA kalmasın:
+   `scrollIntoView({ block: "nearest" })` bu payı hesaba katıyor. */
+:root[data-design="premium"] .file-palette .palette-list:has(> .hits) {
+  scroll-padding-top: 34px;
+}
+
+/* Sekmeler: alt çizgi yerine hap (yan paneldeki `.panel-tabs button.on` ile
+   aynı dil); şeridin yüksekliği iki sekmede aynı. */
+:root[data-design="premium"] .file-palette .palette-tabs {
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 12px 4px;
+  border-bottom: none;
+}
+
+:root[data-design="premium"] .file-palette .palette-tab {
+  margin-bottom: 0;
+  padding: 5px 8px 5px 10px;
+  border-bottom: none;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+:root[data-design="premium"] .file-palette .palette-tab:hover:not(.on) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-design="premium"] .file-palette .palette-tab.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+:root[data-design="premium"] .file-palette .palette-tab .keycap {
+  height: 16px;
+}
+
+:root[data-design="premium"] .palette-root {
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+}
+
+:root[data-design="premium"] .palette-search {
+  gap: 10px;
+  padding: 0 12px 0 16px;
+  border-bottom-color: var(--hairline);
+}
+
+:root[data-design="premium"] .palette-search:focus-within {
+  border-bottom-color: var(--accent-ring);
+}
+
+:root[data-design="premium"] .palette .palette-search input,
+:root[data-design="premium"] .palette .palette-search input:focus {
+  padding: 13px 0;
+  border: none;
+}
+
+:root[data-design="premium"] .palette-search .search-toggles {
+  gap: 2px;
+}
+
+:root[data-design="premium"] .palette-search .search-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+:root[data-design="premium"] .file-palette .pop-row {
+  gap: 10px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .file-palette .pop-row.on,
+:root[data-design="premium"] .file-palette .hit-line.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* Klasör adın HEMEN yanında (içerik sekmesindeki `.hit-dir` gibi); sağ uç meta
+   verinin (git durumu, açık dosya) yeri. */
+:root[data-design="premium"] .file-palette .file-row .file-dir {
+  order: 0;
+  margin-left: 0;
+  max-width: none;
+  text-align: left;
+}
+
+:root[data-design="premium"] .file-palette .file-meta {
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+:root[data-design="premium"] .file-palette .pop-row.on .file-ico {
+  color: var(--text);
+}
+
+:root[data-design="premium"] .file-palette .palette-section {
+  padding: 10px 10px 4px;
+}
+
+:root[data-design="premium"] .file-palette .palette-section::after {
+  background: var(--hairline);
+}
+
+/* İçerik sonuçları okunur boyda, dosya başlığı YAPIŞKAN: uzun bir dosyanın
+   satırları arasında hangi dosyada olunduğu kaybolmasın.
+   ÖLÇÜLEN (önceki hâl): satır 17px, kod 10.15px, numara 9.7px ve %75 soluk. */
+:root[data-design="premium"] .file-palette .hits {
+  gap: 2px;
+}
+
+:root[data-design="premium"] .file-palette .hit-file + .hit-file {
+  margin-top: 6px;
+}
+
+:root[data-design="premium"] .file-palette .hit-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  /* Opak: altından kayan satırlar görünmesin. */
+  background: color-mix(in srgb, var(--text) 4%, var(--surface-alt));
+  font-size: 0.9615rem;
+}
+
+:root[data-design="premium"] .file-palette .hit-line {
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px 2px 12px;
+  border-radius: 7px;
+}
+
+:root[data-design="premium"] .file-palette .hit-text {
+  font-size: 0.9231rem;
+}
+
+:root[data-design="premium"] .file-palette .hit-no {
+  font-size: 0.8462rem;
+  opacity: 1;
+}
+
+:root[data-design="premium"] .file-palette .hit-count {
+  padding: 1px 7px;
+}
+
+:root[data-design="premium"] .file-palette .palette-status {
+  padding: 6px 14px 0;
+}
+
+:root[data-design="premium"] .file-palette .palette-foot {
+  padding: 7px 12px;
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
+}
+
+:root[data-design="premium"] .file-palette .palette-keys .dim + .keycap {
+  margin-left: 10px;
+}
+
+/* Boş / sonuçsuz durum sabit yüksekliğin ortasında. */
+:root[data-design="premium"] .file-palette .palette-empty {
+  gap: 8px;
+  height: 100%;
+  min-height: 160px;
+  padding: 24px;
+}
+
+:root[data-design="premium"] .file-palette .palette-empty strong {
+  font-size: 1rem;
+}
+
+:root[data-design="premium"] .file-palette .palette-chip {
+  gap: 7px;
+  padding: 5px 10px;
+  border-color: var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------------- liste satırları
+ *
+ * Dosya ağacı, arama sonuçları, git listesi, favoriler, ayar sonuçları: hepsi
+ * aynı köşe. Klasikte 4-5px karışık; premium'da hap ve kartlarla uyumlu 7px. */
+:root[data-design="premium"] .tree-row,
+:root[data-design="premium"] .file-result,
+:root[data-design="premium"] .hit-head,
+:root[data-design="premium"] .hit-line,
+:root[data-design="premium"] .git-row,
+:root[data-design="premium"] .settings-result,
+:root[data-design="premium"] .stash-pick,
+:root[data-design="premium"] .stash-section-head,
+:root[data-design="premium"] .stash-toggle,
+:root[data-design="premium"] .fav-item,
+:root[data-design="premium"] .fav-folder {
+  border-radius: 7px;
+}
+
+/* ------------------------------------------------------------ hareket azalt */
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-design="premium"] button,
+  :root[data-design="premium"] .tab,
+  :root[data-design="premium"] .tab-row,
+  :root[data-design="premium"] .group,
+  :root[data-design="premium"] .command-input,
+  :root[data-design="premium"] .command-running {
+    transition: none;
+  }
+}
+
+/* ==================================================== Ayarlar penceresi
+ *
+ * macOS Sistem Ayarları düzeni: pencere boyunca iki sütun.
+ *
+ * - SOL: kenar çubuğu. Başlık ("Ayarlar"), arama ve bölümler; her bölümün
+ *   önünde renkli bir karo içinde simgesi (`SettingsDialog` > `SECTION_ICONS`).
+ *   Seçili bölüm vurgu renginde DOLU — gezinmede tek dolgulu öğe o.
+ * - SAĞ: sayfa. Üstte bölümün adı ve bir satırlık açıklaması, altında
+ *   ayarlar KART kart: kartın üstünde küçük büyük harfli başlık (`h3`),
+ *   içinde ince çizgiyle ayrılmış satırlar. Etiket solda, denetim SAĞDA;
+ *   açık/kapalı ayarlar onay kutusu değil ANAHTAR.
+ *
+ * Kenar çubuğu pencerenin TAM boyunda; başlık ve alt çubuk yalnızca sayfa
+ * sütununda. Bunun için pencere iki sütunlu bir ızgara ve başlık şeridi ile
+ * gövde `display: contents` — çocukları (pencere başlığı, sayfa başlığı,
+ * kapat, gezinme, sayfa) doğrudan bu ızgaraya yerleşiyor. İşaretleme
+ * değişmiyor; klasik aynı öğeleri alt alta diziyor.
+ *
+ * İşaretleme klasikle ORTAK. Premium için eklenen öğeler (bölüm simgesi, sayfa
+ * başlığı, arama simgesi, Hakkında'daki uygulama simgesi) klasikte
+ * `global.css` tarafından gizleniyor; klasik görünüm aynen kalıyor.
+ *
+ * ## Kartın başlığı neden negatif kenar boşluğuyla
+ *
+ * Başlık (`h3`) kartın İÇİNDE bir ızgara öğesi ama kartın ÜSTÜNDE görünmeli.
+ * Kart zemini bir sözde öğeyle (`::before`) çizilseydi kartın bir yığın
+ * bağlamı (stacking context) kurması gerekirdi ve bir kartın "i" açıklaması
+ * bir sonraki kartın ALTINDA kalırdı. Bunun yerine kart gerçek zemini ve
+ * kenarlığı taşıyor; başlık negatif üst boşlukla kartın dışına, üstündeki
+ * boşluğa (`--cap-h`) taşınıyor ve kenar boşluğu kutusu sıfıra iniyor — ilk
+ * satır kartın tepesinden başlıyor.
+ */
+
+:root[data-design="premium"] .modal.settings {
+  --nav-w: 15rem;
+  --nav-bg: color-mix(in srgb, var(--surface) 55%, var(--surface-alt));
+  --page-bg: var(--surface-alt);
+  --card: color-mix(in srgb, var(--text) 3.5%, var(--surface-alt));
+  --card-line: color-mix(in srgb, var(--text) 9%, transparent);
+  --row-line: color-mix(in srgb, var(--text) 7%, transparent);
+  --field-bg: color-mix(in srgb, var(--text) 5%, var(--card));
+  --pop-bg: color-mix(in srgb, var(--text) 8%, var(--surface-alt));
+  --row-h: 46px;
+  --row-x: 16px;
+  --cap-h: 30px;
+  --info-col: 20px;
+  --undo-col: 20px;
+  --label-gap: 8px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: var(--nav-w) minmax(0, 1fr);
+  width: min(74rem, 94vw);
+  height: min(50rem, 88vh);
+  max-height: none;
+  border-radius: 18px;
+  background: var(--page-bg);
+  animation: settings-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-design="premium"] .modal.settings .modal-head,
+:root[data-design="premium"] .modal.settings .settings-body {
+  display: contents;
+}
+
+/* Açık tonda kartlar BEYAZ (zeminden açık), kenar çubuğu bir ton koyu —
+   koyudaki "kart zeminden bir ton açık" ilişkisinin aynısı. */
+:root[data-design="premium"][data-tone="light"] .modal.settings {
+  --nav-bg: color-mix(in srgb, var(--text) 4%, var(--surface-alt));
+  --card: var(--surface);
+  --card-line: color-mix(in srgb, var(--text) 11%, transparent);
+  --field-bg: color-mix(in srgb, var(--text) 3%, var(--surface));
+  --pop-bg: var(--surface);
+}
+
+/* Daha büyük pencere üstten değil ORTADAN açılıyor. */
+:root[data-design="premium"] .overlay:has(> .modal.settings) {
+  align-items: center;
+  padding-top: 0;
+}
+
+/* ------------------------------------------------------------- başlık şeridi */
+
+:root[data-design="premium"] .modal.settings .modal-head > h2 {
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 1;
+  align-self: start;
+  margin: 0;
+  padding: 20px 18px 0 22px;
+  color: var(--text);
+  font-size: 1.0769rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+:root[data-design="premium"] .modal.settings .settings-page {
+  display: block;
+  grid-area: 1 / 2;
+  min-width: 0;
+  padding: 20px 64px 4px 28px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-page-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.4615rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+:root[data-design="premium"] .modal.settings .settings-page-desc {
+  margin: 3px 0 0;
+  color: var(--text-dim);
+  font-size: 0.9231rem;
+  line-height: 1.4;
+}
+
+:root[data-design="premium"] .modal.settings .modal-head > .icon-btn {
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 2;
+  justify-self: end;
+  align-self: start;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  margin: 14px 14px 0 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+:root[data-design="premium"] .modal.settings .modal-head > .icon-btn:hover:not(:disabled) {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- gövde */
+
+/* ------------------------------------------------------------ kenar çubuğu */
+
+:root[data-design="premium"] .modal.settings .settings-nav {
+  grid-area: 1 / 1 / 4 / 2;
+  gap: 1px;
+  min-height: 0;
+  padding: 54px 12px 14px 14px;
+  border-right: 1px solid var(--card-line);
+  background: var(--nav-bg);
+}
+
+:root[data-design="premium"] .modal.settings .settings-search {
+  position: relative;
+  gap: 0;
+  margin-bottom: 12px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-search-ico {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  z-index: 1;
+  display: inline-flex;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+:root[data-design="premium"] .modal.settings .settings-search input,
+:root[data-design="premium"] .modal.settings .settings-search input:focus {
+  height: 30px;
+  padding: 0 30px 0 29px;
+  border-radius: 9px;
+  font-size: 0.9231rem;
+}
+
+:root[data-design="premium"] .modal.settings .settings-search input {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] .modal.settings .settings-search input:focus {
+  border-color: var(--accent-ring);
+  background: color-mix(in srgb, var(--text) 3%, var(--page-bg));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Temizle düğmesi kutunun İÇİNDE. `transform` değil `top`: düğmeye basınca
+   genel kural `transform: translateY(0.5px)` veriyor ve ortalama kayardı. */
+:root[data-design="premium"] .modal.settings .settings-search .icon-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav > button {
+  display: flex;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 10px 0 5px;
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav > button:hover:not(.on) {
+  background: var(--hover);
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav > button.on {
+  background: var(--accent-solid);
+  color: var(--accent-fg);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgb(var(--shadow-rgb) / 0.25),
+    inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+/* Bölüm grupları: ayarlar | profiller, gruplar, kısayollar | hakkında. */
+:root[data-design="premium"] .modal.settings .settings-nav > button[data-section="profiles"],
+:root[data-design="premium"] .modal.settings .settings-nav > button[data-section="about"] {
+  position: relative;
+  margin-top: 13px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav > button[data-section="profiles"]::before,
+:root[data-design="premium"] .modal.settings .settings-nav > button[data-section="about"]::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  left: 8px;
+  height: 1px;
+  background: var(--card-line);
+  pointer-events: none;
+}
+
+/* Renkli simge karoları. Renkler temadan BAĞIMSIZ (macOS'taki gibi): bölümü
+   rengiyle tanımak, temayı değiştirince bozulmamalı. Simge beyaz; karonun
+   üstü bir ton açık, kenarında yarım piksellik koyu çizgi. */
+:root[data-design="premium"] .modal.settings .settings-nav .nav-ico {
+  --tile: #8e8e93;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tile) 80%, #fff), var(--tile));
+  box-shadow:
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 1px 1.5px rgb(0 0 0 / 0.18);
+  color: #fff;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav .nav-ico svg {
+  stroke-width: 1.8;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="appearance"] .nav-ico {
+  --tile: #5e5ce6;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="terminal"] .nav-ico {
+  --tile: #2c2c2e;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="session"] .nav-ico {
+  --tile: #0a84ff;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="history"] .nav-ico {
+  --tile: #f2930a;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="profiles"] .nav-ico {
+  --tile: #2fae4e;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="groups"] .nav-ico {
+  --tile: #f2385d;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="keys"] .nav-ico {
+  --tile: #636366;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="backup"] .nav-ico {
+  --tile: #14a39a;
+}
+
+:root[data-design="premium"] .modal.settings .settings-nav [data-section="about"] .nav-ico {
+  --tile: #2f9fe0;
+}
+
+/* Seçili satırda karo, vurgu dolgusunun üstünde ince bir halkayla ayrılıyor. */
+:root[data-design="premium"] .modal.settings .settings-nav > button.on .nav-ico {
+  box-shadow:
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 0 0 1px rgb(255 255 255 / 0.22);
+}
+
+/* Arama sonuçları */
+:root[data-design="premium"] .modal.settings .settings-results-count {
+  padding: 0 8px 6px;
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:root[data-design="premium"] .modal.settings .settings-result {
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-result.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* ------------------------------------------------------------------ sayfa */
+
+:root[data-design="premium"] .modal.settings .modal-body {
+  grid-area: 2 / 2;
+  min-height: 0;
+  padding: 0 28px 32px;
+  animation: settings-page-in 220ms ease-out;
+}
+
+/* Kayan içerik başlığın altına girerken yumuşakça soluyor. Dinlenme hâlinde
+   GÖRÜNMEZ: şerit sayfanın üst boşluğunun KENDİSİ (18px) — orada zeminle aynı
+   renk; ancak içerik altına kayınca belli oluyor.
+ *
+ * Boşluk bilinçli olarak dolgu değil bu şerit: kabın üst dolgusu olsaydı
+ * WebKit (macOS) yapışkan şeridi dolgunun ALTINA yapıştırıyor, Chromium
+ * üstüne — ölçüldü; WebKit'te şerit ilk kartın başlığını soldurdu. Dolgu
+ * sıfırken iki motor aynı yerde tutuyor. */
+:root[data-design="premium"] .modal.settings .modal-body::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: block;
+  height: 18px;
+  background: linear-gradient(180deg, var(--page-bg), transparent);
+  pointer-events: none;
+}
+
+/* Kart */
+:root[data-design="premium"] .modal.settings .modal-body > .section {
+  grid-template-columns: minmax(0, 1fr) fit-content(62%) var(--info-col) var(--undo-col);
+  column-gap: var(--label-gap);
+  row-gap: 0;
+  margin: var(--cap-h) 0 24px;
+  padding: 2px var(--row-x);
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.12);
+}
+
+/* Kartın başlığı: kartın ÜSTÜNDE (gerekçe bölümün başında). Kutu 22px, alt
+   kenarı kartın 7px üstünde; kenar boşluğu kutusu sıfır. */
+:root[data-design="premium"] .modal.settings .modal-body > .section:first-child {
+  margin-top: calc(var(--cap-h) - 12px);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > h3 {
+  display: flex;
+  align-items: flex-end;
+  height: 22px;
+  margin: calc(-2px - var(--cap-h)) 0 calc(var(--cap-h) - 20px);
+  padding: 0;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+/* Satırlar */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field,
+:root[data-design="premium"] .modal.settings .modal-body > .section > .check-row {
+  position: relative;
+  min-height: var(--row-h);
+  padding-block: 8px;
+}
+
+/* Satır ayırıcısı: ilk satırda yok. Onay satırı ızgarada yalnızca ilk iki
+   sütunu tutuyor ("i" ve geri al yanındaki sütunlarda kardeş öğe), çizgi
+   onların altına da uzatılıyor. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > :is(.field, .check-row, .hintline):not(h3 + *)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--row-line);
+  pointer-events: none;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .check-row:not(h3 + *)::before {
+  right: calc(-1 * (var(--info-col) + var(--undo-col) + 2 * var(--label-gap)));
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field {
+  grid-template-columns: minmax(0, 1fr) fit-content(62%) var(--info-col) var(--undo-col);
+  column-gap: var(--label-gap);
+  row-gap: 8px;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field > label {
+  color: var(--text);
+  line-height: 1.35;
+}
+
+/* Denetim SAĞDA. Değer metinleri (geliştirici, lisans, dosya yolları, sağlık
+   ölçümleri) ikincil renkte ve sağa yaslı — macOS'taki "etiket … değer". */
+/* `:where`: özgüllüğü düşük tutuyor, aşağıdaki "metin kutusu + düğme" ve
+   "geniş içerik" istisnaları onu ezebilsin. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field > label + :where(select, input, .seg, span, div) {
+  justify-self: end;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field > label + span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-dim);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Metin kutusu + düğme (kaynak kodu, veri klasörü): kutu satırın kalanını
+   doldurmalı — sağa yaslanınca birkaç harflik bir kutu kalıyordu. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field:has(> label + div > input) {
+  grid-template-columns: 11rem minmax(0, 1fr) var(--info-col) var(--undo-col);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field > label + div:has(> input) {
+  justify-self: stretch;
+}
+
+/* Geniş içerikli satırlar (tasarım ve tema kartları, sürüm notları): etiket
+   üstte, içerik altında kartın tam eninde. "i" ve geri al etiketle aynı
+   satırda, sağda. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field:is(.top, :has(> .release-notes)) > label {
+  grid-column: 1 / 3;
+  align-self: center;
+  padding-top: 0;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field:is(.top, :has(> .release-notes)) > label + * {
+  grid-row: 2;
+  grid-column: 1 / 3;
+  justify-self: stretch;
+  margin-bottom: 6px;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field.top > :is(.info, .undo) {
+  align-self: center;
+  padding-top: 0;
+}
+
+/* Satır altı notu (yakınlaştırma notu, kısayol çakışması, engellenen
+   seçenek): etiketin altından başlıyor, satırın tam eninde. */
+:root[data-design="premium"] .modal.settings .modal-body .field > .hintline {
+  grid-column: 1 / -1;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body .hintline.warn {
+  padding: 7px 10px;
+  border-left: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+}
+
+/* Kartın içindeki serbest metin: kısayollar açıklaması, telif satırı. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > p {
+  margin: 12px 0 10px;
+  line-height: 1.5;
+}
+
+/* Kartın ilk öğesi bir paragrafsa (Kısayollar açıklaması) üst boşluk dolguyla:
+   işaretlemedeki `marginTop: 0` satır içi stili kenar boşluğunu eziyor. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > h3 + p {
+  padding-top: 12px;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .hintline {
+  position: relative;
+  padding: 11px 0 12px;
+}
+
+/* Yedekleme › İçe al: dosya seçici satırı da bir kart satırı yüksekliğinde. */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .backup-file {
+  min-height: var(--row-h);
+  padding-block: 8px;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section > .keys-reset {
+  margin: 0 0 14px;
+}
+
+/* --------------------------------------------------------------- denetimler */
+
+/* Anahtar (açık / kapalı). Onay kutusunun KENDİSİ: klavye, etiket tıklaması ve
+   erişilebilirlik aynen çalışıyor; yalnızca görünüşü değişiyor. Satırda etiket
+   solda, anahtar sağda (`row-reverse`, DOM sırası değişmeden). */
+:root[data-design="premium"] .modal.settings .check-row {
+  flex-direction: row-reverse;
+  gap: 16px;
+}
+
+:root[data-design="premium"] .modal.settings .check-row > label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent);
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 0 0 0.5px rgb(0 0 0 / 0.08);
+  transition: transform 200ms cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]:checked {
+  background: var(--accent-solid);
+  box-shadow: none;
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]:checked::before {
+  transform: translateX(14px);
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--accent-ring);
+}
+
+:root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+:root[data-design="premium"] .modal.settings .check-row:has(> input:disabled) > label {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* Bağlı alt seçenek: etiketin önünde üst seçeneğe bağlayan köşe çizgisi. */
+:root[data-design="premium"] .modal.settings .check-row.sub > label::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin: 0 9px 3px -4px;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  border-bottom-left-radius: 3px;
+  opacity: 0.35;
+}
+
+/* Açılır menü: yükseltilmiş kutu, sağda yukarı-aşağı ok (macOS açılır
+   düğmesi). Ok rengi orta gri — hem koyu hem açık kartta okunuyor; arka plan
+   görselinde CSS değişkeni kullanılamıyor. */
+:root[data-design="premium"] .modal.settings .modal-body select {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 11rem;
+  max-width: 22rem;
+  height: 30px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 14'%3E%3Cpath d='M2.2 5 L5 2.2 L7.8 5 M2.2 9 L5 11.8 L7.8 9' fill='none' stroke='%23889099' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 10px center / 9px 13px,
+    var(--field-bg);
+  box-shadow: 0 1px 1px rgb(var(--shadow-rgb) / 0.12);
+  color: var(--text);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Satırlardaki açılır menüler TEK genişlikte.
+ *
+ * İSTEK: "Ayarlardaki combobox/selectbox'ların genişliğini standart bir
+ * genişlik belirle, bu sayede bütünlük olsun." İçerik kadar genişlediklerinde
+ * her satırda başka boydaydılar (ölçülen: 132-264px) ve sağa yaslı sütunun sol
+ * kenarı tırtıklıydı; en uzun seçenekler de 22rem'de kesiliyordu. 25rem en
+ * uzun seçeneği alıyor (ölçülen: "List below the prompt (select with
+ * up/down)" 292px, 12px kökte 24,3rem); dar pencerede `max-width` sütuna
+ * sığdırıyor. Klasik tasarımda bu zaten böyle (280px, global.css).
+ *
+ * Profil ve grup formlarındaki menüler DIŞARIDA: orada yanlarındaki metin
+ * kutularıyla aynı sütunu dolduruyorlar (`.settings-form select`).
+ */
+:root[data-design="premium"] .modal.settings .modal-body > .section > .field > select {
+  width: 25rem;
+  max-width: 100%;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body select:hover {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body select:focus,
+:root[data-design="premium"] .modal.settings .modal-body input:not([type="checkbox"]):not([type="range"]):focus {
+  border-color: var(--accent-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input:not([type="checkbox"]):not([type="range"]):not([type="color"]) {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  background: var(--field-bg);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[readonly]:not(.key-capture) {
+  color: var(--text-dim);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="number"] {
+  width: 8.5rem;
+  max-width: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Kaydırıcı: ince iz, dolu kısmı vurgu (`--fill`, `SettingsDialog` >
+   `rangeFill`), beyaz ve gölgeli tutamak. */
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15rem;
+  max-width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--accent) var(--fill, 0%),
+    color-mix(in srgb, var(--text) 16%, transparent) var(--fill, 0%)
+  );
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.2),
+    0 1px 3px rgb(0 0 0 / 0.35);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:focus-visible {
+  outline: none;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.2),
+    0 1px 3px rgb(0 0 0 / 0.35),
+    0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Renk seçici: yuvarlak köşeli renk örneği. */
+:root[data-design="premium"] .modal.settings .modal-body input[type="color"] {
+  width: 46px;
+  height: 28px;
+  padding: 3px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  background: var(--field-bg);
+  cursor: pointer;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+/* Kısayol kutusu: tuş kapağı. Basılırken (kayıt) vurgu renginde. */
+:root[data-design="premium"] .modal.settings .modal-body input.key-capture {
+  width: 9.5rem;
+  max-width: none;
+  height: 30px;
+  border-bottom-width: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 6%, var(--card));
+  caret-color: transparent;
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: 0.9231rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-align: center;
+  cursor: pointer;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body input.key-capture:focus {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* "i" ve geri al: 22px, yuvarlak köşeli. Geri al yalnızca değişmiş ayarda
+   çıkıyor ve vurgu renginde — neyin değiştiği bir bakışta görünsün. */
+/* `.modal-body` önekli: gövdedeki düğmelerin taban yüksekliği (28px) bu iki
+   küçük düğmeyi dikey bir hapa çeviriyordu. */
+:root[data-design="premium"] .modal.settings .modal-body :is(.info-btn, .undo-btn) {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  border-radius: 7px;
+}
+
+/* Açıklama balonu bu pencerede OPAK: yarı saydam cam, balonun altında kalan
+   anahtarları ve metni silik de olsa gösteriyordu; burada okunan şey balonun
+   kendi metni. */
+:root[data-design="premium"] .modal.settings .info-pop {
+  border-radius: 10px;
+  background: var(--pop-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-design="premium"] .modal.settings .info-btn {
+  color: color-mix(in srgb, var(--text-dim) 85%, transparent);
+}
+
+:root[data-design="premium"] .modal.settings .info-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-design="premium"] .modal.settings .info-btn.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+:root[data-design="premium"] .modal.settings .undo-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+:root[data-design="premium"] .modal.settings .undo-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body button {
+  min-height: 28px;
+}
+
+/* Arama sonucuna gidilince satır kısa bir süre parlıyor. */
+:root[data-design="premium"] .modal.settings .modal-body :is(.field, .check-row).found {
+  border-radius: 8px;
+  animation: settings-found 1.6s ease-out;
+}
+
+/* ----------------------------------------------- profiller ve gruplar */
+
+:root[data-design="premium"] .modal.settings .modal-body > .profile-grid {
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 20px;
+  min-height: 0;
+  padding-top: 4px;
+}
+
+@container (max-width: 48rem) {
+  :root[data-design="premium"] .modal.settings .modal-body > .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+:root[data-design="premium"] .modal.settings .profile-list {
+  max-height: 26rem;
+  padding: 5px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.12);
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row {
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-bottom: none;
+  border-radius: 8px;
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row + .row {
+  margin-top: 1px;
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row:hover:not(.on) {
+  background: var(--hover);
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row .dot {
+  flex: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row .kbd {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text-dim);
+  font-size: 0.7308rem;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row.on .kbd {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+
+:root[data-design="premium"] .modal.settings .profile-list .row .kbd.err-text {
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+  color: var(--err);
+}
+
+/* Düzenleyici: tek kart, satırlar ince çizgiyle ayrık; ortam değişkenleri
+   kartın içinde, üstünde bir ayırıcıyla. */
+:root[data-design="premium"] .modal.settings .modal-body .settings-form {
+  --label-col: 10.5rem;
+  --undo-col: 0px;
+  align-content: start;
+  padding: 4px var(--row-x) 12px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.12);
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .field,
+:root[data-design="premium"] .modal.settings .settings-form > .check-row {
+  position: relative;
+  min-height: var(--row-h);
+  padding-block: 8px;
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .check-row {
+  grid-column: 1 / 3;
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > :is(.field, .check-row) + :is(.field, .check-row)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--row-line);
+  pointer-events: none;
+}
+
+/* Anahtar, metin kutularıyla aynı sağ kenarda (ızgaranın ilk iki sütunu);
+   ayırıcı çizgi yine satırın tam eninde. */
+:root[data-design="premium"] .modal.settings .settings-form > .field + .check-row::before {
+  right: calc(-1 * (var(--info-col) + var(--undo-col) + 2 * var(--label-gap)));
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .field > label {
+  color: var(--text);
+}
+
+:root[data-design="premium"] .modal.settings .settings-form select {
+  max-width: none;
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .section {
+  padding-top: 14px;
+  border-top: 1px solid var(--row-line);
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .section > h3 {
+  margin: 0 0 8px;
+  padding: 0;
+  border: none;
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+:root[data-design="premium"] .modal.settings .settings-form > .hint {
+  padding: 36px 12px;
+}
+
+/* --------------------------------------------------------------- Hakkında */
+
+:root[data-design="premium"] .modal.settings .modal-body > .section.about-hero {
+  /* Simge dört satırı kaplıyor; baştaki ve sondaki `1fr` artan yüksekliği
+     emiyor, başlık ile açıklama simgenin ortasında BİTİŞİK duruyor. */
+  grid-template-rows: 1fr auto auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 16px;
+  margin-top: 6px;
+  padding: 18px 20px;
+  background:
+    radial-gradient(
+      140% 160% at 0% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 60%
+    ),
+    var(--card);
+}
+
+:root[data-design="premium"] .modal.settings .about-hero > .about-icon {
+  display: block;
+  grid-row: 1 / -1;
+  grid-column: 1;
+  filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.35));
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section.about-hero > h3 {
+  display: block;
+  grid-row: 2;
+  grid-column: 2;
+  height: auto;
+  margin: 0;
+  color: var(--text);
+  font-size: 1.3846rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+:root[data-design="premium"] .modal.settings .modal-body > .section.about-hero > p {
+  grid-row: 3;
+  grid-column: 2;
+  margin: 3px 0 0;
+  /* "başlıktan sonraki paragraf" dolgusu (Kısayollar kartı için) burada yok. */
+  padding-top: 0;
+}
+
+/* --------------------------------------------------------------- alt çubuk
+ *
+ * Sayfa sütununa ait: metin kartlarla aynı hizadan başlıyor. */
+:root[data-design="premium"] .modal.settings .modal-foot {
+  grid-area: 3 / 2;
+  gap: 8px;
+  padding: 12px 20px 12px 28px;
+  border-top: 1px solid var(--card-line);
+  background: none;
+}
+
+:root[data-design="premium"] .modal.settings .modal-foot > .dim:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8846rem;
+}
+
+:root[data-design="premium"] .modal.settings .modal-foot > .dim:first-child::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: var(--ok);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.3' fill='none' stroke='black' stroke-width='1.6'/%3E%3Cpath d='M5.3 8.2 L7.2 10 L10.8 6.2' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.3' fill='none' stroke='black' stroke-width='1.6'/%3E%3Cpath d='M5.3 8.2 L7.2 10 L10.8 6.2' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+:root[data-design="premium"] .modal.settings .modal-foot button {
+  min-height: 30px;
+  padding-inline: 12px;
+}
+
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+@keyframes settings-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+@keyframes settings-found {
+  0%,
+  55% {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-design="premium"] .modal.settings,
+  :root[data-design="premium"] .modal.settings .modal-body,
+  :root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"],
+  :root[data-design="premium"] .modal.settings .check-row > input[type="checkbox"]::before {
+    animation: none;
+    transition: none;
+  }
+}
