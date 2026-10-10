@@ -52,6 +52,15 @@
  * bir kez ilerliyor. Yani iki sayı aynı şeyi ölçüyordu ve panel, sebebi
  * tümüyle JavaScript olan bir donmada "çizim tıkandı" diyordu. Yanıltıcı bir
  * sayı, hiç sayı olmamasından kötü.
+ *
+ * ## Maliyet
+ *
+ * Sonda ilk hâlinde uygulama ömrü boyunca sürekli çalışıyordu (16 ms
+ * zamanlayıcı + her karede rAF) ve BOŞTA bile çekirdeğin ~%13'ünü yiyordu.
+ * Şimdi yalnızca kullanıcı etkinliğinden sonra beş saniye sık örnekliyor,
+ * boştayken 250 ms'de bir yokluyor, pencere gizliyken duruyor (bkz.
+ * `FrameMonitor`, `ACTIVE_WINDOW_MS`). Ölçümün amacı olan takılma yakalama
+ * bozulmuyor: donma etkileşim sırasında fark ediliyor.
  */
 
 /** Bir takılmanın "takılma" sayılması için gereken en küçük boşluk (ms). */
@@ -88,6 +97,30 @@ export const JANK_SETTLE_MS = 150;
  * hesabı ayrı bir tamponda; beş saniye en uzun takılmayı bile kapsıyor.
  */
 export const TASK_SAMPLE_WINDOW = 5000;
+/**
+ * Kullanıcı etkinliğinden sonra sondanın SIK örneklemede kalacağı süre (ms).
+ *
+ * ÖLÇÜLEN MALİYET: sürekli 16 ms zamanlayıcı + her karede rAF, uygulama
+ * BOŞTAYKEN bile Rust ana süreci %6 + WebContent %5,6 + GPU %1,2 CPU yiyordu
+ * (izleyici durdurulunca 12,9 -> 6,0). rAF'in sürekli istenmesi macOS'ta
+ * arayüz sürecini de saniyede 60 kez uyandırıyor (CVDisplayLink); pil
+ * tüketiminin görünür kısmı bu.
+ *
+ * Donma ARAYÜZLE ETKİLEŞİM sırasında fark ediliyor (yazarken, sekme
+ * değiştirirken, pencereyi sürüklerken); kimse hareketsiz bir pencerenin
+ * takıldığını görmüyor. O yüzden sık örnekleme yalnızca etkinlikten sonra bu
+ * kadar sürüyor; sonrası seyrek yoklamaya (`IDLE_INTERVAL`) iniyor. Uzun
+ * (>= JANK_MS) bir takılma seyrek yoklamada da yakalanıyor.
+ */
+export const ACTIVE_WINDOW_MS = 5000;
+/**
+ * Boştayken yoklama aralığı (ms).
+ *
+ * `JANK_MS`'ye (250) yakın: bir takılmanın yoklamayı kaçırmaması için aralık
+ * eşikten büyük olamaz. Zamanlayıcı ve çizim istemi AYNI yoklamada: saniyede
+ * dört zamanlayıcı ve dört rAF, eskiden 62 + 60.
+ */
+export const IDLE_INTERVAL = 250;
 
 export interface JankEvent {
   /** Duvar saati (ms, epoch) — kullanıcı "saat kaçta" diye sorabilsin. */
@@ -178,12 +211,47 @@ export interface HealthSnapshot {
   calisiyor: boolean;
 }
 
+/** Sondanın çalışma kipi. */
+export type MonitorMode = "fast" | "slow" | "paused";
+
+/**
+ * Kip kararı — SAF, testli.
+ *
+ * `paused`: pencere gizli (küçültülmüş/örtülü): ölçülecek bir kullanıcı yok,
+ * zamanlayıcılar zaten saniyede bire iniyor.
+ * `fast`: son etkinlikten `ACTIVE_WINDOW_MS` geçmedi.
+ * `slow`: geri kalan her durum.
+ */
+export function decideMode(hidden: boolean, sinceActivityMs: number): MonitorMode {
+  if (hidden) return "paused";
+  return sinceActivityMs <= ACTIVE_WINDOW_MS ? "fast" : "slow";
+}
+
+/** Sondanın "kullanıcı etkinliği" saydığı pencere olayları. */
+const ACTIVITY_EVENTS = ["keydown", "pointerdown", "pointermove", "wheel", "focus"] as const;
+
 /**
  * Kare ölçümü. Uygulama ömrü boyunca tek örnek (`frameMonitor`).
  *
  * Ölçümün kendisi ucuz olmak ZORUNDA: kareyi ölçen şey kareyi geciktirirse
  * ölçtüğü sayı kendi maliyetini içerir. Kare başına yapılan iş iki çıkarma,
  * iki dizi yazımı ve bir karşılaştırma.
+ *
+ * ## Üç kip (bkz. `ACTIVE_WINDOW_MS`)
+ *
+ * - `fast`: 16 ms zamanlayıcı + kare başına bir rAF. Kullanıcı etkinliğinden
+ *   sonra ilk beş saniye ve açılışta. Yüzdelik pencereleri YALNIZ bu kipte
+ *   dolar: seyrek kipteki örnekler ("çizim isteği ne kadar sonra karşılandı")
+ *   ile sık kipteki ("iki kare arası") aynı dağılım değil, karıştırmak ortancayı
+ *   anlamsızlaştırırdı.
+ * - `slow`: 250 ms'de bir TEK zamanlayıcı; her yoklamada bir rAF istenip
+ *   isteğin ne kadar sonra karşılandığı ölçülüyor. Bir takılma (>= `JANK_MS`)
+ *   burada da kaydediliyor.
+ * - `paused`: pencere gizli, hiçbir şey çalışmıyor.
+ *
+ * Çizim "boşluğu" her iki kipte de aynı tanımda: rAF'in İSTENDİĞİ andan
+ * KARŞILANDIĞI ana kadar geçen süre. Sık kipte istek bir önceki karede
+ * yapıldığı için bu iki kare arası süreyle aynı sayı (eski tanım).
  */
 export class FrameMonitor {
   private drawGaps: number[] = [];
@@ -191,8 +259,11 @@ export class FrameMonitor {
   private janks: JankEvent[] = [];
   private started = 0;
   private running = false;
-  private lastFrame = 0;
+  private mode: MonitorMode = "paused";
+  private lastActivity = 0;
   private lastTask = 0;
+  private drawPending = false;
+  private drawRequestedAt = 0;
   /** Zaman damgalı sapma örnekleri: takılmanın aralığını geriye okumak için. */
   private taskSamples: TaskSample[] = [];
   private frame: number | null = null;
@@ -212,33 +283,88 @@ export class FrameMonitor {
     if (this.running) return;
     this.running = true;
     if (!this.started) this.started = Date.now();
-    const now = performance.now();
-    this.lastFrame = now;
-    this.lastTask = now;
-    this.tick();
-    this.taskTick();
+    this.lastActivity = performance.now();
+    for (const type of ACTIVITY_EVENTS) {
+      window.addEventListener(type, this.poke, { capture: true, passive: true });
+    }
+    document.addEventListener("visibilitychange", this.onVisibility);
+    this.enter(decideMode(document.hidden, 0));
   }
 
   stop() {
     this.running = false;
-    if (this.frame !== null) cancelAnimationFrame(this.frame);
-    this.frame = null;
-    if (this.timer !== null) window.clearTimeout(this.timer);
-    this.timer = null;
+    for (const type of ACTIVITY_EVENTS) {
+      window.removeEventListener(type, this.poke, { capture: true });
+    }
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.cancelProbes();
+    this.mode = "paused";
     // Bekleyen doldurma zamanlayıcıları: sönmüş bir sondada koşmalarının
     // zararı yok ama geride bırakmak da sızıntı.
     for (const id of this.settleTimers) window.clearTimeout(id);
     this.settleTimers = [];
   }
 
-  /** Çizim döngüsü: kare geldi mi? */
-  private tick = () => {
-    const now = performance.now();
-    const gap = now - this.lastFrame;
-    this.lastFrame = now;
+  /**
+   * Kullanıcı etkinliği: sık örneklemeye dön.
+   *
+   * Pencere olaylarından çok sık çağrılıyor (`pointermove`): iş bir karşılaştırma
+   * ve bir atama. Kip zaten `fast` ise başka hiçbir şey yapmıyor.
+   */
+  poke = () => {
+    this.lastActivity = performance.now();
+    if (this.running && this.mode === "slow") this.enter("fast");
+  };
 
-    this.drawGaps.push(gap);
-    if (this.drawGaps.length > FRAME_WINDOW) this.drawGaps.shift();
+  private onVisibility = () => {
+    if (!this.running) return;
+    if (document.hidden) {
+      this.enter("paused");
+    } else {
+      // Görünür olunca ilk örnek "gizliyken geçen süre"yi takılma sanmasın:
+      // `enter` bütün başlangıç noktalarını sıfırlıyor.
+      this.lastActivity = performance.now();
+      this.enter("fast");
+    }
+  };
+
+  private cancelProbes() {
+    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    this.frame = null;
+    this.drawPending = false;
+    if (this.timer !== null) window.clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  /** Kip değiştirir; başlangıç noktalarını sıfırlar ki geçiş takılma sayılmasın. */
+  private enter(mode: MonitorMode) {
+    this.cancelProbes();
+    this.mode = mode;
+    if (mode === "paused") return;
+    this.lastTask = performance.now();
+    this.requestDraw();
+    this.taskTick();
+  }
+
+  /** Bir çizim isteği: karşılanma süresi ölçülecek. Zaten bekleyen varsa yenisi açılmıyor. */
+  private requestDraw() {
+    if (this.drawPending) return;
+    this.drawPending = true;
+    this.drawRequestedAt = performance.now();
+    this.frame = requestAnimationFrame(this.onFrame);
+  }
+
+  /** Çizim döngüsü: istek karşılandı. */
+  private onFrame = () => {
+    this.frame = null;
+    this.drawPending = false;
+    const now = performance.now();
+    const gap = now - this.drawRequestedAt;
+
+    if (this.mode === "fast") {
+      this.drawGaps.push(gap);
+      if (this.drawGaps.length > FRAME_WINDOW) this.drawGaps.shift();
+    }
 
     if (gap >= JANK_MS) {
       /*
@@ -262,26 +388,33 @@ export class FrameMonitor {
       this.settleTimers.push(timer);
     }
 
-    if (this.running) this.frame = requestAnimationFrame(this.tick);
+    // Yalnızca sık kipte kare kare sürüyor; seyrek kipte bir sonraki yoklama
+    // yeni istek açacak.
+    if (this.running && this.mode === "fast") this.requestDraw();
   };
 
   /**
    * Görev kuyruğu: zamanlayıcı zamanında ateşledi mi?
    *
    * `setTimeout` çizim hattından geçmiyor; gecikmesi doğrudan "ana iş
-   * parçacığı meşgul" demek. Aralık `TASK_INTERVAL` ve sapma o aralığın
-   * ÜZERİNE binen kısım — motorun kendi alt sınırı (çoğu tarayıcıda 4 ms)
-   * ölçümü kirletmesin diye çıkarılıyor.
+   * parçacığı meşgul" demek. Aralık sık kipte `TASK_INTERVAL`, seyrek kipte
+   * `IDLE_INTERVAL`; sapma o aralığın ÜZERİNE binen kısım — motorun kendi alt
+   * sınırı (çoğu tarayıcıda 4 ms) ölçümü kirletmesin diye çıkarılıyor.
    */
   private taskTick = () => {
-    if (!this.running) return;
+    if (!this.running || this.mode === "paused") return;
+    const interval = this.mode === "fast" ? TASK_INTERVAL : IDLE_INTERVAL;
     this.timer = window.setTimeout(() => {
       const now = performance.now();
-      const drift = Math.max(0, now - this.lastTask - TASK_INTERVAL);
+      const drift = Math.max(0, now - this.lastTask - interval);
       this.lastTask = now;
 
-      this.taskGaps.push(drift);
-      if (this.taskGaps.length > FRAME_WINDOW) this.taskGaps.shift();
+      // Yüzdelik penceresi yalnız sık kipte dolar (bkz. sınıf başlığı); zaman
+      // damgalı örnekler ise takılma atfı için HER kipte tutuluyor.
+      if (this.mode === "fast") {
+        this.taskGaps.push(drift);
+        if (this.taskGaps.length > FRAME_WINDOW) this.taskGaps.shift();
+      }
 
       this.taskSamples.push({ at: now, drift });
       const kesim = now - TASK_SAMPLE_WINDOW;
@@ -289,8 +422,16 @@ export class FrameMonitor {
         this.taskSamples.shift();
       }
 
+      // Etkinlik bitti mi? Sık kipten seyreğe iniş yalnızca burada.
+      const next = decideMode(document.hidden, now - this.lastActivity);
+      if (next !== this.mode) {
+        this.enter(next);
+        return;
+      }
+      // Seyrek kipte her yoklama bir çizim isteği de açıyor.
+      if (this.mode === "slow") this.requestDraw();
       this.taskTick();
-    }, TASK_INTERVAL);
+    }, interval);
   };
 
   snapshot(): HealthSnapshot {
