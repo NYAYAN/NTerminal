@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
 import {
@@ -167,5 +168,31 @@ describe("eşikler", () => {
     // Kullanıcı donmadan SONRA Ayarlar'ı açıyor; pencere o yolculuğu
     // atlatacak kadar uzun olmalı.
     expect(FRAME_WINDOW / 60).toBeGreaterThanOrEqual(50);
+  });
+});
+
+/**
+ * Duraklatma kayıtları silmiyor.
+ *
+ * Sonda pencere arka plana geçince duruyor (boşta %4-5 CPU: kesintisiz rAF
+ * döngüsü ekran bağlantısını uyanık tutuyordu, bkz. `App`). Durup yeniden
+ * başlamak açık kalma süresini sıfırlasaydı panel her pencere geçişinde
+ * "0 s" derdi ve takılma kayıtları giderdi.
+ */
+describe("duraklatma", () => {
+  it("stop + start açık kalma süresini ve kayıtları koruyor", async () => {
+    const { FrameMonitor } = await import("./health");
+    const m = new FrameMonitor();
+    m.start();
+    const once = m.snapshot();
+    expect(once.calisiyor).toBe(true);
+    m.stop();
+    expect(m.snapshot().calisiyor).toBe(false);
+    await new Promise((r) => setTimeout(r, 20));
+    m.start();
+    const sonra = m.snapshot();
+    expect(sonra.calisiyor).toBe(true);
+    expect(sonra.uptimeMs, "yeniden başlamak süreyi sıfırladı").toBeGreaterThanOrEqual(once.uptimeMs + 15);
+    m.stop();
   });
 });

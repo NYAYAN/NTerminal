@@ -200,10 +200,18 @@ export class FrameMonitor {
   /** Kuyruk değeri henüz doldurulmamış takılmalar. */
   private settleTimers: number[] = [];
 
+  /**
+   * Başlatır ya da duraklatılmış sondayı sürdürür.
+   *
+   * `started` yalnızca İLK başlangıçta yazılıyor: `stop` + `start` çifti
+   * (pencere arka plana geçti, geri geldi) açık kalma süresini ve halka
+   * tamponları sıfırlamıyor — panel "uygulama ne zamandır açık" sorusuna
+   * cevap vermeye devam ediyor, takılma kayıtları da duruyor.
+   */
   start() {
     if (this.running) return;
     this.running = true;
-    this.started = Date.now();
+    if (!this.started) this.started = Date.now();
     const now = performance.now();
     this.lastFrame = now;
     this.lastTask = now;

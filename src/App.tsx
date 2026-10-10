@@ -244,8 +244,32 @@ export function App() {
    * çünkü açılışın kendisi de ölçülmeye değer.
    */
   useEffect(() => {
-    frameMonitor.start();
-    return () => frameMonitor.stop();
+    /*
+     * Sonda yalnızca pencere GÖRÜNÜR ve ODAKLIYKEN koşuyor.
+     *
+     * ÖLÇÜLDÜ (macOS, sürüm ikilisi, boşta pencere): ana süreç %4-5 CPU
+     * kullanıyordu ve `sample` ana iş parçacığında yalnızca katman commit'leri
+     * gösterdi — iş yapan yoktu, ekran bağlantısını (`CVDisplayLink`) uyanık
+     * tutan vardı: sondanın kesintisiz `requestAnimationFrame` döngüsü ve
+     * 16 ms'lik zamanlayıcı zinciri. Kullanıcı başka bir uygulamadayken bu
+     * boşa yakılan pil. Takılma ölçümü kullanıcı etkileşirken anlamlı;
+     * arka plandaki bir donmayı kaçırmak kabul edilen bedel. `stop` + `start`
+     * açık kalma süresini ve kayıtları koruyor (bkz. `FrameMonitor.start`).
+     */
+    const sync = () => {
+      if (document.hidden || !document.hasFocus()) frameMonitor.stop();
+      else frameMonitor.start();
+    };
+    sync();
+    window.addEventListener("focus", sync);
+    window.addEventListener("blur", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("blur", sync);
+      document.removeEventListener("visibilitychange", sync);
+      frameMonitor.stop();
+    };
   }, []);
 
   /*
