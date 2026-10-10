@@ -274,6 +274,13 @@ fn sahte_ev(name: &str) -> std::path::PathBuf {
     home
 }
 
+/// Listedeki yolun ayiricisi platforma gore degisiyor (Windows'ta `\`); klasor
+/// iceren karsilastirmalar `/`ye cevrilmis yolla yapiliyor. Yukaridaki eski
+/// testler bu yuzden yalnizca dosya adina bakiyor.
+fn duz(p: &str) -> String {
+    p.replace('\\', "/")
+}
+
 fn secenek(home: Option<&Path>) -> ListOpts {
     ListOpts { max_files: MAX_FILES, budget: LIST_BUDGET, home: home.map(Path::to_path_buf) }
 }
@@ -295,7 +302,7 @@ fn ev_dizininde_arac_onbellekleri_atlaniyor() {
         );
     }
     assert!(
-        !out.iter().any(|p| p.starts_with(".cache/")),
+        !out.iter().any(|p| duz(p).starts_with(".cache/")),
         "ev dizinindeki .cache atlanmadi: {out:?}"
     );
     let _ = std::fs::remove_dir_all(&home);
@@ -308,7 +315,7 @@ fn ev_atlamasi_yalnizca_dogrudan_altinda() {
     let home = sahte_ev("ev-derin");
     let out = list_with(&home, &secenek(Some(&home)));
     assert!(
-        out.iter().any(|p| p.ends_with("proje/.cache/x.txt")),
+        out.iter().any(|p| duz(p).ends_with("proje/.cache/x.txt")),
         "projenin icindeki .cache yanlislikla atlandi: {out:?}"
     );
     let _ = std::fs::remove_dir_all(&home);
@@ -322,7 +329,7 @@ fn kok_ev_dizini_degilse_ayni_adli_klasorler_atlanmiyor() {
     let baska = tree("ev-degil-baska");
     touch(&baska, "Library/kaynak.txt");
     let out = list_with(&baska, &secenek(Some(&home)));
-    assert!(out.iter().any(|p| p.ends_with("Library/kaynak.txt")), "{out:?}");
+    assert!(out.iter().any(|p| duz(p).ends_with("Library/kaynak.txt")), "{out:?}");
     let _ = std::fs::remove_dir_all(&home);
     let _ = std::fs::remove_dir_all(&baska);
 }

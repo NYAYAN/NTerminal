@@ -17,7 +17,13 @@ import { describe, expect, it } from "vitest";
  * varsayılan mı" bağlanıyor.
  */
 const DIR = join(process.cwd(), "src-tauri/shell-integration");
-const win = process.platform === "win32";
+/**
+ * Gerçek zsh yoksa atlanıyor: Windows'ta yok, CI'ın Linux makinesinde
+ * (ubuntu-latest) de kurulu değil (bkz. `shellIntegration.test.ts` › `noZsh`).
+ */
+const noZsh =
+  process.platform === "win32" ||
+  spawnSync("zsh", ["-f", "-c", "exit 0"], { env: { PATH: "/usr/bin:/bin" } }).status !== 0;
 
 /**
  * zsh'e varsayılan istemi verip betiği kaynak eder; GENİŞLETİLMİŞ istemi döndürür.
@@ -33,7 +39,7 @@ function genisletilmisIstem(ek: Record<string, string> = {}): string {
 }
 
 describe("renkli istem — xterm hücre nitelikleri", () => {
-  it.skipIf(win)("kimlik ve dizin palet renginde + kalın, işaret varsayılan renkte", async () => {
+  it.skipIf(noZsh)("kimlik ve dizin palet renginde + kalın, işaret varsayılan renkte", async () => {
     const istem = genisletilmisIstem();
     expect(istem, "zsh istem üretmedi").not.toBe("");
 
@@ -69,7 +75,7 @@ describe("renkli istem — xterm hücre nitelikleri", () => {
     term.dispose();
   });
 
-  it.skipIf(win)("iki alan arasındaki boşluk ve @ kimlikle aynı renkte (bölünmüş renk yok)", async () => {
+  it.skipIf(noZsh)("iki alan arasındaki boşluk ve @ kimlikle aynı renkte (bölünmüş renk yok)", async () => {
     const term = new Terminal({ cols: 120, rows: 5, allowProposedApi: true });
     await new Promise<void>((resolve) => term.write(genisletilmisIstem(), resolve));
     const line = term.buffer.active.getLine(0)!;
@@ -88,7 +94,7 @@ describe("renkli istem — xterm hücre nitelikleri", () => {
  * kalın kalmalı ve son metne sızmamalı.
  */
 describe("renkli istem — kullanıcının seçtiği renkler", () => {
-  it.skipIf(win)("kimlik ve dizin seçilen RGB renkte + kalın, işaret varsayılan renkte", async () => {
+  it.skipIf(noZsh)("kimlik ve dizin seçilen RGB renkte + kalın, işaret varsayılan renkte", async () => {
     const istem = genisletilmisIstem({
       NTERMINAL_PROMPT_USER_RGB: "255;140;0",
       NTERMINAL_PROMPT_DIR_RGB: "0;170;255",
@@ -123,7 +129,7 @@ describe("renkli istem — kullanıcının seçtiği renkler", () => {
     term.dispose();
   });
 
-  it.skipIf(win)("yalnız kimlik seçilince dizin palet mavisinde kalıyor", async () => {
+  it.skipIf(noZsh)("yalnız kimlik seçilince dizin palet mavisinde kalıyor", async () => {
     const term = new Terminal({ cols: 120, rows: 5, allowProposedApi: true });
     await new Promise<void>((resolve) =>
       term.write(genisletilmisIstem({ NTERMINAL_PROMPT_USER_RGB: "255;140;0" }), resolve),
@@ -137,7 +143,7 @@ describe("renkli istem — kullanıcının seçtiği renkler", () => {
     term.dispose();
   });
 
-  it.skipIf(win)("bozuk değer palet yeşiline düşüyor", async () => {
+  it.skipIf(noZsh)("bozuk değer palet yeşiline düşüyor", async () => {
     const term = new Terminal({ cols: 120, rows: 5, allowProposedApi: true });
     await new Promise<void>((resolve) =>
       term.write(genisletilmisIstem({ NTERMINAL_PROMPT_USER_RGB: "1;2;3;4" }), resolve),

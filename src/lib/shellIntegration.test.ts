@@ -32,6 +32,17 @@ const ZSH = read(DIR, "nterminal.zsh");
 const SH = read(DIR, "nterminal.sh");
 
 /**
+ * Gerçek zsh başlatan testler zsh YOKSA atlanıyor. Windows'ta yok; CI'ın Linux
+ * makinesinde (ubuntu-latest) de kurulu değil: 0.4.2'nin ilk CI koşusu bu
+ * testlerde boş çıktıyla düştü ("zsh istem üretmedi"). macOS'ta /bin/zsh her
+ * zaman var, testler orada koşuyor. bash Linux'ta da var; onun testleri
+ * yalnızca Windows'ta atlanıyor.
+ */
+const noZsh =
+  process.platform === "win32" ||
+  spawnSync("zsh", ["-f", "-c", "exit 0"], { env: { PATH: "/usr/bin:/bin" } }).status !== 0;
+
+/**
  * PowerShell tarafının karşılığı: PSReadLine uygulamayla birlikte geliyor.
  *
  * Bu testler her platformda koşuyor — Rust tarafındaki kurulum testi
@@ -552,7 +563,8 @@ describe("gerçek zsh akışı", () => {
  * Betikler YAPISAL olarak denetleniyor (yukarıdaki testler) ama bu kural bir
  * DAVRANIŞ: yanlış bir desen ya sessizce hiçbir şey yapmaz ya da kullanıcının
  * istemini ezer. O yüzden betik gerçek kabukta kaynak edilip PS1 okunuyor.
- * Windows'ta zsh/bash yok; orada atlanıyor.
+ * Windows'ta zsh/bash yok; orada atlanıyor. zsh testleri zsh kurulu olmayan
+ * makinede de atlanıyor (CI'ın Linux makinesi; bkz. `noZsh`).
  */
 describe("renkli varsayılan istem", () => {
   const win = process.platform === "win32";
@@ -644,7 +656,7 @@ describe("renkli varsayılan istem", () => {
     expect(SH).toContain("NTERMINAL_PROMPT_COLOR");
   });
 
-  it.skipIf(win)("zsh: işletim sisteminin varsayılan istemi renkleniyor", () => {
+  it.skipIf(noZsh)("zsh: işletim sisteminin varsayılan istemi renkleniyor", () => {
     const r = zsh("%n@%m %1~ %# ");
     expect(r.raw, r.err).toContain("%F{green}");
     expect(r.raw).toContain("%F{blue}");
@@ -652,7 +664,7 @@ describe("renkli varsayılan istem", () => {
     expect(r.expanded).toContain(`${ESC}[`);
   });
 
-  it.skipIf(win)("zsh: renklenen istemin GÖRÜNEN metni aynı kalıyor", () => {
+  it.skipIf(noZsh)("zsh: renklenen istemin GÖRÜNEN metni aynı kalıyor", () => {
     // Renk yalnızca renk: düzen, genişlik ve içerik değişmemeli, yoksa
     // imleç konumu ve komut satırı okuması kayar.
     const duz = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
@@ -661,7 +673,7 @@ describe("renkli varsayılan istem", () => {
     expect(renkli.expanded).not.toBe(duz.expanded);
   });
 
-  it.skipIf(win)("zsh: renk kaçışları sıfırlanıyor (sonraki metne sızmıyor)", () => {
+  it.skipIf(noZsh)("zsh: renk kaçışları sıfırlanıyor (sonraki metne sızmıyor)", () => {
     const r = zsh("%n@%m %1~ %# ");
     // Kalın ve renk açıldıysa kapatılmış olmalı: son metin (`% `) varsayılan renkte.
     const acilis = (r.expanded.match(new RegExp(`${ESC}\\[[0-9;]*m`, "g")) ?? []).length;
@@ -669,7 +681,7 @@ describe("renkli varsayılan istem", () => {
     expect(r.expanded.trimEnd().endsWith("%")).toBe(true);
   });
 
-  it.skipIf(win)("zsh: kullanıcının kendi istemine DOKUNULMUYOR", () => {
+  it.skipIf(noZsh)("zsh: kullanıcının kendi istemine DOKUNULMUYOR", () => {
     for (const ps1 of ["%~ > ", "%F{red}özel%f $ ", "❯ ", "%n@%m %1~ %# x"]) {
       const r = zsh(ps1);
       expect(r.raw, `kullanıcının istemi değişti: ${ps1}`).toBe(ps1);
@@ -683,7 +695,7 @@ describe("renkli varsayılan istem", () => {
   // yüzden en az iki şey bağlı: seçilen renk gerçekten istemde çıkıyor ve
   // bozuk/kötü niyetli değer HİÇBİR ZAMAN kabuğa ulaşmıyor.
 
-  it.skipIf(win)("zsh: seçilen kullanıcı@makine rengi istemde çıkıyor, dizin paletten kalıyor", () => {
+  it.skipIf(noZsh)("zsh: seçilen kullanıcı@makine rengi istemde çıkıyor, dizin paletten kalıyor", () => {
     const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
     expect(r.raw, r.err).toContain(`%{${ESC}[38;2;255;140;0m%}`);
     expect(r.raw).toContain("%F{blue}");
@@ -691,14 +703,14 @@ describe("renkli varsayılan istem", () => {
     expect(r.expanded).toContain(`${ESC}[38;2;255;140;0m`);
   });
 
-  it.skipIf(win)("zsh: seçilen dizin rengi istemde çıkıyor, kullanıcı@makine paletten kalıyor", () => {
+  it.skipIf(noZsh)("zsh: seçilen dizin rengi istemde çıkıyor, kullanıcı@makine paletten kalıyor", () => {
     const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_DIR_RGB: "0;170;255" });
     expect(r.raw, r.err).toContain(`%{${ESC}[38;2;0;170;255m%}`);
     expect(r.raw).toContain("%F{green}");
     expect(r.raw).not.toContain("%F{blue}");
   });
 
-  it.skipIf(win)("zsh: iki renk birlikte seçilince ikisi de çıkıyor", () => {
+  it.skipIf(noZsh)("zsh: iki renk birlikte seçilince ikisi de çıkıyor", () => {
     const r = zsh("%n@%m %1~ %# ", {
       NTERMINAL_PROMPT_USER_RGB: "255;140;0",
       NTERMINAL_PROMPT_DIR_RGB: "0;170;255",
@@ -708,7 +720,7 @@ describe("renkli varsayılan istem", () => {
     expect(r.raw).not.toContain("%F{");
   });
 
-  it.skipIf(win)("zsh: seçilen renkte de GÖRÜNEN metin ve sıfırlama aynı kalıyor", () => {
+  it.skipIf(noZsh)("zsh: seçilen renkte de GÖRÜNEN metin ve sıfırlama aynı kalıyor", () => {
     const duz = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
     const renkli = zsh("%n@%m %1~ %# ", {
       NTERMINAL_PROMPT_USER_RGB: "255;140;0",
@@ -720,7 +732,7 @@ describe("renkli varsayılan istem", () => {
     expect(renkli.expanded.trimEnd().endsWith("%")).toBe(true);
   });
 
-  it.skipIf(win)("zsh: bozuk ya da kötü niyetli renk değeri palet rengine düşüyor, hiçbir şey çalışmıyor", () => {
+  it.skipIf(noZsh)("zsh: bozuk ya da kötü niyetli renk değeri palet rengine düşüyor, hiçbir şey çalışmıyor", () => {
     const iz = join(tmpdir(), `nt-enjeksiyon-${process.pid}-${Date.now()}`);
     try {
       for (const kotu of [
@@ -748,7 +760,7 @@ describe("renkli varsayılan istem", () => {
     }
   });
 
-  it.skipIf(win)("zsh: ayar kapalıyken seçilen renk de uygulanmıyor", () => {
+  it.skipIf(noZsh)("zsh: ayar kapalıyken seçilen renk de uygulanmıyor", () => {
     const r = zsh("%n@%m %1~ %# ", {
       NTERMINAL_PROMPT_COLOR: "0",
       NTERMINAL_PROMPT_USER_RGB: "255;140;0",
@@ -756,12 +768,12 @@ describe("renkli varsayılan istem", () => {
     expect(r.raw).toBe("%n@%m %1~ %# ");
   });
 
-  it.skipIf(win)("zsh: kullanıcının kendi istemine seçilen renk de dokunmuyor", () => {
+  it.skipIf(noZsh)("zsh: kullanıcının kendi istemine seçilen renk de dokunmuyor", () => {
     const r = zsh("%~ > ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
     expect(r.raw).toBe("%~ > ");
   });
 
-  it.skipIf(win)("zsh: `setopt nounset` açıkken de renk uygulanıyor", () => {
+  it.skipIf(noZsh)("zsh: `setopt nounset` açıkken de renk uygulanıyor", () => {
     // Kullanıcının .zshrc'si `setopt nounset` açtıysa betik tanımsız bir
     // değişkende yarıda kalıyor ve istem HİÇ renklenmiyordu.
     const r = run(
@@ -777,12 +789,12 @@ describe("renkli varsayılan istem", () => {
     expect(between(r.out, "RAW"), r.err).toContain("38;2;255;140;0");
   });
 
-  it.skipIf(win)("zsh: ayar kapalıyken varsayılana da dokunulmuyor", () => {
+  it.skipIf(noZsh)("zsh: ayar kapalıyken varsayılana da dokunulmuyor", () => {
     const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
     expect(r.raw).toBe("%n@%m %1~ %# ");
   });
 
-  it.skipIf(win)("zsh: değişken hiç yoksa (eski uygulama) renkleniyor", () => {
+  it.skipIf(noZsh)("zsh: değişken hiç yoksa (eski uygulama) renkleniyor", () => {
     const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: undefined });
     expect(r.raw).toContain("%F{green}");
   });
@@ -892,7 +904,6 @@ describe("renkli varsayılan istem", () => {
  * gösteriyor.
  */
 describe("zsh geçmiş dosyası (gerçek zsh)", () => {
-  const win = process.platform === "win32";
   /**
    * Entegrasyon klasörünün GEÇİCİ kopyası: kabuklar geçmişi ZDOTDIR'e yazıyor ve
    * gerçek klasör depo ağacının içinde — bir test koşusu `.zsh_history`yi depoya
@@ -949,7 +960,7 @@ describe("zsh geçmiş dosyası (gerçek zsh)", () => {
     }
   });
 
-  it.skipIf(win)("kullanıcı HISTFILE'ı kendisi yazdıysa ona dokunulmuyor", () => {
+  it.skipIf(noZsh)("kullanıcı HISTFILE'ı kendisi yazdıysa ona dokunulmuyor", () => {
     const r = histfile({ zshrc: 'HISTFILE=/tmp/kullanici-ozel-gecmis\n' });
     expect(r.histfile).toBe("/tmp/kullanici-ozel-gecmis");
   });
@@ -971,7 +982,7 @@ describe("zsh nounset (gerçek zsh)", () => {
   const OWN = join(KOPYA, "zdotdir");
   afterAll(() => rmSync(KOPYA, { recursive: true, force: true }));
 
-  it.skipIf(process.platform === "win32")("köprü ZDOTDIR'i geri veriyor, entegrasyon yükleniyor, hata yok", () => {
+  it.skipIf(noZsh)("köprü ZDOTDIR'i geri veriyor, entegrasyon yükleniyor, hata yok", () => {
     const home = mkdtempSync(join(tmpdir(), "nt-nounset-"));
     const user = join(home, "zd");
     try {
