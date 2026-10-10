@@ -456,20 +456,21 @@ yüzeylerde cam etkisi getirir. Premium'da Ayarlar penceresi de yeniden
 düzenlenir: renkli bölüm simgeleriyle tam boy bir kenar çubuğu, kartlara
 toplanmış ayarlar ve onay kutuları yerine açık/kapalı anahtarları.
 **Kokpit** (varsayılan; yeni kurulum da güncellenen uygulama da bununla açılır,
-seçilen tasarım ise korunur) Premium'un görünüşüyle başka bir yerleşim: solda grupların baş
-harfleriyle duran bir ray (komut çalışan grupta nokta; altta Geçmiş, Favoriler,
-Değişiklikler ve Ayarlar), yanında yalnızca etkin grubun sekmeleri kart olarak
-(klasör, son komut, çalışan sunucunun portu), sekme şeridinin yerinde "grup ›
-sekme" yolu ve terminalin üstüne açılmak yerine yanında sabit duran yan panel.
-Kenar çubuğu kapatılınca sekme şeridi geri gelir. Raydaki karo sağ tıkla
-yönetilir (ad, renk, favori, yeni sekme, sıra, silme), sürüklenerek sıralanır;
-rayın dibindeki düğme grup adlarını karoların yanına yazar. Ray genişken
-başlığındaki yıldız yalnızca favori grupları listeler (dar rayda süzgeç açıkken
-yıldız rayın başında kalır), ağaç simgesi ise sekmeleri grupların altında listeler
-ve kart sütununu kaldırır: her grup kendi okuyla açılıp kapanır (açık bıraktığınız gruplar
-başka gruba geçince de açık kalır), sekmeye tıklamak ona geçer, sağ tık kartın
-menüsünü açar, sekmeler sürüklenerek sıralanır ya da başka grubun altına
-taşınır.
+seçilen tasarım ise korunur) Premium'un görünüşüyle başka bir yerleşim: solda
+grupların baş harfleriyle durduğu **grup bölmesi** (komut çalışan grupta nokta;
+altta Geçmiş, Favoriler, Değişiklikler ve Ayarlar), yanında yalnızca etkin
+grubun sekmeleri kart olarak (klasör, son komut, çalışan sunucunun portu),
+sekme şeridinin yerinde "grup › sekme" yolu ve terminalin üstüne açılmak yerine
+yanında sabit duran yan panel. Kenar çubuğu kapatılınca sekme şeridi geri
+gelir. Grup bölmesindeki her grup sağ tıkla yönetilir (ad, renk, favori, yeni
+sekme, sıra, silme) ve sürüklenerek sıralanır; bölmenin altındaki ok düğmesi
+bölmeyi genişletip grup adlarını yazar. Bölme genişken başlığındaki yıldız
+yalnızca favori grupları listeler (bölme daraltılmışken süzgeç açıksa yıldız
+bölmenin en üstünde kalır), ağaç simgesi ise sekmeleri grupların altında
+listeler ve yandaki sekme kartlarını kaldırır: her grup kendi okuyla açılıp
+kapanır (açık bıraktığınız gruplar başka gruba geçince de açık kalır), sekmeye
+tıklamak ona geçer, sağ tık sekme menüsünü açar, sekmeler sürüklenerek
+sıralanır ya da başka grubun altına taşınır.
 **Klasik** uygulamanın düz ve yoğun ilk düzeni.
 Terminalin ızgarası üçünde de aynı ölçülerde çizilir; geçiş anında uygulanır,
 yeniden başlatma gerekmez. Gerekçe `src/lib/design.ts`, `src/styles/premium.css`
