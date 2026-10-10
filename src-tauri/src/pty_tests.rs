@@ -714,6 +714,9 @@ mod oturum {
 #[cfg(windows)]
 mod kapanis {
     use super::*;
+    // `encode` Engine trait'inden geliyor; pty.rs artik base64 kullanmadigi
+    // icin (cikti ham baytla IPC kanalinda) `super::*` onu getirmiyor.
+    use base64::Engine;
     use std::io::{BufRead, BufReader};
     use std::net::{SocketAddr, TcpStream};
     use std::process::{Command, Stdio};
