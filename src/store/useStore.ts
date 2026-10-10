@@ -902,6 +902,27 @@ export function dropTabKeys(state: PerTabMaps, tabId: string): PerTabMaps {
   };
 }
 
+/**
+ * Hiçbir canlı oturumun klasörü olmayan git kayıtlarını düşürür.
+ *
+ * `gitInfo` klasör başına dal + değişiklik listesi taşıyor ve `gitFingerprints`
+ * onun imzası; ikisi de yalnızca büyüyordu. Günlerce açık kalan uygulamada
+ * yüzlerce depo arasında `cd` yapan biri için yüzlerce `GitInfo` nesnesi ve
+ * her `set`te hepsinin kopyası. Sekme kapanınca canlı oturumların
+ * klasörlerinde olmayan anahtarlar gidiyor; aynı klasöre dönülürse yeniden
+ * okunuyor (bkz. `pollGit`: bilinmeyen klasör tam sorguyu tetikliyor).
+ */
+function pruneGitInfo(info: Record<string, GitInfo | null>): Record<string, GitInfo | null> {
+  const live = new Set<string>();
+  for (const session of sessions.values()) if (session.cwd) live.add(session.cwd);
+  for (const key of [...gitFingerprints.keys()]) if (!live.has(key)) gitFingerprints.delete(key);
+  const stale = Object.keys(info).filter((key) => !live.has(key));
+  if (stale.length === 0) return info;
+  const next = { ...info };
+  for (const key of stale) delete next[key];
+  return next;
+}
+
 export const useStore = create<Store>((set, get) => ({
   ready: false,
   bootError: null,
@@ -1340,6 +1361,7 @@ export const useStore = create<Store>((set, get) => ({
     set({
       groups: remaining,
       activeGroupId: get().activeGroupId === id ? remaining[0].id : get().activeGroupId,
+      gitInfo: pruneGitInfo(get().gitInfo),
     });
     await get().persistNow();
   },
@@ -1559,7 +1581,9 @@ export const useStore = create<Store>((set, get) => ({
        * bir sakıncası yok.
        */
       ...dropTabKeys(get(), tabId),
+      gitInfo: pruneGitInfo(get().gitInfo),
     });
+    lastAutoRestart.delete(tabId);
     await get().persistNow();
   },
 

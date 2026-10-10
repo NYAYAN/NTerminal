@@ -297,3 +297,36 @@ describe("onay beklerken değişen durum", () => {
     expect(useStore.getState().groups.map((g) => g.id)).toEqual(["g1", "g3"]);
   });
 });
+
+/**
+ * Git önbellekleri sekmeyle birlikte düşüyor.
+ *
+ * `gitInfo` klasör başına dal + değişiklik listesi; yalnızca büyüyordu.
+ * Günlerce açık uygulamada yüzlerce depo arasında `cd` yapan biri için
+ * yüzlerce nesne ve her `set`te hepsinin kopyası. Sekme kapanınca hiçbir canlı
+ * oturumun klasörü olmayan kayıtlar gidiyor.
+ */
+describe("git önbelleği", () => {
+  it("kapanan sekmenin klasörü düşüyor, canlı sekmeninki kalıyor", async () => {
+    const { sessions } = await import("./useStore");
+    const settings = useStore.getState().settings;
+    const sekme = (id: string) => ({
+      id, title: id, customTitle: null, profileId: "p1", cwd: null, createdAt: 0, lastActiveAt: 0,
+      hasScrollback: false, lastCommand: null, locked: false,
+    });
+    useStore.setState({
+      settings: { ...settings, behavior: { ...settings.behavior, confirmCloseTab: "never" } },
+      groups: [{ ...group("g1"), tabs: [sekme("t1"), sekme("t2")], activeTabId: "t1" }],
+      activeGroupId: "g1",
+      gitInfo: { "/depo/a": null, "/depo/b": null, "/depo/eski": null },
+    });
+    sessions.set("t1", { cwd: "/depo/a", dispose: async () => {} } as never);
+    sessions.set("t2", { cwd: "/depo/b", dispose: async () => {} } as never);
+
+    await useStore.getState().closeTab("t1");
+
+    expect(Object.keys(useStore.getState().gitInfo).sort()).toEqual(["/depo/b"]);
+    sessions.clear();
+    useStore.setState({ settings, gitInfo: {} });
+  });
+});
