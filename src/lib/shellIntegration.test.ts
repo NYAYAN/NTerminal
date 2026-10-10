@@ -179,7 +179,8 @@ describe("satır içi öneri eklentisi", () => {
   it("öneri kapalıyken eklentiye hiç dokunulmuyor", () => {
     // Kullanıcı kabuk önerisini kapattıysa onun .zshrc'sindeki ayar geçerli
     // kalmalı; eklentiyi yine de yüklemek o kararı eziyor.
-    const off = ZSH.indexOf('NTERMINAL_PREDICTION == "off"');
+    // `${X-}`: `setopt nounset` açık kullanıcıda tanımsız değişken betiği kesmesin.
+    const off = ZSH.indexOf('${NTERMINAL_PREDICTION-} == "off"');
     const loop = ZSH.indexOf("for __nterm_cand in");
     expect(off, "kapalı denetimi yok").toBeGreaterThan(-1);
     expect(off, "kapalı denetimi yükleme döngüsünden sonra geliyor").toBeLessThan(loop);
@@ -606,5 +607,57 @@ describe("zsh geçmiş dosyası (gerçek zsh)", () => {
   it.skipIf(win)("kullanıcı HISTFILE'ı kendisi yazdıysa ona dokunulmuyor", () => {
     const r = histfile({ zshrc: 'HISTFILE=/tmp/kullanici-ozel-gecmis\n' });
     expect(r.histfile).toBe("/tmp/kullanici-ozel-gecmis");
+  });
+});
+
+/**
+ * `setopt nounset` açık kullanıcıda köprü ve entegrasyon yarıda kalmamalı.
+ *
+ * ÖLÇÜLEN HATA (gerçek zsh, `.zshenv` ve `.zshrc` `setopt nounset` ile):
+ * köprü "NTERMINAL_ZDOTDIR: parameter not set" ile durup `ZDOTDIR`i
+ * kullanıcıya geri vermiyordu (kurulum betikleri satırlarını bizim klasöre
+ * yazıyor ve her açılışta kayboluyordu); entegrasyon betiği tanımsız
+ * `NTERMINAL_INTEGRATION_LOADED`ta ve kanca dizilerinde duruyor, uygulama düz
+ * terminale düşüyordu.
+ */
+describe("zsh nounset (gerçek zsh)", () => {
+  const KOPYA = mkdtempSync(join(tmpdir(), "nt-entegrasyon-"));
+  cpSync(DIR, KOPYA, { recursive: true, filter: (kaynak) => !kaynak.includes(`${join(DIR, "modules")}`) });
+  const OWN = join(KOPYA, "zdotdir");
+  afterAll(() => rmSync(KOPYA, { recursive: true, force: true }));
+
+  it.skipIf(process.platform === "win32")("köprü ZDOTDIR'i geri veriyor, entegrasyon yükleniyor, hata yok", () => {
+    const home = mkdtempSync(join(tmpdir(), "nt-nounset-"));
+    const user = join(home, "zd");
+    try {
+      mkdirSync(user, { recursive: true });
+      writeFileSync(join(user, ".zshenv"), "setopt nounset\n");
+      writeFileSync(join(user, ".zshrc"), "setopt nounset\n");
+      const r = spawnSync(
+        "zsh",
+        ["-l", "-i", "-c", 'print -r -- "zdotdir=[${ZDOTDIR-}] loaded=[${NTERMINAL_INTEGRATION_LOADED-}]"'],
+        {
+          env: {
+            PATH: "/usr/bin:/bin",
+            HOME: home,
+            TERM: "xterm-256color",
+            LANG: "C.UTF-8",
+            // Uygulama veriyor (pty.rs); macOS'un /etc/zshrc'si nounset altında
+            // bu değişken yoksa kendisi düşüyor.
+            TERM_PROGRAM: "NTerminal",
+            ZDOTDIR: OWN,
+            NTERMINAL_ZDOTDIR: user,
+          },
+          encoding: "utf8",
+          timeout: 15000,
+        },
+      );
+      const err = r.stderr ?? "";
+      expect(err, "nounset betiği yarıda kesti").not.toMatch(/parameter not set/);
+      expect(r.stdout).toContain(`zdotdir=[${user}]`);
+      expect(r.stdout, "entegrasyon yüklenmedi").toContain("loaded=[1]");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

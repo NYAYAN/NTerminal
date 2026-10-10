@@ -21,7 +21,7 @@
 #
 # Yalnizca bizim klasorumuzun altindaysa dokunuyoruz: baska bir yere isaret
 # eden (kullanicinin .zshenv'inde kurulmus) bir deger oldugu gibi kalir.
-if [[ -n $HISTFILE && -n $NTERMINAL_OWN_ZDOTDIR && $HISTFILE == ${NTERMINAL_OWN_ZDOTDIR}/* ]]; then
+if [[ -n ${HISTFILE-} && -n ${NTERMINAL_OWN_ZDOTDIR-} && ${HISTFILE-} == ${NTERMINAL_OWN_ZDOTDIR}/* ]]; then
   HISTFILE=$NTERMINAL_USER_ZDOTDIR/${HISTFILE#${NTERMINAL_OWN_ZDOTDIR}/}
 fi
 

@@ -42,7 +42,7 @@ __nterm_source_user() {
 # Bedeli: terminalde elle `zsh` yazip ic ice kabuk acildiginda entegrasyon o
 # kabukta calismaz. Bilincli takas - veri kaybi riskinden iyidir.
 __nterm_restore_zdotdir() {
-  if [[ -n $NTERMINAL_ZDOTDIR ]]; then
+  if [[ -n ${NTERMINAL_ZDOTDIR-} ]]; then
     ZDOTDIR=$NTERMINAL_ZDOTDIR
   else
     unset ZDOTDIR

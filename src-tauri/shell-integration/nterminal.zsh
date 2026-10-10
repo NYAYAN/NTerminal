@@ -18,7 +18,10 @@
 # argüman olarak veriyor. bash tarafinda bunun icin DEBUG tuzagi + sentinel
 # bayragi gerekiyordu (bkz. nterminal.sh); burada o karmasa yok.
 
-if [[ -n $NTERMINAL_INTEGRATION_LOADED ]]; then
+# `${X-}`: kullanici `setopt nounset` actiysa tanimsiz bir
+# degiskene erismek betigi yarida keser ve entegrasyon hic yuklenmez (olculdu:
+# "parameter not set"). Bu betikteki tanimsiz olabilen erisimler bu bicimde.
+if [[ -n ${NTERMINAL_INTEGRATION_LOADED-} ]]; then
   return 0
 fi
 NTERMINAL_INTEGRATION_LOADED=1
@@ -111,10 +114,10 @@ typeset -ga precmd_functions preexec_functions
 
 # precmd EN BASTA ($? icin), ps1_mark EN SONDA (tema PS1'i kurduktan sonra).
 # `${dizi[(r)deger]}` zsh'in ters indeksi: eleman varsa kendisini doner.
-if [[ -z ${precmd_functions[(r)__nterm_precmd]} ]]; then
+if [[ -z ${precmd_functions[(r)__nterm_precmd]-} ]]; then
   precmd_functions=(__nterm_precmd $precmd_functions __nterm_ps1_mark)
 fi
-if [[ -z ${preexec_functions[(r)__nterm_preexec]} ]]; then
+if [[ -z ${preexec_functions[(r)__nterm_preexec]-} ]]; then
   preexec_functions=(__nterm_preexec $preexec_functions)
 fi
 
@@ -137,7 +140,7 @@ fi
 #
 # NTERMINAL_PREDICTION yok ya da 'off' ise HIC dokunmuyoruz: kullanicinin kendi
 # .zshrc'sindeki ayar gecerli kalir.
-if [[ -z $NTERMINAL_PREDICTION || $NTERMINAL_PREDICTION == "off" ]]; then
+if [[ -z ${NTERMINAL_PREDICTION-} || ${NTERMINAL_PREDICTION-} == "off" ]]; then
   __nterm_osc '633;P;Prediction=off'
 else
   __nterm_state=unsupported
