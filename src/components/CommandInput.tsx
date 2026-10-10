@@ -459,6 +459,18 @@ export function CommandInput() {
     const session = sessions.get(tabId);
     const boxSelection = box.selectionStart !== box.selectionEnd;
 
+    /*
+     * IME birleştirmesi sürerken (Japonca, Çince, Korece…) Enter, ok ve
+     * Escape ADAY SEÇMEK içindir; komutu göndermemeli.
+     *
+     * Korumasızken yarım birleştirilmiş bir metin Enter'la kabuğa gidiyordu:
+     * Japonca yazan biri "にほん" yazıp Enter'la dönüştürmeyi onayladığında komut
+     * çalışıyordu. `keyCode 229` eski WebKit'in aynı işareti (Safari'de
+     * `isComposing` birleştirme BİTTİĞİ keydown'da zaten false geliyor).
+     * Koruma iki kipte de geçerli: komut satırı ve çalışan programa yanıt.
+     */
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+
     /**
      * Kutudaki seçimi panoya yazar.
      *
@@ -551,8 +563,6 @@ export function CommandInput() {
         setValue("");
         return;
       }
-      // IME bileşimi sürerken Enter bileşimi onaylıyor, satırı göndermiyor.
-      if (e.nativeEvent.isComposing) return;
       const action = stdinKeyAction(e, {
         empty: value.length === 0,
         appCursor: session?.applicationCursorKeys() ?? false,

@@ -1117,3 +1117,41 @@ describe("komut satırı kutusu", () => {
     useStore.setState({ exited: {} });
   });
 });
+
+describe("IME birleştirmesi", () => {
+  // Japonca/Çince/Korece yazan biri adayı Enter ile onaylıyor; o Enter komutu
+  // göndermemeli. Korumasızken yarım birleştirilmiş metin kabuğa gidiyordu.
+  const enter = (init: KeyboardEventInit) => new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init });
+
+  it("birleştirme sürerken Enter komutu göndermiyor", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "にほん" } });
+    act(() => {
+      el.dispatchEvent(enter({ isComposing: true }));
+    });
+    expect(sendKeys, "IME adayı onaylayan Enter komutu gönderdi").not.toHaveBeenCalled();
+    expect(el.value, "kutu boşaldı").toBe("にほん");
+  });
+
+  it("keyCode 229 (eski WebKit) de birleştirme sayılıyor", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "ni" } });
+    act(() => {
+      el.dispatchEvent(enter({ keyCode: 229 }));
+    });
+    expect(sendKeys).not.toHaveBeenCalled();
+  });
+
+  it("birleştirme bitince Enter normal çalışıyor", () => {
+    // Korumanın bedeli olmamalı: sıradan Enter komutu göndermeye devam ediyor.
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "ls" } });
+    act(() => {
+      el.dispatchEvent(enter({}));
+    });
+    expect(sendKeys).toHaveBeenCalledWith("ls\r");
+  });
+});
