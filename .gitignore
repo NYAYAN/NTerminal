@@ -11,3 +11,8 @@ src-tauri/gen/schemas/
 .env
 .DS_Store
 
+# Testler kabuk entegrasyonunu gercek klasorden calistirirsa zsh gecmis ve
+# tamamlama onbellegini buraya yazar; depoya girmemeli.
+src-tauri/shell-integration/**/.zsh_history
+src-tauri/shell-integration/**/.zcompdump*
+src-tauri/shell-integration/**/.zsh_sessions/

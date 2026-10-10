@@ -5,6 +5,26 @@
 # kuruyor; entegrasyonu once yuklersek isaretimizin ustune yaziliyor ve komut
 # metni hic okunamiyor.
 
+# HISTFILE'i KULLANICININ klasorune tasi.
+#
+# OLCULEN HATA: uygulamanin zsh sekmelerinde `HISTFILE` kullanicinin
+# `~/.zsh_history`'si degil, uygulamanin kendi `shell-integration/zdotdir/`
+# klasorundeki bir dosyaya gidiyordu (kurulu uygulamada 266 satir birikmisti,
+# gercek gecmis 1012 satirdi). Ctrl+R, yukari ok ve zsh-autosuggestions
+# kullanicinin gercek gecmisini gormuyor, digger terminallerdeki komutlar buraya
+# gelmiyordu.
+#
+# ZINCIR: macOS'un `/etc/zshrc`si kullanicinin .zshrc'sinden ONCE kosuyor ve
+# `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history` yaziyor; o an ZDOTDIR bizim
+# koprumuzu gosteriyor. Kullanicinin kendi .zshrc'si HISTFILE'i yazarsa zaten
+# ustune yaziyor, bu satir yalnizca SISTEMIN verdigini duzeltiyor.
+#
+# Yalnizca bizim klasorumuzun altindaysa dokunuyoruz: baska bir yere isaret
+# eden (kullanicinin .zshenv'inde kurulmus) bir deger oldugu gibi kalir.
+if [[ -n $HISTFILE && -n $NTERMINAL_OWN_ZDOTDIR && $HISTFILE == ${NTERMINAL_OWN_ZDOTDIR}/* ]]; then
+  HISTFILE=$NTERMINAL_USER_ZDOTDIR/${HISTFILE#${NTERMINAL_OWN_ZDOTDIR}/}
+fi
+
 (( $+functions[__nterm_source_user] )) && \
   __nterm_source_user "$NTERMINAL_USER_ZDOTDIR/.zshrc"
 

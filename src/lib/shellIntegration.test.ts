@@ -1,7 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { parseOsc133, parseOsc633 } from "./osc";
 
@@ -527,5 +529,82 @@ describe("gerçek zsh akışı", () => {
     const e = lines.filter((l) => l.startsWith("633;E;")).length;
     const c = lines.filter((l) => l === "133;C").length;
     expect(e).toBe(c);
+  });
+});
+
+/**
+ * zsh geçmiş dosyası kullanıcının klasöründe kalmalı.
+ *
+ * ÖLÇÜLEN HATA: uygulamanın zsh sekmelerinde `HISTFILE` kullanıcının
+ * `~/.zsh_history`'si değil uygulamanın kendi `shell-integration/zdotdir/`
+ * klasöründeki bir dosyaya gidiyordu (kurulu uygulamada 266 satır birikmişti,
+ * gerçek geçmiş 1012 satırdı). Ctrl+R, yukarı ok ve zsh-autosuggestions
+ * kullanıcının gerçek geçmişini görmüyordu.
+ *
+ * ZİNCİR: macOS'un `/etc/zshrc`si kullanıcının .zshrc'sinden ÖNCE koşup
+ * `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history` yazıyor; o an ZDOTDIR köprümüzü
+ * gösteriyor.
+ */
+describe("zsh geçmiş dosyası (gerçek zsh)", () => {
+  const win = process.platform === "win32";
+  /**
+   * Entegrasyon klasörünün GEÇİCİ kopyası: kabuklar geçmişi ZDOTDIR'e yazıyor ve
+   * gerçek klasör depo ağacının içinde — bir test koşusu `.zsh_history`yi depoya
+   * yazıp bir kez yanlışlıkla commit'lendi. PSReadLine ikilileri kopyalanmıyor.
+   */
+  const KOPYA = mkdtempSync(join(tmpdir(), "nt-entegrasyon-"));
+  cpSync(DIR, KOPYA, { recursive: true, filter: (kaynak) => !kaynak.includes(`${join(DIR, "modules")}`) });
+  const OWN = join(KOPYA, "zdotdir");
+  afterAll(() => rmSync(KOPYA, { recursive: true, force: true }));
+
+  /** Köprüyle bir zsh açar, `histfile=[…]` satırını okur. */
+  function histfile(opts: { userZdotdir?: string; zshrc?: string } = {}) {
+    const home = mkdtempSync(join(tmpdir(), "nt-hist-"));
+    try {
+      if (opts.zshrc !== undefined) {
+        const dir = opts.userZdotdir ?? home;
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, ".zshrc"), opts.zshrc);
+      }
+      const r = spawnSync("zsh", ["-l", "-i", "-c", 'print -r -- "histfile=[$HISTFILE]"'], {
+        env: {
+          PATH: "/usr/bin:/bin",
+          HOME: home,
+          TERM: "xterm-256color",
+          LANG: "C.UTF-8",
+          ZDOTDIR: OWN,
+          ...(opts.userZdotdir ? { NTERMINAL_ZDOTDIR: opts.userZdotdir } : {}),
+        },
+        encoding: "utf8",
+        timeout: 15000,
+      });
+      const m = /histfile=\[([^\]]*)\]/.exec(r.stdout ?? "");
+      return { histfile: m?.[1] ?? null, home, err: r.stderr ?? "" };
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  // /etc/zshrc yalnızca macOS'ta HISTFILE'ı ZDOTDIR'e göre kuruyor.
+  it.skipIf(process.platform !== "darwin")("HISTFILE uygulamanın klasörüne değil $HOME'a gidiyor", () => {
+    const r = histfile();
+    expect(r.histfile, r.err).not.toBeNull();
+    expect(r.histfile, "geçmiş uygulamanın klasörüne yazılıyor").not.toContain("shell-integration");
+    expect(r.histfile).toBe(`${r.home}/.zsh_history`);
+  });
+
+  it.skipIf(process.platform !== "darwin")("kullanıcının kendi ZDOTDIR'i varsa geçmiş orada", () => {
+    const zd = mkdtempSync(join(tmpdir(), "nt-zd-"));
+    try {
+      const r = histfile({ userZdotdir: zd });
+      expect(r.histfile).toBe(`${zd}/.zsh_history`);
+    } finally {
+      rmSync(zd, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(win)("kullanıcı HISTFILE'ı kendisi yazdıysa ona dokunulmuyor", () => {
+    const r = histfile({ zshrc: 'HISTFILE=/tmp/kullanici-ozel-gecmis\n' });
+    expect(r.histfile).toBe("/tmp/kullanici-ozel-gecmis");
   });
 });
