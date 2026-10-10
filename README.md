@@ -1279,6 +1279,22 @@ karakter iki okuma arasında bölünebilir. Ham baytlar base64 olarak taşınıp
 xterm'e `Uint8Array` veriliyor — xterm parçalı UTF-8'i kendi içinde doğru
 birleştiriyor.
 
+**Teşhis sondası boştayken uyuyor.** Kare ölçümü uygulama ömrü boyunca sürekli
+çalışıyordu (16 ms zamanlayıcı + her karede rAF) ve uygulama boştayken bile
+toplam CPU'nun yarısından fazlasını yiyordu (%12,9; ölçülen). Şimdi yalnızca
+kullanıcı etkinliğinden sonra beş saniye sık örnekliyor, boştayken 250 ms'de bir
+yokluyor, pencere gizliyken duruyor. Donma etkileşim sırasında fark edildiği ve
+uzun donmalar seyrek kipte de kaydedildiği için sondanın amacı bozulmuyor.
+
+Seyrek kipte kayıt **zamanlayıcının geç ateşlemesinden** geliyor, çizim isteğinden
+değil: ilk seyrek kip yalnızca rAF'a bakıyordu ve ana iş parçacığı donmalarını
+neredeyse hiç göremiyordu (elle sürülen zamanlayıcıyla 50 evrede 2 kayıt; panel
+"kayda geçen takılma yok" diyordu, bu da "donma arayüzde değil" demek).
+Garanti dürüstçe şu: 500 ms ve üstü donmalar yoklamanın her evresinde
+kaydediliyor, 250-500 ms arası evreye bağlı, 250 ms altı hiçbir kipte takılma
+sayılmıyor. Bildirilen belirti saniyelerce süren donmaydı; daha kesin yakalama
+isteyen yoklama aralığını küçültür ve maliyetini ölçer.
+
 **Geçmiş için SQLite değil JSONL.** Kayıt sayısı on binler mertebesinde
 kalıyor, tam liste bellekte rahat duruyor. Düz JSON olması dışa/içe aktarımı
 bedava hâle getiriyor ve native bir bağımlılık eklemiyor.

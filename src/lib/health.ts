@@ -61,6 +61,28 @@
  * boştayken 250 ms'de bir yokluyor, pencere gizliyken duruyor (bkz.
  * `FrameMonitor`, `ACTIVE_WINDOW_MS`). Ölçümün amacı olan takılma yakalama
  * bozulmuyor: donma etkileşim sırasında fark ediliyor.
+ *
+ * ## Seyrek kipte donma nasıl yakalanıyor (ve neyi KAÇIRIYOR)
+ *
+ * İlk seyrek kip yalnızca çizim isteğinin karşılanma süresine bakıyordu ve
+ * ana iş parçacığı DONMASINI neredeyse hiç göremiyordu: rAF yoklamada isteniyor
+ * ve ~bir kare içinde karşılanıyor; donma yoklamalar ARASINA düşerse istek
+ * donma BİTTİKTEN sonra açılıyor, gecikmesi ~8 ms çıkıyor. Elle sürülen
+ * zamanlayıcıyla 50 evrede yalnızca 2'sinde kaydedildi ve panel "kayda geçen
+ * takılma yok" dedi — okuma tablosuna göre bu "donma arayüzde değil" demek:
+ * yanıltıcı teşhis.
+ *
+ * Donmanın kanıtı ZAMANLAYICININ GEÇ ATEŞLEMESİ. D ms'lik bir donma, vadesi
+ * donmanın içine düşen zamanlayıcıyı D - (0..aralık) ms geç ateşletir; sapma
+ * `JANK_MS`'ye ulaşırsa kaydediliyor. Sonuç:
+ *
+ *  - D >= JANK_MS + IDLE_INTERVAL (500 ms): HER evrede kaydediliyor.
+ *  - JANK_MS <= D < 500 ms: yoklamanın evresine bağlı, olasılıkla.
+ *  - D < JANK_MS: kaydedilmiyor (fast kipte de takılma sayılmaz).
+ *
+ * Bildirilen belirti saniyelerce süren donmaydı (30-40 sn); alt sınır bu sondanın
+ * işi için fazlasıyla yeterli. Eşiğe kesin yakalama isteyen biri `IDLE_INTERVAL`'ı
+ * küçültür ve maliyetini ölçer.
  */
 
 /** Bir takılmanın "takılma" sayılması için gereken en küçük boşluk (ms). */
@@ -109,23 +131,31 @@ export const TASK_SAMPLE_WINDOW = 5000;
  * Donma ARAYÜZLE ETKİLEŞİM sırasında fark ediliyor (yazarken, sekme
  * değiştirirken, pencereyi sürüklerken); kimse hareketsiz bir pencerenin
  * takıldığını görmüyor. O yüzden sık örnekleme yalnızca etkinlikten sonra bu
- * kadar sürüyor; sonrası seyrek yoklamaya (`IDLE_INTERVAL`) iniyor. Uzun
- * (>= JANK_MS) bir takılma seyrek yoklamada da yakalanıyor.
+ * kadar sürüyor; sonrası seyrek yoklamaya (`IDLE_INTERVAL`) iniyor. Uzun bir
+ * donma seyrek yoklamada da yakalanıyor (bkz. dosya başlığı: "Seyrek kipte
+ * donma nasıl yakalanıyor").
  */
 export const ACTIVE_WINDOW_MS = 5000;
 /**
  * Boştayken yoklama aralığı (ms).
  *
- * `JANK_MS`'ye (250) yakın: bir takılmanın yoklamayı kaçırmaması için aralık
- * eşikten büyük olamaz. Zamanlayıcı ve çizim istemi AYNI yoklamada: saniyede
- * dört zamanlayıcı ve dört rAF, eskiden 62 + 60.
+ * Kesin yakalanan en küçük donma `JANK_MS + IDLE_INTERVAL`: aralığı eşikten
+ * büyük tutmak onu eşiğin iki katının da üstüne çıkarırdı, o yüzden `JANK_MS`'yi
+ * aşamaz (bkz. `healthMonitor.test.ts`). Zamanlayıcı ve çizim istemi AYNI
+ * yoklamada: saniyede dört zamanlayıcı ve dört rAF, eskiden 62 + 60.
  */
 export const IDLE_INTERVAL = 250;
 
 export interface JankEvent {
   /** Duvar saati (ms, epoch) — kullanıcı "saat kaçta" diye sorabilsin. */
   at: number;
-  /** Çizim döngüsündeki boşluk (rAF). */
+  /**
+   * Çizim döngüsündeki boşluk (rAF).
+   *
+   * Donmayı yalnızca zamanlayıcı gördüyse (seyrek kip) çizim isteği ölçülemiyor:
+   * değer o zaman zamanlayıcı sapması, yani donmanın ALT SINIRI. Çizim de
+   * gördüyse (iki yoldan gelen kayıt birleşiyor) ikisinin büyüğü.
+   */
   gapMs: number;
   /**
    * Aynı anda görev kuyruğunun sapması.
@@ -245,9 +275,20 @@ const ACTIVITY_EVENTS = ["keydown", "pointerdown", "pointermove", "wheel", "focu
  *   ile sık kipteki ("iki kare arası") aynı dağılım değil, karıştırmak ortancayı
  *   anlamsızlaştırırdı.
  * - `slow`: 250 ms'de bir TEK zamanlayıcı; her yoklamada bir rAF istenip
- *   isteğin ne kadar sonra karşılandığı ölçülüyor. Bir takılma (>= `JANK_MS`)
- *   burada da kaydediliyor.
+ *   isteğin ne kadar sonra karşılandığı ölçülüyor. Donma zamanlayıcının geç
+ *   ateşlemesinden, çizim hattı tıkanması rAF gecikmesinden yakalanıyor
+ *   (bkz. dosya başlığı).
  * - `paused`: pencere gizli, hiçbir şey çalışmıyor.
+ *
+ * ## Takılma iki yoldan kaydediliyor
+ *
+ * Çizim yolu (`onFrame`: rAF `JANK_MS`'den geç karşılandı) ve zamanlayıcı yolu
+ * (`taskTick`: zamanlayıcı `JANK_MS`'den geç ateşledi). Ana iş parçacığı
+ * donunca İKİSİ DE geç koşuyor ve hangisinin önce koşacağı garanti değil;
+ * `recordJank` aynı donmayı bir kez sayıyor. Kip değişimi (`enter`) bekleyen
+ * ölçümü iptal ettiği için, iptalden ÖNCE değerlendiriliyor (`flushPending`):
+ * donma sırasında kuyruğa giren bir tuş ya da işaretçi olayı donma bitince
+ * zamanlayıcıdan önce koşup ölçümü sessizce silebiliyordu.
  *
  * Çizim "boşluğu" her iki kipte de aynı tanımda: rAF'in İSTENDİĞİ andan
  * KARŞILANDIĞI ana kadar geçen süre. Sık kipte istek bir önceki karede
@@ -264,6 +305,10 @@ export class FrameMonitor {
   private lastTask = 0;
   private drawPending = false;
   private drawRequestedAt = 0;
+  /** Bekleyen görev kuyruğu zamanlayıcısının vadesi (`performance.now()`). */
+  private timerDue = 0;
+  /** Son kaydedilen takılmanın bittiği an: aynı donmayı ikinci kez saymamak için. */
+  private lastJankEnd = 0;
   /** Zaman damgalı sapma örnekleri: takılmanın aralığını geriye okumak için. */
   private taskSamples: TaskSample[] = [];
   private frame: number | null = null;
@@ -336,8 +381,24 @@ export class FrameMonitor {
     this.timer = null;
   }
 
+  /**
+   * Bekleyen ölçümleri İPTAL ETMEDEN önce değerlendirir.
+   *
+   * Vadesi geçmiş bir zamanlayıcı ya da karşılanmamış bir rAF, donmanın tek
+   * kanıtı olabilir; `cancelProbes` bunları siler. `paused`a girerken
+   * değerlendirilmez: pencere gizlenirken zamanlayıcılar kısılıyor ve
+   * gecikmesi donma değil (görünür olunca da bekleyen ölçüm zaten yok).
+   */
+  private flushPending() {
+    const now = performance.now();
+    const drift = this.timer !== null ? Math.max(0, now - this.timerDue) : 0;
+    const gap = this.drawPending ? now - this.drawRequestedAt : 0;
+    if (drift >= JANK_MS || gap >= JANK_MS) this.recordJank(Math.max(gap, drift), now, drift);
+  }
+
   /** Kip değiştirir; başlangıç noktalarını sıfırlar ki geçiş takılma sayılmasın. */
   private enter(mode: MonitorMode) {
+    if (mode !== "paused") this.flushPending();
     this.cancelProbes();
     this.mode = mode;
     if (mode === "paused") return;
@@ -354,6 +415,46 @@ export class FrameMonitor {
     this.frame = requestAnimationFrame(this.onFrame);
   }
 
+  /**
+   * Takılmayı kaydeder. `gap`: donmanın süresi (ya da alt sınırı), `now`: bittiği
+   * an, `drift`: zamanlayıcı sapması (bilinmiyorsa 0).
+   *
+   * Aynı donmayı iki yol da görebilir (bkz. sınıf başlığı): yeni ölçümün başlangıcı
+   * son kaydın bitişinden ÖNCEYSE aynı donma sayılıp kayıt birleştiriliyor
+   * (büyük değerler kalıyor). Bir sonraki donmanın ölçümü bir önceki bittikten
+   * SONRA başladığı için ikisi ayrı kayıt kalıyor.
+   */
+  private recordJank(gap: number, now: number, drift: number) {
+    const last = this.janks[this.janks.length - 1];
+    if (last !== undefined && now - gap < this.lastJankEnd) {
+      last.gapMs = Math.max(last.gapMs, Math.round(gap));
+      last.taskMs = Math.max(last.taskMs, Math.round(drift));
+      this.lastJankEnd = Math.max(this.lastJankEnd, now);
+      return;
+    }
+    this.lastJankEnd = now;
+    /*
+     * Olay HEMEN kaydediliyor (kullanıcı zamanı görmeli), kuyruk değeri
+     * gerekirse biraz sonra dolduruluyor: geç kalan `setTimeout` geri çağrısı
+     * rAF'tan sonra da koşabiliyor. Gerekçesi `maxDriftIn` üzerinde.
+     *
+     * Nesne yerinde değiştiriliyor; `pushJank` diziyi kopyalıyor ama
+     * ÖĞELERİ aynı bırakıyor, yani halkadaki kayıt da güncelleniyor.
+     */
+    const event: JankEvent = { at: Date.now(), gapMs: Math.round(gap), taskMs: Math.round(drift) };
+    this.janks = pushJank(this.janks, event);
+
+    const from = now - gap - TASK_INTERVAL;
+    const timer = window.setTimeout(() => {
+      this.settleTimers = this.settleTimers.filter((id) => id !== timer);
+      event.taskMs = Math.max(
+        event.taskMs,
+        Math.round(maxDriftIn(this.taskSamples, from, performance.now())),
+      );
+    }, JANK_SETTLE_MS);
+    this.settleTimers.push(timer);
+  }
+
   /** Çizim döngüsü: istek karşılandı. */
   private onFrame = () => {
     this.frame = null;
@@ -366,27 +467,7 @@ export class FrameMonitor {
       if (this.drawGaps.length > FRAME_WINDOW) this.drawGaps.shift();
     }
 
-    if (gap >= JANK_MS) {
-      /*
-       * Olay HEMEN kaydediliyor (kullanıcı zamanı görmeli), kuyruk değeri
-       * biraz sonra dolduruluyor: geç kalan `setTimeout` geri çağrısı rAF'tan
-       * sonra da koşabiliyor. Gerekçesi `maxDriftIn` üzerinde.
-       *
-       * Nesne yerinde değiştiriliyor; `pushJank` diziyi kopyalıyor ama
-       * ÖĞELERİ aynı bırakıyor, yani halkadaki kayıt da güncelleniyor.
-       */
-      const event: JankEvent = { at: Date.now(), gapMs: Math.round(gap), taskMs: 0 };
-      this.janks = pushJank(this.janks, event);
-
-      const from = now - gap - TASK_INTERVAL;
-      const timer = window.setTimeout(() => {
-        this.settleTimers = this.settleTimers.filter((id) => id !== timer);
-        event.taskMs = Math.round(
-          maxDriftIn(this.taskSamples, from, performance.now()),
-        );
-      }, JANK_SETTLE_MS);
-      this.settleTimers.push(timer);
-    }
+    if (gap >= JANK_MS) this.recordJank(gap, now, 0);
 
     // Yalnızca sık kipte kare kare sürüyor; seyrek kipte bir sonraki yoklama
     // yeni istek açacak.
@@ -404,10 +485,17 @@ export class FrameMonitor {
   private taskTick = () => {
     if (!this.running || this.mode === "paused") return;
     const interval = this.mode === "fast" ? TASK_INTERVAL : IDLE_INTERVAL;
+    const due = this.lastTask + interval;
+    this.timerDue = due;
     this.timer = window.setTimeout(() => {
+      this.timer = null;
       const now = performance.now();
-      const drift = Math.max(0, now - this.lastTask - interval);
+      const drift = Math.max(0, now - due);
       this.lastTask = now;
+
+      // Ana iş parçacığı donduysa zamanlayıcı geç ateşler; seyrek kipte çizim
+      // yolu bunu göremiyor (bkz. dosya başlığı), bu yüzden kayıt burada da.
+      if (drift >= JANK_MS) this.recordJank(drift, now, drift);
 
       // Yüzdelik penceresi yalnız sık kipte dolar (bkz. sınıf başlığı); zaman
       // damgalı örnekler ise takılma atfı için HER kipte tutuluyor.
