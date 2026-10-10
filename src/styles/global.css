@@ -5764,6 +5764,23 @@ button.pop-group {
   justify-content: flex-end;
 }
 
+/* Formdaki komut zaten bir favoride: kayit engelli, cikis yolu yanindaki
+   dugme. Sari, kirmizi degil: bir hata degil "zaten var" bilgisi. Sol cizgi
+   renkten bagimsiz ikinci isaret (bkz. `.hintline.warn`). Uzun komut
+   bosluksuz da olsa paneli tasirmadan sariliyor. */
+.fav-form-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding-left: 7px;
+  border-left: 2px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  color: var(--warn);
+  font-size: 0.8462rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .hint {
   color: var(--text-dim);
   font-size: 0.8846rem;

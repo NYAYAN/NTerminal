@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Favorite {
     pub id: String,
-    /// Calistirilacak komut.
+    /// Calistirilacak komut. Favoriler arasinda TEKIL: `add` ayni komutu
+    /// ikinci kez acmiyor, `update` baska bir favorinin komutunu vermiyor.
     pub command: String,
     /// Kullanicinin verdigi kisa ad. Bossa komut gosterilir.
     #[serde(default)]
@@ -172,24 +173,53 @@ impl FavoriteStore {
             anyhow::bail!("bos komut favoriye eklenemez");
         }
         let alias = clean_alias(req.alias)?;
+        let label = clean(req.label);
+        let note = clean(req.note);
+        let group_id = clean(req.group_id);
+        let folder = clean(req.folder);
+        let cwd = clean(req.cwd);
+        // Ayni komut zaten favorideyse tekrar eklemiyoruz; kullanici yildiza
+        // iki kez bastiginda liste kirlenmesin.
+        //
+        // Ama istek kayitta OLMAYAN bir sey getiriyorsa eski kaydi "eklendi"
+        // diye dondurmek o alanlari sessizce yutuyordu. BILDIRILEN: favorideki
+        // `yarn start:dev` formdan `yysd` kisaltmasiyla yeniden eklendi, form
+        // kaydedilmis gibi kapandi, kisaltma hicbir yere yazilmadi. Boyle bir
+        // istek artik reddediliyor; var olan kaydi degistirmek `update`in isi
+        // (arayuz formda "Mevcut favoriyi duzenle" sunuyor). Bos alan
+        // "belirtilmedi" demek, degisiklik degil: yildizin yalniz komut
+        // gonderen istegi ve ayni formun ikinci kez gonderilmesi hata vermiyor.
+        //
+        // Kisaltmanin tekilligi bundan SONRA denetleniyor: ayni istegi
+        // tekrarlayan biri kendi kisaltmasini "baska bir favoride" sanmasin.
+        if let Some(existing) = inner.items.iter().find(|f| f.command == command) {
+            let karsilanmis = |gelen: &Option<String>, kayit: &Option<String>| {
+                gelen.is_none() || gelen == kayit
+            };
+            let yeni_bir_sey_yok = karsilanmis(&label, &existing.label)
+                && karsilanmis(&note, &existing.note)
+                && karsilanmis(&group_id, &existing.group_id)
+                && karsilanmis(&folder, &existing.folder)
+                && karsilanmis(&cwd, &existing.cwd)
+                && karsilanmis(&alias, &existing.alias);
+            if !yeni_bir_sey_yok {
+                anyhow::bail!("bu komut zaten favorilerde: {command}");
+            }
+            return Ok(existing.clone());
+        }
         if let Some(a) = &alias {
             if alias_taken(&inner.items, a, None) {
                 anyhow::bail!("bu kisaltma baska bir favoride kullaniliyor: {a}");
             }
         }
-        // Ayni komut zaten favorideyse tekrar eklemiyoruz; kullanici yildiza
-        // iki kez bastiginda liste kirlenmesin.
-        if let Some(existing) = inner.items.iter().find(|f| f.command == command) {
-            return Ok(existing.clone());
-        }
         let favorite = Favorite {
             id: new_id("fav"),
             command,
-            label: clean(req.label),
-            note: clean(req.note),
-            group_id: clean(req.group_id),
-            folder: clean(req.folder),
-            cwd: clean(req.cwd),
+            label,
+            note,
+            group_id,
+            folder,
+            cwd,
             alias,
             created_at: now_ms(),
             used_count: 0,
@@ -211,6 +241,19 @@ impl FavoriteStore {
         if let Some(Some(a)) = &alias {
             if alias_taken(&inner.items, a, Some(id)) {
                 anyhow::bail!("bu kisaltma baska bir favoride kullaniliyor: {a}");
+            }
+        }
+        // Komut da favoriler arasinda tekil (`add` ayni komutu ikinci kez
+        // acmiyor): duzenleme baska bir favorinin komutunu alirsa gecmisteki
+        // yildiz (`remove_by_command`) ikisini birden silerdi. Komutu
+        // DEGISMEYEN yama denetlenmiyor - arayuz komutu her kayitta gonderiyor
+        // ve bu kural yokken olusmus bir cift, kayitlarin geri kalanini
+        // duzenlenemez yapmamali.
+        if let Some(command) = &patch.command {
+            let command = command.trim();
+            let current = inner.items.iter().find(|f| f.id == id).map(|f| f.command.as_str());
+            if current != Some(command) && inner.items.iter().any(|f| f.command == command) {
+                anyhow::bail!("bu komut zaten favorilerde: {command}");
             }
         }
         let Some(item) = inner.items.iter_mut().find(|f| f.id == id) else {

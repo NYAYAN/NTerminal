@@ -1051,6 +1051,13 @@ export const MESSAGES = {
     "Kısaltma: komut kutusuna {alias} yazıp Enter'a basın",
     "Alias: type {alias} in the command box and press Enter",
   ],
+  // Formdaki komut başka bir favoride: kayıt engelli, çıkış yolu yanındaki
+  // düğme (`FavoritesPanel` › `duplicate`). {name} favorinin kısa adı ya da komutu.
+  "fav.duplicate": [
+    "Bu komut zaten favorilerde: “{name}”.",
+    "This command is already a favorite: “{name}”.",
+  ],
+  "fav.editExisting": ["Mevcut favoriyi düzenle", "Edit the existing favorite"],
 
   // -------------------------------------------------------------- arama çubuğu
   "find.placeholder": ["Terminalde ara…", "Search in terminal…"],

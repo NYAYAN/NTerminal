@@ -507,3 +507,112 @@ fn eski_favori_dosyasi_kisaltmasiz_okunuyor() {
     let store = FavoriteStore::load(paths);
     assert_eq!(store.list()[0].alias, None);
 }
+
+/// BILDIRILEN: favorideki `yarn start:dev` formdan `yysd` kisaltmasiyla
+/// yeniden eklendi; `add` var olan kaydi oldugu gibi dondurdu, form kaydedilmis
+/// gibi kapandi ve kisaltma hicbir yere yazilmadi. Kayitta olmayan bir alan
+/// getiren istek artik HATA - basari gibi gorunup yazilani yutmuyor.
+#[test]
+fn mevcut_komuta_yeni_alan_sessizce_yutulmuyor() {
+    let store = FavoriteStore::load(temp_paths("dup-fields"));
+    let fav = store.add(req("yarn start:dev")).unwrap();
+
+    let err = store.add(with_alias("  yarn start:dev  ", "yysd")).unwrap_err();
+    assert!(err.to_string().contains("zaten favorilerde"), "beklenmeyen hata: {err}");
+
+    // Her alan tek basina yetiyor: biri bile kayitta yoksa istek reddediliyor.
+    let alanlar: [(&str, fn(&mut NewFavorite)); 6] = [
+        ("label", |r| r.label = Some("Dev sunucu".into())),
+        ("note", |r| r.note = Some("once npm i".into())),
+        ("group_id", |r| r.group_id = Some("g1".into())),
+        ("folder", |r| r.folder = Some("Yatas".into())),
+        ("cwd", |r| r.cwd = Some("/proje".into())),
+        ("alias", |r| r.alias = Some("ysd".into())),
+    ];
+    for (alan, doldur) in alanlar {
+        let mut istek = req("yarn start:dev");
+        doldur(&mut istek);
+        assert!(store.add(istek).is_err(), "{alan} sessizce yutuldu");
+    }
+
+    let list = store.list();
+    assert_eq!(list.len(), 1, "ikinci kayit acildi");
+    assert_eq!(list[0].id, fav.id);
+    assert_eq!(list[0].alias, None, "reddedilen istek kayda yazildi");
+    assert_eq!(list[0].label, None);
+}
+
+/// Yildiz yolu degismedi: ayni istegi tekrarlamak (yildiza ya da Enter'a iki
+/// kez basmak) hata degil, ayni kaydi donduruyor. Bos alan "belirtilmedi"
+/// demek: yalniz komut gonderen yildiz kayittaki ad ve kisaltmayi silmiyor.
+#[test]
+fn ayni_istegi_tekrarlamak_ayni_kaydi_donduruyor() {
+    let store = FavoriteStore::load(temp_paths("dup-same"));
+    let tam = || NewFavorite {
+        label: Some("Derle".into()),
+        cwd: Some("/proje".into()),
+        ..with_alias("npm run build", "nrb")
+    };
+    let ilk = store.add(tam()).unwrap();
+
+    // Kisaltma KENDI kaydinda: "baska bir favoride kullaniliyor" denmemeli.
+    let tekrar = store.add(tam()).unwrap();
+    assert_eq!(tekrar.id, ilk.id);
+
+    let yildiz = store.add(req(" npm run build ")).unwrap();
+    assert_eq!(yildiz.id, ilk.id);
+    assert_eq!(yildiz.alias.as_deref(), Some("nrb"), "yildiz kisaltmayi dusurdu");
+    assert_eq!(yildiz.label.as_deref(), Some("Derle"));
+
+    // Kaydin bir kismini ayniyla getiren istek de karsilanmis sayiliyor.
+    let kismi = store.add(NewFavorite { label: Some("  Derle ".into()), ..req("npm run build") }).unwrap();
+    assert_eq!(kismi.id, ilk.id);
+    assert_eq!(store.list().len(), 1);
+}
+
+/// Komut favoriler arasinda tekil: duzenleme baska bir favorinin komutunu
+/// alirsa gecmisteki yildiz (`remove_by_command`) ikisini birden silerdi.
+/// Reddedilen yamanin hicbir alani yazilmiyor.
+#[test]
+fn duzenleme_baska_favorinin_komutunu_alamiyor() {
+    let store = FavoriteStore::load(temp_paths("dup-update"));
+    store.add(req("npm test")).unwrap();
+    let diger = store.add(req("npm run test")).unwrap();
+
+    let yama = FavoritePatch {
+        command: Some("  npm test ".into()),
+        label: Some(Some("Testler".into())),
+        ..Default::default()
+    };
+    let err = store.update(&diger.id, yama).unwrap_err();
+    assert!(err.to_string().contains("zaten favorilerde"), "beklenmeyen hata: {err}");
+
+    let kayit = store.list().into_iter().find(|f| f.id == diger.id).unwrap();
+    assert_eq!(kayit.command, "npm run test");
+    assert_eq!(kayit.label, None, "reddedilen yamanin diger alanlari yazildi");
+
+    // Kendi komutunu yeniden yazmak cakisma degil (form komutu her kayitta gonderiyor).
+    let ayni = FavoritePatch { command: Some("npm run test".into()), ..Default::default() };
+    assert!(store.update(&diger.id, ayni).unwrap().is_some());
+}
+
+/// Bu kural yokken duzenlemeyle olusmus bir cift kayitlari KILITLEMEMELI:
+/// komutu degismeyen yama denetlenmiyor.
+#[test]
+fn eski_cift_komutlu_kayit_duzenlenebiliyor() {
+    let paths = temp_paths("dup-legacy");
+    std::fs::write(
+        paths.favorites_file(),
+        r#"[{"id":"a","command":"ls","createdAt":0,"usedCount":0},
+            {"id":"b","command":"ls","createdAt":0,"usedCount":0}]"#,
+    )
+    .unwrap();
+    let store = FavoriteStore::load(paths);
+    let yama = FavoritePatch {
+        command: Some("ls".into()),
+        label: Some(Some("Liste".into())),
+        ..Default::default()
+    };
+    let kayit = store.update("b", yama).unwrap().unwrap();
+    assert_eq!(kayit.label.as_deref(), Some("Liste"));
+}

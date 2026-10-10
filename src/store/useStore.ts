@@ -655,8 +655,10 @@ interface Store {
   disarmStop: () => void;
 
   loadFavorites: () => Promise<void>;
+  /** Hata bildirimde gösteriliyor; dönüş null = kaydedilmedi. */
   addFavorite: (favorite: NewFavorite) => Promise<Favorite | null>;
-  updateFavorite: (id: string, patch: FavoritePatch) => Promise<void>;
+  /** Hata bildirimde gösteriliyor; dönüş false = kaydedilmedi. */
+  updateFavorite: (id: string, patch: FavoritePatch) => Promise<boolean>;
   removeFavorite: (id: string) => Promise<void>;
   toggleFavorite: (command: string) => Promise<void>;
   moveFavorite: (id: string, direction: -1 | 1) => Promise<void>;
@@ -2176,6 +2178,10 @@ export const useStore = create<Store>((set, get) => ({
       return created;
     } catch (err) {
       get().toast(String(err), "err");
+      // Rust reddettiyse liste eskimiş olabilir ("zaten favorilerde" dendi
+      // ama arayüz o kaydı bilmiyordu); tazelenen liste formun kendi
+      // uyarısını ve "Mevcut favoriyi düzenle" düğmesini getiriyor.
+      await get().loadFavorites();
       return null;
     }
   },
@@ -2186,8 +2192,12 @@ export const useStore = create<Store>((set, get) => ({
       // gondermemek dokunma, null gondermek temizleme demek.
       await api.favoritesUpdate(id, patch);
       await get().loadFavorites();
+      return true;
     } catch (err) {
       get().toast(String(err), "err");
+      // `addFavorite`teki sebep: liste eskiyse formun ön denetimi tazelensin.
+      await get().loadFavorites();
+      return false;
     }
   },
 

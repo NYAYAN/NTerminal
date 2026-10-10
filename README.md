@@ -160,7 +160,10 @@ verilebilir; sıralaması elle ayarlanır. Tıklamak komutu yalnızca istem sat�
 yazar, klasör değişmez; çalıştırınca (çift tık ya da ▶) klasör tanımlıysa önce o
 klasöre geçilir. Favoriye bir kısaltma da verilebilir (ör. `nrb`): komut kutusuna
 yazıp Enter'a basınca favorinin komutu terminalin bulunduğu klasörde çalışır,
-favori bir gruba bağlı olsa da her grupta. `Ctrl+Shift+B` panelini açar, komut
+favori bir gruba bağlı olsa da her grupta. Bir komut yalnızca bir kez favori
+olur: zaten favoride olan bir komutu formdan yeniden eklerken form bunu söyler
+ve **Mevcut favoriyi düzenle** düğmesi yazdıklarınızı var olan kayda taşır
+(kaydetmek yine sizde). `Ctrl+Shift+B` panelini açar, komut
 paletinde de doğrudan çalıştırılabilir. `Ctrl+R` hızlı çağırmada favoriler **varsayılan olarak
 gelmiyor** — o pencerenin sorusu "bu sekmede ne çalıştırdım" ve hiç
 çalıştırılmamış bir favori listenin başını tutuyordu; penceredeki

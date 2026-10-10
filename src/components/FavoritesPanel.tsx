@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { aliasProblem } from "../lib/aliases";
 import { formatWhen, fuzzyScore, shortenPath } from "../lib/format";
@@ -49,6 +49,26 @@ function toDraft(favorite: Favorite): DraftForm {
 }
 
 /**
+ * Formda kullanıcının YAZDIKLARI: açıldığı hâlden farklı ve boş olmayan
+ * alanlar (komut hariç). "Mevcut favoriyi düzenle" bunları var olan kaydın
+ * üstüne taşıyor.
+ *
+ * Ölçüt "dolu" değil "açıldığından farklı", çünkü yeni favori formu etkin
+ * sekmenin klasörünü HAZIR getiriyor. O klasör kullanıcının yazdığı bir şey
+ * değil; taşınsaydı var olan favori sessizce o sekmenin klasörüne bağlanırdı
+ * (listeden çalıştırmak önce oraya geçiyor). Boşaltılan alan da taşınmıyor:
+ * yeni formda boş bırakmak "gerek yok" demek, kayıttakini silmek değil.
+ */
+function typedFields(form: DraftForm, base: DraftForm): Partial<DraftForm> {
+  const out: Partial<DraftForm> = {};
+  for (const key of ["label", "note", "cwd", "groupId", "folder", "alias"] as const) {
+    const value = form[key].trim();
+    if (value && value !== base[key].trim()) out[key] = form[key];
+  }
+  return out;
+}
+
+/**
  * Favori komutlar paneli.
  *
  * Geçmişten ayrı tutuluyor: geçmiş otomatik birikip sınır aşılınca budanıyor,
@@ -68,6 +88,17 @@ export function FavoritesPanel() {
   const [query, setQuery] = useState("");
   const [onlyThisGroup, setOnlyThisGroup] = useState(false);
   const [form, setForm] = useState<DraftForm | null>(null);
+  /**
+   * Formun AÇILDIĞI hâl; kullanıcının neyi yazdığı buna göre ayrılıyor
+   * (`typedFields`). Düzenlemede kaydın kendisi, yeni favoride boş form ve
+   * hazır getirilen klasör.
+   */
+  const [formBase, setFormBase] = useState<DraftForm>(EMPTY);
+  const openForm = (draft: DraftForm, base: DraftForm = draft) => {
+    setForm(draft);
+    setFormBase(base);
+  };
+  const editExistingRef = useRef<HTMLButtonElement | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   /** Sürüklenen favori; bırakma hedefleri yalnızca bu varken işliyor. */
   const [dragId, setDragId] = useState<string | null>(null);
@@ -152,11 +183,49 @@ export function FavoritesPanel() {
       .map((r) => r.f);
   }, [favorites, query, onlyThisGroup, activeGroupId]);
 
+  /*
+   * Formdaki komut ZATEN başka bir favoride mi.
+   *
+   * Komut favoriler arasında tekil (Rust `add`/`update` da bağlıyor). Eskiden
+   * aynı komutu formdan eklemek var olan kaydı olduğu gibi döndürüyor, form
+   * kaydedilmiş gibi kapanıyor ve yazılan kısaltma, ad, not sessizce
+   * kayboluyordu (BİLDİRİLEN: `yysd`). Şimdi uyarı formda, kayıt engelli.
+   *
+   * Yazarken hesaplanıyor, Ekle'ye basınca değil: "bu zaten var" bilgisi
+   * diğer alanlar doldurulmadan görünüyor. Komutu DEĞİŞMEYEN düzenleme
+   * denetlenmiyor: kural yokken oluşmuş bir çift, kaydın geri kalanını
+   * düzenlenemez yapmasın (Rust tarafı da öyle).
+   */
+  const draftCommand = form?.command.trim() ?? "";
+  const duplicate =
+    form && draftCommand && draftCommand !== formBase.command.trim()
+      ? (favorites.find((f) => f.id !== form.id && f.command === draftCommand) ?? null)
+      : null;
+
+  /*
+   * "Mevcut favoriyi düzenle": form var olan kaydı düzenlemeye geçiyor ve
+   * yazılanlar kaydın değerlerinin ÜSTÜNE taşınıyor. Kaydetmek yine
+   * kullanıcıda — birleşmiş hâli görüp Kaydet'e basıyor. Sessizce
+   * birleştirmek kaybın tersi bir hata olurdu: kaydın adı, notu, kısaltması
+   * görülmeden ezilirdi.
+   */
+  const editExisting = (target: Favorite) => {
+    if (!form) return;
+    const kayit = toDraft(target);
+    openForm({ ...kayit, ...typedFields(form, formBase) }, kayit);
+  };
+
   const submit = async () => {
     if (!form) return;
     const command = form.command.trim();
     if (!command) {
       store().toast(t("fav.commandEmpty"), "err");
+      return;
+    }
+    // Uyarı zaten formda; Enter'a basanı onun düğmesine götürüyoruz, ikinci
+    // Enter var olan kaydı açıyor.
+    if (duplicate) {
+      editExistingRef.current?.focus();
       return;
     }
     // Kısaltma kaydetmeden ÖNCE denetleniyor: Rust da reddediyor ama onun
@@ -174,8 +243,9 @@ export function FavoritesPanel() {
       );
       return;
     }
+    let saved: boolean;
     if (form.id) {
-      await store().updateFavorite(form.id, {
+      saved = await store().updateFavorite(form.id, {
         command,
         label: form.label.trim() || null,
         note: form.note.trim() || null,
@@ -185,7 +255,7 @@ export function FavoritesPanel() {
         alias: form.alias.trim() || null,
       });
     } else {
-      await store().addFavorite({
+      const created = await store().addFavorite({
         command,
         label: form.label.trim() || null,
         note: form.note.trim() || null,
@@ -194,8 +264,11 @@ export function FavoritesPanel() {
         folder: form.folder.trim() || null,
         alias: form.alias.trim() || null,
       });
+      saved = created !== null;
     }
-    setForm(null);
+    // Kaydedilemediyse (Rust reddetti, disk yazılamadı) form AÇIK kalıyor:
+    // kapanması "kaydedildi" demekti ve yazılan kayboluyordu.
+    if (saved) setForm(null);
   };
 
   const entriesFor = (favorite: Favorite, index: number): MenuEntry[] => [
@@ -212,7 +285,7 @@ export function FavoritesPanel() {
       run: () => void store().runFavorite(favorite.id, false),
     },
     { kind: "separator" },
-    { kind: "item", label: t("common.edit"), run: () => setForm(toDraft(favorite)) },
+    { kind: "item", label: t("common.edit"), run: () => openForm(toDraft(favorite)) },
     {
       kind: "item",
       label: t("common.copyCommand"),
@@ -281,7 +354,10 @@ export function FavoritesPanel() {
       </div>
 
       {form && (
-        <div className="fav-form">
+        // Kimlik değişince form YENİDEN kuruluyor: "Mevcut favoriyi düzenle"
+        // sonrası odak komut alanına dönüyor (autoFocus). Aksi hâlde basılan
+        // düğme uyarıyla birlikte kayboluyor ve odak sayfaya düşüyordu.
+        <div className="fav-form" key={form.id ?? "yeni"}>
           <input
             autoFocus
             className="mono"
@@ -294,6 +370,22 @@ export function FavoritesPanel() {
               if (e.key === "Escape") setForm(null);
             }}
           />
+          {/* Uyarı bildirim balonunda DEĞİL, formda: balon üç saniyede
+              kayboluyor ve düğme taşıyamıyor, uyarı ise komut değişene kadar
+              geçerli. Komutun hemen altında, çünkü onunla ilgili. */}
+          {duplicate && (
+            <div className="fav-form-notice" role="alert">
+              <span>{t("fav.duplicate", { name: duplicate.label || duplicate.command })}</span>
+              <button
+                ref={editExistingRef}
+                type="button"
+                className="outline"
+                onClick={() => editExisting(duplicate)}
+              >
+                {t("fav.editExisting")}
+              </button>
+            </div>
+          )}
           <input
             placeholder={t("fav.labelPlaceholder")}
             value={form.label}
@@ -537,7 +629,7 @@ export function FavoritesPanel() {
             // Etkin sekmenin klasörünü hazır getiriyoruz: favorilerin çoğu
             // belirli bir klasöre bağlı oluyor.
             const cwd = store().activeSession()?.cwd ?? "";
-            setForm({ ...EMPTY, cwd });
+            openForm({ ...EMPTY, cwd });
           }}
         >
           {t("fav.newButton")}
