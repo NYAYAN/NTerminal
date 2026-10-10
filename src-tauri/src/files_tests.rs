@@ -255,3 +255,165 @@ fn damga_yazinca_degisiyor_klasor_icin_yok() {
     assert!(stamp(&root.join("yok.txt")).is_none());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ------------------------------------------- ev dizini, sure butcesi, okuma
+//
+// test-ve-basarim-duzeltmeleri dalindan: ev dizininde arac onbellekleri
+// atlaniyor, yuruyus sure butcesiyle sinirli (8 sn -> 0,4 sn), metin okuma
+// sinirlari.
+
+/// Ev dizini olarak davranan bir agac: arac onbellekleri + gercek dosyalar.
+fn sahte_ev(name: &str) -> std::path::PathBuf {
+    let home = tree(name);
+    touch(&home, ".zshrc");
+    touch(&home, "proje/kod.rs");
+    touch(&home, "proje/.cache/x.txt"); // projenin icindeki .cache ev onbellegi DEGIL
+    for onbellek in ["Library", ".npm", ".cache", ".cargo", ".gradle", ".Trash"] {
+        touch(&home, &format!("{onbellek}/derin/dosya.txt"));
+    }
+    home
+}
+
+fn secenek(home: Option<&Path>) -> ListOpts {
+    ListOpts { max_files: MAX_FILES, budget: LIST_BUDGET, home: home.map(Path::to_path_buf) }
+}
+
+#[test]
+fn ev_dizininde_arac_onbellekleri_atlaniyor() {
+    // OLCULEN HATA: `~` altinda Ctrl+P 8 saniye suruyordu; `.npm`, `.gradle`,
+    // `Library`, `.cargo` gibi onbellekler binlerce dosya tutuyor ve hicbiri
+    // kullanicinin aradigi dosya degil.
+    let home = sahte_ev("ev-atla");
+    let out = list_with(&home, &secenek(Some(&home)));
+
+    assert!(out.iter().any(|p| p == ".zshrc"), "ev dizininin kendi dosyasi kayip: {out:?}");
+    assert!(out.iter().any(|p| p.ends_with("kod.rs")), "proje dosyasi kayip: {out:?}");
+    for onbellek in ["Library", ".npm", ".cargo", ".gradle", ".Trash"] {
+        assert!(
+            !out.iter().any(|p| p.starts_with(onbellek)),
+            "{onbellek} atlanmadi: {out:?}"
+        );
+    }
+    assert!(
+        !out.iter().any(|p| p.starts_with(".cache/")),
+        "ev dizinindeki .cache atlanmadi: {out:?}"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn ev_atlamasi_yalnizca_dogrudan_altinda() {
+    // Projenin ICINDEKI `.cache` ev onbellegi degil; kullanici orada arama
+    // yapiyor olabilir. Atlama yalnizca ev dizininin DOGRUDAN altinda.
+    let home = sahte_ev("ev-derin");
+    let out = list_with(&home, &secenek(Some(&home)));
+    assert!(
+        out.iter().any(|p| p.ends_with("proje/.cache/x.txt")),
+        "projenin icindeki .cache yanlislikla atlandi: {out:?}"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn kok_ev_dizini_degilse_ayni_adli_klasorler_atlanmiyor() {
+    // Bir Unity projesinin `Library` klasoru ya da baska bir yerdeki `.cache`:
+    // kok ev dizini degilse HOME_SKIP devreye girmemeli.
+    let home = sahte_ev("ev-degil");
+    let baska = tree("ev-degil-baska");
+    touch(&baska, "Library/kaynak.txt");
+    let out = list_with(&baska, &secenek(Some(&home)));
+    assert!(out.iter().any(|p| p.ends_with("Library/kaynak.txt")), "{out:?}");
+    let _ = std::fs::remove_dir_all(&home);
+    let _ = std::fs::remove_dir_all(&baska);
+}
+
+#[test]
+fn sure_butcesi_asilinca_eldeki_liste_donuyor() {
+    // Bir agacin ne kadar buyuk oldugu onceden bilinmiyor (ag suruculeri,
+    // iCloud yer tutuculari dosya sayisindan bagimsiz yavas). Butce dolunca
+    // yuruyus DURMALI ve eldeki liste donmeli - eksik liste, bekleyen bir
+    // paletten iyi.
+    let root = tree("butce");
+    for i in 0..5000 {
+        std::fs::write(root.join(format!("d{i:05}.txt")), b"x").unwrap();
+    }
+    let tam = list_with(&root, &ListOpts { max_files: MAX_FILES, budget: Duration::from_secs(30), home: None });
+    assert_eq!(tam.len(), 5000, "genis butcede eksik liste");
+
+    // Tek klasorun ICINDE de sure denetleniyor (BUDGET_CHECK_EVERY): yuz binlerce
+    // girdili tek bir klasor butceyi asmamali.
+    let t0 = Instant::now();
+    let kisa = list_with(&root, &ListOpts { max_files: MAX_FILES, budget: Duration::from_micros(1), home: None });
+    assert!(kisa.len() < tam.len(), "sifir butcede bile tum liste geldi: {}", kisa.len());
+    assert!(t0.elapsed() < Duration::from_secs(2));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn butce_yuzeydeki_dosyalari_koruyor() {
+    // Sure dolarsa elde YUZEYDEKI dosyalar kalmali (genislik oncelikli).
+    let root = tree("butce-yuzey");
+    touch(&root, "ust.txt");
+    for i in 0..300 {
+        touch(&root, &format!("d{i}/a/b/c/derin.txt"));
+    }
+    let out = list_with(&root, &ListOpts { max_files: 5, budget: Duration::from_secs(30), home: None });
+    assert!(out.iter().any(|p| p == "ust.txt"), "sinirda yuzeydeki dosya kayboldu: {out:?}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+fn dosya(name: &str, icerik: &[u8]) -> std::path::PathBuf {
+    let dir = tree(name);
+    let p = dir.join("f.txt");
+    std::fs::write(&p, icerik).unwrap();
+    p
+}
+
+#[test]
+fn buyuk_dosya_kesilerek_okunuyor_ve_bildiriliyor() {
+    // Goruntuleyici en fazla yarim megabayt gosteriyor ve kesildigini
+    // SOYLUYOR. Eskiden dosyanin TAMAMI bellege okunuyordu: birkac GB'lik bir
+    // kutuk dosyasi o kadar bellek ayirip ana is parcacigini bekletirdi. Simdi
+    // en fazla MAX_READ + 1 bayt okunuyor.
+    let p = dosya("buyuk", &vec![b'a'; MAX_READ + 1000]);
+    let t = read_text(&p).expect("okunamadi");
+    assert!(t.truncated, "kesildigi bildirilmedi");
+    assert_eq!(t.text.len(), MAX_READ);
+    assert_eq!(t.size, (MAX_READ + 1000) as u64, "gercek boyut kayip");
+    assert!(!t.binary);
+}
+
+#[test]
+fn tam_sinirdaki_dosya_kesilmiyor() {
+    // Tam MAX_READ bayt: kesilecek bir sey yok. `+1` okuma bunu ayirt ediyor;
+    // `take(MAX_READ)` olsaydi burada yanlis "kesildi" derdi.
+    let p = dosya("sinir", &vec![b'a'; MAX_READ]);
+    let t = read_text(&p).unwrap();
+    assert!(!t.truncated, "sinirda kesildi denildi");
+    assert_eq!(t.text.len(), MAX_READ);
+}
+
+#[test]
+fn kucuk_metin_dosyasi_ve_turkce_karakterler() {
+    let p = dosya("kucuk", "merhaba çalışıyor şğıİ\n".as_bytes());
+    let t = read_text(&p).unwrap();
+    assert_eq!(t.text, "merhaba çalışıyor şğıİ\n");
+    assert!(!t.truncated && !t.binary);
+}
+
+#[test]
+fn ikili_dosya_sezgisi_calisiyor() {
+    let mut icerik = b"PNG".to_vec();
+    icerik.push(0);
+    icerik.extend_from_slice(&[7u8; 100]);
+    let p = dosya("ikili", &icerik);
+    let t = read_text(&p).unwrap();
+    assert!(t.binary && t.text.is_empty());
+}
+
+#[test]
+fn klasor_ve_olmayan_yol_none() {
+    let d = tree("read-klasor");
+    assert!(read_text(&d).is_none());
+    assert!(read_text(&d.join("yok.txt")).is_none());
+}

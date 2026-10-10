@@ -18,7 +18,8 @@
 //! arayuz eksiksiz listeden onemli.
 
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 /// Agactaki tek bir girdi.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -223,6 +224,46 @@ const MAX_FILES: usize = 20_000;
 /// On seviye elle yazilan proje agaclarinin tamamini kapsiyor.
 const MAX_DEPTH: usize = 10;
 
+/// Yuruyusun toplam SURESI.
+///
+/// OLCULEN HATA: ev dizininde (`~`) acilan bir sekmede Ctrl+P `list_files`i
+/// 8 SANIYE surdurdu; `MAX_FILES` sinirina ulasmak icin `.npm` (1,3 sn),
+/// `.gradle` (0,9 sn), `Library`, `.cargo`... dizinlerini tek tek okumak
+/// gerekiyordu. Komut Tauri'de ana is parcaciginda kostugu icin bu sure boyunca
+/// pencere, terminal ciktisi dahil, DONDU. (Komut artik ana is parcaciginda
+/// kosmuyor, ama palet 8 sn bos kalmamali.)
+///
+/// Sinir SAYIYA degil SUREYE de bagli olmali: bir dizin agacinin ne kadar
+/// buyuk oldugu onceden bilinmiyor, ag suruculeri ve iCloud yer tutuculari
+/// dosya sayisindan bagimsiz yavas. Genislik oncelikli yuruyus oldugu icin sure
+/// dolarsa elde YUZEYDEKI dosyalar kaliyor - aranan dosya cogunlukla orada.
+const LIST_BUDGET: Duration = Duration::from_millis(400);
+
+/// Kullanici ev dizininin DOGRUDAN altinda atlanan klasorler.
+///
+/// Yalnizca kok ev dizini iken: bir projenin icindeki `Library` (Unity) ya da
+/// `.cache` zaten uretilen dosya ve `SKIP` listesinde ya da aranmiyor; ev
+/// dizininde ise bunlar arac onbellekleri - binlerce dosya, hicbiri kullanicinin
+/// "aradigi dosya" degil. Olculen agirlar (ev dizini yuruyusu 8 sn): `.npm`,
+/// `.gradle`, `Library`, `.cargo`, `.nuget`, `.cache`, `.rustup`.
+const HOME_SKIP: &[&str] = &[
+    "Library", ".Trash", ".npm", ".cache", ".cargo", ".rustup", ".nvm", ".gradle", ".nuget", ".m2",
+    ".docker", ".local", ".pyenv", ".pub-cache", ".android",
+];
+
+/// Tek bir klasorun icinde sureye bakma sikligi (girdi sayisi). Yuz binlerce
+/// girdili tek bir klasor bile butceyi asmamali.
+const BUDGET_CHECK_EVERY: usize = 2048;
+
+/// Yuruyus ayarlari. `list` uretim degerleriyle cagiriyor; testler kucuk
+/// degerlerle.
+struct ListOpts {
+    max_files: usize,
+    budget: Duration,
+    /// Kok bu dizinse (ev dizini), altindaki `HOME_SKIP` klasorleri atlanir.
+    home: Option<PathBuf>,
+}
+
 /// `root` altindaki dosyalarin `root`a gore yollari.
 ///
 /// Genislik oncelikli (breadth-first): sinira takilirsa elde YUZEYDEKI dosyalar
@@ -230,13 +271,30 @@ const MAX_DEPTH: usize = 10;
 /// yuzeye yakin; derinlik oncelikli yuruyus sinira ilk dalda takilip geri
 /// kalanini hic gormezdi.
 pub fn list(root: &Path) -> Vec<String> {
+    list_with(
+        root,
+        &ListOpts { max_files: MAX_FILES, budget: LIST_BUDGET, home: dirs::home_dir() },
+    )
+}
+
+fn list_with(root: &Path, opts: &ListOpts) -> Vec<String> {
+    let started = Instant::now();
+    let over_budget = || started.elapsed() >= opts.budget;
+    // Kok ev dizini mi? Yol bicimi farkliliklarina (sondaki ayirac) karsi
+    // karsilastirma bilesenlerle yapiliyor.
+    let is_home_root = opts
+        .home
+        .as_deref()
+        .map(|h| h.components().eq(root.components()))
+        .unwrap_or(false);
+
     let mut out: Vec<String> = Vec::new();
-    let mut kuyruk: std::collections::VecDeque<(std::path::PathBuf, usize)> =
+    let mut kuyruk: std::collections::VecDeque<(PathBuf, usize)> =
         std::collections::VecDeque::new();
     kuyruk.push_back((root.to_path_buf(), 0));
 
     while let Some((dir, depth)) = kuyruk.pop_front() {
-        if out.len() >= MAX_FILES {
+        if out.len() >= opts.max_files || over_budget() {
             break;
         }
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -244,7 +302,10 @@ pub fn list(root: &Path) -> Vec<String> {
             continue;
         };
 
-        for entry in entries.flatten() {
+        for (i, entry) in entries.flatten().enumerate() {
+            if i % BUDGET_CHECK_EVERY == BUDGET_CHECK_EVERY - 1 && over_budget() {
+                break;
+            }
             let path = entry.path();
             let Some(name) = entry.file_name().to_str().map(String::from) else {
                 continue;
@@ -255,10 +316,13 @@ pub fn list(root: &Path) -> Vec<String> {
                 if depth + 1 > MAX_DEPTH || SKIP.contains(&name.as_str()) {
                     continue;
                 }
+                if is_home_root && depth == 0 && HOME_SKIP.contains(&name.as_str()) {
+                    continue;
+                }
                 kuyruk.push_back((path, depth + 1));
                 continue;
             }
-            if out.len() >= MAX_FILES {
+            if out.len() >= opts.max_files {
                 break;
             }
             if let Ok(rel) = path.strip_prefix(root) {
