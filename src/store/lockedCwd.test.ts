@@ -82,6 +82,11 @@ function seed(locked: boolean) {
 describe("kilitli sekmede klasör değişmiyor", () => {
   beforeEach(() => {
     sessions.clear();
+    // Düzenek Windows yolları kullanıyor; tırnaklama kabuğa göre (bkz.
+    // `lib/shellQuote.ts`) ve sahte oturumun profili yok, aile platformdan
+    // geliyor. jsdom'un tarayıcı tahmini makineye göre değişiyor (CI'da
+    // "linux" → POSIX → `'C:\\baska'`), o yüzden açıkça Windows.
+    setPlatform("windows");
   });
 
   it("kilitsiz sekmede cd gönderiliyor", () => {
