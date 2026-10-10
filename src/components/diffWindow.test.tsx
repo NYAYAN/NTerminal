@@ -1227,3 +1227,44 @@ describe("sağ tarafta yazmak", () => {
     });
   });
 });
+
+/**
+ * Canlı yoklama dosyanın METNİNİ değil DAMGASINI okuyor.
+ *
+ * Eskiden her yarım saniyede dosyanın tamamı (yarım megabayta kadar) IPC'den
+ * geçiyordu; pencere açık kaldığı sürece saniyede bir megabayt JSON. Şimdi
+ * tek bir `stat`; metin yalnızca boyut ya da değişiklik zamanı oynayınca
+ * okunuyor. Damga okunamıyorsa (eski ikili) eski yol: her seferinde metin.
+ */
+describe("canlı yoklama damgayla", () => {
+  const wait = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+
+  it("damga değişmediyse metin yeniden okunmuyor, değişince okunuyor", async () => {
+    let stamp = { size: 10, modifiedMs: 1000 };
+    vi.spyOn(api, "statFile").mockImplementation(async () => stamp);
+    const read = vi.spyOn(api, "readTextFile").mockImplementation(async () => text("a\nB\nc\nd\nE\n"));
+    render(<DiffWindow target={{ root: ROOT, path: "a.ts" }} />);
+    await settle();
+    await wait(600); // ilk yoklama damgayı öğreniyor (bir okuma)
+    const after = read.mock.calls.length;
+    await wait(1200);
+    expect(read.mock.calls.length, "damga aynıyken metin okundu").toBe(after);
+
+    stamp = { size: 10, modifiedMs: 2000 }; // düzenleyicide kaydedildi
+    await wait(700);
+    expect(read.mock.calls.length, "damga değişti ama metin okunmadı").toBeGreaterThan(after);
+  });
+
+  it("damga okunamazsa eski yol: metin her yoklamada okunuyor", async () => {
+    vi.spyOn(api, "statFile").mockRejectedValue(new Error("eski ikili"));
+    const read = vi.spyOn(api, "readTextFile").mockImplementation(async () => text("a\nB\nc\nd\nE\n"));
+    render(<DiffWindow target={{ root: ROOT, path: "a.ts" }} />);
+    await settle();
+    const before = read.mock.calls.length;
+    await wait(1200);
+    expect(read.mock.calls.length).toBeGreaterThan(before);
+  });
+});

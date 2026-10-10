@@ -330,6 +330,37 @@ pub(crate) fn read_image_limited(path: &Path, limit: u64) -> Result<ImageData, S
     })
 }
 
+/// Fark penceresinin canli yoklamasi icin dosyanin ucuz damgasi.
+///
+/// Pencere yarim saniyede bir "dosya degisti mi" diye bakiyor. Bunu dosyanin
+/// TAMAMINI okuyup (yarim megabayta kadar) IPC'den gecirerek yapiyordu: en kotu
+/// durumda saniyede bir megabayt JSON ve dize karsilastirmasi, pencere acik
+/// kaldigi surece. `metadata` tek sistem cagrisi; metin ancak boyut ya da
+/// degisiklik zamani oynayinca okunuyor. Zaman damgasi + boyut: ayni boyutta
+/// farkli icerik olabiliyor (bir harfi degistirmek), o yuzden ikisi birlikte.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileStamp {
+    pub size: u64,
+    /// Degisiklik zamani, Unix epoch'tan milisaniye; dosya sistemi vermiyorsa 0.
+    pub modified_ms: u64,
+}
+
+/// Dosya yoksa ya da duz dosya degilse `None`.
+pub fn stamp(path: &Path) -> Option<FileStamp> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let modified_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    Some(FileStamp { size: meta.len(), modified_ms })
+}
+
 #[cfg(test)]
 #[path = "files_tests.rs"]
 mod files_tests;

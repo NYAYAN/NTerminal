@@ -7,6 +7,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   DiffSides,
   DirEntry,
+  FileStamp,
   FileText,
   GitBranch,
   GitInfo,
@@ -116,6 +117,8 @@ export const api = {
   searchTextCancel: (id: number) => invoke<void>("search_text_cancel", { id }),
   listEntries: (path: string) => invoke<DirEntry[]>("list_entries", { path }),
   readTextFile: (path: string) => invoke<FileText | null>("read_text_file", { path }),
+  /** Boyut + değişiklik zamanı; dosya yoksa `null`. Fark penceresinin canlı yoklaması. */
+  statFile: (path: string) => invoke<FileStamp | null>("stat_file", { path }),
   /**
    * Görselin baytları (base64) — görüntüleyicinin resim önizlemesi. Çok büyükse
    * `"too-large:<bayt>"` hatası (bkz. `lib/images.ts`).

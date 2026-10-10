@@ -315,6 +315,13 @@ export interface DirEntry {
   dir: boolean;
 }
 
+/** Dosyanın ucuz damgası: fark penceresi tam okumayı yalnızca bu oynayınca yapıyor. */
+export interface FileStamp {
+  size: number;
+  /** Değişiklik zamanı, Unix epoch'tan milisaniye; dosya sistemi vermiyorsa 0. */
+  modifiedMs: number;
+}
+
 export interface FileText {
   text: string;
   /** Sınıra takıldı mı; görüntüleyici bunu söylemek zorunda. */

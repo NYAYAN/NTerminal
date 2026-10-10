@@ -237,3 +237,21 @@ fn gorsel_arayuzun_bekledigi_adlarla_seriliyor() {
     let v = serde_json::to_value(ImageData { data: "AA==".into(), size: 1 }).unwrap();
     assert_eq!(v, serde_json::json!({ "data": "AA==", "size": 1 }));
 }
+
+/// Damga: boyut ve degisiklik zamani; yazinca degisiyor, klasor/olmayan dosya
+/// icin yok. Fark penceresi tam okumayi yalnizca damga oynayinca yapiyor.
+#[test]
+fn damga_yazinca_degisiyor_klasor_icin_yok() {
+    let root = tree("stamp");
+    let p = root.join("a.txt");
+    std::fs::write(&p, "bir\n").unwrap();
+    let once = stamp(&p).expect("damga yok");
+    assert_eq!(once.size, 4);
+    assert!(once.modified_ms > 0, "degisiklik zamani okunmali");
+    std::fs::write(&p, "bir iki\n").unwrap();
+    let sonra = stamp(&p).unwrap();
+    assert_ne!(once, sonra, "icerik degisti, damga ayni kaldi");
+    assert!(stamp(&root).is_none(), "klasor icin damga olmamali");
+    assert!(stamp(&root.join("yok.txt")).is_none());
+    let _ = std::fs::remove_dir_all(&root);
+}

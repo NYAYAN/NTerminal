@@ -768,6 +768,15 @@ async fn read_text_file(path: String) -> CmdResult<Option<files::FileText>> {
         .map_err(fail)
 }
 
+/// Dosyanin ucuz damgasi (boyut + degisiklik zamani) - fark penceresinin canli
+/// yoklamasi. Gerekcesi `files::stamp` basinda.
+#[tauri::command]
+async fn stat_file(path: String) -> CmdResult<Option<files::FileStamp>> {
+    tauri::async_runtime::spawn_blocking(move || files::stamp(std::path::Path::new(&path)))
+        .await
+        .map_err(fail)
+}
+
 /// Bir gorselin icerigi (base64) - goruntuleyicinin resim onizlemesi.
 ///
 /// `async` + `spawn_blocking`: yirmi megabayta kadar okuma ve kodlama; ana is
@@ -1418,6 +1427,7 @@ pub fn run() {
             search_text_cancel,
             list_entries,
             read_text_file,
+            stat_file,
             read_image_file,
             write_text_file,
             update_check,

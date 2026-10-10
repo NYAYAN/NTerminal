@@ -447,13 +447,17 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
    * çoğu zaman düzenleyicinin YANINDA duruyor ve ona tıklanmadan bakılıyor.
    * IntelliJ'de fark belgeyle birlikte canlı.
    *
-   * Yoklama ucuz: dosyanın kendisi (bir okuma) ve deponun imzası (HEAD +
-   * indeks + stash günlüğü, iki üç dosya durumu). Pahalı olan — iki `git`
-   * süreci ve fark hesabı — yalnızca biri DEĞİŞTİYSE koşuyor. İmza commit'i ve
-   * sahnelemeyi yakalıyor (sol taraf HEAD'den geliyor), dosya okuması
-   * düzenlemeyi (imza bunu görmüyor: çalışma ağacındaki dosya indekse
-   * dokunmuyor). Pencere görünmezken (simge durumunda, tümüyle örtülü)
-   * yoklanmıyor; yeniden görününce hemen bakılıyor.
+   * Yoklama ucuz: dosyanın DAMGASI (boyut + değişiklik zamanı, tek `stat`) ve
+   * deponun imzası (HEAD + indeks + stash günlüğü, iki üç dosya durumu).
+   * Dosyanın metni yalnızca damga oynayınca okunuyor: eskiden her yoklama
+   * yarım megabayta kadar metni IPC'den geçiriyordu — pencere açık kaldığı
+   * sürece saniyede bir megabayt JSON ve dize karşılaştırması. Pahalı olan —
+   * iki `git` süreci ve fark hesabı — yalnızca bir şey DEĞİŞTİYSE koşuyor.
+   * İmza commit'i ve sahnelemeyi yakalıyor (sol taraf HEAD'den geliyor),
+   * damga düzenlemeyi (imza bunu görmüyor: çalışma ağacındaki dosya indekse
+   * dokunmuyor). Damga okunamazsa (eski ikili, IPC hatası) eski yol: metin
+   * her seferinde okunuyor. Pencere görünmezken (simge durumunda, tümüyle
+   * örtülü) yoklanmıyor; yeniden görününce hemen bakılıyor.
    */
   const currentRef = useRef<FileText | null | undefined>(undefined);
   const loaded = sides?.root === root && sides.path === path ? sides.data : null;
@@ -465,18 +469,25 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
     // tetiklemiyor: dosya var ama okunamıyorsa (yoklama `null` görür, fark
     // penceresi okumuştur) her yoklamada iki `git` süreci başlatılırdı.
     let lastTrigger: string | null = null;
+    // Son görülen damga; `undefined` = henüz hiç okunmadı ya da okunamıyor.
+    let lastStamp: string | undefined;
     const check = async () => {
       if (busy || document.hidden) return;
       busy = true;
       try {
-        const [print, file] = await Promise.all([
+        const [print, stamp] = await Promise.all([
           api.gitFingerprint(root).catch(() => null),
-          api.readTextFile(`${root}/${path}`).catch(() => null),
+          api.statFile(`${root}/${path}`).catch(() => undefined),
         ]);
         const repoChanged = lastPrint !== undefined && print !== lastPrint;
         lastPrint = print;
         const shown = currentRef.current;
         if (shown === undefined) return; // ilk yükleme sürüyor
+        const stampKey = stamp === undefined ? undefined : !stamp ? "-" : `${stamp.size}|${stamp.modifiedMs}`;
+        // Damga aynı ve depo değişmedi: metni okumaya gerek yok.
+        if (stampKey !== undefined && stampKey === lastStamp && !repoChanged) return;
+        lastStamp = stampKey;
+        const file = await api.readTextFile(`${root}/${path}`).catch(() => null);
         const diskKey = !file ? "-" : file.binary ? `b${file.size}` : `${file.size}|${file.text}`;
         const fileChanged = fileDiffers(shown, file) && diskKey !== lastTrigger;
         if (fileChanged) lastTrigger = diskKey;
