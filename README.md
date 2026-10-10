@@ -651,7 +651,7 @@ yeniden aranır. Ne değiştiğini uygulamadan önce görebilirsiniz.
 | | |
 |---|---|
 | Windows | 10 1809+ / 11 (ConPTY gerektirir) |
-| macOS | 11 Big Sur+ (Intel ve Apple Silicon) |
+| macOS | 11 Big Sur+, yalnızca Apple Silicon paketi (Intel için kaynaktan derleyin) |
 | WebView2 | Yalnızca Windows. 11'de yerleşik; 10'da [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | Node.js | 20+ (yalnızca geliştirme) |
 | Rust | 1.82+ (yalnızca geliştirme) |
