@@ -189,6 +189,23 @@ const RESTORE_RESET =
   "\x1b[?1047l" + "\x1b[!p" + "\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l" + "\x1b[?1006l";
 
 /**
+ * Kabuk entegrasyonunun ilk işaretini (OSC 133) bekleme süresi (ms).
+ *
+ * `SpawnResult.integration` yalnızca bir İDDİA: Rust betiği kabuğa VERDİ, ama
+ * kabuğun onu gerçekten yükleyip yüklemediği bilinmiyor. ÖLÇÜLEN HATA:
+ * `/bin/sh` profilinde `--init-file` yok sayılıyor ve hiçbir işaret gelmiyordu;
+ * arayüz entegrasyonu var saydığı için "Başlatılıyor…" şeridi ve ilk komuttan
+ * sonra "Komut çalışıyor…" + Durdur sonsuza kadar duruyordu — kabuk istemde
+ * bekliyorken. Aynı belirti `.zshrc`si PROMPT'u ya da kancaları ezen her
+ * kurulumda, `exec zsh` sonrası ve bozuk bir betikte çıkabilir.
+ *
+ * Süre kabuğun makul en yavaş açılışını (nvm, conda, ağır tema) kapsıyor ama
+ * boşuna beklemiyor. Aşılırsa iddia geri çekiliyor ve sekme düz bir terminal
+ * gibi davranıyor; işaret GEÇ gelirse iddia geri açılıyor (bkz. `noteIntegration`).
+ */
+const INTEGRATION_PROBE_MS = 5000;
+
+/**
  * WebGL bağlamı tutan oturumlar, en son kullanılan SONDA.
  *
  * Modül düzeyinde çünkü tavan TÜM terminaller için geçerli: motorun sınırı
@@ -269,8 +286,19 @@ export class TerminalSession {
   title = "";
   pid: number | null = null;
   shell = "";
-  /** Kabuk entegrasyonu devrede mi (komut metni ve çıkış kodu güvenilir mi)? */
+  /**
+   * Kabuk entegrasyonu devrede mi (komut metni ve çıkış kodu güvenilir mi)?
+   *
+   * Rust'ın iddiası (`integrationClaimed`) ve İŞARET GÖRÜLDÜ MÜ (`integrationSeen`)
+   * birlikte belirliyor: iddia var ama `INTEGRATION_PROBE_MS` içinde işaret
+   * gelmediyse burası `false`a düşer.
+   */
   integration = false;
+  /** Rust entegrasyon betiğini kabuğa verdi mi (`SpawnResult.integration`). */
+  private integrationClaimed = false;
+  /** Kabuktan en az bir OSC 133 işareti geldi mi — iddianın KANITI. */
+  private integrationSeen = false;
+  private integrationProbe: number | null = null;
   exited = false;
   exitCode: number | null = null;
   spawned = false;
@@ -690,6 +718,8 @@ export class TerminalSession {
       this.pid = result.pid;
       this.shell = result.shell;
       this.integration = result.integration;
+      this.integrationClaimed = result.integration;
+      this.armIntegrationProbe();
       // Temel durumu hemen bildir: arayüzün deposunda bir kayıt olmadan
       // yeniden çizim tetiklenmiyor.
       this.emitInputSignals();
@@ -1768,6 +1798,8 @@ export class TerminalSession {
       }
     }
     this.unlisteners = [];
+    if (this.integrationProbe !== null) window.clearTimeout(this.integrationProbe);
+    this.integrationProbe = null;
     if (this.linkTimer !== null) window.clearTimeout(this.linkTimer);
     this.linkTimer = null;
     if (this.inputTimer !== null) window.clearTimeout(this.inputTimer);
@@ -2042,7 +2074,40 @@ ${dim}[${
 
   // ------------------------------------------------------- OSC işleyicileri
 
+  /**
+   * Kabuktan bir entegrasyon işareti geldi: iddia KANITLANDI.
+   *
+   * Zamanında gelirse hiçbir şey değişmiyor. Çekilmiş bir iddiayı GERİ AÇIYOR:
+   * yavaş açılan bir kabuk (ağır `.zshrc`) sondan sonra da isteme gelebilir ve
+   * o zaman komut kutusu açılmalı, sekme sonsuza kadar düz terminal kalmamalı.
+   */
+  private noteIntegration() {
+    if (this.integrationSeen) return;
+    this.integrationSeen = true;
+    if (this.integrationProbe !== null) {
+      window.clearTimeout(this.integrationProbe);
+      this.integrationProbe = null;
+    }
+    if (this.integrationClaimed && !this.integration) {
+      this.integration = true;
+      this.emitInputSignals();
+    }
+  }
+
+  /** İşaret `INTEGRATION_PROBE_MS` içinde gelmezse iddiayı geri çeker. */
+  private armIntegrationProbe() {
+    if (!this.integrationClaimed || this.integrationSeen) return;
+    if (this.integrationProbe !== null) window.clearTimeout(this.integrationProbe);
+    this.integrationProbe = window.setTimeout(() => {
+      this.integrationProbe = null;
+      if (this.integrationSeen || this.exited || !this.integration) return;
+      this.integration = false;
+      this.emitInputSignals();
+    }, INTEGRATION_PROBE_MS);
+  }
+
   private handleOsc133(payload: string) {
+    this.noteIntegration();
     const { kind, exitCode } = parseOsc133(payload);
     switch (kind) {
       case "A":

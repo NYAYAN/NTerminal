@@ -35,11 +35,14 @@ import { TerminalSession } from "./TerminalSession";
 
 const h = vi.hoisted(() => {
   const handlers = new Map<string, (bytes: Uint8Array) => void>();
+  /** true: kabuk hiçbir entegrasyon işareti göndermiyor (sh gibi). */
+  const durum = { sessiz: false };
   /** Yayımlanan her parça ve teslim edilip edilmediği. */
   const yayin: { id: string; teslim: boolean }[] = [];
   return {
     handlers,
     yayin,
+    durum,
     /** Rust tarafının `app.emit`i: dinleyici yoksa veri DÜŞER. */
     emit(id: string, text: string) {
       const handler = handlers.get(id);
@@ -53,6 +56,7 @@ const h = vi.hoisted(() => {
       h.kapi = new Promise<void>((resolve) => {
         h.kapiyiAc = resolve;
       });
+      durum.sessiz = false;
     },
     /** Kabuğa yazılan her şey (`ptyWrite`). */
     yazilan: [] as { id: string; data: string }[],
@@ -81,7 +85,7 @@ vi.mock("../lib/ipc", () => {
     if (spec.id.startsWith("yavas")) await h.kapi;
     // ÇIKTI SPAWN DÖNMEDEN yayımlanıyor: ConPTY okuyucusu Rust tarafında
     // süreç doğduğu anda başlıyor, komutun yanıtı arayüze varmadan önce.
-    h.emit(spec.id, ilkIstem);
+    if (!h.durum.sessiz) h.emit(spec.id, ilkIstem);
     return { pid: 4242, shell: "powershell", integration: true, cwd: "C:\\Users\\test" };
   });
 
@@ -404,5 +408,128 @@ describe("spawn sürerken kapatılan sekme", () => {
       "geç doğan kabuk sahipsiz kaldı",
     ).toBe(dispozdaOldurme + 1);
     expect(s.pid, "kapanmış oturum doğan kabuğu benimsedi").toBeNull();
+  });
+});
+
+/**
+ * Kabuk entegrasyonunun İDDİASI ile KANITI ayrı şeyler.
+ *
+ * ÖLÇÜLEN HATA (kullanıcı ekran görüntüsüyle bildirdi): `/bin/sh` profilinde
+ * kabuk istemde bekliyorken alt çubukta "Komut çalışıyor…" ve Durdur düğmesi
+ * sonsuza kadar duruyordu; komut kutusu hiç açılmıyordu. Sebep: `--init-file`i
+ * yok sayan `sh` hiçbir OSC 133 işareti göndermiyor, arayüz ise entegrasyonu
+ * Rust'ın iddiasına (`SpawnResult.integration`) bakıp var sayıyordu.
+ *
+ * Kök neden ayrıca giderildi (Rust: `sh` için `ENV`); bu testler GENEL güvenlik
+ * ağını bağlıyor: iddia kanıtlanmazsa geri çekiliyor, sekme düz terminal gibi
+ * davranıyor.
+ */
+describe("entegrasyon kanıtı", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+  const isaretler = `${ESC}]133;A${BEL}${ESC}]133;B${BEL}`;
+
+  it("işaret zamanında gelirse iddia hiç düşmüyor", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      h.reset();
+      const s = session("ik1");
+      await s.start(null);
+      await vi.advanceTimersByTimeAsync(50); // xterm yazmayı işlesin
+      expect(s.inputSignals().integration).toBe(true);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(s.inputSignals().integration, "kanıtlanmış iddia geri çekildi").toBe(true);
+      void s.dispose(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("işaret hiç gelmezse iddia geri çekiliyor (sh gibi)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      h.reset();
+      h.durum.sessiz = true;
+      const s = session("ik2");
+      const sinyal = vi.fn();
+      s.setCallbacks({ onInputSignals: sinyal });
+      await s.start(null);
+      // Başlangıçta iddia geçerli: kabuk henüz açılıyor olabilir.
+      expect(s.inputSignals().integration).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(s.inputSignals().integration, "kanıtsız iddia sonsuza kadar sürdü").toBe(false);
+      // Arayüz bunu ÖĞRENMELİ: yalnızca alanı değiştirmek yetmez.
+      expect(sinyal).toHaveBeenLastCalledWith(
+        expect.objectContaining({ integration: false }),
+      );
+      void s.dispose(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("geç gelen işaret iddiayı GERİ AÇIYOR", async () => {
+    // Ağır bir .zshrc'li kabuk 5 sn'den sonra da isteme gelebilir; o zaman
+    // komut kutusu açılmalı, sekme sonsuza kadar düz terminal kalmamalı.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      h.reset();
+      h.durum.sessiz = true;
+      const s = session("ik3");
+      await s.start(null);
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(s.inputSignals().integration).toBe(false);
+
+      h.emit("ik3", isaretler);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(s.inputSignals().integration, "geç işaret iddiayı geri açmadı").toBe(true);
+      expect(s.inputSignals().atPrompt).toBe(true);
+      void s.dispose(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Rust'ın iddia etmediği kabukta işaret gelse bile entegrasyon açılmıyor", async () => {
+    // Entegrasyonu KAPALI profil (Özel profil, kullanıcı kapattı): bir iç kabuk
+    // ya da çıktıdaki rastgele bir OSC 133 kimlik kazandırmamalı — o sekmede
+    // komut kutusu hiç açılmamalı.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      h.reset();
+      h.durum.sessiz = true;
+      const s = session("ik4");
+      // Kanıt gelmeden önce spawn yanıtı `integration: false`
+      const ipc = await import("../lib/ipc");
+      (ipc.api.ptySpawn as unknown as { mockResolvedValueOnce: (v: unknown) => void })
+        .mockResolvedValueOnce({ pid: 1, shell: "custom", integration: false, cwd: null });
+      await s.start(null);
+      expect(s.inputSignals().integration).toBe(false);
+      h.emit("ik4", isaretler);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(s.inputSignals().integration, "iddia edilmeyen entegrasyon açıldı").toBe(false);
+      void s.dispose(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("kapanan oturumun zamanlayıcısı sinyal göndermiyor", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      h.reset();
+      h.durum.sessiz = true;
+      const s = session("ik5");
+      const sinyal = vi.fn();
+      s.setCallbacks({ onInputSignals: sinyal });
+      await s.start(null);
+      sinyal.mockClear();
+      await s.dispose(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sinyal, "kapanmış oturum sinyal gönderdi").not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
