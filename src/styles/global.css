@@ -1533,7 +1533,8 @@ button.hit-head:hover {
   min-height: 30px;
   padding: 0 5px 0 11px;
   border-radius: var(--radius-lg);
-  cursor: pointer;
+  /* Satir surukleniyor: el degil tutma imleci (asagida `:active` ile grabbing). */
+  cursor: grab;
 }
 
 /* Grup surukleme: birakma yeri ince bir cizgiyle gosteriliyor.
@@ -1560,10 +1561,6 @@ button.hit-head:hover {
 
 .group.dragging {
   opacity: 0.45;
-}
-
-.group-row {
-  cursor: grab;
 }
 
 .group-row:active {
@@ -3316,6 +3313,11 @@ button.hit-head:hover {
   flex: none;
   gap: 1px;
   padding-right: 4px;
+  /* Ucu birden her satirda tam parlakliktayken liste bir arac cubugu tarlasina
+     donusuyor ve asil bilgi olan yol geri plana dusuyor. Soluk duruyorlar,
+     satirin ustundeyken one cikiyorlar (asagida `:hover`/`:focus-within`). */
+  opacity: 0.45;
+  transition: opacity 90ms ease;
 }
 
 /* Dugmeler bir tik BUYUK: 12px simge ve dar dolgu ile ucu de ayni gri lekeye
@@ -3325,14 +3327,6 @@ button.hit-head:hover {
 .git-actions .icon-btn {
   min-height: 0;
   padding: 3px 4px;
-}
-
-/* Ucu birden her satirda tam parlakliktayken liste bir arac cubugu tarlasina
-   donusuyor ve asil bilgi olan yol geri plana dusuyor. Soluk duruyorlar,
-   satirin ustundeyken one cikiyorlar. */
-.git-actions {
-  opacity: 0.45;
-  transition: opacity 90ms ease;
 }
 
 .git-item:hover .git-actions,
@@ -4381,6 +4375,9 @@ button.pop-group {
   background: transparent;
   color: transparent;
   caret-color: var(--text);
+  /* Kaydirma cubugu gizli: renkli katmanla ayni genislikte akmali (bkz.
+     asagida `::-webkit-scrollbar` ve gerekcesi). */
+  scrollbar-width: none;
 }
 
 /* Calisan komutun yanit satiri renklendirilmiyor: arkada renkli katman yok,
@@ -4553,10 +4550,6 @@ button.pop-group {
  *
  * Kaydirma calismaya devam ediyor (tekerlek, ok tuslari) ve renkli katman
  * `onScroll` ile senkron tutuluyor. */
-.command-input-field {
-  scrollbar-width: none;
-}
-
 .command-input-field::-webkit-scrollbar {
   display: none;
 }
@@ -6723,13 +6716,16 @@ button.pop-group {
 
 /* Dosya paletinin alt ipucusu: Enter'in ne yaptigi yazili.
    Gerekli cunku davranis tahmin edilebilir degil - dosyayi ACMIYOR, yolunu
-   komut satirina EKLIYOR. */
+   komut satirina EKLIYOR. Dosyada iki kez tanimliydi ve ikincisi (dolgu, yazi
+   boyu) birinciyi sessizce eziyordu; tek tanim, etkin degerler. */
 .palette-foot {
   display: flex;
   align-items: center;
-  padding: 5px 12px 6px;
+  gap: 14px;
+  padding: 6px 12px;
   border-top: 1px solid var(--border);
-  font-size: 0.8077rem;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
 }
 
 .palette-row {
@@ -6763,15 +6759,6 @@ button.pop-group {
   flex: none;
   color: #e3b341;
   font-size: 0.8462rem;
-}
-
-.palette-foot {
-  border-top: 1px solid var(--border);
-  padding: 6px 12px;
-  color: var(--text-dim);
-  font-size: 0.8462rem;
-  display: flex;
-  gap: 14px;
 }
 
 /* --------------------------------------------------------------------- toast */

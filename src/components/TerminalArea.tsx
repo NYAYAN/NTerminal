@@ -145,7 +145,6 @@ export function TerminalArea() {
   const tabIdsKey = activeGroup?.tabs.map((t) => t.id).join("\n") ?? "";
   const visibleIds = useMemo(
     () => visibleTabIds(activeGroup, viewMode),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- anahtar bilinçli (yukarıda)
     [tabIdsKey, activeTabId, viewMode],
   );
   const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
