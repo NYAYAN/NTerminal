@@ -56,7 +56,23 @@ export const api = {
   /** Oturum sonu için istenen son kayıt bitti (bkz. `onSessionEnd`). */
   sessionEndFlushed: () => invoke<void>("session_end_flushed"),
 
-  ptySpawn: (spec: SpawnSpec) => invoke<SpawnResult>("pty_spawn", { spec }),
+  /**
+   * Kabuğu başlatır; PTY çıktısı `onData`ya HAM BAYT olarak akar.
+   *
+   * Kanal spawn çağrısının argümanı: Rust tarafı okumaya başladığında alıcı
+   * zaten var, yani eski `onPtyData` dinleyicisinin "spawn'dan sonra kuruldu,
+   * ilk istem düştü" yarışı yapısal olarak yok. Base64 ve JSON da yok (bayt
+   * başına üç kopya kalktı). Hıza etkisi ölçüldü ve YOK: satır ağırlıklı
+   * çıktının tavanı macOS çekirdeğinin PTY'yi satır satır teslim etmesi
+   * (ölçümler `pty::DataChannel` başında). Küçük parçalar eval ile, büyükler
+   * `fetch` ile geliyor; ikisi de `ArrayBuffer`.
+   */
+  ptySpawn: (spec: SpawnSpec, onData: (bytes: Uint8Array) => void) => {
+    const channel = new Channel<ArrayBuffer | Uint8Array>((message) => {
+      onData(message instanceof Uint8Array ? message : new Uint8Array(message));
+    });
+    return invoke<SpawnResult>("pty_spawn", { spec, onData: channel });
+  },
   ptyWrite: (id: string, data: string) => invoke<void>("pty_write", { id, data }),
   ptyResize: (id: string, cols: number, rows: number) =>
     invoke<void>("pty_resize", { id, cols, rows }),
@@ -280,15 +296,9 @@ export const api = {
   applyUpdate: () => invoke<void>("update_apply"),
 };
 
-// PTY çıktısı base64 geliyor: terminal akışı geçerli UTF-8 olmak zorunda değil
-// (çok baytlı bir karakter iki okuma arasında bölünebilir), o yüzden ham bayt
-// taşıyıp xterm'e Uint8Array veriyoruz - xterm kendi içinde parçalı UTF-8'i
-// doğru birleştiriyor.
-export interface PtyDataEvent {
-  id: string;
-  data: string;
-}
-
+// PTY çıktısı ham bayt (bkz. `ptySpawn`): terminal akışı geçerli UTF-8 olmak
+// zorunda değil (çok baytlı bir karakter iki okuma arasında bölünebilir),
+// xterm'e Uint8Array veriyoruz - xterm parçalı UTF-8'i kendi birleştiriyor.
 export interface PtyExitEvent {
   id: string;
   code: number | null;
@@ -320,15 +330,6 @@ export function base64ToBytes(input: string): Uint8Array {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out;
-}
-
-export function onPtyData(
-  id: string,
-  handler: (bytes: Uint8Array) => void,
-): Promise<UnlistenFn> {
-  return listen<PtyDataEvent>(`pty:data:${id}`, (event) => {
-    handler(base64ToBytes(event.payload.data));
-  });
 }
 
 export function onPtyExit(

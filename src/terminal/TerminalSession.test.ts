@@ -70,11 +70,13 @@ vi.mock("../lib/ipc", () => {
   /** Kabuğun ilk istemi: istem başlıyor (A), istem bitti / girdi başlıyor (B). */
   const ilkIstem = `${ESC}]133;A${BEL}${ESC}]133;B${BEL}`;
 
-  const ptySpawn = vi.fn(async (spec: { id: string }) => {
+  const ptySpawn = vi.fn(async (spec: { id: string }, onData: (bytes: Uint8Array) => void) => {
     // Rust tarafının hata metni: profildeki kabuk bu makinede yok.
     if (spec.id.startsWith("dogmayan")) {
       throw new Error("kabuk baslatilamadi: C:\\Program Files\\PowerShell\\7\\pwsh.exe");
     }
+    // Veri kanalı spawn'ın argümanı: Rust okumaya başladığında alıcı var.
+    h.handlers.set(spec.id, onData);
     // Yavaş doğan kabuk: makine meşgulken spawn'ın yanıtı gecikiyor.
     if (spec.id.startsWith("yavas")) await h.kapi;
     // ÇIKTI SPAWN DÖNMEDEN yayımlanıyor: ConPTY okuyucusu Rust tarafında
@@ -103,10 +105,6 @@ vi.mock("../lib/ipc", () => {
           target[prop] ?? vi.fn(async () => null),
       },
     ),
-    onPtyData: async (id: string, handler: (bytes: Uint8Array) => void) => {
-      h.handlers.set(id, handler);
-      return () => h.handlers.delete(id);
-    },
     onPtyExit: async () => () => {},
   };
 });
@@ -378,7 +376,7 @@ describe("spawn sürerken kapatılan sekme", () => {
     await basladi;
 
     expect(vi.mocked(api.ptySpawn).mock.calls.length, "ölü sekme için kabuk doğdu").toBe(spawnSayisi);
-    expect(h.handlers.has("yavas-erken"), "veri dinleyicisi kaldı: kalıcı sızıntı").toBe(false);
+    expect(h.handlers.has("yavas-erken"), "spawn çağrılmadı, kanal da kurulmamalı").toBe(false);
   });
 
   it("spawn beklenirken kapatıldı: geç doğan kabuk öldürülüyor", async () => {
@@ -390,12 +388,14 @@ describe("spawn sürerken kapatılan sekme", () => {
     expect(h.handlers.has("yavas-gec"), "taklit bozulmuş: spawn'a ulaşılmadı").toBe(true);
 
     await s.dispose(true);
-    expect(h.handlers.has("yavas-gec"), "dispose dinleyiciyi kaldırmadı").toBe(false);
     const dispozdaOldurme = h.olduruldu.filter((id) => id === "yavas-gec").length;
 
     h.kapiyiAc();
     await basladi;
     await bosalt();
+    // Kanal kabuk ölene kadar canlı kalabilir; gelen veri dispose edilmiş
+    // xterm'e yazılmamalı (bayrak veri geri çağrısında da denetleniyor).
+    expect(() => h.emit("yavas-gec", "gec gelen cikti")).not.toThrow();
 
     // `dispose`un `ptyKill`i PTY yokken gitti ve boşa düştü; kabuk doğunca
     // `start` kendisi öldürmeli.
@@ -403,7 +403,6 @@ describe("spawn sürerken kapatılan sekme", () => {
       h.olduruldu.filter((id) => id === "yavas-gec").length,
       "geç doğan kabuk sahipsiz kaldı",
     ).toBe(dispozdaOldurme + 1);
-    expect(h.handlers.has("yavas-gec"), "spawn sonrası dinleyici geri geldi").toBe(false);
     expect(s.pid, "kapanmış oturum doğan kabuğu benimsedi").toBeNull();
   });
 });

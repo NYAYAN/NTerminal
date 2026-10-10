@@ -209,16 +209,19 @@ fn session_end_flushed() {
 
 // ------------------------------------------------------------------ pty
 
+/// Kabuk baslatma. `on_data`: PTY ciktisinin aktigi IPC kanali (ham bayt);
+/// gerekcesi `pty::DataChannel` basinda.
 #[tauri::command]
 fn pty_spawn(
     app: tauri::AppHandle,
     state: State<AppState>,
     spec: SpawnSpec,
+    on_data: pty::DataChannel,
 ) -> CmdResult<SpawnResult> {
     let settings = state.settings.lock().clone();
     state
         .pty
-        .spawn(&app, spec, &settings, &state.integration_dir)
+        .spawn(&app, spec, &settings, &state.integration_dir, on_data)
         .map_err(fail)
 }
 

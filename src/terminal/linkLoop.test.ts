@@ -52,13 +52,12 @@ vi.mock("../lib/ipc", () => ({
   api: new Proxy({} as Record<string, unknown>, {
     get: (_target, prop: string) =>
       prop === "ptySpawn"
-        ? vi.fn(async () => ({ pid: 1, shell: "zsh", integration: true, cwd: "/tmp" }))
+        ? vi.fn(async (spec: { id: string }, onData: (bytes: Uint8Array) => void) => {
+            h.handlers.set(spec.id, onData);
+            return ({ pid: 1, shell: "zsh", integration: true, cwd: "/tmp" });
+          })
         : vi.fn(async () => null),
   }),
-  onPtyData: async (id: string, handler: (bytes: Uint8Array) => void) => {
-    h.handlers.set(id, handler);
-    return () => h.handlers.delete(id);
-  },
   onPtyExit: async () => () => {},
 }));
 

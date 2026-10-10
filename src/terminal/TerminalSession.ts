@@ -7,7 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-import { api, onPtyData, onPtyExit } from "../lib/ipc";
+import { api, onPtyExit } from "../lib/ipc";
 import { t } from "../lib/i18n";
 import { hasVisibleContent, type BlockView } from "../lib/blocks";
 import { scanForServerUrls } from "../lib/serverScan";
@@ -609,52 +609,21 @@ export class TerminalSession {
     }
 
     /*
-     * Dinleyiciler SPAWN'DAN ÖNCE kuruluyor. Sıra süs değil, hatanın kendisi.
+     * Çıkış dinleyicisi SPAWN'DAN ÖNCE kuruluyor; veri ise spawn çağrısının
+     * kendi kanalından geliyor (`api.ptySpawn`in ikinci argümanı).
      *
-     * ÖLÇÜLEN BELİRTİ: yeni bir sekmede komut kutusu hiç açılmıyor; sekmeyi
-     * yeniden başlatmak düzeltiyor.
+     * ÖLÇÜLEN BELİRTİ (eski olay yolu): yeni bir sekmede komut kutusu hiç
+     * açılmıyor; sekmeyi yeniden başlatmak düzeltiyor. Rust tarafı PTY'yi
+     * doğurur doğurmaz okumaya başlıyor; Tauri olay yayını TAMPONSUZ, o an
+     * kayıtlı dinleyici yoksa veri düşüyor. `ptySpawn`ın yanıtı ile `listen`
+     * kaydı arasında bir IPC gidiş dönüşü vardı ve kabuğun ilk istemi o
+     * aralığa denk gelebiliyordu; OSC 133;B işareti kaçınca kutu kalıcı
+     * kapalı kalıyordu. Kanal spawn'ın argümanı olduğu için bu yarış artık
+     * yapısal olarak yok; aynı kural çıkış olayı için burada sürüyor.
      *
-     * KÖK NEDEN: Rust tarafı PTY'yi doğurur doğurmaz okumaya başlıyor ve
-     * çıktıyı `app.emit` ile yayımlıyor. Tauri'nin olay yayını TAMPONSUZ — o an
-     * kayıtlı dinleyici yoksa veri düşüyor, birikmiyor. Kurulum tersken
-     * `ptySpawn`ın yanıtı ile `listen` kaydı arasında en az bir IPC gidiş
-     * dönüşü vardı ve kabuğun ilk istemi o aralığa denk gelebiliyordu. Kutu
-     * "istemde miyiz" bilgisini o istemin OSC 133;B işaretinden alıyor; işaret
-     * kaçınca kabuk istemde SESSİZCE beklediği için bir daha gelmiyor ve kutu
-     * kalıcı olarak kapalı kalıyordu.
-     *
-     * Yarış olduğu için belirti aralıklıydı: makine meşgulken (oturum geri
-     * yüklenirken, yeni grubun sekmesi on sekmenin yanında açılırken) sık.
-     *
-     * Bu sırada pencere tümden kapanıyor: olay adı sekme kimliğinden türüyor ve
-     * kimlik spawn'dan önce belli, yani dinlemeye erken başlamanın sakıncası
-     * yok. Kayıt spawn başarısız olsa da duruyor; o kimlik için hiç olay
-     * gelmiyor ve `dispose` ikisini de kapatıyor.
+     * Bekleme sırasında kapatıldıysa kayıt listeye girmeden kaldırılıyor;
+     * `dispose` listeyi çoktan boşalttı, bir daha bakmayacak.
      */
-    const unData = await onPtyData(this.tabId, (bytes) => {
-        /*
-         * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
-         *
-         * Ayni parca hem komut baslangici isaretini (OSC 133;C) hem sunucunun
-         * adresini tasiyabiliyor. Tarama once kossaydi adres, o parcadaki
-         * baslangic isareti daha ayristirilmamisken toplanir ve hemen ardindan
-         * gelen "yeni komut, yeni liste" temizligi onu silerdi. Tersi de oluyor:
-         * eski listeye eklenip iki rozet yan yana kaliyordu.
-         *
-         * `write` ESZAMANSIZ: parcayi kuyruga alip zamanlanmis olarak
-         * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor - sirayi
-         * ancak geri cagirma garantiliyor.
-         */
-        this.outputSinceSave = true;
-        this.term.write(bytes, () => this.scanNewLines());
-    });
-    // Bekleme sırasında kapatıldıysa kayıt listeye girmeden kaldırılıyor;
-    // `dispose` listeyi çoktan boşalttı, bir daha bakmayacak.
-    if (this.disposed) {
-      unData();
-      return;
-    }
-    this.unlisteners.push(unData);
     const unExit = await onPtyExit(this.tabId, (code) => this.handleExit(code));
     if (this.disposed) {
       unExit();
@@ -663,32 +632,55 @@ export class TerminalSession {
     this.unlisteners.push(unExit);
 
     try {
-      const result = await api.ptySpawn({
-        id: this.tabId,
-        profileId: this.profileId,
-        cwd: this.cwd,
-        env: {
-          ...this.env,
-          // Kabuk betigi bunu okuyup PSReadLine tahminini aciyor. Ayar
-          // olarak tasiniyor cunku kullanici kapatabilmeli.
-          // Liste gorunumu istem dipteyken calisamiyor; kural tek yerde
-          // (bkz. `effectiveShellPrediction`).
-          NTERMINAL_PREDICTION: effectiveShellPrediction(
-            this.settings.behavior.shellPrediction,
-            this.settings.behavior.promptAtBottom,
-          ),
-          // Istemi ekranin dibine iten kod da kabukta: satiri kabuk ciziyor,
-          // bosluk eklemesi de onun akisinda olmali (bkz. nterminal.ps1).
-          NTERMINAL_PROMPT_BOTTOM: this.settings.behavior.promptAtBottom ? "1" : "0",
-          // Gorunur istemi kabuk yazmiyor; basligi arayuz ciziyor.
-          NTERMINAL_BLOCK_HEADER:
-            this.settings.behavior.commandBlocks && this.settings.behavior.blockHeaders
-              ? "1"
-              : "0",
+      const result = await api.ptySpawn(
+        {
+          id: this.tabId,
+          profileId: this.profileId,
+          cwd: this.cwd,
+          env: {
+            ...this.env,
+            // Kabuk betigi bunu okuyup PSReadLine tahminini aciyor. Ayar
+            // olarak tasiniyor cunku kullanici kapatabilmeli.
+            // Liste gorunumu istem dipteyken calisamiyor; kural tek yerde
+            // (bkz. `effectiveShellPrediction`).
+            NTERMINAL_PREDICTION: effectiveShellPrediction(
+              this.settings.behavior.shellPrediction,
+              this.settings.behavior.promptAtBottom,
+            ),
+            // Istemi ekranin dibine iten kod da kabukta: satiri kabuk ciziyor,
+            // bosluk eklemesi de onun akisinda olmali (bkz. nterminal.ps1).
+            NTERMINAL_PROMPT_BOTTOM: this.settings.behavior.promptAtBottom ? "1" : "0",
+            // Gorunur istemi kabuk yazmiyor; basligi arayuz ciziyor.
+            NTERMINAL_BLOCK_HEADER:
+              this.settings.behavior.commandBlocks && this.settings.behavior.blockHeaders
+                ? "1"
+                : "0",
+          },
+          cols: this.term.cols,
+          rows: this.term.rows,
         },
-        cols: this.term.cols,
-        rows: this.term.rows,
-      });
+        (bytes) => {
+          /*
+           * Adres taramasi YAZMA BITTIKTEN SONRA, geri cagirmada.
+           *
+           * Ayni parca hem komut baslangici isaretini (OSC 133;C) hem sunucunun
+           * adresini tasiyabiliyor. Tarama once kossaydi adres, o parcadaki
+           * baslangic isareti daha ayristirilmamisken toplanir ve hemen
+           * ardindan gelen "yeni komut, yeni liste" temizligi onu silerdi.
+           * Tersi de oluyor: eski listeye eklenip iki rozet yan yana kaliyordu.
+           *
+           * `write` ESZAMANSIZ: parcayi kuyruga alip zamanlanmis olarak
+           * ayristiriyor. Bu yuzden hemen ardindan cagirmak da yetmiyor -
+           * sirayi ancak geri cagirma garantiliyor.
+           *
+           * Sekme kapandiysa (kanal canli kalabilir, kabuk olene kadar) veri
+           * dispose edilmis xterm'e yazilmiyor.
+           */
+          if (this.disposed) return;
+          this.outputSinceSave = true;
+          this.term.write(bytes, () => this.scanNewLines());
+        },
+      );
       // Kabuk, sekmesi kapandıktan sonra doğdu. `dispose`un `ptyKill`i PTY
       // henüz yokken gitti ve boşa düştü; öldürmek artık burada.
       if (this.disposed) {

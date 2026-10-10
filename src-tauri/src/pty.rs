@@ -9,8 +9,8 @@
 use crate::model::{Settings, ShellKind};
 use crate::store::{profile_executable, resolve_profile};
 use anyhow::{anyhow, Context, Result};
-use base64::Engine;
 use parking_lot::Mutex;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -104,6 +104,12 @@ pub const POWERSHELL_SCRIPT_ENV: &str = "NTERMINAL_INTEGRATION_SCRIPT";
 /// kendisi tanimliyor. Bkz. nterminal.ps1, "PSReadLine yedegi".
 pub const PSREADLINE_DLL_ENV: &str = "NTERMINAL_PSREADLINE";
 
+/// Ciktiyi tek mesajda toplama penceresi.
+///
+/// Kisa, cunku bu dogrudan tus gecikmesi: yazilan harfin ekranda gorunmesi en
+/// az bu kadar bekliyor. Pencereyi agir akista uzatmak DENENDI (16 KB
+/// birikince 40 ms'ye): 30 MB `yes` ciktisinda sure degismedi (16,0 s ↔ 15,9 s),
+/// cunku tavan burada degil, cekirdekte (bkz. `DataChannel`); geri alindi.
 const COALESCE_WINDOW: Duration = Duration::from_millis(6);
 /// Tek olayda gonderilecek azami bayt.
 const MAX_CHUNK: usize = 128 * 1024;
@@ -152,14 +158,6 @@ pub struct SpawnResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DataEvent {
-    id: String,
-    /// base64: PTY cikisi ham bayt akisi, gecerli UTF-8 olmak zorunda degil.
-    data: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct ExitEvent {
     id: String,
     code: Option<u32>,
@@ -199,7 +197,8 @@ struct Session {
 
 /// Oturum olaylarinin gittigi yer.
 ///
-/// Uygulamada Tauri olay yayini (`TauriSink`), testte bir kanal.
+/// Uygulamada `TauriSink` (veri icin IPC kanali, cikis icin olay), testte bir
+/// mpsc kanali.
 trait EventSink: Clone + Send + 'static {
     /// PTY ciktisi. `false`: alici gitmis, yayinci durmali.
     fn data(&self, bytes: &[u8]) -> bool;
@@ -208,20 +207,44 @@ trait EventSink: Clone + Send + 'static {
     fn exit(&self, code: Option<u32>);
 }
 
+/// PTY ciktisini arayuze tasiyan kanal: HAM BAYT, base64 ve JSON yok.
+///
+/// `ipc::Channel` buyuk yuku `fetch` ile ozel protokolden ham olarak
+/// geciriyor (kucuk yuk eval ile, esik Tauri'nin). Eski yol Tauri olayiydi:
+/// her parca base64 dize olarak JSON'a, oradan bir JS kaynagina gomuluyor ve
+/// arayuzde geri cozuluyordu - bayt basina uc kopya. Kanal ayrica `pty_spawn`
+/// cagrisinin ARGUMANI: arayuz onu spawn'dan once kuruyor, yani "dinleyici
+/// spawn'dan sonra kuruldu, ilk istem dustu" yarisi (eski `onPtyData`)
+/// yapisal olarak kalkti. Cikis olayi seyrek; olay olarak kaliyor.
+///
+/// ## Olculen hiz - ve tavanin nerede oldugu
+///
+/// 30 MB `yes` ciktisi (15 milyon satir), macOS: olayla 16,0 s, kanalla
+/// 15,9 s; 10 MB'lik TEK satir iki yolda da 0,4 s. Yani satir agirlikli
+/// ciktida hiz tasima yolundan bagimsiz. Yalin bir Python okuyucusu (pty.fork
+/// + os.read dongusu, arayuz yok) ayni ciktiyi 14,6 s'de aliyor: 9,3 milyon
+/// okuma, ortalama 4 bayt - cekirdek PTY'si ciktiyi SATIR BASINA teslim
+/// ediyor, `stty raw` ile bile (2 baytlik okumalar). Tavan ~1 milyon satir/s
+/// ve cekirdekte; xterm tek basina (WKWebView, IPC yok) ayni 30 MB'yi 5,4 s'de
+/// yaziyor. Satir sayisi degil bayt sayisi buyuyunce (uzun satir) hiz
+/// 26 MB/s. Burada kazanilacak bir sey kalmadi; kanal yine de bayt basina
+/// isi azaltiyor ve yarisi kaldiriyor.
+pub type DataChannel = Channel<InvokeResponseBody>;
+
 #[derive(Clone)]
 struct TauriSink {
     app: AppHandle,
     id: String,
-    data_event: String,
+    data: DataChannel,
     exit_event: String,
 }
 
 impl TauriSink {
-    fn new(app: &AppHandle, id: &str) -> Self {
+    fn new(app: &AppHandle, id: &str, data: DataChannel) -> Self {
         Self {
             app: app.clone(),
             id: id.to_string(),
-            data_event: format!("pty:data:{id}"),
+            data,
             exit_event: format!("pty:exit:{id}"),
         }
     }
@@ -229,11 +252,7 @@ impl TauriSink {
 
 impl EventSink for TauriSink {
     fn data(&self, bytes: &[u8]) -> bool {
-        let payload = DataEvent {
-            id: self.id.clone(),
-            data: base64::engine::general_purpose::STANDARD.encode(bytes),
-        };
-        self.app.emit(&self.data_event, payload).is_ok()
+        self.data.send(InvokeResponseBody::Raw(bytes.to_vec())).is_ok()
     }
 
     fn exit(&self, code: Option<u32>) {
@@ -253,6 +272,7 @@ impl PtyManager {
         spec: SpawnSpec,
         settings: &Settings,
         integration_dir: &std::path::Path,
+        on_data: DataChannel,
     ) -> Result<SpawnResult> {
         // Ayni kimlikle acik bir oturum varsa once onu kapat: arayuz yeniden
         // baglanmak istiyorsa sahipsiz bir surec birakmayalim.
@@ -372,7 +392,7 @@ impl PtyManager {
             pixel_width: 0,
             pixel_height: 0,
         };
-        let pid = self.launch(&spec.id, cmd, size, TauriSink::new(app, &spec.id))?;
+        let pid = self.launch(&spec.id, cmd, size, TauriSink::new(app, &spec.id, on_data))?;
 
         Ok(SpawnResult {
             id: spec.id,
@@ -455,7 +475,7 @@ impl PtyManager {
                         Ok(chunk) => pending.extend_from_slice(&chunk),
                         Err(_) => break, // okuyucu kapandi
                     }
-                    // Kisa bir pencere boyunca gelenleri ayni olaya topla.
+                    // Kisa bir pencere boyunca gelenleri ayni mesaja topla.
                     let deadline = Instant::now() + COALESCE_WINDOW;
                     while pending.len() < MAX_CHUNK {
                         let remaining = deadline.saturating_duration_since(Instant::now());

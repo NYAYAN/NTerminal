@@ -1647,6 +1647,45 @@ ekran dışı WKWebView, geniş ve dar pencere.
 
 ---
 
+### 1.28 PTY çıktı hızı: tavan çekirdekte
+
+**Soru.** `yes | head -c 30000000` N-Terminal'de 16 s (1,9 MB/s) sürüyor;
+10 MB'lik tek bir satır 0,4 s. Satır ağırlıklı çıktı neden yavaş?
+
+**Ölçüldü (10 Ekim 2026, macOS, Apple Silicon).** Üç katman ayrı ayrı:
+
+| Yol | 30 MB `yes` (15 M satır) | 10 MB tek satır |
+|---|---|---|
+| Uygulama, Tauri olayı (base64 + JSON) | 16,0 s | 0,39 s |
+| Uygulama, `ipc::Channel` (ham bayt) | 15,9 s | 0,37 s |
+| Uygulama, Channel + 40 ms'lik ağır akış penceresi | 16,0 s | 0,38 s |
+| Yalın Python okuyucu (`pty.fork` + `os.read`, arayüz yok) | 14,6 s | 0,38 s |
+| xterm tek başına, WKWebView (IPC yok) | 5,4 s | 0,62 s |
+| xterm tek başına, Chromium | 4,0 s | 0,46 s |
+
+Python okuyucusu 9,3 milyon okuma yaptı, ortalama 4 bayt; `stty raw` ile
+(OPOST kapalı) 2 baytlık okumalar ve aynı süre. Çekirdek PTY'si çıktıyı
+**satır başına** teslim ediyor; okuyucu ne kadar hızlı olursa olsun kuyrukta
+o anda bir satır var. Küçük okumadan sonra 0,2 ms beklemek okuma sayısını
+50 bine indirdi ama süreyi değiştirmedi (12,9 s): hız okuma sayısıyla değil
+yazanın satır başına engellenmesiyle sınırlı. Tavan ~1 milyon satır/s ve
+uygulamanın dışında.
+
+**Kararlar.** PTY çıktısı Tauri olayı yerine `tauri::ipc::Channel` ile taşınıyor
+(bayt başına üç kopya kalktı, "dinleyici spawn'dan sonra kuruldu" yarışı
+yapısal olarak yok; bkz. `pty::DataChannel`). Birleştirme penceresini ağır
+akışta uzatmak denendi ve kazanç getirmediği için geri alındı. Teşhis sondası
+pencere odaksızken duruyor: boşta %4-6 CPU'nun kaynağı kesintisiz rAF
+döngüsünün ekran bağlantısını uyanık tutmasıydı; odaksızda şimdi %0,5.
+
+**Tekrar ölçmek.** Ölçüm komutunu açılışta koşturan bir `custom` profil
+(`/bin/sh -c "( time yes | head -c 30000000 ) 2> /tmp/t1.txt; exec zsh"`)
+ve `NTERMINAL_DATA_DIR` ile izole örnek; `time` çıktısı dosyada. Yalın
+okuyucu için `python3 -c` ile `pty.fork` döngüsü. xterm tek başına için
+tarayıcı düzeneği (sahte IPC) ve ekran dışı/görünür WKWebView aracı
+(`callAsyncJavaScript`; görünmez pencerede zamanlayıcılar kısılıyor, ölçüm
+için pencere ekranda olmalı).
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.
