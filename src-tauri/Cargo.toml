@@ -34,15 +34,16 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 # Uygulama icinden guncelleme (indir, imzayi dogrula, kur). Gerekcesi update.rs.
 #
-# `~2.12`: 2.13 tauri 2.12 istiyor; "2.12" yazmak Cargo'ya tauri'yi de
-# yukseltme izni veriyor ve @tauri-apps/api 2.11 ile surum uyusmazligi
-# `tauri build`i durduruyor. tauri yukseltilince bu sinir da kalkar.
+# Surum siniri yok: tauri, @tauri-apps/api ve CLI birlikte 2.12'ye cekildi
+# (eskiden `~2.12`: 2.13 tauri 2.12 istiyordu ve api 2.11 ile uyusmazlik
+# `tauri build`i durduruyordu). Uclunun minor'u birlikte yukselmeli; bkz.
+# .github/dependabot.yml `tauri` grubu.
 #
 # native-tls: sertifika isletim sisteminin guven deposundan (Windows'ta
 # Schannel, macOS'ta anahtarlik) - kurumsal TLS vekilinin kok sertifikasi orada.
 # Varsayilan rustls kendi listesini tasiyip o depoyu yok sayiyor. `zip` yalnizca
 # Tauri 1'in sikistirilmis paketleri icin; kapali.
-tauri-plugin-updater = { version = "~2.12", default-features = false, features = ["native-tls", "system-proxy"] }
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "system-proxy"] }
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 
 # pty.rs `kill`: sekme kapanirken SIGHUP ve ardindan SIGKILL kabugun SUREC
