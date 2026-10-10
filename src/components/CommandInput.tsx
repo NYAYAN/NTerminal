@@ -152,7 +152,7 @@ export function CommandInput() {
   const value = stdin ? reply : draft;
   // İlk sözcük bir favori kısaltması mı (bkz. `lib/aliases.ts`). Yalnızca
   // kabuğun satırında: çalışan programa giden yanıt açılmıyor.
-  const aliasHit = stdin ? null : expandAlias(value, favorites, activeGroupId);
+  const aliasHit = stdin ? null : expandAlias(value, favorites);
   const setValue = stdin ? setReply : setDraft;
 
   useEffect(() => {

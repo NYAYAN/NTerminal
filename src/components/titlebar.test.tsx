@@ -376,9 +376,10 @@ describe("görünüm düğmeleri", () => {
 
   it("kenar çubuğu daraltılmışken çizilmiyor", () => {
     // `display: none` DEĞİL: ızgaranın `auto` sütununun sıfıra inmesi ve
-    // terminalin o alanı alması gerekiyor.
+    // terminalin o alanı alması gerekiyor. Kokpit'in sekme ağacı açıkken de
+    // aynı yoldan çizilmiyor (bkz. `railTree`).
     expect(APP, "kenar çubuğu koşulsuz çiziliyor").toMatch(
-      /\{!sidebarCollapsed && <GroupSidebar \/>\}/,
+      /\{!sidebarCollapsed && !railTree\(settings\.appearance\) && <GroupSidebar \/>\}/,
     );
   });
 

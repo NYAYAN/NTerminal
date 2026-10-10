@@ -39,6 +39,7 @@ import type {
 } from "../types";
 import { ArgsInput } from "./ArgsInput";
 import { BackupPanel } from "./BackupPanel";
+import { ColorButton } from "./ColorPanel";
 import { DesignPicker } from "./DesignPicker";
 import { EnvEditor } from "./EnvEditor";
 import {
@@ -1753,10 +1754,12 @@ export function SettingsDialog() {
                     </div>
                     <div className="field">
                       <label>{t("common.color")}</label>
-                      <input
-                        type="color"
-                        value={profile.color ?? "#58a6ff"}
-                        onChange={(e) => updateProfile({ color: e.target.value })}
+                      {/* Yerel renk girdisi değil: macOS'ta seçicisi ekranın sol
+                          alt köşesinde açılıyordu (bkz. `ColorPanel`). */}
+                      <ColorButton
+                        value={profile.color}
+                        label={t("common.color")}
+                        onChange={(color) => updateProfile({ color })}
                       />
                     </div>
                     <div className="check-row">
@@ -1836,10 +1839,10 @@ export function SettingsDialog() {
                     </div>
                     <div className="field">
                       <label>{t("common.color")}</label>
-                      <input
-                        type="color"
-                        value={group.color ?? "#58a6ff"}
-                        onChange={(e) => store().updateGroup(group.id, { color: e.target.value })}
+                      <ColorButton
+                        value={group.color}
+                        label={t("common.color")}
+                        onChange={(color) => store().updateGroup(group.id, { color })}
                       />
                     </div>
                     <div className="field">

@@ -156,9 +156,12 @@ bekleyen asılı kalıyor mu, Esc/Enter ne yapıyor.
 **Favori komutlar.** Sık kullandığınız komutlar yıldızlanıp ayrı bir listede
 tutulur — geçmişten ayrı, çünkü geçmiş otomatik birikip sınır aşılınca budanıyor.
 Favoriye kısa bir ad, not, klasör ve "yalnızca şu grupta görünsün" kısıtı
-verilebilir; sıralaması elle ayarlanır. Klasör tanımlıysa çalıştırmadan önce o
-klasöre geçilir. `Ctrl+Shift+B` panelini açar, komut paletinde de doğrudan
-çalıştırılabilir. `Ctrl+R` hızlı çağırmada favoriler **varsayılan olarak
+verilebilir; sıralaması elle ayarlanır. Tıklamak komutu yalnızca istem satırına
+yazar, klasör değişmez; çalıştırınca (çift tık ya da ▶) klasör tanımlıysa önce o
+klasöre geçilir. Favoriye bir kısaltma da verilebilir (ör. `nrb`): komut kutusuna
+yazıp Enter'a basınca favorinin komutu terminalin bulunduğu klasörde çalışır,
+favori bir gruba bağlı olsa da her grupta. `Ctrl+Shift+B` panelini açar, komut
+paletinde de doğrudan çalıştırılabilir. `Ctrl+R` hızlı çağırmada favoriler **varsayılan olarak
 gelmiyor** — o pencerenin sorusu "bu sekmede ne çalıştırdım" ve hiç
 çalıştırılmamış bir favori listenin başını tutuyordu; penceredeki
 **Favoriler** tiki (`Ctrl+F`) onları listenin başına geri getiriyor.
@@ -412,7 +415,13 @@ panelindeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonu
 (`code ` yazıp `Ctrl+P`). Satırda dosya **adı önde**, klasörü hemen yanında ve
 soluk (Klasik tasarımda sağa hizalı): klasör zinciri çoğu satırda aynı, yani
 ayırt etmeyen kısmı önce okutmak gözü boşuna yoruyordu. Eşleşen harfler vurgulu;
-harfleri dağınık eşleşen dosyalar "Yakın eşleşmeler" başlığının altında. Kutu
+harfleri dağınık eşleşen dosyalar "Yakın eşleşmeler" başlığının altında. Kalıp da
+yazılabilir: `*.tsx` yalnız tsx dosyalarını, `*.{ts,tsx}` ikisini,
+`src/**/*.test.ts` src altındaki testleri getirir; kalıp metinle birlikte de
+çalışır (`rail *.tsx`). Aynı kural dosya panelindeki aramada da geçerli. Satırın
+başındaki simge dosyanın türü: yaygın türler kendi renginde kısa bir etiketle
+(TS, RS, `{}` …), görseller resim simgesiyle; dosya panelindeki ağaçta da aynı
+simgeler. Kutu
 boşken liste **Değişenler**, **Son açılanlar** ve **Tüm dosyalar** diye
 bölünüyor; `Alt+↑` / `Alt+↓` (mac'te `⌥↑` / `⌥↓`) bölümden bölüme atlar. Liste açılışta bir kez okunuyor,
 süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten geçirmemek için.
@@ -454,7 +463,13 @@ Değişiklikler ve Ayarlar), yanında yalnızca etkin grubun sekmeleri kart olar
 sekme" yolu ve terminalin üstüne açılmak yerine yanında sabit duran yan panel.
 Kenar çubuğu kapatılınca sekme şeridi geri gelir. Raydaki karo sağ tıkla
 yönetilir (ad, renk, favori, yeni sekme, sıra, silme), sürüklenerek sıralanır;
-rayın dibindeki düğme grup adlarını karoların yanına yazar.
+rayın dibindeki düğme grup adlarını karoların yanına yazar. Ray genişken
+başlığındaki yıldız yalnızca favori grupları listeler (dar rayda süzgeç açıkken
+yıldız rayın başında kalır), ağaç simgesi ise sekmeleri grupların altında listeler
+ve kart sütununu kaldırır: her grup kendi okuyla açılıp kapanır (açık bıraktığınız gruplar
+başka gruba geçince de açık kalır), sekmeye tıklamak ona geçer, sağ tık kartın
+menüsünü açar, sekmeler sürüklenerek sıralanır ya da başka grubun altına
+taşınır.
 **Klasik** uygulamanın düz ve yoğun ilk düzeni.
 Terminalin ızgarası üçünde de aynı ölçülerde çizilir; geçiş anında uygulanır,
 yeniden başlatma gerekmez. Gerekçe `src/lib/design.ts`, `src/styles/premium.css`
@@ -484,7 +499,10 @@ aktarılan dosyaya dahildir.
 **Grup renkleri.** Her grubun rengi yalnızca ince bir şeritte değil arka planda
 da görünür — kenar çubuğunda onlarca grup varken renginden tanımak için. Renk
 sağ tık → *Rengi değiştir* ile hazır renklerden, özel renk seçiciyle ya da
-Ayarlar → Gruplar → Renk'ten verilir; kaldırılabilir. Etkin grubun rengi sekme
+Ayarlar → Gruplar → Renk'ten verilir; kaldırılabilir. Özel renk seçici
+uygulamanın kendisinde, renk kutularının hemen altında açılır (doygunluk ve
+parlaklık alanı, ton çubuğu, renk kodu); sistemin renk penceresi macOS'ta
+ekranın köşesinde açıldığı için kullanılmıyor. Etkin grubun rengi sekme
 çubuğunun altındaki çizgide de görünüyor, böylece kenar çubuğu kapalıyken de
 hangi gruptasınız belli oluyor. Karışım oranları okunabilirlik sınırıyla
 bağlıdır (bkz. Testler).

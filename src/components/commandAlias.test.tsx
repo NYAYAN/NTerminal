@@ -165,12 +165,16 @@ describe("komut kutusunda kısaltma", () => {
     expect(markFavoriteUsed).not.toHaveBeenCalled();
   });
 
-  it("başka gruba bağlı favorinin kısaltması bu grupta açılmıyor", () => {
+  it("başka gruba bağlı favorinin kısaltması bu grupta da açılıyor", () => {
+    // BİLDİRİLEN: Yataş'a bağlı favorinin kısaltması NTerminal'deki sekmede
+    // kabuğa olduğu gibi gitti: "command not found" (çıkış 127).
     const { container } = render(<CommandInput />);
     fireEvent.change(field(container), { target: { value: "dep" } });
-    expect(hint(container)).toBeNull();
+    expect(hint(container)).toBe("make deploy");
     fireEvent.keyDown(field(container), { key: "Enter" });
-    expect(sendKeys).toHaveBeenCalledWith("dep\r");
+    expect(sendKeys).toHaveBeenCalledWith("make deploy\r");
+    expect(changeDir).not.toHaveBeenCalled();
+    expect(markFavoriteUsed).toHaveBeenCalledWith("f2");
   });
 
   it("çalışan programa giden yanıt açılmıyor", () => {

@@ -134,15 +134,20 @@ describe("Kokpit: grup rayı", () => {
   });
 
   /*
-   * Favori süzgeci kenar çubuğunun aracı; rayda bir grubu gizlemek ona
-   * ulaşmanın tek yolunu kapatırdı.
+   * Favori süzgeci rayda da geçerli. İSTEK: "Favoriye ekli grupları
+   * listelemek istediğimde listeleme yapamıyorum." Ray eskiden süzgeci yok
+   * sayıyordu (bir grubu gizlemek ona ulaşmanın tek yolunu kapatırdı); artık
+   * süzgecin düğmesi rayın kendisinde ve dar rayda da açıkken görünüyor.
+   * Ayrıntılar `railTree.test.tsx` içinde.
    */
-  it("favori süzgeci açıkken de bütün gruplar rayda", () => {
+  it("favori süzgeci açıkken rayda yalnız favoriler; dar rayda kapatma düğmesi duruyor", () => {
     seed([group("g1", [tab("a")], { favorite: true }), group("g2", [tab("b")])], {
       behavior: { showOnlyFavoriteGroups: true },
     });
     const { container } = render(<GroupRail />);
-    expect(container.querySelectorAll(".grail-item")).toHaveLength(2);
+    const labels = [...container.querySelectorAll(".grail-item")].map((el) => el.getAttribute("aria-label"));
+    expect(labels).toEqual(["g1"]);
+    expect(container.querySelector(".grail-head .grail-favorites")?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("gruplanmamış kova adıyla ve simgeyle duruyor", () => {

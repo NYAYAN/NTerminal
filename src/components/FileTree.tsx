@@ -5,7 +5,8 @@ import { baseName } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { sessions, useStore } from "../store/useStore";
-import { ChevronIcon, FolderIcon } from "./Icons";
+import { fileKind } from "../lib/images";
+import { ChevronIcon, FileKindIcon, FolderIcon } from "./Icons";
 import type { DirEntry } from "../types";
 
 /**
@@ -24,6 +25,14 @@ import type { DirEntry } from "../types";
  * Her klasör yalnızca AÇILDIĞINDA okunuyor. Bütün ağacı önden okumak derin bir
  * projede binlerce klasör gezmek demek ve panel açılırken uygulamayı
  * kilitlerdi.
+ *
+ * ## Satırda türün simgesi
+ *
+ * Klasörde klasör, dosyada türü (görsel, kod, belge): Ctrl+P paletiyle ve
+ * içerik aramasının sonuçlarıyla AYNI simgeler (`FileKindIcon`). BİLDİRİLEN:
+ * "klasör yapısını açtığımda dosyaların tiplerini gösteren iconlar burada
+ * yok, cmd + p deyince görüyorum." Klasörün de simgesi var: yalnız dosyalarda
+ * olsaydı dosya adları klasör adlarından bir simge kadar içeride başlardı.
  *
  * ## Dosyaya tıklamak ne yapıyor
  *
@@ -198,6 +207,13 @@ function Level({
                   başlamalı, yoksa satırlar yatay olarak kayıyor. */}
               <span className="tree-caret" aria-hidden="true">
                 {entry.dir ? <ChevronIcon open={acik} size={10} /> : null}
+              </span>
+              <span
+                className="tree-ico"
+                data-kind={entry.dir ? "dir" : fileKind(entry.name)}
+                aria-hidden="true"
+              >
+                {entry.dir ? <FolderIcon size={12} /> : <FileKindIcon path={entry.name} size={12} />}
               </span>
               <span className="tree-name">{entry.name}</span>
             </button>

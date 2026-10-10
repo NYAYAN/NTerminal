@@ -69,7 +69,9 @@ export const MESSAGES = {
   "dirs.search": ["Klasör ara…", "Search directories…"],
   // Ctrl+P'nin ad sekmesi. Kutu NEYİ aradığını söylüyor; NEREDE aradığını
   // şeridin sağındaki dizin rozeti (`files.rootTitle`).
-  "files.search": ["Dosya adı yazın…", "Type a file name…"],
+  // Kalıp da yazılabiliyor (`lib/fileGlob.ts`); ipucu bunu söylüyor, yoksa
+  // `*.tsx` denemek kimsenin aklına gelmiyor.
+  "files.search": ["Dosya adı ya da *.tsx gibi bir kalıp yazın…", "Type a file name or a pattern like *.tsx…"],
   "app.searchFiles": ["Dosya ara", "Search files"],
   "app.searchTitle": [
     "Bulunduğun dizinde dosya ara ({keys})",
@@ -863,6 +865,10 @@ export const MESSAGES = {
   // Kokpit rayının dibindeki düğme: rayı genişletip grup adlarını yazıyor.
   "rail.showNames": ["Grup adlarını göster", "Show group names"],
   "rail.hideNames": ["Grup adlarını gizle", "Hide group names"],
+  // Geniş rayın başlığındaki düğme: sekmeler grupların altında (ağaç) ya da
+  // yandaki kartlarda. Etiket tıklamanın SONUCUNU söylüyor.
+  "rail.showTabs": ["Sekmeleri grupların altında göster", "Show tabs under groups"],
+  "rail.hideTabs": ["Sekmeleri kartlarda göster", "Show tabs as cards"],
   "group.namePlaceholder": ["Grup adı", "Group name"],
   "group.showAll": ["Tüm grupları göster ({n})", "Show all groups ({n})"],
   "group.showFavoritesOnly": [
@@ -909,6 +915,11 @@ export const MESSAGES = {
   ],
   "group.colorClose": ["Kapat", "Close"],
   "group.customColor": ["Özel renk seç", "Pick a custom color"],
+  // Uygulamanın kendi renk seçicisi (`ColorPanel`): alan, ton çubuğu, kod kutusu.
+  "color.area": ["Doygunluk ve parlaklık", "Saturation and brightness"],
+  "color.areaValue": ["Doygunluk %{s}, parlaklık %{v}", "Saturation {s}%, brightness {v}%"],
+  "color.hue": ["Ton", "Hue"],
+  "color.hex": ["Renk kodu", "Color code"],
   "group.clearColor": ["Rengi kaldır", "Clear color"],
   "group.delete": ["Grubu sil", "Delete group"],
 

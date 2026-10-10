@@ -47,20 +47,22 @@ export function aliasProblem(
 /**
  * Satırın ilk sözcüğü bir kısaltmaysa açılımı; değilse null.
  *
- * Yalnızca bu grupta görünen favorilerin kısaltmaları geçerli: bir gruba
- * bağlanmış favori başka grupta listede görünmüyor, kısaltması da orada
- * çalışmamalı. Büyük-küçük harf ayırt ediliyor (komut adları da öyle).
+ * Kısaltma HER grupta çalışıyor, favori bir gruba bağlı olsa da. BİLDİRİLEN:
+ * Yataş grubuna bağlı favorinin kısaltması (`yysd`) NTerminal grubundaki
+ * sekmede açılmadı, kabuğa olduğu gibi gitti ("command not found"; uygulama
+ * geçmişinde çıkış kodu 127). Grup kısıtı favorinin LİSTEDE nerede
+ * göründüğü; kısaltma ise kullanıcının ezberlediği tek sözcük ve her yerde
+ * aynı şeyi yapmalı. Kısaltmalar zaten bütün favorilerde tekil
+ * (`aliasProblem`, `favorites.rs`): grup ayrımı bir belirsizlik de
+ * çözmüyordu. Büyük-küçük harf ayırt ediliyor (komut adları da öyle).
  */
 export function expandAlias(
   line: string,
   favorites: readonly Favorite[],
-  groupId: string | null,
 ): { text: string; favorite: Favorite } | null {
   const match = /^(\S+)([\s\S]*)$/.exec(line);
   if (!match) return null;
   const [, word, rest] = match;
-  const favorite = favorites.find(
-    (f) => f.alias === word && (!f.groupId || f.groupId === groupId),
-  );
+  const favorite = favorites.find((f) => f.alias === word);
   return favorite ? { text: favorite.command + rest, favorite } : null;
 }

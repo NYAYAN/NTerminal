@@ -128,6 +128,12 @@ export interface Appearance {
    */
   railExpanded: boolean;
   /**
+   * Geniş rayda sekmeler grupların altında mı (ağaç). Açıkken kart sütunu
+   * gizleniyor, ağaç aynı sekmeleri gösteriyor (bkz. `GroupRail`,
+   * `railTree`). Ayar, çünkü seçim yeniden açılışta da bekleniyor.
+   */
+  railTabs: boolean;
+  /**
    * Favoriler panelinde DARALTILMIŞ grup adları.
    *
    * Neden liste: favori grubu ayrı bir varlık değil, favorinin üzerinde duran

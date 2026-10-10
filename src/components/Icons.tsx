@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { fileType } from "../lib/fileTypes";
 import { fileKind } from "../lib/images";
 
 /**
@@ -202,12 +203,39 @@ export function FileIcon(props: IconProps) {
   );
 }
 
-/** Dosya listesinde satırın türü: görsel, kod ya da belge (bkz. `fileKind`). */
-export function FileKindIcon({ path, ...props }: IconProps & { path: string }) {
+/**
+ * Dosya listesinde satırın türü: görselde resim, tanınan türde türün etiketi
+ * kendi renginde (TS, RS, {} …; bkz. `lib/fileTypes.ts`), geri kalanında
+ * genel kod ya da belge simgesi (`fileKind`).
+ *
+ * Etiket `size`dan biraz geniş (üç harfli "TSX" sığsın); satırlar adları aynı
+ * sütundan başlatsın diye simgeyi taşıyan kutu sabit genişlikte (`.file-ico`,
+ * `.tree-ico`).
+ */
+export function FileKindIcon({ path, size = 14, className }: IconProps & { path: string }) {
   const kind = fileKind(path);
-  if (kind === "image") return <ImageIcon {...props} />;
-  if (kind === "code") return <CodeIcon {...props} />;
-  return <FileIcon {...props} />;
+  if (kind === "image") return <ImageIcon size={size} className={className} />;
+  const type = fileType(path);
+  if (type) {
+    return (
+      // Etiket CSS'te çiziliyor (`::before`, `data-label`): satırın metni
+      // yalnızca dosyanın adı kalsın — kopyalanan, aranan ve ekran
+      // okuyucunun okuduğu ad "TSApp.tsx" olmasın.
+      <span
+        className={className ? `ftype ${className}` : "ftype"}
+        data-label={type.label}
+        aria-hidden="true"
+        style={{
+          ["--ftype" as string]: type.color,
+          width: size + 4,
+          height: size,
+          fontSize: Math.round(size * 0.62 * 10) / 10,
+        }}
+      />
+    );
+  }
+  if (kind === "code") return <CodeIcon size={size} className={className} />;
+  return <FileIcon size={size} className={className} />;
 }
 
 /**
@@ -699,6 +727,22 @@ export function LayersIcon(props: IconProps) {
     <Svg {...props}>
       <path d="M8 2.4 L14 5.6 L8 8.8 L2 5.6 Z" />
       <path d="M2 9 L8 12.2 L14 9" />
+    </Svg>
+  );
+}
+
+/**
+ * Sekme ağacı — üstte grubun çizgisi, altında ondan dallanan iki sekme
+ * (Kokpit rayında "sekmeleri grupların altında göster").
+ */
+export function TreeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14 4 H6" />
+      <path d="M14 8 H9" />
+      <path d="M14 12 H9" />
+      <path d="M2.5 4 V6.5 C2.5 7.3 3.2 8 4 8 H6" />
+      <path d="M2.5 6.5 V10.5 C2.5 11.3 3.2 12 4 12 H6" />
     </Svg>
   );
 }

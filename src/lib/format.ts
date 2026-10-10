@@ -1,3 +1,4 @@
+import { globPositions, globTest, parseFileQuery } from "./fileGlob";
 import { localeTag, t } from "./i18n";
 
 /** Geçmiş listesinde okunabilir zaman: bugünse saat, dünse "dün", öncesi tarih. */
@@ -137,9 +138,14 @@ export function rankFiles(
 ): string[] {
   if (!query.trim()) return files.slice(0, max);
 
+  // Kalıplar (`*.tsx`) süzüyor, kalan metin bulanık sıralıyor (bkz.
+  // `lib/fileGlob.ts`). Yalnız kalıp yazılmışsa hepsi aynı puanda: sırayı
+  // aşağıdaki kısa-yol-önce kuralı veriyor.
+  const { text, globs } = parseFileQuery(query);
   const scored: { path: string; score: number }[] = [];
   for (const path of files) {
-    const score = fileScore(path, query);
+    if (globs.length > 0 && !globs.every((glob) => globTest(glob, path))) continue;
+    const score = text.trim() ? fileScore(path, text) : 0;
     if (score !== null) scored.push({ path, score });
   }
   /*
@@ -236,6 +242,23 @@ export interface FileMatch {
  * binlerce dosyada koşuyor, bu ise yalnızca ÇİZİLEN satırlarda (en çok iki yüz).
  */
 export function fileMatch(path: string, query: string): FileMatch | null {
+  const { text, globs } = parseFileQuery(query);
+  if (globs.length === 0) return textMatch(path, query);
+  // Kalıbın düz parçaları (`.tsx`) da işaretli; dağınıklığı metin belirliyor.
+  const positions = new Set<number>();
+  for (const glob of globs) {
+    const found = globPositions(glob, path);
+    if (!found) return null;
+    for (const p of found) positions.add(p);
+  }
+  const rest = text.trim() ? textMatch(path, text) : { positions: [], scattered: false };
+  if (!rest) return null;
+  for (const p of rest.positions) positions.add(p);
+  return { positions: [...positions].sort((a, b) => a - b), scattered: rest.scattered };
+}
+
+/** Kalıpsız sorgunun eşleşmesi (`fileScore`un bantlarıyla aynı karar). */
+function textMatch(path: string, query: string): FileMatch | null {
   const q = query.trim().toLowerCase();
   if (!q) return { positions: [], scattered: false };
 

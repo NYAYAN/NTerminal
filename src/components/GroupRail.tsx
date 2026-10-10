@@ -1,29 +1,57 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { railTree } from "../lib/design";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
-import { groupInitials } from "../lib/labels";
+import { groupInitials, isClaudeCommand, resolveProfile, tabLabel, tabTooltip } from "../lib/labels";
+import { portLabel } from "../lib/serverLinks";
+import { isLocked, visibleGroups } from "../lib/tabs";
 import { readableAccent } from "../lib/themes";
-import { useStore } from "../store/useStore";
-import type { Group } from "../types";
+import { sessions, useStore } from "../store/useStore";
+import type { Group, TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 import { GroupColorPicker } from "./GroupColorPicker";
 import { groupMenu } from "./groupMenu";
-import { ArrowIcon, BranchIcon, ClockIcon, GearIcon, LayersIcon, PlusIcon, StarIcon } from "./Icons";
+import {
+  ArrowIcon,
+  BranchIcon,
+  ChevronIcon,
+  ClaudeIcon,
+  ClockIcon,
+  CloseIcon,
+  GearIcon,
+  LayersIcon,
+  PlusIcon,
+  StarIcon,
+  TreeIcon,
+} from "./Icons";
+import { tabMenu } from "./tabMenu";
 
-/** Karonun yanında açık olan kutu: grubun adı ya da rengi. */
-type RailEdit = { kind: "rename" | "color"; groupId: string; anchor: HTMLElement } | null;
+/**
+ * Rayın yanında açık olan kutu: grubun adı ya da rengi, ağaçtaki sekmenin
+ * adı. `id` grubun ya da sekmenin kimliği.
+ */
+type RailEdit = { kind: "rename" | "color" | "renameTab"; id: string; anchor: HTMLElement } | null;
 
 /** Rayın kendi ipucu: metni ve dayanağın sağ-orta noktası. */
 type RailTip = { text: string; left: number; top: number } | null;
+
+/** Ağaçta sürüklenen sekmenin bırakılacağı yer: grup ve o gruptaki sıra. */
+type TabDrop = { groupId: string; index: number } | null;
 
 /**
  * Kokpit yerleşiminin grup rayı: her grup bir düğme, baş harfleri ve rengiyle.
  *
  * Kokpit'te kenar çubuğu (`GroupSidebar`) yalnızca ETKİN grubun sekmelerini
- * gösteriyor; gruplar arası geçiş buradan. Bu yüzden ray bütün grupları
- * gösteriyor — favori süzgeci kenar çubuğunun aracı, burada bir grubu gizlemek
- * ona ulaşmanın tek yolunu kapatırdı.
+ * gösteriyor; gruplar arası geçiş buradan.
+ *
+ * Favori süzgeci (`showOnlyFavoriteGroups`, Premium ve Klasik'teki ayarın
+ * aynısı) rayın kendi düğmesiyle: geniş rayın başlığında, ağaç düğmesinin
+ * SOLUNDA bir yıldız. İSTEK: "Favoriye ekli grupları listelemek istediğimde
+ * listeleme yapamıyorum." Süzgeç dar rayda da geçerli; orada açıkken
+ * başlığın yerinde yalnızca basılı yıldız duruyor — grupların neden eksik
+ * olduğu görünsün ve tek tıkla geri gelsin. Geniş rayda favori grupların
+ * adının yanında yıldız var: süzgecin neyi bırakacağı önceden görünüyor.
  *
  * Alt kısımda yan panelin üç kipi (geçmiş, favoriler, değişiklikler) ve Ayarlar:
  * Kokpit'te panel terminalin yanında sabit bir sütun ve bu düğmeler onu açıp
@@ -64,14 +92,41 @@ type RailTip = { text: string; left: number; top: number } | null;
  * isimlerini tam görme de olmuş olur)". Rayın dibindeki düğme rayı genişletip
  * adları karonun yanına yazıyor; durum ayarda (`railExpanded`), yeniden
  * açılışta da öyle. Genişken ipucu yok: ad zaten yazılı.
+ *
+ * ## Sekme ağacı
+ *
+ * İSTEK: "genişlet dersem o zaman bir buton çıksın, bu buton ile sekmeleri
+ * grupta göster diyeyim" ve "kişi başka grupları açık yaptıysa açık
+ * kalmalı". Geniş rayın başlığında "Gruplar" ve yanında YALNIZCA SİMGE olan
+ * bir düğme (İSTEK: "yazı çok yer kaplıyor, tooltip olarak gösterirsin");
+ * basınca sekmeler grupların altına diziliyor ve kart sütunu çizilmiyor —
+ * aynı sekmeleri iki kez göstermezdi (`railTree`, ayarı `railTabs`).
+ *
+ * Her grup kendi okuyla açılıp kapanıyor; durum grubun kendisinde
+ * (`collapsed`). Etkin grup değişince hiçbir grup kendiliğinden kapanmıyor,
+ * yeniden açılışta da aynı. Premium ve Klasik'in kenar çubuğu aynı alanı
+ * kullanıyor: orada daraltılan grup burada da kapalı.
+ *
+ * Sekme satırı kartın işini görüyor: tıklamak sekmeye geçiyor, sağ tık kartın
+ * menüsü (`tabMenu`), orta tık kapatıyor, sürükleyince sıra ya da grup
+ * değişiyor — bir grubun karosuna ya da "Sekme ekle" satırına bırakılan sekme
+ * o grubun sonuna gidiyor. Çift tık karodaki gerekçeyle bir şey yapmıyor; ad
+ * sağ tıktan, satırın yanındaki kutuda. Satırın ipucu tarayıcınınki: ad
+ * satırda yazılı, ipucu yalnızca ek bilgi (profil, klasör, son komut) ve
+ * listede gezinirken anında açılan kutular göz yorardı.
  */
 export function GroupRail() {
   const t = useT();
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const running = useStore((s) => s.running);
+  const exited = useStore((s) => s.exited);
+  const profiles = useStore((s) => s.settings.profiles);
+  const defaultProfileId = useStore((s) => s.settings.defaultProfileId);
   const themeId = useStore((s) => s.settings.appearance.theme);
   const expanded = useStore((s) => s.settings.appearance.railExpanded);
+  const tree = useStore((s) => railTree(s.settings.appearance));
+  const onlyFavorites = useStore((s) => s.settings.behavior.showOnlyFavoriteGroups);
   const keybindings = useStore((s) => s.settings.keybindings);
   const historyOpen = useStore((s) => s.ui.historyOpen);
   const panelMode = useStore((s) => s.ui.panelMode);
@@ -84,8 +139,15 @@ export function GroupRail() {
   const closeEdit = useCallback(() => setEdit(null), []);
   const [dragGroupId, setDragGroupId] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const [tabDrop, setTabDrop] = useState<TabDrop>(null);
   const [tip, setTip] = useState<RailTip>(null);
   const groupsRef = useRef<HTMLDivElement | null>(null);
+
+  // Rayda görünen gruplar. Sıralama göstergeleri bu listenin sırasında;
+  // depoya giden yer `fullIndex` ile bütün listeye çevriliyor.
+  const shown = visibleGroups(groups, onlyFavorites);
+  const favoriteCount = groups.filter((g) => g.favorite).length;
 
   const togglePanel = (mode: "history" | "favorites" | "git") =>
     setUi(
@@ -132,8 +194,8 @@ export function GroupRail() {
       : groupMenu(group, {
           groups,
           newTabHint: key("newTab"),
-          rename: () => setEdit({ kind: "rename", groupId: group.id, anchor: tile }),
-          changeColor: () => setEdit({ kind: "color", groupId: group.id, anchor: tile }),
+          rename: () => setEdit({ kind: "rename", id: group.id, anchor: tile }),
+          changeColor: () => setEdit({ kind: "color", id: group.id, anchor: tile }),
           doubleClickRenames: false,
         });
 
@@ -142,35 +204,249 @@ export function GroupRail() {
   const endDrag = () => {
     setDragGroupId(null);
     setDropAt(null);
+    setDragTabId(null);
+    setTabDrop(null);
   };
 
-  /** İmlecin bıraktığı yerin sırası: ortası imlecin altında kalan ilk karo. */
+  /**
+   * İmlecin bıraktığı yerin sırası: ortası imlecin altında kalan ilk grup.
+   * Ağaçta grup karosuyla ve sekmeleriyle TEK parça: ortası bütününün ortası.
+   */
   const dropIndexAt = (clientY: number): number => {
-    const tiles = [...(groupsRef.current?.querySelectorAll<HTMLElement>(".grail-item") ?? [])];
-    const below = tiles.findIndex((el) => {
+    const items = [
+      ...(groupsRef.current?.querySelectorAll<HTMLElement>(tree ? ".grail-node" : ".grail-item") ?? []),
+    ];
+    const below = items.findIndex((el) => {
       const rect = el.getBoundingClientRect();
       return clientY < rect.top + rect.height / 2;
     });
-    const index = below === -1 ? tiles.length : below;
+    const index = below === -1 ? items.length : below;
     // Kovanın önüne bırakılan grup onun arkasına düşüyor; çizgi de orada.
-    return groups[0]?.ungrouped && index === 0 ? 1 : index;
+    return shown[0]?.ungrouped && index === 0 ? 1 : index;
   };
 
+  /**
+   * Görünen sıradaki yeri BÜTÜN listedeki yere çevirir. Süzgeç açıkken liste
+   * kısa; görünen sırayla taşımak grubu gizli grupların arasında yanlış yere
+   * koyardı (kenar çubuğundaki aynı gerekçe, `GroupSidebar`).
+   */
+  const fullIndex = (at: number): number =>
+    at < shown.length
+      ? groups.indexOf(shown[at])
+      : groups.indexOf(shown[shown.length - 1]) + 1;
+
   // Bırakınca hiçbir şey değişmeyecekse çizgi yok: grubun kendi yerinin iki yanı.
-  const from = dragGroupId ? groups.findIndex((g) => g.id === dragGroupId) : -1;
+  const from = dragGroupId ? shown.findIndex((g) => g.id === dragGroupId) : -1;
   const dropShown =
     dropAt !== null && from !== -1 && dropAt !== from && dropAt !== from + 1 ? dropAt : null;
 
-  const editGroup = edit ? groups.find((g) => g.id === edit.groupId) : undefined;
+  /** Sekmenin hedefini yazar; aynı yerse yeniden çizdirmiyor. */
+  const aimTab = (groupId: string, index: number) =>
+    setTabDrop((prev) =>
+      prev && prev.groupId === groupId && prev.index === index ? prev : { groupId, index },
+    );
+
+  /** Sekme satırının üstünde: imleç üst yarıdaysa öncesine, alt yarıdaysa sonrasına. */
+  const overTab = (e: React.DragEvent<HTMLElement>, groupId: string, index: number) => {
+    if (!dragTabId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    aimTab(groupId, e.clientY > rect.top + rect.height / 2 ? index + 1 : index);
+  };
+
+  /** Grubun karosu ya da "Sekme ekle" satırı: sekme o grubun sonuna. */
+  const overGroupEnd = (e: React.DragEvent<HTMLElement>, group: Group) => {
+    if (!dragTabId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    aimTab(group.id, group.tabs.length);
+  };
+
+  // Sekme için de aynısı: kendi yerinin iki yanı hiçbir şey değiştirmiyor.
+  const tabFrom = dragTabId
+    ? groups
+        .map((g) => ({ groupId: g.id, index: g.tabs.findIndex((x) => x.id === dragTabId) }))
+        .find((at) => at.index !== -1)
+    : undefined;
+  const tabDropShown =
+    tabDrop &&
+    tabFrom &&
+    !(
+      tabDrop.groupId === tabFrom.groupId &&
+      (tabDrop.index === tabFrom.index || tabDrop.index === tabFrom.index + 1)
+    )
+      ? tabDrop
+      : null;
+
+  const dropTab = (e: React.DragEvent) => {
+    if (!dragTabId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (tabDropShown) store().moveTabTo(dragTabId, tabDropShown.groupId, tabDropShown.index);
+    endDrag();
+  };
+
+  /** Satırdaki çizgi: hedefin önündeki satırın üstünde, sondaysa son satırın altında. */
+  const tabMark = (group: Group, index: number): "before" | "after" | undefined => {
+    if (tabDropShown?.groupId !== group.id) return undefined;
+    if (tabDropShown.index === index) return "before";
+    return tabDropShown.index === group.tabs.length && index === group.tabs.length - 1
+      ? "after"
+      : undefined;
+  };
+
+  const editGroup =
+    edit && edit.kind !== "renameTab" ? groups.find((g) => g.id === edit.id) : undefined;
+  const editTab =
+    edit?.kind === "renameTab"
+      ? groups.flatMap((g) => g.tabs).find((x) => x.id === edit.id)
+      : undefined;
+  const editingTab = (tab: TabState) => edit?.kind === "renameTab" && edit.id === tab.id;
 
   const newGroupLabel = t("app.newGroupTitle", { keys: key("newGroup") });
   const historyLabel = t("app.historyTitle", { keys: key("historyPanel") });
   const favoritesLabel = t("app.favoritesTitle", { keys: key("favorites") });
   const settingsLabel = t("app.settingsTitle", { keys: key("settings") });
   const toggleLabel = t(expanded ? "rail.hideNames" : "rail.showNames");
+  const treeLabel = t(tree ? "rail.hideTabs" : "rail.showTabs");
+  const favoriteGroupsLabel = onlyFavorites
+    ? t("group.showAll", { n: groups.length })
+    : t("group.showFavoritesOnly", { n: favoriteCount });
+
+  /** Favori süzgecinin düğmesi: geniş rayın başlığında, dar rayda süzgeç açıkken. */
+  const favoritesButton = (
+    <button
+      type="button"
+      className={onlyFavorites ? "grail-tool grail-favorites on" : "grail-tool grail-favorites"}
+      aria-pressed={onlyFavorites}
+      aria-label={favoriteGroupsLabel}
+      {...tipProps(favoriteGroupsLabel)}
+      onClick={() => {
+        hideTip();
+        void store().patchBehavior({ showOnlyFavoriteGroups: !onlyFavorites });
+      }}
+    >
+      <StarIcon filled={onlyFavorites} size={14} />
+    </button>
+  );
+
+  /** Ağaçta bir grubun sekmeleri ve dipte "Sekme ekle". */
+  const tabList = (group: Group) => (
+    <div className="grail-tabs">
+      {group.tabs.map((tab, tabIndex) => {
+        const active = group.id === activeGroupId && group.activeTabId === tab.id;
+        const profile = resolveProfile(profiles, tab.profileId, defaultProfileId);
+        return (
+          <div
+            key={tab.id}
+            className={`grail-tab${active ? " on" : ""}${dragTabId === tab.id ? " dragging" : ""}${
+              editingTab(tab) ? " editing" : ""
+            }`}
+            aria-current={active ? "true" : undefined}
+            title={tabTooltip(tab, profile, false)}
+            data-drop={tabMark(group, tabIndex)}
+            draggable={!editingTab(tab)}
+            onClick={() => store().setActiveTab(tab.id)}
+            onContextMenu={(e) => {
+              hideTip();
+              const row = e.currentTarget;
+              menu.open(
+                e,
+                tabMenu(group, tab, tabIndex, {
+                  groups,
+                  rename: () => setEdit({ kind: "renameTab", id: tab.id, anchor: row }),
+                  doubleClickRenames: false,
+                }),
+              );
+            }}
+            onAuxClick={(e) => {
+              if (e.button !== 1) return;
+              e.preventDefault();
+              if (!isLocked(tab)) void store().closeTab(tab.id);
+            }}
+            onDragStart={(e) => {
+              hideTip();
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", tab.id);
+              setDragTabId(tab.id);
+            }}
+            onDragOver={(e) => overTab(e, group.id, tabIndex)}
+            onDrop={dropTab}
+          >
+            <RailTabState tab={tab} running={!!running[tab.id]} exited={!!exited[tab.id]} />
+            <span className="grail-tab-name">{tabLabel(tab)}</span>
+            {running[tab.id] && <RailTabPort tab={tab} />}
+            {isLocked(tab) ? (
+              <span className="grail-tab-lock" title={t("tab.lockedTitle", { keys: key("toggleLock") })}>
+                🔒
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="grail-tab-close"
+                aria-label={t("menu.closeTab")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void store().closeTab(tab.id);
+                }}
+              >
+                <CloseIcon size={11} />
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        className="grail-tab-add"
+        onClick={() => {
+          if (group.ungrouped) store().addLooseTab();
+          else store().addTab({ groupId: group.id });
+        }}
+        onDragOver={(e) => overGroupEnd(e, group)}
+        onDrop={dropTab}
+      >
+        <PlusIcon size={11} />
+        <span>{t("group.addTab")}</span>
+      </button>
+    </div>
+  );
 
   return (
     <nav className={expanded ? "grail expanded" : "grail"} aria-label={t("group.heading")}>
+      {expanded && (
+        <div className="grail-head">
+          <span className="grail-caption">{t("group.heading")}</span>
+          <span className="grail-head-actions">
+            {favoritesButton}
+            <button
+              type="button"
+              className={tree ? "grail-tool on" : "grail-tool"}
+              aria-pressed={tree}
+              aria-label={treeLabel}
+              {...tipProps(treeLabel)}
+              onClick={() => {
+                hideTip();
+                // Başlık çubuğunda sekme listesi kapatılmışsa (bkz. `railTree`)
+                // düğme onu da açıyor: basınca sekmeler görünmeli.
+                void store().patchAppearance(
+                  tree ? { railTabs: false } : { railTabs: true, sidebarCollapsed: false },
+                );
+              }}
+            >
+              <TreeIcon size={15} />
+            </button>
+          </span>
+        </div>
+      )}
+      {!expanded && onlyFavorites && <div className="grail-head">{favoritesButton}</div>}
+      {expanded && onlyFavorites && favoriteCount === 0 && (
+        <p className="grail-empty">{t("group.noFavorites")}</p>
+      )}
+
       <div
         className="grail-groups"
         ref={groupsRef}
@@ -186,12 +462,12 @@ export function GroupRail() {
         onDrop={(e) => {
           if (!dragGroupId) return;
           e.preventDefault();
-          if (dropAt !== null) store().moveGroupTo(dragGroupId, dropAt);
+          if (dropShown !== null) store().moveGroupTo(dragGroupId, fullIndex(dropShown));
           endDrag();
         }}
         onDragEnd={endDrag}
       >
-        {groups.map((group, index) => {
+        {shown.map((group, index) => {
           const active = group.id === activeGroupId;
           const busy = group.tabs.some((tab) => running[tab.id]);
           const name = group.ungrouped ? t("group.ungrouped") : group.name;
@@ -200,26 +476,31 @@ export function GroupRail() {
           const ink = readableAccent(group.color, themeId);
           // Çizgi bir öğe değil, özniteliğe bağlı sözde öğe: sürüklerken
           // eklenen öğe karoları kaydırırdı (bkz. `GroupSidebar` testi).
+          // Ağaçta karonun değil grubun bütününün (karo + sekmeler) üstünde.
           const drop =
             dropShown === index
               ? "before"
-              : dropShown === groups.length && index === groups.length - 1
+              : dropShown === shown.length && index === shown.length - 1
                 ? "after"
                 : undefined;
-          return (
+          // Sekme bu grubun sonuna gidecek ve sekmeleri görünmüyor: karo halkalı.
+          const into =
+            tabDropShown?.groupId === group.id && (group.collapsed || group.tabs.length === 0);
+          const tile = (
             <button
               key={group.id}
               type="button"
               className={`grail-item${active ? " on" : ""}${
-                dragGroupId === group.id ? " dragging" : ""
-              }${edit?.groupId === group.id ? " editing" : ""}`}
+                !tree && dragGroupId === group.id ? " dragging" : ""
+              }${editGroup?.id === group.id ? " editing" : ""}`}
               aria-current={active ? "true" : undefined}
               aria-label={name}
               style={{
                 ["--group-color" as string]: group.color ?? "var(--accent)",
                 ["--group-ink" as string]: ink ?? "var(--accent)",
               }}
-              data-drop={drop}
+              data-drop={tree ? undefined : drop}
+              data-into={tree && into ? "" : undefined}
               draggable={!group.ungrouped}
               {...tipProps(name, !expanded)}
               onClick={() => store().setActiveGroup(group.id)}
@@ -233,13 +514,42 @@ export function GroupRail() {
                 e.dataTransfer.setData("text/plain", group.id);
                 setDragGroupId(group.id);
               }}
+              onDragOver={(e) => overGroupEnd(e, group)}
+              onDrop={dropTab}
             >
               <span className="grail-initials">
                 {group.ungrouped ? <LayersIcon size={15} /> : groupInitials(group)}
               </span>
               {expanded && <span className="grail-name">{name}</span>}
+              {expanded && group.favorite && (
+                <span className="grail-fav" title={t("group.favoriteMark")}>
+                  <StarIcon size={11} />
+                </span>
+              )}
+              {tree && group.collapsed && <span className="grail-count">{group.tabs.length}</span>}
               {busy && <span className="grail-busy" title={t("group.busy")} />}
             </button>
+          );
+          if (!tree) return tile;
+          return (
+            <div
+              key={group.id}
+              className={dragGroupId === group.id ? "grail-node dragging" : "grail-node"}
+              data-drop={drop}
+            >
+              {tile}
+              {/* Karonun kardeşi, içinde değil: düğme içinde düğme olmuyor. */}
+              <button
+                type="button"
+                className="grail-caret"
+                aria-expanded={!group.collapsed}
+                aria-label={t(group.collapsed ? "group.expand" : "group.collapse")}
+                onClick={() => store().updateGroup(group.id, { collapsed: !group.collapsed })}
+              >
+                <ChevronIcon open={!group.collapsed} size={12} />
+              </button>
+              {!group.collapsed && tabList(group)}
+            </div>
           );
         })}
         <button
@@ -315,7 +625,26 @@ export function GroupRail() {
         </div>
       )}
       {edit && editGroup && edit.kind === "rename" && (
-        <RailRename group={editGroup} anchor={edit.anchor} onDone={closeEdit} />
+        <RailRename
+          anchor={edit.anchor}
+          initial={editGroup.name}
+          placeholder={t("group.namePlaceholder")}
+          // Boş ad yok sayılıyor, kenar çubuğundaki gibi: grup adsız kalmıyor.
+          save={(name) => {
+            if (name) store().updateGroup(editGroup.id, { name });
+          }}
+          onDone={closeEdit}
+        />
+      )}
+      {edit && editTab && (
+        <RailRename
+          anchor={edit.anchor}
+          initial={editTab.customTitle ?? tabLabel(editTab)}
+          placeholder={t("tab.namePlaceholder")}
+          // Boş = özel adı kaldır; ad yine kabuktan ya da klasörden gelir.
+          save={(name) => store().updateTab(editTab.id, { customTitle: name || null })}
+          onDone={closeEdit}
+        />
       )}
       {edit && editGroup && edit.kind === "color" && (
         <RailPopover anchor={edit.anchor} label={t("group.changeColor")} onDismiss={closeEdit}>
@@ -324,6 +653,43 @@ export function GroupRail() {
       )}
       {menu.state && <ContextMenu state={menu.state} onClose={menu.close} />}
     </nav>
+  );
+}
+
+/**
+ * Ağaçtaki sekmenin durumu, satırın başında: Claude Code, çalışan komut,
+ * kapanmış kabuk ya da henüz açılmamış sekme — kartın göstergeleriyle aynı.
+ */
+function RailTabState({ tab, running, exited }: { tab: TabState; running: boolean; exited: boolean }) {
+  const t = useT();
+  if (running && isClaudeCommand(tab.lastCommand)) {
+    return (
+      <span className="grail-tab-claude" title={t("tab.claudeRunningTitle")}>
+        <ClaudeIcon size={12} />
+      </span>
+    );
+  }
+  if (running) return <span className="tab-dot busy" />;
+  if (exited) return <span className="tab-dot dead" />;
+  if (sessions.get(tab.id)?.pid == null) {
+    return <span className="tab-row-idle" title={t("tab.notStarted")} />;
+  }
+  return <span className="tab-dot grail-tab-dot" />;
+}
+
+/**
+ * Çalışan komutun sunucu portu. Kartla aynı kaynak — OTURUMDAN okunuyor, komut
+ * bitince gösterilmiyor (gerekçeler `KokpitLines` ve `RunningLinks` içinde).
+ */
+function RailTabPort({ tab }: { tab: TabState }) {
+  // Yeniden çizim tetikleyicisi; değer oturumdan okunuyor (bkz. RunningLinks).
+  useStore((s) => s.runLinks[tab.id]);
+  const url = sessions.get(tab.id)?.runUrls()[0];
+  if (!url) return null;
+  return (
+    <span className="grail-tab-port" title={url}>
+      {portLabel(url)}
+    </span>
   );
 }
 
@@ -365,6 +731,24 @@ function RailPopover({
     });
   }, [anchor]);
 
+  // İçerik büyüyünce (renk kutusunda özel renk seçicisi açılınca) kutu
+  // ekranın altına taşmasın: yalnızca gerektiği kadar yukarı kayıyor.
+  // Yeniden ortalamak, tıklanan düğmeyi imlecin altından kaydırırdı.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const margin = 8;
+      const height = el.offsetHeight;
+      setPos((pos) => {
+        const top = Math.max(margin, Math.min(pos.top, window.innerHeight - height - margin));
+        return top === pos.top ? pos : { ...pos, top };
+      });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (!onDismiss) return;
     const down = (event: MouseEvent) => {
@@ -396,18 +780,30 @@ function RailPopover({
   );
 }
 
-/** Grubun adı, karonun yanındaki kutuda. Enter ve odak kaybı kaydediyor, Esc vazgeçiyor. */
+/**
+ * Ad kutusu, karonun ya da ağaçtaki sekme satırının yanında. Enter ve odak
+ * kaybı kaydediyor, Esc vazgeçiyor. Değişmeyen ad kaydedilmiyor: adı
+ * klasörden gelen bir sekmede o ad özel ada dönüşüp sabitlenirdi.
+ */
 function RailRename({
-  group,
   anchor,
+  initial,
+  placeholder,
+  save,
   onDone,
 }: {
-  group: Group;
   anchor: HTMLElement;
+  initial: string;
+  placeholder: string;
+  /** Kırpılmış ve `initial`dan FARKLI ad; boş da olabilir. */
+  save: (name: string) => void;
   onDone: () => void;
 }) {
   const t = useT();
-  const [draft, setDraft] = useState(group.name);
+  // Kutu açılırkenki ad: sekmenin klasörden gelen adı kutu açıkken
+  // değişse de yazılan metin ve karşılaştırma ilk hâle göre.
+  const [start] = useState(initial);
+  const [draft, setDraft] = useState(initial);
   const input = useRef<HTMLInputElement | null>(null);
   // Kutu bir kez kapanıyor: Esc'den ya da Enter'dan sonra sökülen kutunun
   // odak kaybı ikinci kez kaydetmesin (Esc vazgeçmeyi kaydetmeye çevirirdi).
@@ -426,12 +822,11 @@ function RailRename({
     input.current?.select();
   }, []);
 
-  const finish = (save: boolean) => {
+  const finish = (ok: boolean) => {
     if (finished.current) return;
     finished.current = true;
     const name = draft.trim();
-    // Boş ad yok sayılıyor, kenar çubuğundaki gibi: grup adsız kalmıyor.
-    if (save && name && name !== group.name) useStore.getState().updateGroup(group.id, { name });
+    if (ok && name !== start) save(name);
     onDone();
   };
 
@@ -441,7 +836,7 @@ function RailRename({
         ref={input}
         className="rename-input"
         value={draft}
-        placeholder={t("group.namePlaceholder")}
+        placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => finish(true)}
         onKeyDown={(e) => {

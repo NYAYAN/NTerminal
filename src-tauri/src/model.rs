@@ -185,6 +185,11 @@ pub struct Appearance {
     /// yaziyor. Ayarda, cunku genisletilen ray yeniden acilista da genis
     /// bekleniyor (ISTEK: "grubu genislet daralt da yapabilir miyiz").
     pub rail_expanded: bool,
+    /// Genis rayda sekmeler gruplarin altinda mi (agac). Acikken kart sutunu
+    /// gizleniyor; ayarda, cunku secim yeniden acilista da bekleniyor (ISTEK:
+    /// "genislet dersem bir buton ciksin, bu buton ile sekmeleri grupta
+    /// goster diyeyim").
+    pub rail_tabs: bool,
     /// Favoriler panelinde DARALTILMIS grup adlari.
     ///
     /// Neden liste: favori grubu ayri bir varlik degil, favorinin uzerinde
@@ -232,6 +237,7 @@ impl Default for Appearance {
             show_shell_badge: false,
             sidebar_collapsed: false,
             rail_expanded: false,
+            rail_tabs: false,
             collapsed_favorite_folders: Vec::new(),
         }
     }

@@ -1,3 +1,4 @@
+import type { Appearance } from "../types";
 import type { MsgKey } from "./messages";
 
 /**
@@ -71,6 +72,28 @@ export function designLook(design: Design): "classic" | "premium" {
 
 export function designLayout(design: Design): "kokpit" | null {
   return design === "kokpit" ? "kokpit" : null;
+}
+
+/**
+ * Kokpit'in sekme ağacı ekranda mı: sekmeler geniş rayda grupların altında,
+ * kart sütununun yerine (bkz. `GroupRail`).
+ *
+ * İSTEK: "genişlet dersem o zaman bir buton çıksın, bu buton ile sekmeleri
+ * grupta göster diyeyim". Ağaç yalnızca GENİŞ rayda: dar rayda karolar baş
+ * harf kadar, sekme adı sığmıyor. Başlık çubuğundaki "Grupları daralt" sekme
+ * listesini nerede duruyorsa orada kapatıyor — kartlardaysa kartları,
+ * ağaçtaysa ağacın sekmelerini; aksi hâlde ağaç açıkken o düğme hiçbir şey
+ * yapmazdı.
+ */
+export function railTree(
+  appearance: Pick<Appearance, "design" | "railExpanded" | "railTabs" | "sidebarCollapsed">,
+): boolean {
+  return (
+    appearance.design === "kokpit" &&
+    appearance.railExpanded &&
+    appearance.railTabs &&
+    !appearance.sidebarCollapsed
+  );
 }
 
 /**

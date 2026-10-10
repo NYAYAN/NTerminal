@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { shortenPath } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
-import { api } from "../lib/ipc";
 import {
-  groupLabel,
   hasCustomTitle,
   isClaudeCommand,
   resolveProfile,
@@ -22,6 +20,7 @@ import type { Group, TabState } from "../types";
 import { ContextMenu, useContextMenu, type MenuEntry } from "./ContextMenu";
 import { GroupColorPicker } from "./GroupColorPicker";
 import { groupMenu } from "./groupMenu";
+import { tabMenu } from "./tabMenu";
 import {
   ChevronIcon,
   ClaudeIcon,
@@ -292,84 +291,6 @@ export function GroupSidebar() {
         ] satisfies MenuEntry[])),
   ];
 
-  const tabMenu = (group: Group, tab: TabState, index: number): MenuEntry[] => {
-    const others = groups.filter((g) => g.id !== group.id);
-    return [
-      {
-        kind: "item",
-        label: t("menu.rename"),
-        hint: t("common.doubleClick"),
-        run: () => startEditTab(tab),
-      },
-      ...(hasCustomTitle(tab)
-        ? [
-            {
-              kind: "item" as const,
-              label: t("menu.resetName"),
-              run: () => store().updateTab(tab.id, { customTitle: null }),
-            },
-          ]
-        : []),
-      { kind: "separator" },
-      {
-        kind: "item",
-        label: t(isLocked(tab) ? "menu.unlock" : "menu.lock"),
-        run: () => store().toggleTabLock(tab.id),
-      },
-      { kind: "separator" },
-      { kind: "item", label: t("common.restartShell"), run: () => void store().restartTab(tab.id) },
-      ...(tab.cwd
-        ? [
-            {
-              kind: "item" as const,
-              label: t("common.revealFolder"),
-              run: () => void api.revealInExplorer(tab.cwd!).catch(() => {}),
-            },
-          ]
-        : []),
-      { kind: "separator" },
-      {
-        kind: "item",
-        label: t("common.moveUp"),
-        disabled: index === 0,
-        run: () => store().moveTab(tab.id, -1),
-      },
-      {
-        kind: "item",
-        label: t("common.moveDown"),
-        disabled: index === group.tabs.length - 1,
-        run: () => store().moveTab(tab.id, 1),
-      },
-      ...(others.length > 0
-        ? [
-            { kind: "separator" as const },
-            {
-              // Alt menu: on bes grubu olan kullanicida duz liste menuyu
-              // uzatip "Sekmeyi kapat"i ekran disina itiyordu.
-              kind: "submenu" as const,
-              label: t("menu.moveToGroup"),
-              entries: others.map((g) => ({
-                kind: "item" as const,
-                // Gruplanmamış kovanın kayıtlı adı yok; etiketi çeviriden
-                // geliyor. Bu satır aynı zamanda bir sekmeyi gruptan
-                // ÇIKARMANIN yolu.
-                label: groupLabel(g),
-                run: () => store().moveTabToGroup(tab.id, g.id),
-              })),
-            },
-          ]
-        : []),
-      { kind: "separator" },
-      {
-        kind: "item",
-        label: t(isLocked(tab) ? "menu.closeTabLocked" : "menu.closeTab"),
-        danger: true,
-        disabled: isLocked(tab),
-        run: () => void store().closeTab(tab.id),
-      },
-    ];
-  };
-
   // --------------------------------------------------------------------- render
 
   return (
@@ -591,7 +512,16 @@ export function GroupSidebar() {
                         }}
                         onClick={() => store().setActiveTab(tab.id)}
                         onDoubleClick={() => startEditTab(tab)}
-                        onContextMenu={(e) => menu.open(e, tabMenu(group, tab, tabIndex))}
+                        onContextMenu={(e) =>
+                          menu.open(
+                            e,
+                            tabMenu(group, tab, tabIndex, {
+                              groups,
+                              rename: () => startEditTab(tab),
+                              doubleClickRenames: true,
+                            }),
+                          )
+                        }
                         onAuxClick={(e) => {
                           if (e.button === 1) {
                             e.preventDefault();

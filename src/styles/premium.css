@@ -1923,8 +1923,10 @@
 }
 
 /* Kaydırıcı: ince iz, dolu kısmı vurgu (`--fill`, `SettingsDialog` >
-   `rangeFill`), beyaz ve gölgeli tutamak. */
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"] {
+   `rangeFill`), beyaz ve gölgeli tutamak. Renk seçicinin ton çubuğu
+   (`.color-hue`) dışarıda: onun izi gökkuşağı, bu kurallar onu griye
+   boyuyordu. */
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue) {
   -webkit-appearance: none;
   appearance: none;
   width: 15rem;
@@ -1934,7 +1936,7 @@
   cursor: pointer;
 }
 
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"]::-webkit-slider-runnable-track {
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue)::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
   background: linear-gradient(
@@ -1944,7 +1946,7 @@
   );
 }
 
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"]::-webkit-slider-thumb {
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue)::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
@@ -1960,15 +1962,15 @@
     box-shadow 120ms ease;
 }
 
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:active::-webkit-slider-thumb {
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue):active::-webkit-slider-thumb {
   transform: scale(1.1);
 }
 
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:focus-visible {
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue):focus-visible {
   outline: none;
 }
 
-:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:focus-visible::-webkit-slider-thumb {
+:root[data-design="premium"] .modal.settings .modal-body input[type="range"]:not(.color-hue):focus-visible::-webkit-slider-thumb {
   box-shadow:
     0 0 0 0.5px rgb(0 0 0 / 0.2),
     0 1px 3px rgb(0 0 0 / 0.35),
@@ -1993,6 +1995,33 @@
 :root[data-design="premium"] .modal.settings .modal-body input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: 5px;
+}
+
+/* Renk seçicinin önizlemesi ayarların 30px'lik kutusunun yanında onun
+   boyunda dursun. */
+:root[data-design="premium"] .modal.settings .modal-body .color-preview {
+  width: 30px;
+  height: 30px;
+}
+
+/* Uygulamanın kendi renk alanı (`ColorButton`): eski yerel girdinin premium
+   görünüşü — yuvarlak köşeli kart içinde renk örneği. */
+:root[data-design="premium"] .modal.settings .modal-body .color-well {
+  width: 46px;
+  height: 28px;
+  padding: 3px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  background: var(--field-bg);
+}
+
+:root[data-design="premium"] .modal.settings .modal-body .color-well > span {
+  border-radius: 5px;
+}
+
+:root[data-design="premium"] .color-area,
+:root[data-design="premium"] .color-preview {
+  border-radius: 8px;
 }
 
 /* Kısayol kutusu: tuş kapağı. Basılırken (kayıt) vurgu renginde. */

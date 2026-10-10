@@ -367,6 +367,21 @@ describe("ad sekmesi: vurgu ve bölümler", () => {
     expect(isaretler(klasorde)).toEqual(["t"]);
   });
 
+  it("kalıp: `*.tsx` yalnız tsx dosyalarını getiriyor, uzantı işaretli", async () => {
+    // İSTEK: "aramalarda *.tsx dersem bunların da çalışması gerekir."
+    seed("files", "*.tsx");
+    vi.spyOn(api, "listFiles").mockResolvedValue(["src/App.tsx", "src/main.ts", "README.md", "src/ui/Panel.tsx"]);
+    const { container } = render(<FilePalette />);
+    await waitFor(() => expect(satirlar(container)).toHaveLength(2));
+    expect(satirlar(container).map((el) => el.querySelector(".file-name")?.textContent)).toEqual([
+      "App.tsx",
+      "Panel.tsx",
+    ]);
+    expect(isaretler(satirlar(container)[0])).toEqual([".tsx"]);
+    // Kalıp eşleşmesi "yakın" sayılmıyor: ayraç yok.
+    expect(container.querySelector(".palette-section")).toBeNull();
+  });
+
   it("boş sorgu: Değişenler, Son açılanlar, Tüm dosyalar — yollar dizine göre", async () => {
     /*
      * Kabuk deponun ALT klasöründe: git yolları köke göre (`src/a.ts`), liste

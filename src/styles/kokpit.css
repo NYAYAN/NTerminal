@@ -181,11 +181,16 @@
 /* Sürüklenen karo soluk; bırakma yeri boşluğa çizilen bir çizgi. Çizgi
    özniteliğe bağlı sözde öğe: sürüklerken eklenen bir öğe karoları
    kaydırırdı ve WebKit kayan öğenin sürüklemesini başlatmıyor. */
-:root[data-layout="kokpit"] .grail-item.dragging {
+:root[data-layout="kokpit"] .grail-item.dragging,
+:root[data-layout="kokpit"] .grail-node.dragging {
   opacity: 0.4;
 }
 
-:root[data-layout="kokpit"] .grail-item[data-drop]::after {
+/* Sekme ağacında çizgi karonun değil grubun bütününün (karo + sekmeleri)
+   kenarında: "sonra" karonun altına çizilse grubun sekmelerinin arasına
+   düşerdi. */
+:root[data-layout="kokpit"] .grail-item[data-drop]::after,
+:root[data-layout="kokpit"] .grail-node[data-drop]::after {
   content: "";
   position: absolute;
   left: 2px;
@@ -197,11 +202,13 @@
 }
 
 /* Karolar arası boşluk 10px; çizgi tam ortasında. */
-:root[data-layout="kokpit"] .grail-item[data-drop="before"]::after {
+:root[data-layout="kokpit"] .grail-item[data-drop="before"]::after,
+:root[data-layout="kokpit"] .grail-node[data-drop="before"]::after {
   top: -6.5px;
 }
 
-:root[data-layout="kokpit"] .grail-item[data-drop="after"]::after {
+:root[data-layout="kokpit"] .grail-item[data-drop="after"]::after,
+:root[data-layout="kokpit"] .grail-node[data-drop="after"]::after {
   bottom: -6.5px;
 }
 
@@ -211,6 +218,13 @@
   box-shadow:
     0 0 0 2px var(--rail-bg),
     0 0 0 4px var(--accent-ring);
+}
+
+/* Renk kutusunda özel renk seçicisi açıkken kutu ona yer açıyor: hazır renk
+   ızgarası kendi içeriği kadar dar, seçici ise alanı ve ton çubuğu için
+   genişlik istiyor. */
+:root[data-layout="kokpit"] .grail-pop .color-swatches:has(> .color-panel) {
+  width: 13.5rem;
 }
 
 /* Karonun yanındaki kutu (ad ya da renk): yüzen menülerle aynı cam yüzey. */
@@ -265,9 +279,77 @@
 
 /* Geniş ray: karonun yanında grubun adı, araçlar dipte tek sıra.
    Genişlik GEÇİŞSİZ değişiyor: kayarak açılan bir ray terminali her karede
-   yeniden ölçtürür (`fit` → PTY'ye yeni ölçü → kabuk istemi yeniden çizer). */
+   yeniden ölçtürür (`fit` → PTY'ye yeni ölçü → kabuk istemi yeniden çizer).
+   Adlarda da sekme ağacında da AYNI genişlik: başlıktaki ağaç düğmesi sağa
+   yaslı, genişlik değişseydi basınca imlecin altından kayardı. 248px ağaçtaki
+   sekme adına ve portuna yer bırakıyor. */
 :root[data-layout="kokpit"] .grail.expanded {
-  width: 220px;
+  width: 248px;
+}
+
+/* Geniş rayın başlığı: "Gruplar" ve sekme ağacının düğmesi — yalnızca simge,
+   adı ipucunda (İSTEK: "yazı çok yer kaplıyor, tooltip olarak gösterirsin").
+   Grup listesinin dışında: liste kayınca başlık yerinde kalıyor. */
+:root[data-layout="kokpit"] .grail-head {
+  flex: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 0 16px;
+}
+
+:root[data-layout="kokpit"] .grail-caption {
+  color: var(--text-dim);
+  font-size: 0.7308rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:root[data-layout="kokpit"] .grail-head .grail-tool {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+/* Başlığın sağındaki düğmeler: favori grup süzgeci, sonra sekme ağacı. */
+:root[data-layout="kokpit"] .grail-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Dar rayda başlık yalnızca süzgeç açıkken var ve tek düğmesi o: grupların
+   neden eksik olduğunu söylüyor, tek tıkla geri getiriyor. */
+:root[data-layout="kokpit"] .grail:not(.expanded) .grail-head {
+  justify-content: center;
+  padding: 10px 0 0;
+}
+
+/* Basılı süzgeç yıldızı favori renginde (kenar çubuğundaki yıldızla aynı). */
+:root[data-layout="kokpit"] .grail-favorites.on,
+:root[data-layout="kokpit"] .grail-favorites.on:hover:not(:disabled) {
+  color: #e3b341;
+}
+
+/* Favori grubun adının yanındaki yıldız: süzgecin neyi bırakacağı görünsün. */
+:root[data-layout="kokpit"] .grail-fav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #e3b341;
+}
+
+/* Süzgeç açık ama favori grup yok: ne yapılacağını söyleyen kısa not. */
+:root[data-layout="kokpit"] .grail-empty {
+  flex: none;
+  margin: 8px 16px 0;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  line-height: 1.45;
+  white-space: pre-line;
 }
 
 :root[data-layout="kokpit"] .grail.expanded .grail-groups {
@@ -333,8 +415,253 @@
   transform: scaleX(-1);
 }
 
+/* --------------------------------------------- sekme ağacı (geniş rayda) */
+
+/* Grup: karo, sağ ucunda açma oku, altında sekmeleri. Ok karonun KARDEŞİ
+   (düğme içinde düğme olmuyor) ve karonun üstüne oturuyor; karo ona ve
+   kapalıyken sekme sayısına yer bırakıyor. */
+:root[data-layout="kokpit"] .grail-node {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-node > .grail-item {
+  padding-right: 38px;
+}
+
+:root[data-layout="kokpit"] .grail-caret {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+:root[data-layout="kokpit"] .grail-caret:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
+
+:root[data-layout="kokpit"] .grail-count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text-dim);
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Sekmeler karodan dallanıyor: dikey çizgi baş harflerin ortasından (40px'lik
+   sütunun ortası) iniyor, her satıra kısa bir kol. Satırın `::after`ı
+   bırakma çizgisinin; kol `::before`.
+
+   İlk sekme karodan 10px aşağıda. BİLDİRİLEN: "grup altındaki ilk sekme
+   gruba çok yakın, arasında boşluk olmalı." 4px'te etkin grubun halkası
+   (karonun 4px dışına taşıyor) ilk satırın kenarına değiyordu. Çizgi o
+   boşluğu halkanın dış kenarından başlayarak geçiyor: sekmeler karodan
+   kopuk görünmesin. */
+:root[data-layout="kokpit"] .grail-tabs {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 10px;
+  padding-left: 30px;
+}
+
+:root[data-layout="kokpit"] .grail-tabs::before {
+  content: "";
+  position: absolute;
+  left: 19.5px;
+  top: -6px;
+  bottom: 13px;
+  width: 1px;
+  background: var(--hairline-strong);
+  pointer-events: none;
+}
+
+:root[data-layout="kokpit"] .grail-tab {
+  position: relative;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 8px;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.9231rem;
+  cursor: default;
+}
+
+:root[data-layout="kokpit"] .grail-tab::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: var(--hairline-strong);
+  pointer-events: none;
+}
+
+:root[data-layout="kokpit"] .grail-tab:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+:root[data-layout="kokpit"] .grail-tab.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text);
+  font-weight: 500;
+}
+
+:root[data-layout="kokpit"] .grail-tab.dragging {
+  opacity: 0.4;
+}
+
+/* Yanında ad kutusu açık olan satır, karodaki gibi halkalı. */
+:root[data-layout="kokpit"] .grail-tab.editing {
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+:root[data-layout="kokpit"] .grail-tab-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Satırın başındaki durum: çalışan (`busy`), kapanmış (`dead`) ve açılmamış
+   (`tab-row-idle`) kartınkilerle aynı sınıflar; hiçbiri değilse sönük nokta. */
+:root[data-layout="kokpit"] .grail-tab-dot {
+  background: color-mix(in srgb, var(--text) 24%, transparent);
+}
+
+:root[data-layout="kokpit"] .grail-tab-claude {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+}
+
+:root[data-layout="kokpit"] .grail-tab-port {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+  font-family: var(--mono-font);
+  font-size: 0.7692rem;
+  line-height: 16px;
+}
+
+/* Kapat düğmesi yalnızca üzerine gelince görünüyor ama yeri hep ayrılı: ad
+   üzerine gelince kısalıp zıplamasın. Kilitli sekmede yerinde kilit var. */
+:root[data-layout="kokpit"] .grail-tab-close,
+:root[data-layout="kokpit"] .grail-tab-lock {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+:root[data-layout="kokpit"] .grail-tab-close {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  visibility: hidden;
+}
+
+:root[data-layout="kokpit"] .grail-tab:hover > .grail-tab-close {
+  visibility: visible;
+}
+
+:root[data-layout="kokpit"] .grail-tab-close:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+
+:root[data-layout="kokpit"] .grail-tab-lock {
+  font-size: 0.6923rem;
+}
+
+/* "Sekme ekle": sekme satırlarıyla karışmasın diye kısa, soluk ve rozetsiz
+   (kartlardaki gerekçeyle). Sürüklenen sekme için grubun SONU da burası. */
+:root[data-layout="kokpit"] .grail-tab-add {
+  height: 26px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  text-align: left;
+  opacity: 0.75;
+}
+
+:root[data-layout="kokpit"] .grail-tab-add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  opacity: 1;
+}
+
+/* Sekmenin bırakılacağı yer: satırlar arasında karolarınkiyle aynı çizgi;
+   sekmeleri görünmeyen (kapalı ya da boş) gruba bırakırken karo halkalı. */
+:root[data-layout="kokpit"] .grail-tab[data-drop]::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+:root[data-layout="kokpit"] .grail-tab[data-drop="before"]::after {
+  top: -1.5px;
+}
+
+:root[data-layout="kokpit"] .grail-tab[data-drop="after"]::after {
+  bottom: -1.5px;
+}
+
+:root[data-layout="kokpit"] .grail-item[data-into] {
+  box-shadow:
+    0 0 0 2px var(--rail-bg),
+    0 0 0 4px var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root[data-layout="kokpit"] .grail-busy,
+  :root[data-layout="kokpit"] .grail-tab > .tab-dot.busy,
   :root[data-layout="kokpit"] .tab-row-last.running::before {
     animation: none;
   }

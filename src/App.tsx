@@ -23,6 +23,7 @@ import { TabBar } from "./components/TabBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { StashDialog } from "./components/StashDialog";
 import { WindowControls } from "./components/WindowControls";
+import { railTree } from "./lib/design";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
@@ -805,8 +806,9 @@ export function App() {
       {kokpit && <GroupRail />}
 
       {/* Daraltılmışken hiç çizilmiyor: ızgaranın `auto` sütunu sıfıra
-          iniyor ve terminal o alanı alıyor. */}
-      {!sidebarCollapsed && <GroupSidebar />}
+          iniyor ve terminal o alanı alıyor. Kokpit'in sekme ağacı açıkken de
+          yok: aynı sekmeler rayda grupların altında (bkz. `railTree`). */}
+      {!sidebarCollapsed && !railTree(settings.appearance) && <GroupSidebar />}
 
       <div className="main">
         <TabBar />

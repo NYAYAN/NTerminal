@@ -55,7 +55,8 @@ describe("klasörü açma eylemi", () => {
     // klavyeyle çalışan geçici bir katman, bağlam menüsü taşımıyor.
     const yuzeyler = [
       "src/components/TabBar.tsx",
-      "src/components/GroupSidebar.tsx",
+      // Kenar çubuğunun ve Kokpit rayındaki sekme ağacının ortak sekme menüsü.
+      "src/components/tabMenu.ts",
       "src/components/TerminalArea.tsx",
       "src/components/HistoryPanel.tsx",
       "src/components/FavoritesPanel.tsx",
@@ -63,5 +64,9 @@ describe("klasörü açma eylemi", () => {
     ];
     const eksik = yuzeyler.filter((f) => !read(f).includes("revealInExplorer"));
     expect(eksik, `klasör açma eksik:\n${eksik.join("\n")}`).toEqual([]);
+    // Ortak menünün iddiası ancak o yüzeyler onu gerçekten açıyorsa geçerli.
+    for (const f of ["src/components/GroupSidebar.tsx", "src/components/GroupRail.tsx"]) {
+      expect(read(f), `${f} ortak sekme menüsünü açmıyor`).toContain("tabMenu(");
+    }
   });
 });

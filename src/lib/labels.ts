@@ -131,13 +131,19 @@ export function resolveProfile(
   );
 }
 
-/** Sekme için ipucu (tooltip) metni. */
-export function tabTooltip(tab: TabState, profile: Profile | undefined): string {
+/**
+ * Sekme için ipucu (tooltip) metni.
+ *
+ * Son satır adlandırmanın yolunu söylüyor ("Çift tıkla ad ver"). Çift tıkın
+ * ad değiştirmediği yerde (Kokpit rayının sekme ağacı) `nameHint` false:
+ * olmayan bir yolu önermesin.
+ */
+export function tabTooltip(tab: TabState, profile: Profile | undefined, nameHint = true): string {
   const lines = [tabLabel(tab)];
   if (profile) lines.push(profile.name);
   if (tab.cwd) lines.push(tab.cwd);
   if (tab.lastCommand) lines.push(t("tab.lastCommand", { command: tab.lastCommand }));
-  lines.push(t(hasCustomTitle(tab) ? "tab.renamedHint" : "tab.nameHint"));
+  if (nameHint) lines.push(t(hasCustomTitle(tab) ? "tab.renamedHint" : "tab.nameHint"));
   return lines.join("\n");
 }
 

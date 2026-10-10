@@ -262,3 +262,37 @@ describe("toplu katlama düğmesi", () => {
     expect(katlaButonu(container), "arama sırasında düğme duruyor").toBe(null);
   });
 });
+
+describe("ağaçta türün simgesi", () => {
+  /*
+   * BİLDİRİLEN: "klasör yapısını açtığımda dosyaların tiplerini gösteren
+   * iconlar burada yok, cmd + p deyince görüyorum, değişikliklerde
+   * görüyorum." Simgeler Ctrl+P'dekilerle aynı (`FileKindIcon`); klasörde
+   * klasör simgesi, adlar aynı sütundan başlasın diye.
+   */
+  it("klasörde klasör, dosyada türü: görsel, kod, belge", async () => {
+    vi.spyOn(api, "listEntries").mockImplementation(async (p: string) =>
+      p === CWD
+        ? [
+            { name: "src", dir: true },
+            { name: "logo.png", dir: false },
+            { name: "main.rs", dir: false },
+            { name: "LICENSE", dir: false },
+          ]
+        : [],
+    );
+    seed();
+    const { container } = render(<FilePanel />);
+    await waitFor(() => expect(satir(container, "LICENSE")).not.toBe(undefined));
+
+    const tur = (ad: string) => {
+      const ico = satir(container, ad)!.querySelector(".tree-ico")!;
+      // Tanınan türde türün etiketi (`lib/fileTypes.ts`), ötekilerde çizim.
+      const etiket = ico.querySelector(".ftype")?.getAttribute("data-label");
+      return etiket ?? (ico.querySelector("svg") ? ico.getAttribute("data-kind") : null);
+    };
+    expect(["src", "logo.png", "main.rs", "LICENSE"].map(tur)).toEqual(["dir", "image", "RS", "doc"]);
+    // Etiket satırın METNİNE girmiyor: ad aranırken ve kopyalanırken yalnız ad.
+    expect(satir(container, "main.rs")!.textContent).toBe("main.rs");
+  });
+});

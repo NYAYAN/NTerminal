@@ -50,6 +50,7 @@ function settings(patch: Partial<Settings["appearance"]> = {}, behavior = {}): S
       showShellBadge: false,
       sidebarCollapsed: false,
       railExpanded: false,
+      railTabs: false,
       collapsedFavoriteFolders: [],
       ...patch,
     },

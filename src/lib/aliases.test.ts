@@ -37,41 +37,44 @@ const LIST = [
 
 describe("kısaltma açılımı", () => {
   it("ilk sözcük kısaltmaysa favorinin komutu gidiyor", () => {
-    expect(expandAlias("nrb", LIST, "g1")?.text).toBe("npm run build --configuration");
-    expect(expandAlias("ysd", LIST, "g1")?.favorite.id).toBe("f2");
+    expect(expandAlias("nrb", LIST)?.text).toBe("npm run build --configuration");
+    expect(expandAlias("ysd", LIST)?.favorite.id).toBe("f2");
   });
 
   it("arkasına yazılanlar komutun sonuna ekleniyor", () => {
-    expect(expandAlias("nrb --watch production", LIST, "g1")?.text).toBe(
+    expect(expandAlias("nrb --watch production", LIST)?.text).toBe(
       "npm run build --configuration --watch production",
     );
   });
 
   it("yalnızca satırın İLK sözcüğü: ortada geçen ya da boşlukla başlayan açılmıyor", () => {
-    expect(expandAlias("echo nrb", LIST, "g1")).toBeNull();
-    expect(expandAlias(" nrb", LIST, "g1")).toBeNull();
+    expect(expandAlias("echo nrb", LIST)).toBeNull();
+    expect(expandAlias(" nrb", LIST)).toBeNull();
   });
 
   it("sözcüğün tamamı eşleşmeli: ön eki ya da devamı açılmıyor", () => {
-    expect(expandAlias("nr", LIST, "g1")).toBeNull();
-    expect(expandAlias("nrbx", LIST, "g1")).toBeNull();
+    expect(expandAlias("nr", LIST)).toBeNull();
+    expect(expandAlias("nrbx", LIST)).toBeNull();
   });
 
   it("büyük-küçük harf ayırt ediliyor (komut adları da öyle)", () => {
-    expect(expandAlias("NRB", LIST, "g1")).toBeNull();
+    expect(expandAlias("NRB", LIST)).toBeNull();
   });
 
   it("ters bölü kısaltmayı atlıyor — kabuktaki alışkanlık", () => {
-    expect(expandAlias("\\nrb", LIST, "g1")).toBeNull();
+    expect(expandAlias("\\nrb", LIST)).toBeNull();
   });
 
-  it("bir gruba bağlı favorinin kısaltması yalnızca o grupta çalışıyor", () => {
-    expect(expandAlias("dep", LIST, "g1")).toBeNull();
-    expect(expandAlias("dep", LIST, "g2")?.text).toBe("make deploy");
+  it("bir gruba bağlı favorinin kısaltması da her grupta çalışıyor", () => {
+    // BİLDİRİLEN: Yataş grubuna bağlı favorinin kısaltması NTerminal'deki
+    // sekmede kabuğa olduğu gibi gitti ("command not found", çıkış 127).
+    // Grup kısıtı favorinin listede nerede göründüğü; kısaltma her yerde aynı.
+    expect(expandAlias("dep", LIST)?.text).toBe("make deploy");
+    expect(expandAlias("dep --dry-run", LIST)?.favorite.id).toBe("f3");
   });
 
   it("boş satır açılmıyor", () => {
-    expect(expandAlias("", LIST, "g1")).toBeNull();
+    expect(expandAlias("", LIST)).toBeNull();
   });
 });
 

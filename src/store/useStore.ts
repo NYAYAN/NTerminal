@@ -977,6 +977,7 @@ export const useStore = create<Store>((set, get) => ({
       showShellBadge: false,
       sidebarCollapsed: false,
       railExpanded: false,
+      railTabs: false,
       collapsedFavoriteFolders: [],
     },
     behavior: {
@@ -2259,8 +2260,15 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   /**
-   * Favoriyi etkin sekmede uygular. Favoride klasor tanimliysa once oraya
-   * geciyoruz: "bu komut su klasorde anlamli" bilgisi favorinin bir parcasi.
+   * Favoriyi etkin sekmede uygular. ÇALIŞTIRIRKEN favoride klasör tanımlıysa
+   * önce oraya geçiliyor: "bu komut şu klasörde anlamlı" bilgisi favorinin
+   * bir parçası.
+   *
+   * Yalnızca istem satırına YAZARKEN (tek tık) klasör DEĞİŞMİYOR. BİLDİRİLEN:
+   * "bir kere click yaptığımda komut yazın kısmına komutu yazıyor ama hangi
+   * path'deysem o path'i de değiştiriyor. Path değiştirmemeli. Çalıştır
+   * dersem yola gidip komutu çalıştırmalı." Yazmak bir öneri: komutun nerede
+   * çalışacağına kullanıcı Enter'dan önce karar veriyor.
    */
   async runFavorite(id, execute) {
     const favorite = get().favorites.find((f) => f.id === id);
@@ -2270,7 +2278,7 @@ export const useStore = create<Store>((set, get) => ({
       get().toast(t("store.noActiveTerminal"), "err");
       return;
     }
-    if (favorite.cwd && favorite.cwd !== session.cwd) {
+    if (execute && favorite.cwd && favorite.cwd !== session.cwd) {
       // Kilitli sekmede klasör değişmiyor. Komutu yine de göndermek onu
       // YANLIŞ klasörde çalıştırmak olurdu — favorinin klasörü bilgi değil
       // koşul, o yüzden burada duruyoruz.

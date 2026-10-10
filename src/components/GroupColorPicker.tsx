@@ -1,6 +1,9 @@
+import { useState } from "react";
+
 import { useT } from "../lib/i18n";
 import { useStore } from "../store/useStore";
 import type { Group } from "../types";
+import { ColorPanel } from "./ColorPanel";
 
 /**
  * Seçicideki HAZIR renkler — dört tane.
@@ -38,10 +41,19 @@ const GROUP_COLORS = ["#58a6ff", "#3fb950", "#d29922", "#bc8cff"];
  * akışındayken en alta düşüyor ve arandığı yerde bulunmuyordu. Şimdi seçici
  * iki parça: saran kutu ızgarası ve onun sağında, ilk satıra hizalı sabit bir
  * kapatma düğmesi.
+ *
+ * ## Özel renk uygulamanın içinde
+ *
+ * Gökkuşağı kutusu uygulamanın kendi seçicisini (`ColorPanel`) kutuların
+ * hemen ALTINDA açıp kapatıyor. Yerel `<input type="color">`du; macOS'ta
+ * WebKit onun seçicisini ekranın sol alt köşesinde açıyordu (BİLDİRİLEN,
+ * ölçüm `ColorPanel` içinde). Kutu, renk hazırların dışındaysa işaretli.
  */
 export function GroupColorPicker({ group, onClose }: { group: Group; onClose: () => void }) {
   const t = useT();
   const store = useStore.getState;
+  const [customOpen, setCustomOpen] = useState(false);
+  const custom = group.color !== null && !GROUP_COLORS.includes(group.color);
   return (
     <div className="color-picker">
       {/* Sıra: temizle → dört hazır renk → (boşluk) → özel renk.
@@ -70,13 +82,20 @@ export function GroupColorPicker({ group, onClose }: { group: Group; onClose: ()
             onClick={() => store().updateGroup(group.id, { color: option })}
           />
         ))}
-        <label className="swatch custom" title={t("group.customColor")}>
-          <input
-            type="color"
+        <button
+          className={custom ? "swatch custom on" : "swatch custom"}
+          title={t("group.customColor")}
+          aria-expanded={customOpen}
+          onClick={() => setCustomOpen((open) => !open)}
+        />
+        {/* Kendi satırında, kutuların altında (sarma ızgarası tam genişlik
+            veriyor); seçmek burada da kapatmıyor. */}
+        {customOpen && (
+          <ColorPanel
             value={group.color ?? "#58a6ff"}
-            onChange={(e) => store().updateGroup(group.id, { color: e.target.value })}
+            onChange={(color) => store().updateGroup(group.id, { color })}
           />
-        </label>
+        )}
       </div>
       <button className="icon-btn color-close" title={t("group.colorClose")} onClick={onClose}>
         ×
