@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
+import { focusEscaped } from "../lib/focus";
 import { useT } from "../lib/i18n";
 import { resolveConfirm, useStore } from "../store/useStore";
 
@@ -19,10 +20,27 @@ export function ConfirmDialog() {
   const t = useT();
   const request = useStore((s) => s.ui.confirm);
   const okRef = useRef<HTMLButtonElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
+  const messageId = useId();
 
-  // Odak onay düğmesinde: Enter'a basmak en olası eylemi yapsın.
+  /*
+   * Odak onay düğmesinde: Enter'a basmak en olası eylemi yapsın. Ve odak
+   * PENCEREDE KALIYOR: Tab son düğmeden sonra arkadaki terminalin gizli
+   * textarea'sına geçiyordu; oradan yazılan harf kabuğa gidiyor, Enter ise
+   * (pencerenin dinleyicisi yakaladığı için) onaylıyordu — kullanıcı
+   * terminale yazdığını sanırken yıkıcı eylemi onaylamış oluyordu. Dışarı
+   * kaçan odak geri çekiliyor (`SettingsDialog` ile aynı desen).
+   */
   useEffect(() => {
+    if (!request) return;
     okRef.current?.focus();
+    const onFocusIn = (event: FocusEvent) => {
+      const modal = modalRef.current;
+      if (modal && focusEscaped(event.target, modal)) okRef.current?.focus();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
   }, [request?.id]);
 
   useEffect(() => {
@@ -53,13 +71,23 @@ export function ConfirmDialog() {
       // mümkün olmamalı.
       onMouseDown={() => resolveConfirm(request.id, false)}
     >
-      <div className="modal confirm" onMouseDown={(e) => e.stopPropagation()} role="alertdialog">
+      <div
+        className="modal confirm"
+        onMouseDown={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        ref={modalRef}
+      >
         <div className="modal-head">
-          <h2>{request.title}</h2>
+          <h2 id={titleId}>{request.title}</h2>
         </div>
 
         <div className="modal-body">
-          <p className="confirm-message">{request.message}</p>
+          <p className="confirm-message" id={messageId}>
+            {request.message}
+          </p>
           {request.detail && <p className="confirm-detail dim">{request.detail}</p>}
         </div>
 

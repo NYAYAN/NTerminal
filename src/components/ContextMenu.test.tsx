@@ -205,3 +205,74 @@ describe("bilgi satırı", () => {
     expect(container.querySelectorAll("button.ctx-item")).toHaveLength(0);
   });
 });
+
+/**
+ * Klavye: menü ok tuşlarıyla geziliyor, odak açılışta ilk satırda, kapanışta
+ * açıldığı yere dönüyor.
+ *
+ * Eskiden satırlar düğme olsa da kimse odak vermiyordu: klavyeyle açılan
+ * menüde ilk ok tuşu kabuğa gidiyor, ekran okuyucu düz `div` okuyordu.
+ */
+describe("klavye", () => {
+  it("açılışta ilk satır odaklı, roller tanımlı", () => {
+    const { container } = menu([
+      { kind: "header", label: "Başlık" },
+      { kind: "item", label: "Bir", run: () => {} },
+      { kind: "check", label: "İki", checked: true, run: () => {} },
+    ]);
+    expect(container.querySelector('[role="menu"]')).not.toBe(null);
+    expect(document.activeElement?.textContent).toBe("Bir");
+    expect(screen.getByText("İki").closest("button")!.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(screen.getByText("İki").closest("button")!.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("ok tuşları satırlar arasında dolaşıyor, devre dışı satırı atlıyor, uçlarda sarıyor", () => {
+    const { container } = menu([
+      { kind: "item", label: "Bir", run: () => {} },
+      { kind: "item", label: "Kapalı", disabled: true, run: () => {} },
+      { kind: "item", label: "Üç", run: () => {} },
+    ]);
+    const panel = container.querySelector('[role="menu"]')!;
+    fireEvent.keyDown(panel, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Üç");
+    fireEvent.keyDown(panel, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent, "sondan başa sarmalı").toBe("Bir");
+    fireEvent.keyDown(panel, { key: "ArrowUp" });
+    expect(document.activeElement?.textContent, "baştan sona sarmalı").toBe("Üç");
+    fireEvent.keyDown(panel, { key: "Home" });
+    expect(document.activeElement?.textContent).toBe("Bir");
+    fireEvent.keyDown(panel, { key: "End" });
+    expect(document.activeElement?.textContent).toBe("Üç");
+  });
+
+  it("sağ ok alt menüyü açıp ilk satırına odaklanıyor, sol ok geri dönüyor", async () => {
+    const run = vi.fn();
+    const { container } = menu([
+      { kind: "item", label: "Bir", run: () => {} },
+      { kind: "submenu", label: "Taşı", entries: [{ kind: "item", label: "Alfa", run }] },
+    ]);
+    const panel = container.querySelector('[role="menu"]')!;
+    fireEvent.keyDown(panel, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toContain("Taşı");
+    fireEvent.keyDown(panel, { key: "ArrowRight" });
+    await settle();
+    expect(document.activeElement?.textContent, "alt menünün ilk satırı odaklanmalı").toBe("Alfa");
+    const sub = document.activeElement!.closest('[role="menu"]')!;
+    fireEvent.keyDown(sub, { key: "ArrowLeft" });
+    await settle(50);
+    expect(container.querySelectorAll('[role="menu"]'), "alt menü kapanmalı").toHaveLength(1);
+    expect(document.activeElement?.textContent, "odak alt menülü satıra dönmeli").toContain("Taşı");
+  });
+
+  it("kapanınca odak açıldığı yere dönüyor", () => {
+    const button = document.createElement("button");
+    button.textContent = "Kaynak";
+    document.body.appendChild(button);
+    button.focus();
+    const view = menu([{ kind: "item", label: "Bir", run: () => {} }]);
+    expect(document.activeElement?.textContent).toBe("Bir");
+    view.unmount();
+    expect(document.activeElement).toBe(button);
+    button.remove();
+  });
+});

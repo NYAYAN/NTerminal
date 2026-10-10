@@ -180,3 +180,39 @@ describe("onay penceresi", () => {
     expect(screen.getByText("OK")).toBeTruthy();
   });
 });
+
+/**
+ * Odak pencerede kalıyor ve pencere ekran okuyucuya tanıtılıyor.
+ *
+ * ÖLÇÜLEN RİSK: Tab son düğmeden sonra arkadaki terminalin gizli textarea'sına
+ * geçiyordu; oradan yazılan harf kabuğa gidiyor, Enter ise pencerenin
+ * dinleyicisi yakaladığı için ONAYLIYORDU — yıkıcı eylem, terminale yazdığını
+ * sanan birinin elinde.
+ */
+describe("odak ve erişilebilirlik", () => {
+  it("dışarı kaçan odak onay düğmesine geri çekiliyor", async () => {
+    const outside = document.createElement("textarea");
+    document.body.appendChild(outside);
+    render(<ConfirmDialog />);
+    void useStore.getState().askConfirm({ title: "T", message: "M" });
+    await act(async () => {});
+    expect(document.activeElement?.textContent).toBe("Tamam");
+
+    await act(async () => {
+      outside.focus();
+    });
+    expect(document.activeElement?.textContent, "odak pencerenin dışına çıktı").toBe("Tamam");
+    outside.remove();
+  });
+
+  it("alertdialog başlık ve iletiye bağlı, modal", async () => {
+    render(<ConfirmDialog />);
+    void useStore.getState().askConfirm({ title: "Başlık", message: "İleti" });
+    await act(async () => {});
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    const byId = (attr: string) => document.getElementById(dialog.getAttribute(attr)!)?.textContent;
+    expect(byId("aria-labelledby")).toBe("Başlık");
+    expect(byId("aria-describedby")).toBe("İleti");
+  });
+});

@@ -53,6 +53,29 @@ export function ContextMenu({ state, onClose }: { state: ContextMenuState; onClo
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState({ x: state.x, y: state.y });
 
+  /*
+   * Klavye: menü açılınca odak ilk satırda, kapanınca açıldığı yere dönüyor.
+   *
+   * Menü eskiden yalnızca fareyle geziliyordu: satırlar düğme olsa da odağı
+   * kimse vermiyordu, ok tuşları işlemiyordu ve ekran okuyucu düz `div`
+   * okuyordu. Klavyeyle (⇧F10 / menü tuşu / uygulamanın kısayolları) açılan
+   * menü, odak terminalde kaldığı için ilk ok tuşunu kabuğa gönderiyordu.
+   * Gezinti `MenuPanel` içinde (ok, Home/End, sağ-sol ok alt menü); burada
+   * yalnızca odağın gidip gelmesi.
+   */
+  // Çizim sırasında alınıyor, etkide değil: çocuk etkileri önce koşuyor ve
+  // `MenuPanel` o anda ilk satırı odaklamış oluyor — etkide bakılsa "açıldığı
+  // yer" menünün kendisi çıkardı.
+  const [back] = useState(() =>
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+  useEffect(
+    () => () => {
+      if (back?.isConnected) back.focus();
+    },
+    [back],
+  );
+
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -97,11 +120,14 @@ function MenuPanel({
   entries,
   pos,
   onClose,
+  onBack,
 }: {
   ref?: React.Ref<HTMLDivElement>;
   entries: MenuEntry[];
   pos: { x: number; y: number };
   onClose: () => void;
+  /** Alt menüde sol ok: üst menüye dön (alt menüyü kapat, satırı odakla). */
+  onBack?: () => void;
 }) {
   // Açık alt menünün girdi sırası ve konumu.
   const [open, setOpen] = useState<{ index: number; x: number; y: number; flip: boolean } | null>(
@@ -146,10 +172,66 @@ function MenuPanel({
 
   const openEntry = open !== null ? entries[open.index] : undefined;
 
+  /** Bu panelin odaklanabilir satırları (devre dışı ve bilgi satırları hariç). */
+  const focusables = () =>
+    panelRef.current
+      ? Array.from(panelRef.current.querySelectorAll<HTMLButtonElement>("button.ctx-item:not(:disabled)"))
+      : [];
+
+  // Açılışta ilk satır odaklı: ok tuşları hemen işlesin, Enter ilk eylemi yapsın.
+  useEffect(() => {
+    focusables()[0]?.focus();
+  }, []);
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = focusables();
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const focusAt = (i: number) => items[(i + items.length) % items.length]?.focus();
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusAt(current + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusAt(current - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusAt(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusAt(items.length - 1);
+        break;
+      case "ArrowRight": {
+        const row = items[current];
+        if (row?.classList.contains("has-sub")) {
+          event.preventDefault();
+          const index = Number(row.dataset.index);
+          scheduleOpen(index, row);
+        }
+        break;
+      }
+      case "ArrowLeft":
+        if (onBack) {
+          event.preventDefault();
+          event.stopPropagation();
+          onBack();
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <>
       <div
         className="ctx-menu"
+        role="menu"
+        onKeyDown={onKeyDown}
         ref={(node) => {
           panelRef.current = node;
           if (typeof ref === "function") ref(node);
@@ -192,6 +274,10 @@ function MenuPanel({
               <button
                 key={index}
                 className={isOpen ? "ctx-item has-sub open" : "ctx-item has-sub"}
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={isOpen}
+                data-index={index}
                 disabled={entry.disabled}
                 onMouseEnter={(e) => {
                   if (entry.disabled) return;
@@ -224,6 +310,8 @@ function MenuPanel({
               <button
                 key={index}
                 className="ctx-item"
+                role="menuitemcheckbox"
+                aria-checked={entry.checked}
                 onMouseEnter={closeSub}
                 onClick={() => {
                   entry.run();
@@ -241,6 +329,7 @@ function MenuPanel({
             <button
               key={index}
               className={entry.danger ? "ctx-item danger" : "ctx-item"}
+              role="menuitem"
               disabled={entry.disabled}
               onMouseEnter={closeSub}
               onClick={() => {
@@ -264,7 +353,17 @@ function MenuPanel({
           }}
           onMouseLeave={closeSub}
         >
-          <MenuPanel entries={openEntry.entries} pos={{ x: open.x, y: open.y }} onClose={onClose} />
+          <MenuPanel
+            entries={openEntry.entries}
+            pos={{ x: open.x, y: open.y }}
+            onClose={onClose}
+            onBack={() => {
+              closeSub();
+              panelRef.current
+                ?.querySelector<HTMLButtonElement>(`button.ctx-item[data-index="${open.index}"]`)
+                ?.focus();
+            }}
+          />
         </div>
       )}
     </>
