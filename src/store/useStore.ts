@@ -1005,6 +1005,10 @@ export const useStore = create<Store>((set, get) => ({
       appInput: true,
       commandBlocks: true,
       blockHeaders: true,
+      // `model.rs` ile aynı: renkli istem açık, renkler seçilmemiş (palet).
+      colorPrompt: true,
+      promptUserColor: "",
+      promptDirColor: "",
       // Varsayılan "background": uygulamanın menü çubuğunda / bildirim
       // alanında her zaman bir simgesi var, kapatma düğmesine basınca tümden
       // ölmesi bu varlıkla çelişiyordu — simge de kayboluyordu.

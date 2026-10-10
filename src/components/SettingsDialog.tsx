@@ -22,6 +22,7 @@ import {
 } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { defaultFontStack, isMac } from "../lib/platform";
+import { defaultPromptColors } from "../lib/promptColors";
 import { SECTIONS, searchSettings, type Section } from "../lib/settingsIndex";
 import { LIMITS, terminalFontSize } from "../lib/settingsLimits";
 import { sessions, useStore, type UpdateInstall } from "../store/useStore";
@@ -239,6 +240,8 @@ function underRoot(root: string, path: string): string {
 export function SettingsDialog() {
   const t = useT();
   const settings = useStore((s) => s.settings);
+  // Renk seçilmemişken istemin gerçekte göründüğü renkler (bkz. `promptColors.ts`).
+  const promptDefaults = defaultPromptColors(settings.appearance.theme);
   /*
    * GRUPLANMAMIŞ kova bu listede YOK.
    *
@@ -501,6 +504,46 @@ export function SettingsDialog() {
           void store().patchBehavior({ [key]: opened.behavior[key] } as Partial<Behavior>)
         }
       />
+    );
+  }
+
+  /**
+   * İstem renk seçicisi: renk düğmesi + "Varsayılana dön" + geri al (bkz.
+   * `promptColors.ts`). Renk düğmesi uygulamanın kendi seçicisi (`ColorButton`):
+   * yerel renk girdisinin macOS'taki seçicisi ekranın köşesinde açılıyordu.
+   * Renkli istem kapalıyken kabuk renkleri okumuyor; düğmeler de kapalı.
+   */
+  function promptColorControl(
+    key: "promptUserColor" | "promptDirColor",
+    label: MsgKey,
+    hint: MsgKey,
+    fallback: string,
+  ) {
+    const off = !settings.behavior.colorPrompt;
+    return (
+      <>
+        <label>{t(label)}</label>
+        <div className="prompt-color-row">
+          <ColorButton
+            value={settings.behavior[key] || fallback}
+            label={t(label)}
+            disabled={off}
+            onChange={(color) => void store().patchBehavior({ [key]: color })}
+          />
+          <button
+            className="outline"
+            disabled={off || !settings.behavior[key]}
+            onClick={() => void store().patchBehavior({ [key]: "" })}
+          >
+            {t("settings.promptColorReset")}
+          </button>
+        </div>
+        {/* Açıklama düğmesi geri alma düğmesinden ÖNCE ve satırın İÇİNDE:
+            ızgarada bilgi sütunu olan öğe kendinden öncekinin satırına
+            yerleşiyor; satırın dışına konunca boş bir satıra düşüyordu. */}
+        <SettingHint>{t(hint)}</SettingHint>
+        {undoBehavior(key)}
+      </>
     );
   }
 
@@ -1365,6 +1408,48 @@ export function SettingsDialog() {
                 </div>
                 <SettingHint>{t("settings.blockHeadersHint")}</SettingHint>
                 {undoBehavior("blockHeaders")}
+                {/* Yalnızca macOS: PowerShell istemi bu değişkenleri okumuyor ve
+                    `nterminal.sh` Git Bash/WSL'de de yükleniyor. */}
+                {isMac() && (
+                  <>
+                    <div className="check-row" data-setting="settings.colorPrompt">
+                      <input
+                        id="colorPrompt"
+                        type="checkbox"
+                        checked={settings.behavior.colorPrompt}
+                        onChange={(e) =>
+                          void store().patchBehavior({ colorPrompt: e.target.checked })
+                        }
+                      />
+                      <label htmlFor="colorPrompt">{t("settings.colorPrompt")}</label>
+                    </div>
+                    <SettingHint>{t("settings.colorPromptHint")}</SettingHint>
+                    {undoBehavior("colorPrompt")}
+                  </>
+                )}
+                {/* Renkler renkli istem AÇIKKEN anlamlı: kapalıyken kabuk hiçbirini
+                    okumuyor. Seçilmemişken istemin GERÇEKTE göründüğü renk (kalın
+                    palet rengi = parlak karşılığı) gösteriliyor. */}
+                {isMac() && (
+                  <>
+                    <div className="field" data-setting="settings.promptUserColor">
+                      {promptColorControl(
+                        "promptUserColor",
+                        "settings.promptUserColor",
+                        "settings.promptUserColorHint",
+                        promptDefaults.user,
+                      )}
+                    </div>
+                    <div className="field" data-setting="settings.promptDirColor">
+                      {promptColorControl(
+                        "promptDirColor",
+                        "settings.promptDirColor",
+                        "settings.promptDirColorHint",
+                        promptDefaults.dir,
+                      )}
+                    </div>
+                  </>
+                )}
                 <div className="check-row" data-setting="settings.appInput">
                   <input
                     id="appInput"

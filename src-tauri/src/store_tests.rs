@@ -139,6 +139,9 @@ fn eski_ayar_dosyasi_eksik_alanlarla_okunabilir() {
     assert!(settings.behavior.app_input);
     assert!(settings.behavior.command_blocks);
     assert!(settings.behavior.block_headers);
+    assert!(settings.behavior.color_prompt, "eski dosyada renkli istem acik gelmeli");
+    assert_eq!(settings.behavior.prompt_user_color, "", "eski dosyada istem rengi secilmemis gelmeli");
+    assert_eq!(settings.behavior.prompt_dir_color, "");
     assert!(settings.behavior.app_suggestions);
 
     // Eksik kisayollar da tamamlanmali.
@@ -306,6 +309,9 @@ fn bos_bolumler_varsayilanla_dolar() {
     assert!(settings.behavior.app_input);
     assert!(settings.behavior.command_blocks);
     assert!(settings.behavior.block_headers);
+    assert!(settings.behavior.color_prompt, "bos behavior'da renkli istem acik gelmeli");
+    assert_eq!(settings.behavior.prompt_user_color, "");
+    assert_eq!(settings.behavior.prompt_dir_color, "");
     assert!(settings.behavior.app_suggestions);
 }
 
@@ -448,4 +454,24 @@ fn yakinlastirma_alani_eski_dosyada_sifir() {
     let s: Settings = serde_json::from_str(r#"{ "appearance": { "fontSize": 12 } }"#).unwrap();
     assert_eq!(s.appearance.font_zoom, 0);
     assert_eq!(s.appearance.font_size, 12);
+}
+
+/// Kullanicinin sectigi istem renkleri diske yazilip geri okununca KORUNMALI.
+///
+/// Alanlar `Behavior`a eklenmeden once arayuzden gelen bilinmeyen alanlar
+/// yuklemede sessizce dusuyordu: ayar ekranda dururdu ama bir sonraki acilista
+/// kaybolurdu. Camel case adlar arayuzle (`promptUserColor`) eslesmeli.
+#[test]
+fn istem_renkleri_diske_yazilip_okununca_korunuyor() {
+    let mut settings = Settings::default();
+    settings.behavior.prompt_user_color = "#ff8c00".into();
+    settings.behavior.prompt_dir_color = "#00aaff".into();
+
+    let json = serde_json::to_string(&settings).expect("serilestirilemedi");
+    assert!(json.contains("\"promptUserColor\":\"#ff8c00\""), "arayuzun bekledigi ad: {json}");
+    assert!(json.contains("\"promptDirColor\":\"#00aaff\""), "arayuzun bekledigi ad: {json}");
+
+    let geri: Settings = serde_json::from_str(&json).expect("okunamadi");
+    assert_eq!(geri.behavior.prompt_user_color, "#ff8c00");
+    assert_eq!(geri.behavior.prompt_dir_color, "#00aaff");
 }

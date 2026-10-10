@@ -121,6 +121,55 @@ if [[ -z ${preexec_functions[(r)__nterm_preexec]-} ]]; then
   preexec_functions=(__nterm_preexec $preexec_functions)
 fi
 
+# --- 3b) renkli varsayilan istem --------------------------------------------
+#
+# macOS'un zsh varsayilani (`%n@%m %1~ %# `, /etc/zshrc) duz metin: ekran
+# gecmisinde bir komutun NEREDE basladigini gozle bulmak zor. Kullanicinin
+# bilerek kurdugu istem (oh-my-zsh, starship, kendi PROMPT'u) DEGISMEZ:
+# yalnizca isletim sisteminin verdigi varsayilanin AYNISI ise renkleniyor. Bu
+# betik kullanicinin .zshrc'sinden SONRA yuklendigi icin o an PS1 zaten
+# kullanicinin son hali.
+#
+# Renkler paletten (`green` = ANSI 2, `blue` = ANSI 4): gercek tonu tema
+# belirliyor, yani her temada okunabilir. Kalin + yesil kullanici@makine, kalin
+# mavi dizin: Debian/Ubuntu'nun varsayilan renkli istemiyle ayni duzen.
+#
+# NTERMINAL_PROMPT_COLOR=0 (Ayarlar > Terminal > Renkli istem kapali) ise
+# dokunmuyoruz. Degisken yoksa (eski uygulama surumu) renkleniyor.
+#
+# Renkleri KULLANICI secebiliyor (Ayarlar > Terminal > Istem renkleri): uygulama
+# `NTERMINAL_PROMPT_USER_RGB` (kullanici@makine) ve `NTERMINAL_PROMPT_DIR_RGB`
+# (dizin) degiskenlerine `R;G;B` yaziyor (bkz. `promptColors.ts`; terminal
+# zeminine karsi okunur hale getirilmis). Deger bir KACIS DIZISININ icine
+# yazildigi icin kati dogrulaniyor: yalniz rakam, tam iki `;`. Bos ya da bozuk
+# bir deger sessizce palet rengine (yesil / mavi) dusuyor; ham SGR `%{ %}` icinde
+# cunku zsh'in "bu karakterler ekranda yer kaplamaz" isareti bu.
+#
+# Degiskenler `${X-}` ile okunuyor: kullanici `setopt nounset` actiysa (.zshrc bu
+# betikten ONCE yuklendi) tanimsiz bir degisken betigi yarida keserdi.
+#
+# Karsilastirma harfi harfine: sag taraf tirnak icinde, glob degil.
+__nterm_rgb_ok() {
+  case $1 in
+    '' | *[!0-9\;]* | \;* | *\; | *\;\;*) return 1 ;;
+  esac
+  [[ ${1//[^;]/} == ';;' ]]
+}
+if [[ ${NTERMINAL_PROMPT_COLOR-} != 0 && $PS1 == '%n@%m %1~ %# ' ]]; then
+  __nterm_uc='%F{green}' __nterm_uf='%f' __nterm_dc='%F{blue}' __nterm_df='%f'
+  if __nterm_rgb_ok "${NTERMINAL_PROMPT_USER_RGB-}"; then
+    __nterm_uc=$'%{\e[38;2;'"${NTERMINAL_PROMPT_USER_RGB}"$'m%}'
+    __nterm_uf=$'%{\e[39m%}'
+  fi
+  if __nterm_rgb_ok "${NTERMINAL_PROMPT_DIR_RGB-}"; then
+    __nterm_dc=$'%{\e[38;2;'"${NTERMINAL_PROMPT_DIR_RGB}"$'m%}'
+    __nterm_df=$'%{\e[39m%}'
+  fi
+  PS1="%B${__nterm_uc}%n@%m${__nterm_uf}%b %B${__nterm_dc}%1~${__nterm_df}%b %# "
+  unset __nterm_uc __nterm_uf __nterm_dc __nterm_df
+fi
+unfunction __nterm_rgb_ok
+
 # --- 4) komut onerisi -------------------------------------------------------
 #
 # zsh'te PSReadLine karsiligi `zsh-autosuggestions`. Eklenti uygulamayla

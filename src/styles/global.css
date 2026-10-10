@@ -7747,3 +7747,11 @@ button.pop-group {
   outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: -1px;
 }
+
+/* Istem rengi satiri: renk dugmesi ve "Varsayilana don". Ust hizali: dugmenin
+   altinda secici acilinca yanindaki dugme yerinde kalsin. */
+.prompt-color-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}

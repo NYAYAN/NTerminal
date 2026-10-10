@@ -149,6 +149,53 @@ __nterm_prompt_done"
   fi
 fi
 
+# Renkli varsayilan istem.
+#
+# macOS'un bash varsayilani (`\h:\W \u\$ `, /etc/bashrc) ve bash'in yerlesik
+# varsayilani (`\s-\v\$ `) duz metin: ekran gecmisinde bir komutun NEREDE
+# basladigini gozle bulmak zor. Kullanicinin bilerek kurdugu istem DEGISMEZ:
+# yalnizca bu iki varsayilandan biriyle BIREBIR ayniysa renkleniyor (kullanici
+# profilleri yukarida yuklendi, PS1 o an son hali).
+#
+# Renkler paletten (yesil/mavi = ANSI 2/4): gercek tonu tema belirliyor. `\[ \]`
+# bash'e "bu karakterler ekranda yer kaplamaz" der; olmazsa satir uzunlugu
+# yanlis hesaplanip imlec kayar.
+#
+# Renkleri KULLANICI secebiliyor (Ayarlar > Terminal > Istem renkleri): uygulama
+# `NTERMINAL_PROMPT_USER_RGB` (kullanici@makine) ve `NTERMINAL_PROMPT_DIR_RGB`
+# (dizin) degiskenlerine `R;G;B` yaziyor (terminal zeminine karsi okunur hale
+# getirilmis). Deger bir KACIS DIZISININ icine yazildigi icin kati dogrulaniyor:
+# yalniz rakam, tam iki `;`. Bos ya da bozuk bir deger sessizce palet rengine
+# (yesil / mavi) dusuyor.
+#
+# NTERMINAL_PROMPT_COLOR=0 ise dokunmuyoruz; degisken yoksa renkleniyor.
+__nterm_rgb_ok() {
+  case "$1" in
+    '' | *[!0-9\;]* | \;* | *\; | *\;\;*) return 1 ;;
+  esac
+  [ "${1//[^;]/}" = ";;" ]
+}
+if [ "${NTERMINAL_PROMPT_COLOR-1}" != "0" ]; then
+  __nterm_uc='1;32'
+  __nterm_dc='1;34'
+  if __nterm_rgb_ok "${NTERMINAL_PROMPT_USER_RGB-}"; then
+    __nterm_uc="1;38;2;${NTERMINAL_PROMPT_USER_RGB}"
+  fi
+  if __nterm_rgb_ok "${NTERMINAL_PROMPT_DIR_RGB-}"; then
+    __nterm_dc="1;38;2;${NTERMINAL_PROMPT_DIR_RGB}"
+  fi
+  case "${PS1-}" in
+    '\h:\W \u\$ ')
+      PS1='\[\033['"${__nterm_uc}"'m\]\h\[\033[0m\]:\[\033['"${__nterm_dc}"'m\]\W\[\033[0m\] \[\033['"${__nterm_uc}"'m\]\u\[\033[0m\]\$ '
+      ;;
+    '\s-\v\$ ')
+      PS1='\[\033['"${__nterm_uc}"'m\]\s-\v\[\033[0m\]\$ '
+      ;;
+  esac
+  unset __nterm_uc __nterm_dc
+fi
+unset -f __nterm_rgb_ok
+
 # Istemin bittigini (komut girisinin basladigini) PS1 sonuna isaretliyoruz.
 # \[ \] sarmasi bash'e "bu karakterler ekranda yer kaplamaz" der; olmazsa
 # satir uzunlugu yanlis hesaplanip imlec kayar.

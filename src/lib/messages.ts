@@ -1540,6 +1540,23 @@ export const MESSAGES = {
     "Kabuk görünür bir istem yazmaz; dizin, süre ve çıkış durumu bloğun kendi başlığında gösterilir. Ekrandan uzun yol dizesi kalkar. Şimdilik yalnızca PowerShell: başlık yalnızca kabuğun bunu bildirdiği sekmelerde çizilir, diğerlerinde istem olduğu gibi kalır.",
     "The shell writes no visible prompt; the directory, duration and outcome appear in the block's own header instead, so the long path string leaves the screen. PowerShell only for now: the header is drawn only in tabs where the shell reports it, and the prompt stays as it is elsewhere.",
   ],
+  // Renkli istem (yalnız macOS): kabuğun VARSAYILAN istemi renkleniyor.
+  "settings.colorPrompt": ["Renkli istem", "Colored prompt"],
+  "settings.colorPromptHint": [
+    "Kabuğun varsayılan istemi (kullanıcı@makine dizin %) düz beyaz yerine renkli yazılır: bir komutun nerede başladığı ekran geçmişinde bir bakışta görünür. Yalnızca işletim sisteminin verdiği istem renklenir; oh-my-zsh, starship ya da kendi PROMPT'unu kuran birinin istemine dokunulmaz. Yeni açılan sekmelerde geçerli olur.",
+    "The shell's default prompt (user@host dir %) is drawn in color instead of plain white, so where a command started is visible at a glance in the scrollback. Only the prompt the operating system provides is colored; a prompt you set up yourself (oh-my-zsh, starship, PROMPT) is left alone. Applies to newly opened tabs.",
+  ],
+  "settings.promptUserColor": ["İstem rengi: kullanıcı@makine", "Prompt color: user@host"],
+  "settings.promptUserColorHint": [
+    "Renkli istemdeki kullanıcı@makine kısmının rengi. Seçilmezse temanın rengi kullanılır. Seçtiğiniz renk terminal zemininde okunmayacak kadar soluksa aynı tonun okunur bir hâli çizilir. Yalnızca işletim sisteminin verdiği varsayılan istem boyanır; kendi istemini kuran birinin istemine dokunulmaz. Yeni açılan sekmelerde geçerli olur.",
+    "The color of the user@host part of the colored prompt. If you pick none, the theme's color is used. A color too faint to read on the terminal background is drawn as a readable shade of the same hue. Only the prompt the operating system provides is painted; a prompt you set up yourself is left alone. Applies to newly opened tabs.",
+  ],
+  "settings.promptDirColor": ["İstem rengi: klasör", "Prompt color: folder"],
+  "settings.promptDirColorHint": [
+    "Renkli istemdeki klasör adının rengi. Seçilmezse temanın rengi kullanılır; okunabilirlik ve kapsam kuralları kullanıcı@makine rengiyle aynıdır. Yeni açılan sekmelerde geçerli olur.",
+    "The color of the folder name in the colored prompt. If you pick none, the theme's color is used; the readability and scope rules are the same as for the user@host color. Applies to newly opened tabs.",
+  ],
+  "settings.promptColorReset": ["Varsayılana dön", "Reset to default"],
   "settings.commandBlocks": [
     "Komutları blok olarak göster",
     "Show commands as blocks",

@@ -183,25 +183,30 @@ export function ColorButton({
   value,
   label,
   onChange,
+  disabled = false,
 }: {
   value: string | null;
   label: string;
   onChange: (hex: string) => void;
+  /** Ayar şu an anlamsızsa (ör. renkli istem kapalı) düğme kapalı, seçici açılmıyor. */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const color = value ?? FALLBACK;
+  const shown = open && !disabled;
   return (
     <div className="color-field">
       <button
         type="button"
         className="color-well"
         aria-label={label}
-        aria-expanded={open}
+        aria-expanded={shown}
+        disabled={disabled}
         onClick={() => setOpen((was) => !was)}
       >
         <span style={{ background: color }} />
       </button>
-      {open && <ColorPanel value={color} onChange={onChange} />}
+      {shown && <ColorPanel value={color} onChange={onChange} />}
     </div>
   );
 }

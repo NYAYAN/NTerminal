@@ -577,6 +577,17 @@ tamamlıyor.
 
 İkisi birlikte de kullanılabilir; ayrı ayrı kapatılabilir.
 
+**Renkli varsayılan istem** (macOS zsh ve bash). İşletim sisteminin verdiği
+düz istem (`kullanıcı@makine dizin %`) renkleniyor: kalın yeşil kimlik, kalın
+mavi dizin; renkler ANSI paletinden geldiği için tona tema karar veriyor.
+Yalnızca işletim sisteminin varsayılanıyla **birebir aynı** istem renkleniyor;
+oh-my-zsh, starship ya da kendi `PROMPT`unu kuran kullanıcının istemine
+dokunulmuyor. *Ayarlar › Terminal › Komut satırı › Renkli istem* ile
+kapatılabilir; aynı yerde kullanıcı@makine ve klasör için ayrı ayrı renk
+seçilebiliyor (seçilmezse temanın yeşili/mavisi). Seçilen renk terminalin
+zemininde okunmayacak kadar soluksa aynı tonun okunur bir hâli kullanılıyor.
+Yeni açılan sekmelerde geçerli.
+
 **Kabuk kapanınca sekme kendiliğinden yeniden başlar.** `exit` yazdığınızda ya
 da kabuk düştüğünde sekme boş bir kutuya dönüşmüyor: yeni bir kabuk açılıyor ve
 önceki ekran, altında "önceki oturum burada bitti" ayıracıyla yerinde kalıyor.

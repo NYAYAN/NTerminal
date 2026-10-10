@@ -331,6 +331,26 @@ pub struct Behavior {
     /// satir); dizin, sure ve cikis durumu o bos satira uygulama tarafindan
     /// ciziliyor. Simdilik yalnizca PowerShell.
     pub block_headers: bool,
+    /// Kabugun VARSAYILAN istemini renklendir (yalnizca macOS/Linux kabuklari).
+    ///
+    /// Kabuga NTERMINAL_PROMPT_COLOR ile bildiriliyor. macOS'un zsh
+    /// varsayilani (`%n@%m %1~ %#`) ve bash varsayilani (`\h:\W \u\$`) duz
+    /// metin: ekran gecmisinde bir komutun NEREDE basladigini gozle bulmak
+    /// zor. Kullanicinin bilerek kurdugu istem (oh-my-zsh, starship, kendi
+    /// PROMPT'u) DEGISMIYOR - yalnizca isletim sisteminin verdigi varsayilanin
+    /// AYNISI ise kullanici@makine ve dizin renkleniyor.
+    ///
+    /// Varsayilan ACIK: istek "en azindan nerede komut yazdigimi anlayayim"
+    /// idi ve kapali bir varsayilan hicbir kullaniciya ulasmazdi.
+    pub color_prompt: bool,
+    /// Renkli istemde kullanici@makine rengi (`#rrggbb`); bos: temanin paleti (yesil).
+    ///
+    /// Arayuz rengi terminal zeminine karsi okunur hale getirip (`promptRgb`)
+    /// kabuga `NTERMINAL_PROMPT_USER_RGB` ile `R;G;B` olarak veriyor. Bos birakmak
+    /// "secilmedi" demek, hicbir sey degismiyor.
+    pub prompt_user_color: String,
+    /// Renkli istemde klasor rengi (`#rrggbb`); bos: temanin paleti (mavi).
+    pub prompt_dir_color: String,
     /// YALNIZCA macOS: Option tusu Meta gibi davransin.
     ///
     /// Acikken Option+B / Option+F / Option+Backspace kabuga ESC dizisi olarak
@@ -384,6 +404,9 @@ impl Default for Behavior {
             app_input: true,
             command_blocks: true,
             block_headers: true,
+            color_prompt: true,
+            prompt_user_color: String::new(),
+            prompt_dir_color: String::new(),
             close_action: "background".into(),
             check_updates: true,
         }

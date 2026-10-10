@@ -534,6 +534,351 @@ describe("gerçek zsh akışı", () => {
 });
 
 /**
+ * Renkli varsayılan istem — GERÇEK zsh ve bash üzerinde.
+ *
+ * ## İstek
+ *
+ * "nyayan@Nurullahs-MacBook-Pro locale-test % echo merhaba" satırı düz beyaz:
+ * ekran geçmişinde komutun NEREDE başladığını gözle bulmak zor. Kullanıcı
+ * "en azından nerede komut yazdığını anlayabilsin" istedi.
+ *
+ * ## Kural
+ *
+ * Yalnızca işletim sisteminin verdiği varsayılan istem renkleniyor (zsh
+ * `%n@%m %1~ %#`, bash `\h:\W \u\$` ve bash'in yerleşik `\s-\v\$`). Kullanıcının
+ * bilerek kurduğu istem (oh-my-zsh, starship, kendi PROMPT'u) DEĞİŞMİYOR ve
+ * ayar kapalıyken hiçbir şeye dokunulmuyor.
+ *
+ * Betikler YAPISAL olarak denetleniyor (yukarıdaki testler) ama bu kural bir
+ * DAVRANIŞ: yanlış bir desen ya sessizce hiçbir şey yapmaz ya da kullanıcının
+ * istemini ezer. O yüzden betik gerçek kabukta kaynak edilip PS1 okunuyor.
+ * Windows'ta zsh/bash yok; orada atlanıyor.
+ */
+describe("renkli varsayılan istem", () => {
+  const win = process.platform === "win32";
+  const ZSH_SCRIPT = join(DIR, "nterminal.zsh");
+  const SH_SCRIPT = join(DIR, "nterminal.sh");
+  const ESC = String.fromCharCode(27);
+
+  function run(
+    cmd: string,
+    args: string[],
+    env: Record<string, string | undefined>,
+    setup?: (home: string) => void,
+  ) {
+    // Kullanıcının dosyalarına DOKUNMAMAK için boş bir HOME.
+    const home = mkdtempSync(join(tmpdir(), "nt-istem-"));
+    try {
+      setup?.(home);
+      const r = spawnSync(cmd, args, {
+        env: { PATH: "/usr/bin:/bin", HOME: home, TERM: "xterm-256color", ...env },
+        encoding: "utf8",
+        timeout: 15000,
+      });
+      return { out: r.stdout ?? "", err: r.stderr ?? "", code: r.status };
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Betik kaynak edilirken OSC dizileri yazıyor (dizin bildirimi); PS1 değerlerini
+   * onlardan ayırmak için sentinel arasına alıyoruz.
+   */
+  const between = (out: string, tag: string) =>
+    new RegExp(`<<${tag}>>([\\s\\S]*?)<</${tag}>>`).exec(out)?.[1] ?? "";
+
+  /** zsh: verilen PS1 ile betiği kaynak edip PS1'i (ham) ve genişletilmiş hâlini döndürür. */
+  function zsh(ps1: string, env: Record<string, string | undefined> = {}) {
+    const r = run(
+      "zsh",
+      [
+        "-f",
+        "-c",
+        `PS1=${JSON.stringify(ps1)}; source ${JSON.stringify(ZSH_SCRIPT)}; ` +
+          `print -rn -- "<<RAW>>$PS1<</RAW>>"; print -rnP -- "<<EXP>>$PS1<</EXP>>"`,
+      ],
+      env,
+    );
+    return { raw: between(r.out, "RAW"), expanded: between(r.out, "EXP"), err: r.err };
+  }
+
+  /**
+   * bash: kullanıcının istemi GERÇEK akıştaki yerinden veriliyor.
+   *
+   * Betik önce kullanıcının başlangıç dosyalarını yüklüyor (macOS'ta
+   * /etc/profile → /etc/bashrc, sonra ~/.bash_profile) ve PS1'i ANCAK ONDAN
+   * SONRA görüyor; kaynak etmeden önce PS1 vermek boşa: /etc/bashrc onu ezer.
+   * O yüzden istem, geçici HOME'daki profil dosyalarına yazılıyor. `ps1`
+   * verilmezse işletim sisteminin kendi varsayılanı kalıyor.
+   *
+   * bash 3.2'de `${PS1@P}` yok, yalnızca ham PS1 okunuyor. Betik entegrasyon
+   * işaretini (`\[\033]133;B\007\]`) PS1'in SONUNA hemen ekliyor; o yapışkan
+   * son ek bu testlerin konusu değil, karşılaştırmadan çıkarılıyor.
+   */
+  function bash(ps1: string | undefined, env: Record<string, string | undefined> = {}) {
+    const r = run(
+      "bash",
+      // `-i`: etkileşimli kabuk bash'in yerleşik PS1'ini (`\s-\v\$`) veriyor ve
+      // /etc/bashrc ancak PS1 doluysa kendi varsayılanını yazıyor; `-i`siz PS1
+      // boş kalır ve o dosya hemen dönerdi.
+      ["--norc", "--noprofile", "-i", "-c", `. ${JSON.stringify(SH_SCRIPT)}; printf '<<RAW>>%s<</RAW>>' "$PS1"`],
+      env,
+      (home) => {
+        if (ps1 === undefined) return;
+        // macOS `.bash_profile`ı, Git Bash/WSL/Linux `.bashrc`yi okuyor.
+        for (const f of [".bash_profile", ".bashrc"]) {
+          writeFileSync(join(home, f), `PS1='${ps1}'\n`);
+        }
+      },
+    );
+    const isaret = "\\[\\033]133;B\\007\\]";
+    const raw = between(r.out, "RAW");
+    return { raw: raw.endsWith(isaret) ? raw.slice(0, -isaret.length) : raw, err: r.err };
+  }
+
+  const strip = (s: string) => s.replace(new RegExp(`${ESC}\\[[0-9;]*m`, "g"), "");
+
+  it("betikler ayarı okuyor", () => {
+    expect(ZSH).toContain("NTERMINAL_PROMPT_COLOR");
+    expect(SH).toContain("NTERMINAL_PROMPT_COLOR");
+  });
+
+  it.skipIf(win)("zsh: işletim sisteminin varsayılan istemi renkleniyor", () => {
+    const r = zsh("%n@%m %1~ %# ");
+    expect(r.raw, r.err).toContain("%F{green}");
+    expect(r.raw).toContain("%F{blue}");
+    // Gerçekten renk KAÇIŞI üretiyor (genişletilmiş hâlde SGR dizisi var).
+    expect(r.expanded).toContain(`${ESC}[`);
+  });
+
+  it.skipIf(win)("zsh: renklenen istemin GÖRÜNEN metni aynı kalıyor", () => {
+    // Renk yalnızca renk: düzen, genişlik ve içerik değişmemeli, yoksa
+    // imleç konumu ve komut satırı okuması kayar.
+    const duz = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
+    const renkli = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "1" });
+    expect(strip(renkli.expanded)).toBe(strip(duz.expanded));
+    expect(renkli.expanded).not.toBe(duz.expanded);
+  });
+
+  it.skipIf(win)("zsh: renk kaçışları sıfırlanıyor (sonraki metne sızmıyor)", () => {
+    const r = zsh("%n@%m %1~ %# ");
+    // Kalın ve renk açıldıysa kapatılmış olmalı: son metin (`% `) varsayılan renkte.
+    const acilis = (r.expanded.match(new RegExp(`${ESC}\\[[0-9;]*m`, "g")) ?? []).length;
+    expect(acilis).toBeGreaterThan(2);
+    expect(r.expanded.trimEnd().endsWith("%")).toBe(true);
+  });
+
+  it.skipIf(win)("zsh: kullanıcının kendi istemine DOKUNULMUYOR", () => {
+    for (const ps1 of ["%~ > ", "%F{red}özel%f $ ", "❯ ", "%n@%m %1~ %# x"]) {
+      const r = zsh(ps1);
+      expect(r.raw, `kullanıcının istemi değişti: ${ps1}`).toBe(ps1);
+    }
+  });
+
+  // ------------------------------------------- kullanıcının seçtiği renkler
+  //
+  // Uygulama `R;G;B` yolluyor (terminal zeminine karşı okunur hâle getirilmiş,
+  // bkz. `promptColors.ts`); betik bunu bir KAÇIŞ DİZİSİNİN içine yazıyor. Bu
+  // yüzden en az iki şey bağlı: seçilen renk gerçekten istemde çıkıyor ve
+  // bozuk/kötü niyetli değer HİÇBİR ZAMAN kabuğa ulaşmıyor.
+
+  it.skipIf(win)("zsh: seçilen kullanıcı@makine rengi istemde çıkıyor, dizin paletten kalıyor", () => {
+    const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
+    expect(r.raw, r.err).toContain(`%{${ESC}[38;2;255;140;0m%}`);
+    expect(r.raw).toContain("%F{blue}");
+    expect(r.raw, "palet yeşili seçilen renkle birlikte kaldı").not.toContain("%F{green}");
+    expect(r.expanded).toContain(`${ESC}[38;2;255;140;0m`);
+  });
+
+  it.skipIf(win)("zsh: seçilen dizin rengi istemde çıkıyor, kullanıcı@makine paletten kalıyor", () => {
+    const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_DIR_RGB: "0;170;255" });
+    expect(r.raw, r.err).toContain(`%{${ESC}[38;2;0;170;255m%}`);
+    expect(r.raw).toContain("%F{green}");
+    expect(r.raw).not.toContain("%F{blue}");
+  });
+
+  it.skipIf(win)("zsh: iki renk birlikte seçilince ikisi de çıkıyor", () => {
+    const r = zsh("%n@%m %1~ %# ", {
+      NTERMINAL_PROMPT_USER_RGB: "255;140;0",
+      NTERMINAL_PROMPT_DIR_RGB: "0;170;255",
+    });
+    expect(r.expanded).toContain(`${ESC}[38;2;255;140;0m`);
+    expect(r.expanded).toContain(`${ESC}[38;2;0;170;255m`);
+    expect(r.raw).not.toContain("%F{");
+  });
+
+  it.skipIf(win)("zsh: seçilen renkte de GÖRÜNEN metin ve sıfırlama aynı kalıyor", () => {
+    const duz = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
+    const renkli = zsh("%n@%m %1~ %# ", {
+      NTERMINAL_PROMPT_USER_RGB: "255;140;0",
+      NTERMINAL_PROMPT_DIR_RGB: "0;170;255",
+    });
+    expect(strip(renkli.expanded)).toBe(strip(duz.expanded));
+    // Renk son metne (`% `) sızmıyor: varsayılan renge dönülmüş.
+    expect(renkli.expanded).toContain(`${ESC}[39m`);
+    expect(renkli.expanded.trimEnd().endsWith("%")).toBe(true);
+  });
+
+  it.skipIf(win)("zsh: bozuk ya da kötü niyetli renk değeri palet rengine düşüyor, hiçbir şey çalışmıyor", () => {
+    const iz = join(tmpdir(), `nt-enjeksiyon-${process.pid}-${Date.now()}`);
+    try {
+      for (const kotu of [
+        "1;2",
+        "1;2;3;4",
+        "a;b;c",
+        ";1;2",
+        "1;2;",
+        "1;;2",
+        "1;2;3;",
+        "1 2 3",
+        `1;2;3$(touch ${iz})`,
+        `1;2;3\`touch ${iz}\``,
+        `1;2;3;touch ${iz}`,
+        "\x1b[31m",
+      ]) {
+        const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_USER_RGB: kotu, NTERMINAL_PROMPT_DIR_RGB: kotu });
+        expect(r.raw, `bozuk değer kabul edildi: ${JSON.stringify(kotu)}`).toContain("%F{green}");
+        expect(r.raw).toContain("%F{blue}");
+        expect(r.raw).not.toContain("38;2");
+      }
+      expect(existsSync(iz), "değer bir komut olarak ÇALIŞTI").toBe(false);
+    } finally {
+      rmSync(iz, { force: true });
+    }
+  });
+
+  it.skipIf(win)("zsh: ayar kapalıyken seçilen renk de uygulanmıyor", () => {
+    const r = zsh("%n@%m %1~ %# ", {
+      NTERMINAL_PROMPT_COLOR: "0",
+      NTERMINAL_PROMPT_USER_RGB: "255;140;0",
+    });
+    expect(r.raw).toBe("%n@%m %1~ %# ");
+  });
+
+  it.skipIf(win)("zsh: kullanıcının kendi istemine seçilen renk de dokunmuyor", () => {
+    const r = zsh("%~ > ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
+    expect(r.raw).toBe("%~ > ");
+  });
+
+  it.skipIf(win)("zsh: `setopt nounset` açıkken de renk uygulanıyor", () => {
+    // Kullanıcının .zshrc'si `setopt nounset` açtıysa betik tanımsız bir
+    // değişkende yarıda kalıyor ve istem HİÇ renklenmiyordu.
+    const r = run(
+      "zsh",
+      [
+        "-f",
+        "-c",
+        `setopt nounset; PS1=${JSON.stringify("%n@%m %1~ %# ")}; source ${JSON.stringify(ZSH_SCRIPT)}; ` +
+          `print -rn -- "<<RAW>>$PS1<</RAW>>"`,
+      ],
+      { NTERMINAL_PROMPT_USER_RGB: "255;140;0" },
+    );
+    expect(between(r.out, "RAW"), r.err).toContain("38;2;255;140;0");
+  });
+
+  it.skipIf(win)("zsh: ayar kapalıyken varsayılana da dokunulmuyor", () => {
+    const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: "0" });
+    expect(r.raw).toBe("%n@%m %1~ %# ");
+  });
+
+  it.skipIf(win)("zsh: değişken hiç yoksa (eski uygulama) renkleniyor", () => {
+    const r = zsh("%n@%m %1~ %# ", { NTERMINAL_PROMPT_COLOR: undefined });
+    expect(r.raw).toContain("%F{green}");
+  });
+
+  it.skipIf(process.platform !== "darwin")("bash: macOS'un GERÇEK varsayılanı (/etc/bashrc) renkleniyor", () => {
+    // Kullanıcı dosyası yok: istemi /etc/bashrc veriyor.
+    const r = bash(undefined);
+    expect(r.raw, r.err).toContain("\\033[1;32m");
+  });
+
+  it.skipIf(win)("bash: varsayılan istem renkleniyor ve sıfır genişlik sarmalı korunuyor", () => {
+    const r = bash("\\h:\\W \\u\\$ ");
+    expect(r.raw, r.err).toContain("\\033[1;32m");
+    expect(r.raw).toContain("\\033[1;34m");
+    // \[ \] sarmaları OLMAZSA readline satır uzunluğunu yanlış hesaplar ve
+    // imleç kayar: her renk dizisi bir sarmanın içinde olmalı.
+    const renkler = r.raw.match(/\\033\[[0-9;]*m/g) ?? [];
+    const sarili = r.raw.match(/\\\[\\033\[[0-9;]*m\\\]/g) ?? [];
+    expect(renkler.length).toBeGreaterThan(0);
+    expect(sarili.length, `sarılmamış renk dizisi var: ${r.raw}`).toBe(renkler.length);
+  });
+
+  it.skipIf(win)("bash: yerleşik varsayılan (sh-3.2$) renkleniyor", () => {
+    const r = bash("\\s-\\v\\$ ");
+    expect(r.raw, r.err).toContain("\\033[1;32m");
+    expect(r.raw).toContain("\\s-\\v");
+  });
+
+  it.skipIf(win)("bash: kullanıcının kendi istemine DOKUNULMUYOR", () => {
+    for (const ps1 of ["\\w \\$ ", "\\u@\\h \\W % ", "$ "]) {
+      expect(bash(ps1).raw, `kullanıcının istemi değişti: ${ps1}`).toBe(ps1);
+    }
+  });
+
+  it.skipIf(win)("bash: seçilen renkler istemde çıkıyor ve sıfır genişlik sarmalı korunuyor", () => {
+    const r = bash("\\h:\\W \\u\\$ ", {
+      NTERMINAL_PROMPT_USER_RGB: "255;140;0",
+      NTERMINAL_PROMPT_DIR_RGB: "0;170;255",
+    });
+    expect(r.raw, r.err).toContain("\\033[1;38;2;255;140;0m");
+    expect(r.raw).toContain("\\033[1;38;2;0;170;255m");
+    expect(r.raw, "palet rengi seçilenle birlikte kaldı").not.toContain("\\033[1;32m");
+    const renkler = r.raw.match(/\\033\[[0-9;]*m/g) ?? [];
+    const sarili = r.raw.match(/\\\[\\033\[[0-9;]*m\\\]/g) ?? [];
+    expect(sarili.length, `sarılmamış renk dizisi var: ${r.raw}`).toBe(renkler.length);
+  });
+
+  it.skipIf(win)("bash: yalnız kullanıcı rengi seçilince dizin paletten kalıyor", () => {
+    const r = bash("\\h:\\W \\u\\$ ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
+    expect(r.raw, r.err).toContain("\\033[1;38;2;255;140;0m");
+    expect(r.raw).toContain("\\033[1;34m");
+  });
+
+  it.skipIf(win)("bash: yerleşik varsayılan (sh-3.2$) da seçilen rengi alıyor", () => {
+    const r = bash("\\s-\\v\\$ ", { NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
+    expect(r.raw, r.err).toContain("\\033[1;38;2;255;140;0m");
+    expect(r.raw).toContain("\\s-\\v");
+  });
+
+  it.skipIf(win)("bash: bozuk ya da kötü niyetli renk değeri palet rengine düşüyor, hiçbir şey çalışmıyor", () => {
+    const iz = join(tmpdir(), `nt-enjeksiyon-bash-${process.pid}-${Date.now()}`);
+    try {
+      for (const kotu of [
+        "1;2",
+        "1;2;3;4",
+        "a;b;c",
+        ";1;2",
+        "1;2;",
+        "1;;2",
+        "1 2 3",
+        `1;2;3$(touch ${iz})`,
+        `1;2;3\`touch ${iz}\``,
+        `1;2;3;touch ${iz}`,
+      ]) {
+        const r = bash("\\h:\\W \\u\\$ ", { NTERMINAL_PROMPT_USER_RGB: kotu, NTERMINAL_PROMPT_DIR_RGB: kotu });
+        expect(r.raw, `bozuk değer kabul edildi: ${JSON.stringify(kotu)}`).toContain("\\033[1;32m");
+        expect(r.raw).toContain("\\033[1;34m");
+        expect(r.raw).not.toContain("38;2");
+      }
+      expect(existsSync(iz), "değer bir komut olarak ÇALIŞTI").toBe(false);
+    } finally {
+      rmSync(iz, { force: true });
+    }
+  });
+
+  it.skipIf(win)("bash: ayar kapalıyken seçilen renk de uygulanmıyor", () => {
+    const r = bash("\\h:\\W \\u\\$ ", { NTERMINAL_PROMPT_COLOR: "0", NTERMINAL_PROMPT_USER_RGB: "255;140;0" });
+    expect(r.raw).toBe("\\h:\\W \\u\\$ ");
+  });
+
+  it.skipIf(win)("bash: ayar kapalıyken varsayılana da dokunulmuyor", () => {
+    expect(bash("\\h:\\W \\u\\$ ", { NTERMINAL_PROMPT_COLOR: "0" }).raw).toBe("\\h:\\W \\u\\$ ");
+  });
+});
+
+/**
  * zsh geçmiş dosyası kullanıcının klasöründe kalmalı.
  *
  * ÖLÇÜLEN HATA: uygulamanın zsh sekmelerinde `HISTFILE` kullanıcının

@@ -161,6 +161,28 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     key: "settings.blockHeaders",
     hint: "settings.blockHeadersHint",
   },
+  // Yalnızca macOS: PowerShell istemi bu değişkeni okumuyor.
+  {
+    section: "terminal",
+    group: "settings.commandLine",
+    key: "settings.colorPrompt",
+    hint: "settings.colorPromptHint",
+    only: ["macos"],
+  },
+  {
+    section: "terminal",
+    group: "settings.commandLine",
+    key: "settings.promptUserColor",
+    hint: "settings.promptUserColorHint",
+    only: ["macos"],
+  },
+  {
+    section: "terminal",
+    group: "settings.commandLine",
+    key: "settings.promptDirColor",
+    hint: "settings.promptDirColorHint",
+    only: ["macos"],
+  },
   {
     section: "terminal",
     group: "settings.commandLine",

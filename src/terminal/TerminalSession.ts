@@ -17,6 +17,7 @@ import { looksLikeSecretPrompt, resolveCtrlC, type CtrlCAction } from "../lib/in
 import { typingOutsideTerminal } from "../lib/focus";
 import { cwdCandidatesFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
+import { promptRgb } from "../lib/promptColors";
 import { shouldResize } from "../lib/ptySize";
 import { getTheme, resolveThemeId } from "../lib/themes";
 import {
@@ -165,6 +166,17 @@ const LINK_HIGHLIGHT_DELAY = 90;
 const INPUT_NOTIFY_DELAY = 70;
 
 const INTEGRATION_GRACE_MS = 220;
+
+/**
+ * Bir istem renginin kabuğa giden değeri.
+ *
+ * Yalnızca macOS'ta ve "renkli istem" açıkken doluyor: betikler Git Bash/WSL'de de
+ * yükleniyor ve orada renk uygulanmamalı (bkz. `NTERMINAL_PROMPT_COLOR`).
+ */
+function promptRgbFor(settings: Settings, key: "promptUserColor" | "promptDirColor"): string {
+  if (!isMac() || !settings.behavior.colorPrompt) return "";
+  return promptRgb(settings.behavior[key], settings.appearance.theme);
+}
 
 /**
  * Geri yüklenen ekranın ARDINDAN yazılan sıfırlama: yeni kabuk ana ekranda ve
@@ -697,6 +709,17 @@ export class TerminalSession {
               this.settings.behavior.commandBlocks && this.settings.behavior.blockHeaders
                 ? "1"
                 : "0",
+            // Kabuğun varsayılan istemini renklendir (yalnız işletim sisteminin
+            // verdiği istem; kullanıcının kendi istemine dokunulmaz).
+            //
+            // YALNIZ macOS: ayar satırı Windows'ta gizli ve `nterminal.sh` Git
+            // Bash/WSL'de de yükleniyor; orada bash'in yerleşik istemi
+            // (`\s-\v\$ `) boyanırdı. Belgelenen kapsam macOS zsh ve bash.
+            NTERMINAL_PROMPT_COLOR: isMac() && this.settings.behavior.colorPrompt ? "1" : "0",
+            // Kullanıcının seçtiği istem renkleri (`R;G;B`; boş: palet rengi). Terminal
+            // zeminine karşı okunur hâle getirilmiş gidiyor (bkz. `promptColors.ts`).
+            NTERMINAL_PROMPT_USER_RGB: promptRgbFor(this.settings, "promptUserColor"),
+            NTERMINAL_PROMPT_DIR_RGB: promptRgbFor(this.settings, "promptDirColor"),
           },
           cols: this.term.cols,
           rows: this.term.rows,

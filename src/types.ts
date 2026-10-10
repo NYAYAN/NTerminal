@@ -203,6 +203,29 @@ export interface Behavior {
    */
   blockHeaders: boolean;
   /**
+   * Kabuğun VARSAYILAN istemini renklendir (yalnızca macOS/Linux kabukları).
+   *
+   * Kabuğa `NTERMINAL_PROMPT_COLOR` ile bildiriliyor. macOS'un zsh varsayılanı
+   * (`%n@%m %1~ %#`) ve bash varsayılanı (`\h:\W \u\$`) düz metin: ekran
+   * geçmişinde bir komutun NEREDE başladığını gözle bulmak zor. Kullanıcının
+   * bilerek kurduğu istem (oh-my-zsh, starship, kendi PROMPT'u) DEĞİŞMİYOR —
+   * yalnızca işletim sisteminin verdiği varsayılanın AYNISI ise
+   * kullanıcı@makine ve dizin renkleniyor. Yeni sekmelerde geçerli.
+   */
+  colorPrompt: boolean;
+  /**
+   * Renkli istemde kullanıcı@makine rengi (`#rrggbb`); boş: temanın paleti
+   * (kalın yeşil). Yalnızca `colorPrompt` açıkken ve istem işletim sisteminin
+   * varsayılanıysa geçerli.
+   *
+   * Seçilen renk terminal zeminine karşı okunur hâle getirilip (`promptRgb`)
+   * kabuğa `NTERMINAL_PROMPT_USER_RGB` ile `R;G;B` olarak veriliyor. Yeni
+   * sekmelerde geçerli.
+   */
+  promptUserColor: string;
+  /** Renkli istemde klasör rengi (`#rrggbb`); boş: temanın paleti (kalın mavi). */
+  promptDirColor: string;
+  /**
    * YALNIZCA macOS: Option tuşu Meta gibi davransın.
    *
    * Açıkken Option+B / Option+F / Option+Backspace kabuğa ESC dizisi olarak
