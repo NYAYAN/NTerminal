@@ -168,7 +168,7 @@ jobs:
       # Ad-hoc mühürlü pakette uyarı "Apple doğrulayamadı"ya dönüyor ve Sistem
       # Ayarları › Gizlilik ve Güvenlik'te "Yine de Aç" düğmesi çıkıyor:
       # kullanıcı Terminal açmadan, bir kez tıklayarak açıyor. Ücretli Apple
-      # Developer ID olmadan gelinebilecek en iyi nokta bu (bkz. README).
+      # Developer ID olmadan gelinebilecek en iyi nokta bu (bkz. docs/gelistirme.md).
       - name: Paketle
         shell: bash
         env:

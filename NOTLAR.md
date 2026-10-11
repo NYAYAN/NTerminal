@@ -4,9 +4,11 @@ Bu dosya bir değişiklik günlüğü değil, **yol haritası**: neyin neden öy
 yapıldığını ve neyin hâlâ açık olduğunu tutuyor. Amaç, aylar sonra "şunu da
 ekleyelim" dendiğinde aynı kararları baştan tartışmak zorunda kalmamak.
 
-`README.md` ürünü ANLATIYOR (ne yapar, nasıl kullanılır). Burası ise
-geliştirmenin arkasındaki gerekçeleri ve açık işleri tutuyor. Bir karar
-kalıcılaştıysa yeri README, hâlâ tartışmaya açıksa burası.
+`README.md` ürünü TANITIYOR; ne yaptığı ve nasıl kullanıldığı
+[`docs/ozellikler.md`](docs/ozellikler.md)'de, derleme, testler ve yayın
+[`docs/gelistirme.md`](docs/gelistirme.md)'de. Burası ise geliştirmenin
+arkasındaki gerekçeleri ve açık işleri tutuyor. Bir karar kalıcılaştıysa yeri o
+belgeler, hâlâ tartışmaya açıksa burası.
 
 Ayrıntılı gerekçeler kodun kendisinde: aşağıdaki her madde ilgili dosyayı
 işaret ediyor ve o dosyadaki yorum "neden" sorusunu tam olarak yanıtlıyor.
@@ -832,7 +834,8 @@ push edebileceğimiz bir yapı istiyorum."
 kısmen), toplu kutu, ileti alanı, Commit ve Push
 ([`GitCommit.tsx`](src/components/GitCommit.tsx)); Rust'ta `stage`, `unstage`,
 `commit`, `push` ([`git.rs`](src-tauri/src/git.rs)); saf kurallar
-[`lib/gitStage.ts`](src/lib/gitStage.ts). Kullanıcıya dönük anlatım README'de.
+[`lib/gitStage.ts`](src/lib/gitStage.ts). Kullanıcıya dönük anlatım
+[`docs/ozellikler.md`](docs/ozellikler.md)'de.
 
 Kararlar (gerekçelerin tamamı kodun yanında):
 
@@ -1000,7 +1003,7 @@ okuma komutu senkron, üç yazma komutu `async` + `spawn_blocking`. Arayüzde
 [`lib/gitStash.ts`](src/lib/gitStash.ts); `useActiveGit` ve `useLabel` ortak
 olduğu için [`gitShared.tsx`](src/components/gitShared.tsx)e taşındı (aksi hâlde
 `GitChanges` ile stash bileşenleri birbirini içe aktarırdı). Kullanıcıya dönük
-anlatım README'de.
+anlatım [`docs/ozellikler.md`](docs/ozellikler.md)'de.
 
 Kararlar (gerekçelerin tamamı kodun yanında):
 

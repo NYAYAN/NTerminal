@@ -6,7 +6,7 @@
 # Erisilebilirlik, Otomasyon) ikilinin hash'ine bagliyor ve HER derlemede
 # sifirliyor. Sabit bir sertifikayla imzali pakette izinler derlemeler arasinda
 # korunuyor. Kimlik yalnizca bu Mac'te ise yariyor: baska bir Mac ona
-# guvenmiyor, indirilen paketin Gatekeeper uyarisi da degismiyor (bkz. README).
+# guvenmiyor, indirilen paketin Gatekeeper uyarisi da degismiyor (bkz. docs/gelistirme.md).
 #
 # `npm run bundle` kimligi kendiliginden kullaniyor (scripts/run.mjs).
 #

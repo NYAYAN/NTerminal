@@ -1,1628 +1,230 @@
+<div align="center">
+
+<img src="src-tauri/icons/128x128@2x.png" width="104" alt="">
+
 # N-Terminal
 
-Windows ve macOS için gruplanabilir sekmeli terminal. Gruplar, gruba bağlı
-sekmeler, sekme ya da bölme görünümü, oturum devamlılığı, komut geçmişi,
-Türkçe/İngilizce arayüz ve ayarların makineler arası taşınması.
+**Projelerinizi gruplara ayıran, komutlarınızı hatırlayan terminal.**
 
-Tauri 2 (Rust) + xterm.js 6 üzerine kurulu. PTY katmanı `portable-pty`
-üzerinden: Windows'ta ConPTY, macOS'ta yerel Unix PTY.
+macOS ve Windows için · Türkçe ve İngilizce arayüz · Ücretsiz ve açık kaynak
 
-> Yalnızca kurup kullanmak istiyorsan: aşağıdaki **[Paketi indirip
-> kurmak](#paketi-indirip-kurmak)** — hazır paket, derleme yok. Kaynaktan
-> derleyeceksen: **[KURULUM.md](KURULUM.md)** — hangi dizinde hangi komut, hangi
-> dosya oluşuyor. Bu dosya nedenleri ve ayrıntıları anlatıyor.
->
-> Geliştirmeye devam edeceksen: **[NOTLAR.md](NOTLAR.md)** — hangi kararın
-> arkasında hangi ölçülmüş hata var, neler açık kaldı ve tekrar ısıracak
-> tuzaklar hangileri.
+[![Son sürüm](https://img.shields.io/github/v/release/NYAYAN/NTerminal?label=son%20s%C3%BCr%C3%BCm&color=2f81f7)](https://github.com/NYAYAN/NTerminal/releases/latest)
+[![Derleme](https://github.com/NYAYAN/NTerminal/actions/workflows/build.yml/badge.svg)](https://github.com/NYAYAN/NTerminal/actions/workflows/build.yml)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-3fb950)](LICENSE)
 
----
+**[İndir](https://github.com/NYAYAN/NTerminal/releases/latest)** &nbsp;·&nbsp;
+[Kurulum](#paketi-indirip-kurmak) &nbsp;·&nbsp;
+[Öne çıkanlar](#öne-çıkanlar) &nbsp;·&nbsp;
+[Kısayollar](#klavye-kısayolları) &nbsp;·&nbsp;
+[Belgeler](#belgeler)
+
+<img src="docs/gorseller/kokpit.png" width="900" alt="N-Terminal: solda gruplar ve sekmeleri, ortada komut blokları ve süreleriyle terminal, altta komut kutusu">
+
+</div>
+
+## Öne çıkanlar
+
+### Her proje bir grup
+
+Her grubun kendi rengi, sekmeleri ve başlangıç klasörü var. Kokpit tasarımında
+soldaki grup bölmesini genişletince sekmeler grubun altında ağaç gibi listelenir.
+Sekmeleri sürükleyerek gruplar arasında taşıyabilir, yıldızla işaretlediğiniz
+favori grupları tek tıkla süzebilirsiniz. Uygulamayı kapatıp açtığınızda gruplar, sekmeler, çalışma
+klasörleri ve ekran çıktısı kaldığı yerden gelir.
+
+### Her komut kendi bloğunda
+
+Her komut ayrı bir bloğa yazılır. Kenardaki çizgi komutun başarılı olup
+olmadığını, sağ üst köşe ne kadar sürdüğünü gösterir. Komut kutusu altta sabit
+durur; yazarken geçmişten öneri gelir. macOS'ta varsayılan istem renklenir, böylece
+uzun bir çıktının içinde nerede komut yazdığınız hemen görünür. Bir sekmede
+geliştirme sunucusu çalışıyorsa portu (`:5173`) sekmenin yanında, Claude Code
+çalışıyorsa onun simgesi görünür.
+
+### Favoriler ve Git, yan panelde
+
+**Favori komutlar.** Sık kullandığınız komutları klasörlere ayırın; her birine
+kısa ad, not, grup ve kısaltma verin. Komut kutusuna kısaltmayı (`nrb`) yazıp
+Enter'a basınca komutun tamamı çalışır; ne çalışacağı kutunun içinde önceden
+yazar.
+
+**Değişiklikler.** Dosyaları seçip commit'leyin, push'layın, stash'e alın. Farkı
+panelin içinde ya da ayrı bir pencerede yan yana görün, dal seçiciyle dal
+değiştirin. Komut kutusunun üstünde dal adı, gönderilmemiş commit sayısı ve
+değişen dosya sayısı her zaman görünür.
+
+<p align="center">
+  <img src="docs/gorseller/paneller.png" width="820" alt="Solda Favoriler paneli: klasörlere ayrılmış favori komutlar ve kısaltmaları. Sağda Değişiklikler paneli: commit iletisi, Stash, Commit ve Push düğmeleri, değişen dosyalar ve açılmış bir fark">
+</p>
+
+### Dosyayı bulmak: Ctrl+P
+
+Bulunduğunuz klasörde dosyayı adıyla ya da `*.tsx`, `src/**/*.test.ts`,
+`*.{ts,tsx}` gibi kalıplarla bulun; her dosya türü kendi etiketiyle görünür. Aynı
+pencerenin **Dosya içeriği** sekmesi dosyaların içinde arar. Dosya paneli ise
+klasör ağacını, dosya görüntüleyiciyi ve küçük düzenlemeleri tek yerde toplar.
+
+<p align="center">
+  <img src="docs/gorseller/dosya-arama.png" width="900" alt="Ctrl+P penceresi: *term* kalıbıyla bulunan farklı türde dosyalar">
+</p>
+
+### Sekme ya da bölme
+
+Grubun sekmelerini tek tek ya da yan yana bölmeler hâlinde görün; ikisi arasında
+tek tuşla geçin (macOS'ta ⌘⇧E, Windows'ta Ctrl+Shift+E).
+
+<p align="center">
+  <img src="docs/gorseller/bolme.png" width="900" alt="Bölme görünümü: bir grubun üç sekmesi aynı anda">
+</p>
+
+### Size göre
+
+Üç tasarım (Kokpit, Premium, Klasik), açık ve koyu renk temaları; yazı tipi, satır
+aralığı, istem renkleri, kabuk profilleri ve kısayollar. Değişiklikler anında
+uygulanır. Bütün yapılandırmanızı tek dosyayla başka bir bilgisayara
+taşıyabilirsiniz (*Ayarlar › Yedekleme*).
+
+<p align="center">
+  <img src="docs/gorseller/ayarlar.png" width="49%" alt="Ayarlar: tasarım ve renk teması seçimi">
+  <img src="docs/gorseller/premium-acik.png" width="49%" alt="Premium tasarım, açık tema">
+</p>
+
+### Ve dahası
+
+- **Komut geçmişi:** her komut klasörü, süresi ve sonucuyla kaydedilir. Geçmişte
+  hızlı arama macOS'ta ⌘R, Windows'ta Ctrl+R; boş satırda ↑ geçmiş panelini açar.
+- **Kabuklar (shell):** zsh, bash, PowerShell 7, Windows PowerShell, Git Bash ve
+  WSL tam destekli; cmd.exe ve fish da çalışır. Makinedeki kabukları uygulama
+  kendisi bulur.
+- **Güvenli kapatma:** sekme kapatılırken onay sorulur (ayardan değiştirilebilir);
+  kilitlenen sekme hiçbir yoldan kapanmaz; silme işlemleri her zaman onay ister.
+- **Kendiliğinden güncelleme:** yeni sürüm uygulamanın içinden gelir; paket
+  imzası doğrulanarak kurulur, sekmeler yeniden açılışta geri gelir.
+- **Arka planda çalışma:** pencereyi kapatınca uygulama macOS'ta menü çubuğunda,
+  Windows'ta bildirim alanında çalışmaya devam eder.
 
 ## Paketi indirip kurmak
 
 Son sürüm: **[Releases › Latest](https://github.com/NYAYAN/NTerminal/releases/latest)**.
-Bir kez kurulduktan sonra yeni sürümler **uygulamanın içinden** geliyor
-(*Ayarlar › Hakkında › Güncelle ve yeniden başlat*); aşağıdaki adımlar
-yalnızca ilk kurulumda.
+Bir kez kurduktan sonra yeni sürümler **uygulamanın içinden** gelir
+(*Ayarlar › Hakkında › Güncelle ve yeniden başlat*); aşağıdaki adımlar yalnızca
+ilk kurulum için.
 
-**Windows 10/11** — `N-Terminal_<sürüm>_x64-setup.exe`yi indirip çalıştırın;
-yönetici izni istemiyor, kullanıcı klasörüne kuruluyor (kurumsal dağıtım için
-aynı sürümün `.msi`si de var). Paket imzasız olduğu için Windows "Windows
-bilgisayarınızı korudu" (*Windows protected your PC*) diyebilir: **Ek bilgi**
-(*More info*) › **Yine de çalıştır** (*Run anyway*). Daha önce `.msi` ile
-kurduysanız `setup.exe` onu kaldırıp uygulamayı kullanıcı klasörüne taşıyor;
-görev çubuğuna sabitlenmiş düğmeyi bir kez kaldırıp yeniden sabitleyin
-(ayrıntı KURULUM.md'de).
-
-**macOS 11+ (Apple Silicon)** — `N-Terminal_<sürüm>_aarch64.dmg`yi açıp
-N-Terminal'i **Uygulamalar** klasörüne sürükleyin. İlk açılışta macOS
-"Apple, N-Terminal'in kötü amaçlı yazılım içermediğini doğrulayamadı" der
-(*“N-Terminal” Not Opened*); **Bitti**'ye (*Done*) basın, sonra:
+**macOS 11+ (Apple Silicon):** `N-Terminal_<sürüm>_aarch64.dmg` dosyasını açıp
+N-Terminal'i **Uygulamalar** klasörüne sürükleyin. İlk açılışta macOS "Apple,
+N-Terminal'in kötü amaçlı yazılım içermediğini doğrulayamadı" der
+(*“N-Terminal” Not Opened*). **Bitti**'ye (*Done*) basın, sonra:
 
 1. **Sistem Ayarları › Gizlilik ve Güvenlik**'i açın (*System Settings ›
-   Privacy & Security*),
-2. en alttaki **Güvenlik** bölümünde "N-Terminal engellendi" satırının
-   yanındaki **Yine de Aç**'a (*Open Anyway*) basın,
-3. parolanızla ya da Touch ID ile onaylayın.
-
-Terminal komutu gerekmiyor. Neden bu adım var ve tamamen nasıl kalkar:
-[macOS: ilk açılış](#macos-ilk-açılış).
-
-## Ne yapar
-
-**Gruplar ve sekmeler.** Sekmeler gruplara bağlı. Her grubun kendi rengi,
-varsayılan kabuk profili, başlangıç klasörü ve kendine özel ortam değişkenleri
-var — bir projeye ait sekmeler `NODE_ENV=development` ile açılırken diğerleri
-etkilenmez. Sekmeler gruplar arasında taşınabilir.
-
-**Sekme adlandırma.** Sekmeye çift tıklayarak (ya da sağ tık menüsünden,
-`Ctrl+Shift+R` ile) ad verilir. Elle verilen ad kabuğun kendi başlığını ezer ve
-küçük bir işaretle belirtilir; boş bırakmak adı sıfırlar, başlık yeniden
-klasör/kabuk adından türetilir. Aynı işlem kenar çubuğundaki sekme satırında da
-geçerli. Gruplar da aynı şekilde adlandırılıyor.
-
-**Grup düzeni.** Kenar çubuğunun başlığındaki **Grupları Daralt** / **Grupları Aç**
-düğmesi bütün grupları tek tuşla toplar veya açar (biri bile açıksa hepsi
-kapanır, hepsi kapalıysa hepsi açılır). Aynı eylem grup sağ tık menüsünde de
-var. Gruplar favori işaretlenebilir (sağ tık → *Favori Gruba Ekle* ya da
-satırdaki yıldız) ve yıldız süzgeciyle yalnızca favoriler listelenir — çok
-grupla çalışırken
-listeyi kısaltmak için. Süzgeç açıkken **etkin grup favori olmasa da listede
-kalır**; aksi hâlde çalıştığınız yeri gözden kaybediyorsunuz. Başlık çubuğunun
-sol köşesindeki panel düğmesi kenar çubuğunu tümden daraltır — terminale bütün
-genişliği bırakmak için. Durum ayarda tutuluyor, yani uygulama onu hatırlıyor.
-
-**Gruplanmamış sekmeler.** Bir sekmenin gruba ait olması zorunlu değil. Kenar
-çubuğunun **boş yerine sağ tık** → *Yeni sekme*; sekme
-listenin en üstünde, başlıksız düz bir bölümde açılıyor — tıpkı bir dosya
-yöneticisinde köke bırakılmış dosyalar gibi. Aynı menüde yeni grup, tümünü
-daraltma ve favori süzgeci de var.
-
-Bölümün başlığı YOK ve bu bilinçli: başlık bir grubun kimliği (ad, renk,
-yıldız, katlama oku, sayı) ve "gruplanmamış" yazan bir başlık koymak onu yine
-bir gruba çevirirdi. Süzgeç açıkken de kayboluyor değil — kova favori
-işaretlenemediği için süzgeç onu elese sekmeler bir daha bulunamazdı. Son
-sekmesi kapanınca bölüm kendiliğinden gidiyor. Bir sekmeyi gruba almak ya da
-gruptan çıkarmak: sürükle-bırak, ya da sağ tık → *Gruba taşı*.
-
-**Kabuk rozeti.** Sekme adının solunda hangi kabuğun çalıştığını söyleyen kısa
-kod duruyor: `PS7`, `PS`, `CMD`, `SH`, `WSL`, `ZSH`. *Ayarlar › Görünüm ›
-Sekmeler* altından kapatılabilir — tek profille çalışırken her satırda aynı şeyi
-tekrarlıyor ve dar kenar çubuğunda sekme adına ayrılan yeri yiyor. Rozet
-sekmenin **gerçekte açtığı** kabuğu gösteriyor: profil silinmiş ya da ayarlar
-sıfırlanmışsa kimlik boşa düşüyor, kabuk varsayılan profille açılıyor ve rozet
-de onu yazıyor (eskiden burada `?` çıkıyordu).
-
-**Claude Code.** Sekmede `claude` çalışırken rozetin yerinde Claude Code'un
-açılışta terminale çizdiği turuncu maskot duruyor; komut bitince kabuk rozeti
-geri geliyor. Rozet kapalıyken de çiziliyor, çünkü kabuğun türünü değil sekmede
-o an ne çalıştığını söylüyor. Tanıma kabuk entegrasyonunun bildirdiği komut
-metnine bakıyor (`claude`, yoluyla ya da `npx @anthropic-ai/claude-code`);
-takma adla (`alias c=claude`) başlatılan Claude tanınmıyor.
-
-**Menüler.** Sağ tık menülerinde uzun listeler alt menüde açılıyor: on beş
-grubu olan bir kullanıcıda "Gruba taşı" altındaki düz liste menüyü uzatıp
-"Sekmeyi kapat"ı ekranın dışına itiyordu. Alt menü sağda yer yoksa sola
-açılıyor.
-
-**Sürükle-bırak.** Sekmeler hem sekme çubuğunda hem kenar çubuğunda
-sürüklenerek yeniden sıralanır. Kenar çubuğunda bir sekmeyi başka bir grubun
-üstüne bırakmak onu o gruba taşır. **Gruplar da** başlıklarından tutulup
-sürüklenerek sıralanır. Bırakma konumu ince bir çizgiyle gösteriliyor; imleç
-öğenin ilk yarısındaysa öncesine, ikinci yarısındaysa sonrasına bırakılır.
-Aynı hedefe iki tür sürükleme geldiği için (sekme mi grup mu) hangisinin
-taşındığı ayrı izleniyor; sekme sürüklerken grup sırası değişmiyor.
-
-> Sürükle-bırak Tauri'nin `dragDropEnabled` ayarı kapalı olmadan **çalışmıyor**:
-> açıkken webview'e işletim sistemi düzeyinde bir dosya-bırakma yakalayıcısı
-> takılıyor ve o yakalayıcı sayfa içindeki HTML5 sürükleme olaylarını yutuyor.
-> Kodda hiçbir belirti vermeyen bir sessizlik; bu yüzden yapılandırma testle
-> bağlı (`src/lib/tauriConfig.test.ts`).
-
-**Sekme kilidi.** Sürekli açık kalması gereken sekmeler kilitlenebilir
-(`Ctrl+Shift+L` ya da sağ tık → *Kilitli*). Kilitli sekmede kapatma düğmesinin
-yerini kilit simgesi alıyor; kapatma düğmesi, orta tuş, `Ctrl+W`, *diğerlerini
-kapat* ve grup silme — hepsi reddediliyor. Kilit bir onay penceresi değil: tek
-tıkla aşılabilen bir kilidin koruma değeri olmaz, kapatmak için önce kilidi
-kaldırmak gerekiyor. Kilit durumu çalışma alanıyla birlikte kaydedilir ve
-aktarıma dahildir.
-
-**Kapatma onayı.** Sekme kapatılırken varsayılan olarak onay sorulur —
-yanlışlıkla çarpıya basmaya karşı. Ayardan "yalnızca komut çalışıyorsa" ya da
-"hiç sorma" seçilebilir. *Diğerlerini kapat* sekme başına değil tek bir onay
-sorar. Kilit ve onay birbirinin yerine geçmiyor: onay bir tıklama daha ister,
-kilit kapatmayı tümden reddeder.
-
-**Silme her zaman sorar.** Grup silme, favoriden kaldırma (menüden ya da
-yıldızı kapatarak), geçmişten kayıt silme, geçmişi temizleme, profil silme,
-ortam değişkeni silme ve ayarları sıfırlama — hepsi onay istiyor. Yıldızı
-kapatmak bir anahtar gibi görünüyor ama favoriyi **siliyor**: kısa ad, not ve
-klasör bilgisi de gidiyor, geri tıklamak onları getirmiyor. Boş bir grup da
-soruyor; "boş" olması silmenin geri dönüşü olduğu anlamına gelmiyor.
-
-Ekleme yıkıcı olmadığı için soru sormuyor, ve yapılamayacak bir işlem için de
-sormuyor (son grup, son profil) — olmayacak bir şey için onay istemek
-yanıltıcı. Onay grup silme ve favori kaldırmada **deponun içinde**: silme yolu
-birden fazla olabiliyor (menü, kısayol, komut paleti) ve onayın her birinde
-tekrarlanması kaçınılmaz olarak birinde atlanmasıyla sonuçlanıyor.
-
-Onay penceresi uygulamanın kendi penceresi, `window.confirm` değil: webview'ün
-yerleşik iletişim pencereleri temayı ve dili taşımıyor, ana iş parçacığını
-bloklayabiliyor ve gömülü webview'de hiç görünmeme riski taşıyor. Onay
-penceresinin görünmemesi korumanın tümden kaybı demek — o yüzden davranışı
-testle bağlı: karar çağırana doğru ulaşıyor mu, ikinci bir istek gelince ilk
-bekleyen asılı kalıyor mu, Esc/Enter ne yapıyor.
-
-**Favori komutlar.** Sık kullandığınız komutlar yıldızlanıp ayrı bir listede
-tutulur — geçmişten ayrı, çünkü geçmiş otomatik birikip sınır aşılınca budanıyor.
-Favoriye kısa bir ad, not, klasör ve "yalnızca şu grupta görünsün" kısıtı
-verilebilir; sıralaması elle ayarlanır. Tıklamak komutu yalnızca istem satırına
-yazar, klasör değişmez; çalıştırınca (çift tık ya da ▶) klasör tanımlıysa önce o
-klasöre geçilir. Favoriye bir kısaltma da verilebilir (ör. `nrb`): komut kutusuna
-yazıp Enter'a basınca favorinin komutu terminalin bulunduğu klasörde çalışır,
-favori bir gruba bağlı olsa da her grupta. Bir komut yalnızca bir kez favori
-olur: zaten favoride olan bir komutu formdan yeniden eklerken form bunu söyler
-ve **Mevcut favoriyi düzenle** düğmesi yazdıklarınızı var olan kayda taşır
-(kaydetmek yine sizde). `Ctrl+Shift+B` panelini açar, komut
-paletinde de doğrudan çalıştırılabilir. `Ctrl+R` hızlı çağırmada favoriler **varsayılan olarak
-gelmiyor** — o pencerenin sorusu "bu sekmede ne çalıştırdım" ve hiç
-çalıştırılmamış bir favori listenin başını tutuyordu; penceredeki
-**Favoriler** tiki (`Ctrl+F`) onları listenin başına geri getiriyor.
-
-**Kaldığı yerden devam.** Uygulama kapanırken grup/sekme düzeni, her sekmenin
-çalışma dizini ve ekran çıktısı diske yazılır. Yeniden açıldığında düzen geri
-gelir, sekmeye girdiğinizde önceki çıktı ekranda durur ve altında ayırıcı bir
-satırla yeni kabuk başlar. Sekmeler tembel açılır: 20 sekmeli bir çalışma alanı
-açılışta 20 kabuk süreci başlatmaz, sekmeye tıkladığınızda başlar.
-
-> Kabuk süreçleri uygulamayla birlikte kapanır. Geri yüklenen içerik geçmiş
-> ekran görüntüsüdür, canlı bir oturum değildir (tmux gibi değil).
-
-**Komut geçmişi.** Çalıştırdığınız her komut; klasörü, çıkış kodu, süresi ve
-zamanıyla kaydedilir. Sağdaki panelde bu sekmenin / bu grubun / tümünün geçmişi
-aranabilir, başarılı-hatalı filtrelenebilir, tekrarlar gizlenebilir. Satırlar
-seçilip istem satırına yazılabilir, çalıştırılabilir, kopyalanabilir veya
-silinebilir. `Ctrl+R` ile hızlı geri çağırma: iki üç harf yaz, Enter'a bas.
-
-**Sağ panel terminalin üstünde.** Geçmiş, Favoriler ve Değişiklikler sekmeli
-sağ panel, Dosyalar paneli gibi terminalin **üstünde**, sağ kenarında açılır:
-terminal daralmaz, kabuk ekranı yeniden çizilmez; bağlam çubuğu ve komut satırı
-tam genişlikte kalır. İkisi birden açıkken Dosyalar sağ panelin soluna kadar
-uzanır, birbirlerinin üstüne binmezler.
-
-**Değişiklikler.** Sağ panelin *Değişiklikler* sekmesi bulunulan dizin bir git
-deposuysa değişen dosyaları listeliyor; farklar **yerinde**, listeyi
-kaybetmeden açılıyor. Satırlar **kapalı** geliyor: liste önce dosya adlarını
-gösteriyor, bir satıra tıklamak farkını açıyor, başlıktaki düğme hepsini açıyor
-ya da topluyor. Fark yalnızca satır açılınca isteniyor; yani elli dosyalık bir
-değişiklik elli `git diff` ile başlamıyor. "Hepsini aç" ise hepsini birden
-istiyor ve istekler dörtlü bir kuyruktan geçiyor — yüz dosyalık bir değişiklikte
-yüz `git` sürecini aynı anda doğurmak makineyi ölçülebilir biçimde takıyor.
-Uzun satırlı bir farkı sağa kaydırınca eklenen ve silinen satırların zemini
-satırın sonuna kadar uzanıyor.
-
-**Değişmemiş satırları açma.** `git diff` yalnızca değişenlerin çevresinde üç
-satır bağlam veriyor; gerisi çizilmiyor. Blokların arasında "**59 değişmemiş
-satır**" yazan bir şerit duruyor ve solunda, satır numarası sütunuyla aynı
-genişlikte bir düğme bloğu: yukarı ok satırları şeridin üstünde, aşağı ok
-altında açıyor, her basış elli satır. Kalan bundan azsa iki yana açılan tek bir
-ok kalıyor, boşluk tükenince şerit kayboluyor.
-
-Satırlar dosyanın kendisinden geliyor — `git diff -U<n>` ile daha geniş bağlam
-istemek her bloğun **iki** yanını birden açardı, oysa istenen yönlü açma.
-Şeridin sağında hunk başlığının tek özgün parçası duruyor: kapsayan işlevin
-adı. ("Gizli" değil "değişmemiş": satırlar saklanmıyor, yalnızca değişmedikleri
-için gösterilmiyorlar.)
-
-Farkın başındaki künye (`diff --git a/… b/…`, `index …`, `--- a/…`, `+++ b/…`)
-çizilmiyor: dosya adı satırın başlığında zaten yazıyor ve o dört satır dar bir
-panelde görünenin üçte birini yiyordu. Ayrım "meta mı" değil **"başka yerde
-yazıyor mu"** — `Binary files … differ`, `rename from/to`, `similarity index`
-ve `old/new mode` duruyor, çünkü tek kaynakları o satırlar (ikili dosyada farkın
-tamamı o bildirim; yeniden adlandırmada eski ad başka hiçbir yerde yok).
-
-**Satırın düzeni.** Değişiklik sayacı (`+15 -1`) dosya adının hemen yanında —
-bir sıfat gibi okunuyor. Önceki hâlinde satırın sağ ucundaydı ve hangi dosyaya
-ait olduğunu bulmak için göz yatay kaymak zorundaydı. Sağ uç eylemlerin: yolu
-kopyala, değişiklikleri geri al, dosyayı aç. Üçü de **her zaman görünür** —
-gizli bir eylem, bir kez keşfedilene kadar yok demek; ağırlıkları düşük
-tutuluyor ve satırın üzerine gelince öne çıkıyorlar.
-
-Durum, satırın başındaki renkli bir **simge**: kalem değişti, artı eklendi, eksi
-silindi, ok yeniden adlandırıldı, kesik çizgili artı takipsiz. Metin ipucunda ve
-ekran okuyucuda duruyor. Önceki hâli yazıydı ("DEĞİŞTİ", "YENİDEN
-ADLANDIRILDI") ve 88px'lik sabit bir sütun tutuyordu; o sütun dosya **yolundan**
-çıkıyordu, yani dar panelde asıl aranan bilgi kırpılırken yerinde her satırda
-tekrarlanan aynı kelime duruyordu.
-
-**Commit ve push.** Panelin başındaki kutu, terminale dönmeden commit atmayı ve
-göndermeyi sağlıyor. Her satırın solundaki **kutu** dosyayı commit'e ekler
-(`git add`), kaldırınca çıkarır (`git reset`; dosyaya dokunmaz). Üç hâli var:
-işaretli (dosyanın tamamı eklendi), işaretsiz ve **ara** — dosya *kısmen*
-eklenmiş (`MM`): commit'e yalnızca eklenen kısım girer, kutuya basmak kalanı da
-ekler. Dosyaların üstündeki tablo başlığında, satır kutularıyla aynı sütunda
-bir toplu kutu durur: hepsini ekler ya da çıkarır; başlığın sağı kaç dosyanın
-commit'e gireceğini yazar. Commit kutusunda düğmelerin solunda bulunduğunuz dal
-görünür (ipucu Push'un hedefini, örneğin `main → origin/main`, söyler).
-
-İleti alanına yazıp **Commit**'e ya da `Ctrl+Enter`'a (mac'te `Cmd+Enter`)
-basmak yalnızca eklenen dosyaları commit'ler. `-a` yok: işaretlemediğiniz dosya
-gitmez. Dosya seçilmemişse ya da ileti boşsa düğme kapalı ve ipucu ilk eksiği
-söylüyor. Yarım kalmış ileti panelin sekmesi değişince ya da başka bir dizine
-geçince kaybolmaz (depo başına saklanır); commit atılınca silinir, atılamazsa
-**korunur**.
-
-**Push** yalnızca geçerli dalı gönderir. **Etiket göndermez** — bu depoda `v*`
-etiketi itmek yayın demek — ve zorla itme yoktur; `push.followTags` ayarınız
-açık olsa bile. Dalın yukarı akışı yoksa (yeni dal ya da uzaktan silinmiş) düğme
-**Yayınla** der: dalı uzakta oluşturur ve izlemeyi kurar. Uzak sizden ilerideyse
-düğmeye basmadan önce uyarır. Değişiklik yokken bile gönderilmemiş commit varsa
-panelde "N commit gönderilmedi" satırı ve Push görünür — commit'leri itmek için
-değişiklik olması gerekmez. Panele giden rozet de kaybolmaz: komut satırının
-üstündeki şeritte git deposundayken her zaman `± N` durur — değişiklik yoksa
-soluk renkte `± 0`. Tıklamak paneli açar; gönderilmemiş commit varsa ipucu
-sayısını söyler.
-
-Neyin gideceği göndermeden önce görünür: **Push** (ya da **Yayınla**) hemen
-göndermez, düğmenin altında bir onay paneli açar. Panel Push'un göndereceği
-commit'leri (yukarı akışın önündekiler; yayınlanacak dalda hiçbir uzakta
-olmayanlar) en yeni başta sıralar — ileti, altında kısa karma, yazar ve zaman.
-Commit'e tıklamak dosyalarını, dosyaya tıklamak farkını açar (birleştirme
-commit'i ilk ebeveynine göre). Paneldeki **Push** gönderir (odak oradadır,
-`Enter` yeter); **Vazgeç**, `Esc` ya da panelin dışına tıklamak göndermeden
-kapatır. En üstteki (son) commit'in yanındaki geri alma oku **Commit'i geri
-alır** (IntelliJ'deki "Undo Commit", `git reset --soft`): commit kalkar ama
-içindeki değişiklikler silinmez, eklenmiş hâlde Değişiklikler listesine döner
-ve iletisi commit kutusuna gelir (kutuda yazılmış bir ileti varsa ona
-dokunulmaz). Yalnızca henüz gönderilmemiş son commit geri alınır; uzaktaki bir
-commit ya da deponun ilk commit'i reddedilir.
-
-Hata **kalıcı** ve kutunun içinde: git'in kendi metni satır sonlarıyla, olduğu
-gibi gösterilir. Bir commit kancasının (lint, test) ya da reddedilen bir
-push'un çıktısı üç saniyelik bir bildirimde okunmaz. Kancalar atlanmaz
-(`--no-verify` yok).
-
-Fark artık `HEAD`e karşı alınıyor: eskiden çalışma ağacını indeksle
-karşılaştırıyordu ve bir dosya eklenince satırın farkı boş çıkıyordu.
-
-**Farkı yeni pencerede göster.** Satırın sağındaki bölünmüş pencere simgesi
-farkı IntelliJ / WebStorm'daki gibi ayrı bir pencerede açar: solda `HEAD`
-(salt okunur, başlıkta commit'in kısa kimliği ve dosyanın yolu), sağda
-dosyanın güncel hâli; iki dosyanın tamamı yan yana, satır numaraları ortada,
-değişen bloklar ortadaki eğri bağlayıcılarla birbirine bağlı. Renkler
-IntelliJ'inkiler: eklenen yeşil, silinen gri, değişen mavi; değişen satırın
-içinde değişen sözcükler koyu. İki taraf birlikte kayar. `F7` / `Shift+F7`
-sonraki / önceki farka gider; son farktayken basmak doğrudan sıradaki
-değişen dosyanın ilk farkına geçer (ilk farkta `Shift+F7` öncekinin sonuncusuna). Dosyalar arasında araç çubuğundaki oklar (mac'te
-`⌃⇧←/→`, Windows'ta `Alt+Shift+←/→`) ya da "2/5 dosya" sayacı ile gezilir;
-`Esc` pencereyi kapatır. **Sağ taraf düzenlenebilir**: araç çubuğundaki
-kalem (**Düzenle**, `F4`, mac'te `⌘↓`) düzenlemeyi açar ve kapatır. Kapalıyken
-sağ başlıkta solda olduğu gibi bir kilit durur (salt okunur); açıkken kalem
-vurgu renginde ve çerçeveli, sağ başlıkta **✎ Düzenleniyor** yazar ve altında
-vurgu çizgisi belirir. Açıkken sağ tarafa tıklayıp yazarsınız; fark yazdıkça
-güncellenir ve yazmayı bıraktıktan kısa bir süre sonra dosyaya kaydedilir
-(düzenlemeyi kapatınca, pencereden çıkınca, başka dosyaya geçince ya da pencere
-kapanırken hemen). `Esc` önce düzenlemeyi kapatır, ikinci `Esc` pencereyi.
-Kalemin yanındaki **Geri al**, **İleri al** ve **Kaydet** düğmeleri
-`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `⇧⌘Z` ve `Ctrl+S` / `Cmd+S` ile aynı işi yapar. Enter
-girintiyi korur, Sekme girinti ekler (`Shift+Sekme` siler); satır sonları
-(LF / CRLF) dosyanın kendi biçiminde kalır. Sol oluktaki `»` o bloğu `HEAD`deki
-hâline geri alır; `Ctrl+Z` / `Cmd+Z` hem yazdıklarınızı hem `»`ü geri alır
-(art arda yazılan harfler tek adımda). Siz yazarken dosya başka bir yerde
-kaydedilirse üzerine yazılmaz; pencere sorar: **Diskteki hâli yükle** ya da
-**Benimkini kaydet**. Birleşik görünümde ve daraltılmış parça varken sağ taraf
-yazılamaz; kalem önce yan yana / açık görünüme geçip imleci sağ tarafta o
-satıra koyar. Satır sonları karışık, çok büyük (4 MB'tan
-büyük) ya da ikili dosya burada yazılamaz; kalem onu ana penceredeki
-görüntüleyicide açar. Pencere
-açıkken fark canlıdır: dosyayı başka bir düzenleyicide kaydetmek ya da commit
-atmak yarım saniye içinde pencereye yansır, pencereye tıklamak gerekmez. Araç
-çubuğundan birleşik görünüme geçilir. Değişmemiş parçalar varsayılan olarak
-daraltılmış gelir (dalgalı çizgiye tıklamak kademe kademe açar); araç
-çubuğundaki düğme hepsini açar ya da yeniden daraltır, simgesi ve ipucu basınca
-ne olacağını söyler. Okuduğunuz satır daraltıp açarken yerinde kalır; dişli menüsünde eş zamanlı
-kaydırma, boşlukları yok sayma (baştaki/sondaki, bütün boşluklar, boş
-satırlar da) ve vurgulama (sözcük / satır / bölünmüş / karakter / hiçbiri)
-seçenekleri var; menü seçim yapınca kapanmaz, seçenekleri art arda denemek
-için açık kalır.
-Yeni ve takip edilmeyen dosyada tek editör görünür (o da yazılabilir), bütün
-satırlar eklenmiş renginde. Fark penceresi tektir: açıkken başka bir dosyanın simgesine basmak
-ikinci bir pencere açmaz, açık pencereyi öne getirip o dosyaya geçirir.
-
-**Stash.** Değişiklikleri commit'lemeden kenara almak için commit kutusundaki
-**Stash** düğmesi bir pencere açar: hangi dosyaların gideceğini seçersiniz,
-isterseniz bir ad verirsiniz (IntelliJ / WebStorm'daki gibi). Pencere
-Değişiklikler listesinde **işaretli** olan dosyalarla açılır — kısmen eklenmiş
-(`MM`) dosya da dâhil; hiçbiri işaretli değilse seçim **boş** açılır ve "Tüm
-dosyaları seç" kutusu var (boş bir Enter ile yanlışlıkla her şeyi kenara atmamak
-için hepsini varsaymıyor). Penceredeki seçimi değiştirmek listedeki kutulara
-dokunmaz. Dosya adlarının solundaki klasör yolu varsayılan olarak **gizli**;
-"Klasör yollarını göster" kutusu — panel başlığındaki klasör düğmesiyle aynı
-ayar — onu getirir. Takipsiz bir dosya seçilirse `--include-untracked`
-kendiliğinden eklenir; seçilmeyen dosyaya dokunulmaz.
-
-Stash'ler listenin en üstündeki **Stash** başlığının altında. Başlık depo
-varken her zaman görünür (temiz bir çalışma ağacında da stash uygulanabilsin
-diye), stash varsa sayısı yanında yazar ve varsayılan olarak **kapalı**. Açınca
-her stash'in adı, dalı ve zamanı görünür; satıra tıklamak dosyalarını, dosyaya
-tıklamak farkını açar (yalnızca okunur). Stash'teki dosyaların klasör yolu da
-aynı **Klasör yollarını göster** ayarına uyar (varsayılan gizli). Uygula simgesinin ne yapacağını iki kutu
-belirler: **Uyguladıktan sonra sil (pop)** ve **İndeksi geri yükle** (`--index`);
-ikisi de varsayılan olarak kapalı. Kutular başlıkta sayacın solundaki **ayar
-simgesine** basınca açılan küçük pencerede; dışarı basınca ya da `Esc` ile kapanır.
-Bir seçenek açıkken simge vurgulu durur (kutular gizli olsa da belli olsun diye) ve
-satırdaki uygula simgesinin ipucu ("Uygula ve sil") hangisinin geçerli olduğunu
-söyler. **Silmek her zaman sorar**: stash silinince
-geri getirilemez. Uygulamak sormaz — içerik silinmiyor, çalışma ağacına taşınıyor.
-Çakışma olursa git stash'i silmez ve hata metni kalıcı bir kutuda gösterilir.
-Dördüncü bir sekme olarak yazılmıştı ama panelin başlığına sığmadığı için
-Değişiklikler'in içine taşındı.
-
-**Dal seçici.** Dal rozetine tıklamak dalları listeler; birini seçmek
-`git checkout`u kabuğa yazıp çalıştırır. **Yerel dallar** üstte durur. `git
-fetch` ile gelen **uzak dallar** sayılarıyla birlikte "Uzak dallar" başlığının
-altında, varsayılan olarak **kapalı**: başlığa tıklayarak (ya da klavyeyle
-başlıkta Enter'a basarak) açılır ve uygulama açık kaldığı sürece açık kalır.
-Arama kapalı bölümdeki eşleşmeleri de bulur. Bir uzak dalı seçmek `git checkout
---track origin/ad` gönderir; yerel bir izleme dalı oluşur.
-
-**Dosya paneli.** Başlık çubuğundaki klasör düğmesi bulunulan dizinin ağacını
-**terminalin üstünde**, sol kenarında açar — terminal daralmaz, kabuk ekranı
-yeniden çizmez (önceden panel kendi sütunuydu ve açılınca terminali
-sıkıştırıyordu). Sekme çubuğu, komut kutusu ve durum çubuğu görünür kalır;
-ağaçta `Shift`+tıklama yolu komut kutusuna ekler. Bir dosyaya tıklamak onu
-ağacın **yanında, terminalin kalan bütün genişliğinde** açar; ağaç yerinde
-kalır, açık dosya ağaçta işaretlidir ve başka bir dosyaya tıklamak
-görüntüleyiciyi değiştirir. Görüntüleyicinin `×`'i yalnızca dosyayı, panelin
-`×`'i ya da klasör düğmesi paneli kapatır. Panelin içindeyken `Esc` önce aramayı,
-sonra paneli kapatır ve odak terminale (ya da komut kutusuna) döner;
-düzenlerken basılan `Esc` paneli kapatmaz. Açık bir dosya terminali örtüyorsa
-**Terminalde ara** kısayolu önce paneli kapatır. Aramadan ya da paletten açılan
-dosyanın dalları ağaçta kendiliğinden açılır.
-
-**Panelde arama.** Panel başlığındaki büyüteç bir kutu açar; üstündeki iki düğme
-ne arandığını seçer: **Dosya** (dosya adlarında bulanık arama) ya da **İçerik**
-(dosyaların içinde metin). Sonuçlar ağacın yerinde listelenir ve seçim listeyi
-kapatmaz: dosya sağda açılır, liste solda kalır — eşleşmeler arasında tıklayarak
-gezilir. İçerik kipinde sonuçlar dosyaya göre gruplu (başlığa tıklamak grubu
-katlar), satır numarası ve işaretli eşleşmeyle gelir; tıklamak dosyayı **o
-satırda** açar ve eşleşmeyi işaretler. Kutudan aşağı ok sonuçlara iner.
-
-**Görseller.** PNG, JPEG, GIF, WebP, AVIF, BMP, ICO ve SVG görüntüleyicide resim
-olarak açılır (macOS'ta TIFF ve HEIC de). Alandan büyük görsel **sığdırılır**,
-küçüğü büyütülmez (bulanıklaşmasın); başlıkta piksel boyutu, o anki ölçek ve
-dosya boyutu yazar. Görsele ya da başlıktaki düğmeye tıklamak **gerçek boyuta**
-geçer (kaydırılabilir), ikinci tıklama geri sığdırır. Saydam alanlar dama
-zeminde görünür. SVG önizlemeyle açılır; başlıktaki `</>` kaynağı gösterir
-(düzenlenebilir), görsel simgesi önizlemeye döner — içerik aramasından açılan
-SVG doğrudan eşleşmenin satırında, kaynakta açılır. 20 MB'tan büyük görsel
-önizlenmez ve bu, boyutuyla birlikte söylenir; açılamayan biçim de (ör.
-Windows'ta HEIC) boş bir alan değil, bir uyarı gösterir.
-
-**Görüntüleyicide düzenlemek.** Panelde açılan dosya önce salt
-okunur görünür. Başlıktaki kalem (**Düzenle**) düzenlemeyi açar: kalem vurgu
-renginde ve çerçeveli olur, başlığın altında vurgu çizgisi belirir, satır
-numaraları yanında yazabilirsiniz. Yanındaki **Geri al**, **İleri al** ve
-**Kaydet** düğmeleri (`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `⇧⌘Z`, `Ctrl+S` / `Cmd+S`)
-her zaman başlıkta; kaydedilmemiş değişiklik varken adın yanında vurgu renginde
-bir nokta durur. Kayıt açık (düğme ya da kısayol); ama düzenlemeyi kapatırken,
-başka dosyaya geçerken, dosyayı ya da paneli kapatırken kaydedilmemiş olan
-kendiliğinden yazılır, kaybolmaz. Dosya siz düzenlerken başka bir yerde kaydedildiyse üzerine
-yazılmaz: **Diskteki hâli yükle** ya da **Benimkini kaydet**. Satır sonları
-(LF / CRLF) korunur. İkili, yarım megabayttan büyük ya da satır sonları karışık
-dosya düzenlenemez; kalem kapalıdır ve üzerine gelince nedenini söyler.
-
-**Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
-bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı dosya
-panelindeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler
-(`code ` yazıp `Ctrl+P`). Satırda dosya **adı önde**, klasörü hemen yanında ve
-soluk (Klasik tasarımda sağa hizalı): klasör zinciri çoğu satırda aynı, yani
-ayırt etmeyen kısmı önce okutmak gözü boşuna yoruyordu. Eşleşen harfler vurgulu;
-harfleri dağınık eşleşen dosyalar "Yakın eşleşmeler" başlığının altında. Kalıp da
-yazılabilir: `*.tsx` yalnız tsx dosyalarını, `*.{ts,tsx}` ikisini,
-`src/**/*.test.ts` src altındaki testleri getirir; kalıp metinle birlikte de
-çalışır (`rail *.tsx`). Aynı kural dosya panelindeki aramada da geçerli. Satırın
-başındaki simge dosyanın türü: yaygın türler kendi renginde kısa bir etiketle
-(TS, RS, `{}` …), görseller resim simgesiyle; dosya panelindeki ağaçta da aynı
-simgeler. Kutu
-boşken liste **Değişenler**, **Son açılanlar** ve **Tüm dosyalar** diye
-bölünüyor; `Alt+↑` / `Alt+↓` (mac'te `⌥↑` / `⌥↓`) bölümden bölüme atlar. Liste açılışta bir kez okunuyor,
-süzme bellekte — her tuş vuruşunda binlerce dosyayı diskten geçirmemek için.
-
-**Dosyaların içinde arama (`Ctrl+Shift+G`, mac'te `⌘⇧F`).** Aynı paletin ikinci
-sekmesi: **Dosya içeriği**. Kutu ve sorgu iki sekmede ortak; `Tab` sekmeyi
-değiştirir — adında bulamadığınızı içinde aramak için yeniden yazmanız gerekmez.
-Sonuçlar dosyaya göre gruplu, satır numarasıyla ve eşleşmesi işaretli gelir;
-`Enter` dosyayı **o satırda** açar (eşleşme işaretli), `Shift+Enter` yolu komut
-satırına ekler. Kutunun sağındaki üç seçenek: **büyük/küçük harfe duyarlı**
-(`Aa`, `Alt+C` / `⌥⌘C`), **yalnızca tam sözcük** (`Alt+W` / `⌥⌘W`) ve **düzenli
-ifade** (`.*`, `Alt+R` / `⌥⌘R`; Rust `regex` sözdizimi, her satıra ayrı
-uygulanır). Varsayılan büyük/küçük harf gözetmeyen düz metin. Palet son
-sorguyu hatırlar ve seçili getirir: bir sonraki eşleşmeye gitmek için yeniden
-açıp ok + `Enter` yeter.
-
-Arama Rust'ta ve iş parçacıklarına bölünmüş koşuyor; yazdıkça 200 ms bekleyip
-yeniden arar, eskisini durdurur. Dizin bir git deposundaysa dosya listesi
-git'ten gelir: **`.gitignore`a takılanlar aranmaz** (derleme çıktısı, önbellek),
-izlenmeyen yeni dosyalar aranır. Depo değilse `Ctrl+P`'nin yürüyüşü kullanılır
-(`node_modules`, `target`, `dist` gibi klasörler atlanır). Sınırlar **söylenir**:
-ilk 2000 satır gösterilir, 2 MB'tan büyük ve ikili dosyalara bakılmaz, en fazla
-20.000 dosya taranır — sınıra takılan arama durum satırında bunu yazar. Bu
-depoda bir arama ilk seferde ~40 ms, sonrakiler ~3 ms; 20.000 dosyalık git'siz
-bir klasörde ilk tarama ~1 sn.
-
-**Tasarım: Premium, Kokpit ya da Klasik.** *Ayarlar › Görünüm › Tasarım* üç
-kartla seçiliyor ve renk temasından **bağımsız**: tema rengi, tasarım biçimi belirler.
-**Premium** katmanlı yüzeyler, ince hat kenarlıklar, yumuşak gölgeler,
-hap biçimli sekmeler, yüzen bir komut kutusu ve menü/palet gibi kısa ömürlü
-yüzeylerde cam etkisi getirir. Premium'da Ayarlar penceresi de yeniden
-düzenlenir: renkli bölüm simgeleriyle tam boy bir kenar çubuğu, kartlara
-toplanmış ayarlar ve onay kutuları yerine açık/kapalı anahtarları.
-**Kokpit** (varsayılan; yeni kurulum da güncellenen uygulama da bununla açılır,
-seçilen tasarım ise korunur) Premium'un görünüşüyle başka bir yerleşim: solda
-grupların baş harfleriyle durduğu **grup bölmesi** (komut çalışan grupta nokta;
-altta Geçmiş, Favoriler, Değişiklikler ve Ayarlar), yanında yalnızca etkin
-grubun sekmeleri kart olarak (klasör, son komut, çalışan sunucunun portu),
-sekme şeridinin yerinde "grup › sekme" yolu ve terminalin üstüne açılmak yerine
-yanında sabit duran yan panel. Kenar çubuğu kapatılınca sekme şeridi geri
-gelir. Grup bölmesindeki her grup sağ tıkla yönetilir (ad, renk, favori, yeni
-sekme, sıra, silme) ve sürüklenerek sıralanır; bölmenin altındaki ok düğmesi
-bölmeyi genişletip grup adlarını yazar. Bölme genişken başlığındaki yıldız
-yalnızca favori grupları listeler (bölme daraltılmışken süzgeç açıksa yıldız
-bölmenin en üstünde kalır), ağaç simgesi ise sekmeleri grupların altında
-listeler ve yandaki sekme kartlarını kaldırır: her grup kendi okuyla açılıp
-kapanır (açık bıraktığınız gruplar başka gruba geçince de açık kalır), sekmeye
-tıklamak ona geçer, sağ tık sekme menüsünü açar, sekmeler sürüklenerek
-sıralanır ya da başka grubun altına taşınır.
-**Klasik** uygulamanın düz ve yoğun ilk düzeni.
-Terminalin ızgarası üçünde de aynı ölçülerde çizilir; geçiş anında uygulanır,
-yeniden başlatma gerekmez. Gerekçe `src/lib/design.ts`, `src/styles/premium.css`
-ve `src/styles/kokpit.css` başlarında.
-
-**Arayüz yazı tipi.** *Ayarlar › Görünüm* altında terminalin yazı tipinden
-**ayrı** bir aile ve boyut var: menüler, paneller, sekme adları ve ayarlar
-pencerelerinin tamamı onunla ölçekleniyor. İkisini tek ayara bağlamak, yazıyı
-büyütmek isteyen kişiyi terminalini daraltmaya zorlardı — terminalin boyutu
-satıra kaç sütun sığdığını da belirliyor.
-
-**Görünüm: sekme ya da bölme.** Sekme çubuğundaki iki düğme (ya da
-`Ctrl+Shift+E`) terminal alanını iki kip arasında değiştirir. **Sekmeler** kipinde
-aynı anda tek terminal görünür. **Bölmeler** kipinde etkin grubun bütün sekmeleri
-döşenir: her bölmenin üstünde kabuk kodu ve sekme adıyla ince bir başlık, odaklı
-bölmenin çevresinde vurgu rengi, tıkladığınız bölme etkin sekme olur. Izgara
-bölme sayısına göre kuruluyor (2 → yan yana, 3 → üstte iki + altta bir geniş,
-7 → 3×3'ün son satırı tam genişlik) ve boş hücre bırakmıyor.
-
-> Bölme kipi grubun **her** sekmesinin kabuğunu başlatır — "hepsini yan yana
-> göster" demenin karşılığı bu. Grubu küçük tutmak kullanıcının elinde.
-
-**Dil.** Arayüz Türkçe ve İngilizce. Ayarlar → Görünüm → Dil ile değişir, anında
-uygulanır; tarih/saat ve sayı biçimleri de dille birlikte değişir. Dil ayarı dışa
-aktarılan dosyaya dahildir.
-
-**Grup renkleri.** Her grubun rengi yalnızca ince bir şeritte değil arka planda
-da görünür — kenar çubuğunda onlarca grup varken renginden tanımak için. Renk
-sağ tık → *Rengi değiştir* ile hazır renklerden, özel renk seçiciyle ya da
-Ayarlar → Gruplar → Renk'ten verilir; kaldırılabilir. Özel renk seçici
-uygulamanın kendisinde, renk kutularının hemen altında açılır (doygunluk ve
-parlaklık alanı, ton çubuğu, renk kodu); sistemin renk penceresi macOS'ta
-ekranın köşesinde açıldığı için kullanılmıyor. Etkin grubun rengi sekme
-çubuğunun altındaki çizgide de görünüyor, böylece kenar çubuğu kapalıyken de
-hangi gruptasınız belli oluyor. Karışım oranları okunabilirlik sınırıyla
-bağlıdır (bkz. Testler).
-
-**Kopyala / yapıştır.** Terminalde sağ tık **menü** açar: kopyala, yapıştır,
-tümünü seç, temizle, ara, görünüm kipi, kabuğu yeniden başlat, klasörü Gezgin'de
-aç. Eskiden koşulsuz yapıştırıyordu — metin seçip sağ tıklayan kullanıcı için tam
-ters sonuç. Ayardan "seçim varsa kopyala, yoksa yapıştır" ya da "her zaman
-yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğa SIGINT
-olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
-zaman komutu durdurur**.
-
-Aynı kural **komut kutusunda** da geçerli ve karar tek yerden çıkıyor
-(`resolveCtrlC`): kutuda seçili metin varsa `Ctrl+C` onu kopyalar ve seçimi
-kaldırır, satır yerinde durur; seçim yoksa kabuğa gider ve yazılan satırı
-bırakır. Odak kutudayken terminalde seçim varsa kopyalanan odur. Kopyalama
-kısayolu (`Ctrl+Shift+C`) kutunun seçimini de kopyalar — tarayıcının o tuşa
-kendi karşılığı olmadığı için kutu bunu kendisi yapıyor. "Ctrl+C seçim varken
-kopyalasın" ayarı kapalıysa `Ctrl+C` iki yüzeyde de her zaman kabuğa gider.
-`Ctrl+Shift`, `Ctrl+Alt` (Windows'ta AltGr) ve `Ctrl+Win` ile basılan C/D/L
-kabuğun denetim karakteri sayılmaz.
-
-**Bağlantılar.** Terminaldeki URL'ler **vurgu renginde** görünür, üzerine
-gelindiğinde imleç değişir ve tıklanınca işletim sisteminin varsayılan
-tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open` çağırmak;
-Tauri webview'ünde bu hiçbir şey yapmadığı için linkler sessizce
-çalışmıyordu.) Yalnızca `http`/`https` açılır ve url kabuktan geçirilmez.
-
-Renklendirme xterm'in dekorasyon API'siyle yapılıyor ve **yalnızca görünür
-satırlara** uygulanıyor: dekorasyon tampon satırına bağlı bir imleçle yaşıyor,
-on binlerce satırlık kaydırma tamponunun tamamına kaydetmek belleği ve çizimi
-boğardı. Tarama iki aşamalı — önce satır metninde hızlı bir eleme, sonra
-yalnızca aday satırlarda hücre hücre okuma; tipik çıktıda satırların çoğunda
-bağlantı yok. Çok yoğun çıktı üreten işlerde ayardan kapatılabilir.
-
-**Komut önerisi.** Daha önce çalıştırdığınız komutlar yazarken önerilir.
-İki bağımsız kaynak var:
-
-*Uygulamanın kendi geçmişi (her kabukta).* Yazdıkça istemin altında bir liste
-açılır: **↑↓** seçer, **→** kabul eder, **Esc** kapatır. Seçili öneri üç ayrı
-işaretle belli oluyor — işaret oku, arka plan tonu ve metnin parlaklaşması;
-önceki hâlinde seçili ve seçili olmayan satırların en dikkat çeken kısmı aynı
-renk ve aynı kalınlıktaydı, yani "hangisini seçtim" sorusunun görsel cevabı
-yoktu. Liste yalnızca en az
-iki karakter yazıldığında, eşleşme varken ve imleç satır sonundayken açılıyor —
-bu üç koşul özelliğin güvenliği: boş satırda liste kapalı olduğu için ok tuşları
-kabuğun kendi geçmişine gidiyor. Kabul etmek yazılanı silip öneriyi yazıyor;
-öneri yazılanla tam olarak başlıyorsa yalnızca kalanı ekliyor (hiçbir şey
-silinmiyor). Kaynak uygulamanın geçmişi olduğu için sekmeler ve kabuklar arası
-çalışıyor.
-
-`cd` bunun istisnası: cevabı geçmişte değil, diskte. `cd ` yazınca bulunulan
-dizinin klasörleri gelir, yazdıkça süzülür (içeren eşleşme; başlayanlar önce).
-Yazılan ad bir klasörle **tam eşleşiyorsa** — elle ya da listeden kabul edip —
-o klasörün içi gelir, ayırıcı yazmak gerekmez: `cd NYAYAN` yazan kişi
-NYAYAN'ın alt klasörlerini görür, aynı adla başlayan kardeşler onların
-ardından. Yazılanla birebir aynı satır listede yok — yeni bir şey söylemeyen
-öneri öneri değil.
-
-*Kabuğun geçmişten tamamlaması (PSReadLine, zsh-autosuggestions).* Satır içi
-soluk "hayalet metin" ya da istemin altında liste. Bunu kabuğa bırakmak
-bilinçli: tamamlamayı ekran tamponuna yazmak kabuğun satır düzenleyicisiyle
-(imleç, yeniden çizim, sekme tamamlama) yarışmak demek. PSReadLine 2.2+
-gerekiyor; sürüm yetmiyorsa durum çubuğunun **⋯** menüsünde *Geçmişten
-tamamlama · Desteklenmiyor* yazıyor ve satırın üzerine gelmek ne yapılacağını
-söylüyor.
-
-Adı bir kez değişti. Önceki hâli "kabuk önerisi"ydi ve ne dediği
-anlaşılmıyordu: neyin önerildiği de, kimin önerdiği de belirsizdi. Yapılan iş
-tam olarak şu — kabuk, geçmişte çalıştırdığınız komutlardan satırın kalanını
-tamamlıyor.
-
-İkisi birlikte de kullanılabilir; ayrı ayrı kapatılabilir.
-
-**Renkli varsayılan istem** (macOS zsh ve bash). İşletim sisteminin verdiği
-düz istem (`kullanıcı@makine dizin %`) renkleniyor: kalın yeşil kimlik, kalın
-mavi dizin; renkler ANSI paletinden geldiği için tona tema karar veriyor.
-Yalnızca işletim sisteminin varsayılanıyla **birebir aynı** istem renkleniyor;
-oh-my-zsh, starship ya da kendi `PROMPT`unu kuran kullanıcının istemine
-dokunulmuyor. *Ayarlar › Terminal › Komut satırı › Renkli istem* ile
-kapatılabilir; aynı yerde kullanıcı@makine ve klasör için ayrı ayrı renk
-seçilebiliyor (seçilmezse temanın yeşili/mavisi). Seçilen renk terminalin
-zemininde okunmayacak kadar soluksa aynı tonun okunur bir hâli kullanılıyor.
-Yeni açılan sekmelerde geçerli.
-
-**Kabuk kapanınca sekme kendiliğinden yeniden başlar.** `exit` yazdığınızda ya
-da kabuk düştüğünde sekme boş bir kutuya dönüşmüyor: yeni bir kabuk açılıyor ve
-önceki ekran, altında "önceki oturum burada bitti" ayıracıyla yerinde kalıyor.
-Sekmeyi gerçekten kapatmak isterseniz kenar çubuğundan ya da sekme çubuğundan
-kapatırsınız.
-
-Koşulsuz değil: **arka arkaya hemen ölen** bir kabuk yeniden denenmiyor. Profilde
-olmayan bir yürütülebilir ya da silinmiş bir çalışma dizini, koşulsuz bir
-yeniden başlatmada saniyede yüzlerce süreç demek olurdu. O durumda eski kutu
-geri geliyor ve nereye bakılacağını söylüyor.
-
-**Komut çalışırken yanıt da komut satırına yazılır.** `ng serve`in
-"Would you like to use a different port? (Y/n)" sorusu, `npm init`in soruları,
-`Read-Host`, bir REPL — çalışan program bir şey sorduğunda yanıt terminalin
-içine değil, alttaki kutuya yazılıyor ve Enter'la programa gidiyor. Kutu komut
-çalışırken kapanmıyor; `>_` yerine yanıp sönen bir nokta ve "Komut çalışıyor…"
-yazısı çıkıyor. Kural tek cümle: **kutu boşken** tuşlar doğrudan programa
-gidiyor, yazmaya başlayınca satır kutuda toplanıp Enter'la gönderiliyor.
-Böylece:
-
-- Boş kutuda Enter programa gider — "(Y/n)" sorusunda varsayılanı kabul etmek.
-- Boş kutuda oklar, Boşluk, Esc, Backspace ve `Ctrl+<harf>` programa gider:
-  `ng new`in stil listesi gibi oklarla seçilen listeler, işaret kutuları,
-  "devam etmek için bir tuşa basın" çalışıyor.
-- Yazarken oklar ve Backspace kutuyu düzenler; **Tab** yazılanı programa
-  devredip tamamlatır (REPL, ssh ardındaki kabuk), **Esc** yazılanı bırakır.
-- Program parola soruyorsa (`password:`, `passphrase … :`, `Parola:`) yazılan
-  nokta olarak görünüyor ve panoya kopyalanamıyor.
-- Yazılan yanıt komut geçmişine girmiyor, öneri listesi açılmıyor. Komut
-  gönderilmemiş bir yanıtla biterse o yanıt silinir; istemde yarım bırakılan
-  komut taslağı ise komut bitince yerinde durur.
-
-Tam ekran programlarda (`vim`, `less`, `git log`) kutu yine kapanıyor ve tuşlar
-doğrudan terminale gidiyor: orada ekranı program yönetiyor.
-
-**Çalışan komutu durdurma.** Yanıt satırının sağındaki **Durdur** düğmesi tek
-tıkla durduruyor. Klavyeden kutudayken ya da terminalin içindeyken düz
-`Ctrl+C` tek basışta gidiyor — kabuğun kendi tuşu. Odak başka bir yerdeyse
-(kenar çubuğu, sekme çubuğu) **Ctrl+C iki kez arka arkaya**: ilk basış satırı
-kırmızıya çevirip "tekrar basın" diyor, ikincisi kabuğa SIGINT gönderiyor. İki
-basış, tuşun ikinci anlamı yüzünden — Ctrl+C aynı zamanda kopyalama, ve odak
-yazılan yerde değilken tek basışta durdurmak kopyalamak isteyenin işini
-keserdi. Silah 1,5 saniye sonra kendiliğinden düşüyor. Uygulama komut satırı
-ayarı kapalıysa (klasik terminal) kutunun yerinde "Komut çalışıyor…" şeridi ve
-aynı düğme duruyor.
-
-**Boş satırda ↑: geçmiş paneli.** Komut satırı boşken yukarı ok, kutunun
-hemen üstünde **GEÇMİŞ** panelini açıyor: son komutlar, ne zaman
-çalıştırıldıklarıyla. **↑↓** gezer, **→** kabul eder, **Esc** kapatır. Enter
-seçileni kutuya yazar — çalıştırmaz; tek bir Enter'la geçmişten komut
-koşturmak geri dönüşü olmayan bir kaza demek.
-
-Liste **o sekmenin** geçmişi: gerçek bir kabuğun yukarı oku da yalnızca kendi
-oturumunu hatırlar, yan sekmede yazdığınız komutu araya karıştırmaz. `Ctrl+A`
-kapsamı tüm sekmelere genişletir, tekrar basmak geri alır; panelin sağ altında
-hangi kapsamda olduğu yazıyor. Yeni açılmış, kendi geçmişi olmayan bir sekmede
-liste kendiliğinden tüm geçmişten kuruluyor — yoksa yukarı ok orada hiçbir şey
-yapmazdı ve bu panelin varlık sebebi tam olarak o boşluğu doldurmak.
-
-İstenmeyen bir komutu panelden **geçmişten silebilirsiniz**: satırın sağındaki
-**×** (her satırda soluk durur, üzerine gelince belirginleşir) ya da seçiliyken
-**Shift+Delete** (mac'te ⇧⌦, yani Shift+Fn+⌫). Silmeden önce onay sorulur.
-Silme panelin kapsamını izler: panel bu sekmeyi gösteriyorsa yalnızca bu
-sekmenin kayıtları gider, diğer sekmelerin geçmişi değişmez; `Ctrl+A` ile tüm
-sekmelere geçip silmek komutun bütün kayıtlarını siler. Kayıtlar diskten de
-silinir — komut bir sonraki açılışta geri gelmez, metni geçmiş dosyasında da
-kalmaz. Yazarken açılan öneri listesinde de aynı düğme ve tuş çalışır; o liste
-sekmeye göre süzülmediği için orada silme her zaman bütün sekmeleri kapsar.
-
-**Yeni sürüm ve güncelleme.** Uygulama açılışta ve açık kaldıkça altı saatte
-bir GitHub'daki son yayına bakar; daha yenisi varsa durum çubuğunda
-**⬆ 0.2.2 hazır** rozeti çıkar. Rozete tıklamak *Ayarlar › Hakkında*'yı açıyor:
-sürüm notları orada ve iki düğme:
-
-- **Güncelle ve yeniden başlat** — paketi uygulama kendisi indiriyor, imzasını
-  doğruluyor, kuruyor ve yeniden açılıyor. Önce onay soruluyor; sekmelerde
-  çalışan bir komut varsa (`ng serve` gibi) onun duracağı da yazıyor. Sekmeler
-  yeniden açılışta geri geliyor. Windows'ta kurucu ilerleme çubuğuyla, soru
-  sormadan çalışıyor (MSI ile kurulduysa yönetici onayı istenir); macOS'ta paket
-  yerinde değişiyor ve tarayıcıdan indirilmediği için **ilk açılıştaki "Yine de
-  Aç" adımı tekrar etmiyor** — güncellemeye karantina damgası düşmüyor (ölçüldü).
-- **İndirme sayfasını aç** — elle kurmak için; tarayıcı kendiliğinden
-  açılmıyor, dış bağlantı açmak kullanıcının kararı.
-
-Kurulum düğmesi yalnızca yayın **imzalıysa** (bkz. *Testler › GitHub Actions ›
-Güncelleme imzası*) ve uygulama **kurulu bir paketse** çıkıyor: `npm start`ın
-geliştirme ikilisinde ve kurulumsuz kopyalanmış `nterminal.exe`de yalnızca
-indirme sayfası var. İmza tutmazsa paket kurulmuyor, uygulama olduğu gibi
-çalışmaya devam ediyor ve hata *Hakkında*'da yazıyor.
-
-Denetim *Ayarlar › Hakkında*'dan kapatılabiliyor — kapalıyken hiçbir ağ isteği
-yapılmıyor, aynı yerdeki düğmeyle elle denetlenebiliyor. "Yeni sürüm yok" ile
-"denetleyemedim" ayrı yazılıyor: ağı olmayan bir makinede "bu sürüm güncel"
-demek, bilinmeyen bir şeyi biliyormuş gibi göstermek olurdu.
-
-> Denetim isteği `curl` ile yapılıyor, bir HTTP kütüphanesiyle değil. Sebep
-> kurumsal ağlar: rustls kendi kök sertifika listesini taşıyıp sistemin güven
-> deposunu yok sayıyor ve araya giren bir kurumsal TLS proxy'sinde denetim hep
-> başarısız olurdu. `curl` sertifikaları işletim sisteminden alıyor — üstelik
-> yeni bir bağımlılık gerekmiyor. Kurulum ise Tauri'nin güncelleme eklentisiyle
-> yapılıyor (indirme, imza ve kurucu bir arada); o da aynı sebeple `native-tls`
-> ile derleniyor: güven deposu ve vekil sunucu ayarı sistemden.
-
-**Ayar aktarımı.** Tek JSON dosyasına dışa aktarım; karşı makinede içe alım.
-Yollar `${HOME}` gibi belirteçlere çevrildiği için başka bir kullanıcı adındaki
-makinede de çalışır, kabuk konumları (PowerShell 7, Git Bash…) o makinede
-yeniden aranır. Ne değiştiğini uygulamadan önce görebilirsiniz.
-
----
-
-## Gereksinimler
-
-| | |
-|---|---|
-| Windows | 10 1809+ / 11 (ConPTY gerektirir) |
-| macOS | 11 Big Sur+, yalnızca Apple Silicon paketi (Intel için kaynaktan derleyin) |
-| WebView2 | Yalnızca Windows. 11'de yerleşik; 10'da [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
-| Node.js | 20+ (yalnızca geliştirme) |
-| Rust | 1.82+ (yalnızca geliştirme) |
-| Visual Studio | C++ masaüstü geliştirme bileşeni (yalnızca Windows'ta geliştirme) |
-| Xcode Command Line Tools | `xcode-select --install` (yalnızca macOS'ta geliştirme) |
-
-macOS'ta WebView2 gerekmiyor: sistemin WKWebView'ü kullanılıyor.
-
-## Kurulum ve çalıştırma
-
-```bash
-npm install
-```
-
-Geliştirme kipinde başlat:
-
-```bash
-npm start
-```
-
-Dağıtım yapısı (exe + kurucu) üret:
-
-```bash
-npm run bundle
-```
-
-Testleri koş:
-
-```bash
-npm test
-```
-
-Üç komut da **iki platformda aynı**. Çıktılar `src-tauri/target/release/`
-altında: Windows'ta `bundle/nsis/*.exe` ve `bundle/msi/*.msi`, macOS'ta
-`bundle/macos/*.app` ve `bundle/dmg/*.dmg`.
-
-macOS paketi bir Mac'te üretilmek zorunda: Apple SDK'sı olmadan çapraz derleme
-mümkün değil. Windows kurucusu da aynı şekilde Windows'ta üretiliyor.
-
-**MSI şablonu projede, ama elle yazılmıyor.** `src-tauri/wix/main.wxs`
-Tauri'nin kendi şablonu, tek bir satır eksik: Başlat menüsü kısayolunun
-`Icon="ProductIcon"` satırı. O simge Windows Installer'ın ürün koduna bağlı
-önbelleğinde duruyor, ürün kodu her derlemede değişiyor ve güncelleme eski
-klasörü siliyor. Kısayoldan görev çubuğuna sabitlenen düğmenin resmi her MSI
-güncellemesinden sonra boşalıyordu; simgesiz kısayol exe'nin simgesini
-gösteriyor. Şablon kurulu CLI'den üretiliyor:
-
-```bash
-node scripts/wix-template.mjs
-```
-
-Tauri güncellendiğinde bu komut yeniden koşulmalı; unutulursa `npm test`
-(CI'da Windows paket işi) şablonun CLI'dekinden kaydığını söylüyor. İkisi
-de yalnızca Windows'ta iş görüyor: WiX şablonu CLI'nin Windows derlemesinde
-var, macOS'takinde yok. macOS'ta komut "uygulanamaz" diyor, test de
-atlanıyor.
-
-### macOS: ilk açılış
-
-**Paket Apple kimliğiyle imzalı değil, ad-hoc imzalı.** Tarayıcıdan indirilen
-bir uygulamayı macOS ilk açılışta denetliyor (Gatekeeper) ve Apple'ın
-onaylamadığı paketi açmıyor: "Apple, N-Terminal'in kötü amaçlı yazılım
-içermediğini doğrulayamadı". Açmanın yolu **Sistem Ayarları › Gizlilik ve
-Güvenlik › Yine de Aç** — adımları [Paketi indirip kurmak](#paketi-indirip-kurmak)
-bölümünde. Bir kez yapılıyor; uygulamanın kendi kurduğu güncellemelerde
-karantina işareti olmadığı için tekrar etmiyor.
-
-**Eskiden "hasarlı" diyordu.** CI ad-hoc imzayı eklemeden önceki paketlerde
-yalnızca ikilinin bağlayıcı imzası vardı, paketin kaynakları mühürsüzdü;
-macOS o pakete **"hasarlı, Çöp'e taşıyın"** diyor ve "Yine de Aç" düğmesini
-HİÇ göstermiyor. ÖLÇÜLDÜ (macOS 27, aynı kod, karantinalı iki kopya): imzasız
-paket *“…” is damaged and can’t be opened* + yalnızca *Move to Trash / Cancel*;
-ad-hoc paket *“…” Not Opened — Apple could not verify…* ve Gizlilik ve
-Güvenlik'te *“…” was blocked to protect your Mac. [Open Anyway]*. İş akışındaki
-tek fark `APPLE_SIGNING_IDENTITY: "-"`.
-
-Eski bir paket "hasarlı" diyorsa (ya da Terminal tercih ediliyorsa) karantina
-damgasını kaldırmak da açıyor:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/N-Terminal.app
-```
-
-Komut `Permission denied` derse uygulamanın dosyaları sizin hesabınıza ait
-değildir — örneğin `/Applications`'a başka bir yönetici hesabıyla ya da
-yönetici parolası sorularak kopyalandıysa. O zaman aynı komutu `sudo` ile
-koşun; yönetici parolası sorulur (yazarken ekranda görünmez, Enter yeterli):
+   Privacy & Security*).
+2. En alttaki **Güvenlik** bölümünde "N-Terminal engellendi" satırının
+   yanındaki **Yine de Aç**'a (*Open Anyway*) basın.
+3. Mac'inizin parolasıyla ya da Touch ID ile onaylayın. Bu onay yönetici
+   yetkisi ister; standart bir kullanıcı hesabındaysanız macOS bir yöneticinin
+   adını ve parolasını sorar.
+
+Bu adım bir kez yapılır; uygulamanın kendi kurduğu güncellemelerde tekrar
+etmez. macOS uygulamayı açmıyor, "hasarlı" diyor ya da **Yine de Aç** düğmesi
+çıkmıyorsa: [macOS: ilk açılış](#macos-ilk-açılış).
+
+**Windows 10/11:** `N-Terminal_<sürüm>_x64-setup.exe` dosyasını indirip
+çalıştırın. Kurulum yönetici izni istemez, uygulama kullanıcı klasörüne kurulur
+(kurumsal dağıtım için aynı sürümün `.msi` paketi de var). Paket imzasız olduğu
+için Windows "Windows bilgisayarınızı korudu" (*Windows protected your PC*)
+diyebilir: **Ek bilgi** (*More info*) › **Yine de çalıştır** (*Run anyway*).
+Daha önce `.msi` ile kurduysanız `setup.exe` onu kaldırıp uygulamayı kullanıcı
+klasörüne taşır; görev çubuğuna sabitlenmiş düğmeyi bir kez kaldırıp yeniden
+sabitleyin ([KURULUM.md](KURULUM.md)).
+
+## macOS: ilk açılış
+
+N-Terminal Apple'ın ücretli geliştirici sertifikasıyla değil, kendi imzasıyla
+(ad-hoc) dağıtılıyor. macOS internetten indirilen ve Apple'ın onaylamadığı bir
+uygulamayı ilk açılışta durdurur; yukarıdaki **Yine de Aç** adımı bu yüzden
+gerekli. Uygulamanın içinden gelen güncellemeler internetten indirilmiş
+sayılmadığı için bu adım tekrar etmez.
+
+**"Hasarlı" uyarısı ya da Yine de Aç düğmesi yoksa.** Bazı durumlarda (örneğin
+eski sürümlerin paketlerinde) macOS uygulamanın hasarlı olduğunu söyleyip Çöp
+Sepeti'ne taşımayı önerir ve Sistem Ayarları'nda **Yine de Aç** düğmesi hiç
+çıkmaz. Paket bozuk değildir; macOS'un indirilen dosyaya koyduğu karantina
+işaretini kaldırmak yeterli. **Terminal**
+uygulamasını açın (Uygulamalar › İzlenceler › Terminal) ve şunu yazın:
 
 ```bash
 sudo xattr -dr com.apple.quarantine /Applications/N-Terminal.app
 ```
 
-Komut bir kez koşuluyor; sonrasında uygulama normal açılıyor. macOS 15'ten
-beri Control+tık → Aç kaçış kapısı yok; Terminal'siz tek yol yukarıdaki
-"Yine de Aç".
-
-**Eski paketin imzası.** İkili yalnızca bağlayıcı imzalı, paketin kaynakları
-mühürlü değil ve Team ID yok:
-
-```
-$ codesign -dvv /Applications/N-Terminal.app
-Identifier=nterminal-9bd84406411f3fc4
-Signature=adhoc
-TeamIdentifier=not set
-
-$ spctl -a -vvv /Applications/N-Terminal.app
-code has no resources but signature indicates they must be present
-```
-
-`Identifier` `com.nyayan.nterminal` değil, **ikilinin hash'inden türeyen bir
-ad** — yani her derleme macOS için başka bir uygulama. Ad-hoc mühürlü pakette
-`Identifier` artık `com.nyayan.nterminal`, ama ikinci sonuç iki imzada da
-aynı ve herkesi ilgilendiriyor: macOS gizlilik izinlerini (Tam Disk Erişimi,
-Erişilebilirlik, Otomasyon) kod imzası şartına bağlıyor; imza ad-hoc olduğu
-için şart `cdhash`e çivileniyor ve **her yeni sürümde verdiğiniz izinler
-sıfırlanıyor** — uygulama içinden gelen güncellemede de.
-
-**Tamamen uyarısız çözüm** Apple Developer Program üyeliği (yıllık ücretli),
-*Developer ID Application* sertifikası ve notarization. O zaman son kullanıcı
-yalnızca "internetten indirildi, açılsın mı?" onayını görüp **Aç**'a basıyor —
-Sistem Ayarları'na gitmek yok — ve izinler sabit Team ID sayesinde sürümler
-arası korunuyor. Tauri bunu derleme sırasında kendisi yapıyor; gereken,
-sertifikanın ve Apple hesabı bilgilerinin CI'a sır olarak verilmesi. Şimdilik
-yapılmadı: üyelik ücretli ve kararı proje sahibinin.
-
-Kendinden imzalı bir sertifika izin sıfırlanmasını **geliştirme makinesinde**
-çözer ama son kullanıcı için hiçbir şey değiştirmez — o sertifika başka bir
-Mac'te güvenilmiyor. Yerel derleme için bu yol hazır: `sh scripts/macos-cert.sh`
-anahtar zincirine **NTerminal Dev** adlı bir kimlik ekliyor, `npm run bundle`
-da kimlik varsa onunla imzalıyor (yoksa imzasız; CI ise ad-hoc imzalıyor).
-
-Kabuktan gelen `APPLE_SIGNING_IDENTITY` bilerek **kullanılmıyor**. Tauri bu
-değişkeni yapılandırmadaki imza ayarından önce okuyor; kabuk profilinde başka
-bir proje için genel tanımlıyken NTerminal paketleri o projenin sertifikasıyla
-imzalanıyordu. Başka bir kimlik gerekiyorsa (örneğin ileride Developer ID)
-`NTERMINAL_SIGNING_IDENTITY` ile verilir.
-
-### Neden `npx tauri dev` yerine `npm start`?
-
-`scripts/run.mjs` platforma göre dağıtıyor. macOS ve Linux'ta doğrudan `tauri`
-çağırıyor — orada özel bir hazırlık gerekmiyor. Windows'ta ise
-`scripts/win-env.ps1` üzerinden geçiyor; o betik derlemeden önce
-**kullanılabilir** bir MSVC toolset'i buluyor.
-
-Sebebi somut bir sorun: bu makinede iki Visual Studio kurulumu var ve rustc her
-zaman en yeni toolset'i seçiyor. Yeni olan (VS 18 / MSVC 14.50) linker'ı
-içerdiği hâlde x64 CRT kütüphanelerini (`msvcrt.lib`) içermiyor, dolayısıyla
-doğrudan `cargo build` şununla düşüyor:
-
-```
-LINK : fatal error LNK1104: cannot open file 'msvcrt.lib'
-```
-
-Betik toolset'leri `lib\x64\msvcrt.lib` var mı diye tarıyor, sağlam olanın
-`vcvars64` ortamını içeriye alıyor ve linker'ı `cargo`'ya açıkça bildiriyor.
-Bu yüzden hangi VS kurulu olduğundan bağımsız çalışır.
-
-> Paketlemede `LNK1104` yerine **`Access is denied`** görürseniz N-Terminal
-> açıktır: çalışan `nterminal.exe` değiştirilemiyor. Uygulamayı kapatıp
-> yeniden deneyin.
-
----
-
-## Kabuk entegrasyonu
-
-Komut geçmişinin doğru olması için uygulamanın *hangi komutun çalıştığını, ne
-zaman bittiğini ve hangi kodla çıktığını* bilmesi gerekiyor. Tuş vuruşlarını
-saymak bunu vermez: yön tuşlarıyla düzenleme, sekme tamamlama, geçmişten çağırma
-hepsi yanlış metin üretir.
-
-Bunun yerine kabuğa küçük bir başlangıç betiği yükleniyor. Betik, VS Code ve
-WezTerm'in de kullandığı **OSC 133 / OSC 633** anlamsal istem işaretlerini
-gönderiyor:
-
-| Dizi | Anlamı |
-|---|---|
-| `OSC 133;A` | İstem (prompt) çizilmeye başlıyor |
-| `OSC 133;B` | İstem bitti, komut girişi burada başlıyor |
-| `OSC 133;C` | Komut çalışmaya başladı |
-| `OSC 133;D;<kod>` | Komut bitti, çıkış kodu |
-| `OSC 633;E;<komut>` | Çalıştırılan komutun metni |
-| `OSC 633;P;Cwd=<yol>` | Geçerli klasör |
-| `OSC 7;file://…` | Geçerli klasör (standart biçim) |
-
-Betikler `src-tauri/shell-integration/` altında; exe'nin içine gömülü olarak
-dağıtılıyor ve her açılışta veri klasörüne yazılıyor.
-
-**PowerShell betiği `-File` ile YÜKLENMİYOR.** `-File` yürütme ilkesine tabi
-ve stok bir Windows istemcisinde ilke `Restricted`: betik çalışmıyor, istem
-işareti hiç gelmiyor, dipte "Kabuk başlatılıyor…" şeridi sonsuza kadar
-kalıyordu (başka bir bilgisayara kurulumda bildirildi; geliştirme makinesinde
-grup ilkesi `Unrestricted` koyduğu için görünmüyordu). Uygulama bunun yerine
-`-Command` ile küçük bir yükleyici veriyor: yükleyici betiğin metnini okuyup
-betik bloğu olarak çalıştırıyor. İlke yalnızca dosyayı denetlediği için
-`Restricted`, `AllSigned`, grup ilkesi ve "internetten indirildi" işaretli
-dosya bunu durdurmuyor; kullanıcının oturumunun ilkesi de değişmiyor
-(`-ExecutionPolicy Bypass` bütün sekmeyi Bypass'a çekerdi). Aynı ilke
-uygulamayla gelen PSReadLine'ın `.psm1`ini de engellediğinde betik modülü
-DLL'inden kendisi yüklüyor. Yükleme yine de başarısız olursa kabuk
-`OSC 633;P;Integration=failed` bildiriyor ve sekme entegrasyonsuz düz terminal
-olarak açılıyor. Ayrıntılar `src-tauri/src/pty.rs` içinde,
-`POWERSHELL_BOOTSTRAP` üzerinde.
-
-### Destek durumu
-
-| Kabuk | Platform | Komut metni | Çıkış kodu | Süre | Klasör |
-|---|---|---|---|---|---|
-| PowerShell 7 (pwsh) | ikisi | ✅ | ✅ | ✅ | ✅ |
-| Windows PowerShell 5.1 | Windows | ✅ | ✅ | ✅ | ✅ |
-| Git Bash / MSYS | Windows | ✅ | ✅ | ✅ | ✅ |
-| WSL | Windows | ✅ | ✅ | ✅ | ✅ |
-| cmd.exe | Windows | ⚠️ tampondan | ❌ | ✅ | ✅ |
-| zsh | macOS | ✅ | ✅ | ✅ | ✅ |
-| bash | macOS | ✅ | ✅ | ✅ | ✅ |
-| fish | macOS | ⚠️ tampondan | ❌ | ⚠️ | ❌ |
-| Özel profil | ikisi | ⚠️ tampondan | ❌ | ⚠️ | ❌ |
-
-**PowerShell**, kullanıcının kendi `prompt` fonksiyonunu ve profilini bozmuyor;
-sarmalıyor. Komut metni PSReadLine'ın `PSConsoleHostReadLine` kancasından
-alınıyor; PSReadLine yoksa `Get-History` yedeğine düşüyor (süre de oradan
-geliyor). Çıkış kodu için `$LASTEXITCODE` değişimi izleniyor — yalnızca `$?`
-bakmak yerel uygulamaların (`git`, `dotnet`) gerçek kodunu kaçırırdı.
-
-**Bash**, `--init-file` ile yüklendiği için kullanıcının `~/.bashrc`'sini
-betiğin kendisi yüklüyor; aksi hâlde takma adlar ve PATH ayarları kaybolurdu.
-Komut yakalama `DEBUG` tuzağıyla yapılıyor, ama tuzak *her* basit komutta
-tetikleniyor — kullanıcının komutunda da, `PROMPT_COMMAND` parçalarında da,
-başlangıç betiğinin kendi satırlarında da. Ayırt etmek için `PROMPT_COMMAND`'ın
-en sonuna bir sentinel (`__nterm_prompt_done`) ekleniyor: yalnızca o çalıştıktan
-sonraki ilk tetikleme kullanıcının komutu sayılıyor. Alternatifler yetmiyordu —
-`history` numarasını karşılaştırmak `HISTCONTROL=ignoredups` ile tekrarlanan
-komutları kaçırıyor, basit bir "bir kez bildir" bayrağı ise kullanıcının kendi
-`PROMPT_COMMAND` parçalarını komut sanıyordu.
-
-**Bash macOS'ta** ayrıca login zincirini kendisi yüklüyor. `--init-file`
-bash'te yalnızca login *olmayan* etkileşimli kabukta okunuyor, dolayısıyla
-`--login` çıkarılmak zorunda; ama mac'te kullanıcı ayarları `.bash_profile`'da
-duruyor (Terminal.app login kabuğu açtığı için) ve PATH'i `/etc/profile`
-içindeki `path_helper` kuruyor. Betik ikisini de yükleyip `.bashrc`'yi bir kez
-daha yüklemiyor — çift yükleme PATH girdilerini ikiye katlardı.
-
-**Zsh** `--init-file` benzeri bir bayrak sunmuyor. Tek yol `ZDOTDIR`'i kendi
-klasörümüze çevirmek, ama o zaman kullanıcının `.zshenv`, `.zprofile`, `.zshrc`
-ve `.zlogin` dosyalarının **hiçbiri** okunmuyor. `shell-integration/zdotdir/`
-altındaki dört köprü dosyası her birini kendi sırasında yükleyip zinciri
-kurtarıyor; `.zshrc` sonunda `ZDOTDIR` kullanıcıya geri veriliyor — aksi hâlde
-`.zshrc`'ye satır ekleyen bir kurulum betiği (nvm, rustup) bizim klasöre yazar
-ve o klasör her açılışta üzerine yazıldığı için ayarı sessizce kaybolurdu.
-
-Zsh tarafı bash'ten daha temiz: komut satırını `preexec` doğrudan argüman
-olarak veriyor, `DEBUG` tuzağı ve sentinel gerekmiyor. Buna karşılık `precmd`
-kancası dizinin **başına** ekleniyor — `$?` bir sonraki kancaya kadar yaşıyor
-ve başka bir kanca önce koşarsa okunan çıkış kodu onunki olurdu. `133;B`
-işareti ise her istemde yeniden kontrol ediliyor: powerlevel10k ve starship
-PS1'i her istemde yeniden kuruyor, tek seferlik ekleme ilk istemden sonra
-kaybolurdu.
-
-**cmd.exe** çıkış kodu bildiremiyor: `PROMPT` değişkeni her istemde yeniden
-değerlendiriliyor ama `%ERRORLEVEL%` atama anında bir kez çözülüyor. İstem ve
-klasör işaretleri geliyor, komut metni ise ekran tamponundan okunuyor.
-
-### "Tampondan" ne demek?
-
-Entegrasyon komut metni vermediğinde, Enter'a basıldığı anda ekran tamponu
-okunuyor: `OSC 133;B` ile işaretlenen noktadan imlece kadar olan metin. Bu,
-tuş vuruşlarını saymanın aksine satır düzenlemeye, tamamlamaya ve satır
-kaydırmasına dayanıklı.
-
----
-
-## Tema okunabilirliği
-
-Geleneksel terminal paletleri açık zeminde okunamayan renkler içeriyor. Resmî
-Solarized Light şemasında `brightWhite` doğrudan arka planın aynısı (`#fdf6e3`),
-`white` ise bir tık farkı olan `#eee8d5`. Kabuklar bu renkleri bolca kullandığı
-için (PSReadLine sayıları "White" ile boyuyor, pek çok araç vurgu için "bright
-white" veriyor) yazılan metin görünmez oluyordu.
-
-Tek tek renk düzeltmek yerine palet bir okunabilirlik süzgecinden geçiyor
-(`src/lib/contrast.ts`): her renk arka plana karşı WCAG karşıtlık oranıyla
-ölçülüyor, eşiğin altındaysa tonu korunarak arka plandan uzaklaştırılıyor —
-açık zeminde koyulaşıyor, koyu zeminde açılıyor. Eşikler: normal palet renkleri
-için 3.2, varsayılan metin rengi için 4.5.
-
-Solarized Açık'ta ölçülen sonuç:
-
-| Renk | Önce | Sonra |
-|---|---|---|
-| `brightWhite` | `#fdf6e3` — karşıtlık **1.00** (görünmez) | `#8b877d` — 3.32 |
-| `white` | `#eee8d5` — 1.14 | `#838075` — 3.67 |
-| `brightCyan` | `#93a1a1` — 2.48 | `#7d8989` — 3.35 |
-| `yellow` | `#b58900` — 2.98 | `#ac8200` — 3.27 |
-| `foreground` | `#586e75` — 4.99 | değişmedi |
-
-Zaten yeterli karşıtlığa sahip renklere dokunulmuyor, dolayısıyla koyu temalar
-(paletleri bu açıdan sağlam) olduğu gibi kalıyor. Testler bu güvenceyi tüm
-temalar için doğruluyor: hiçbir palet renginin arka planla karışmadığı
-iddiası her tema üzerinde ayrı ayrı ölçülüyor.
-
----
-
-## Veri dosyaları
-
-Varsayılan konum `%APPDATA%\NTerminal`:
-
-| Dosya | İçerik |
-|---|---|
-| `settings.json` | Görünüm, davranış, kabuk profilleri, kısayollar |
-| `workspace.json` | Gruplar (favori işareti dahil), sekmeler, kilit durumu, çalışma dizinleri |
-| `history.jsonl` | Komut geçmişi (append-only günlük) |
-| `favorites.json` | Favori komutlar |
-| `scrollback/<sekme>.ansi` | Sekme başına kaydedilmiş ekran çıktısı |
-| `shell-integration/` | Kabuğa yüklenen betikler |
-
-Ayar bolumleri (`appearance`, `behavior`) kapsayici duzeyinde
-`serde(default)` tasiyor: yeni bir alan eklendiginde diskte duran eski dosya
-okunmaya devam eder, eksik alan varsayilanla dolar. Bu nitelik olmadan tek bir
-yeni alan kullanicinin tum ayarlarini sifirliyor - testler bu gocu dogruluyor.
-
-Yazma her zaman "geçici dosyaya yaz + yerine taşı" biçiminde: yarım yazılmış
-bir `settings.json` tüm yapılandırmayı kaybettirmesin.
-
-`history.jsonl` her komut için iki satır yazıyor — başlarken `add`, bitince
-`fin`. Böylece her komut sonunda 50 bin satırlık dosya baştan yazılmıyor.
-Günlük şiştiğinde kendiliğinden sıkıştırılıyor.
-
-### Taşınabilir kip
-
-Exe'nin yanına `nterminal-data` adlı bir klasör açarsanız tüm yapılandırma
-oradan okunur/yazılır. Uygulamayı klasörüyle birlikte kopyalamak (USB, ağ
-paylaşımı) ayarları da taşır. `NTERMINAL_DATA_DIR` ortam değişkeni de aynı işi
-yapar.
-
-### Tek örnek (Windows)
-
-Aynı veri klasörüyle yalnızca bir N-Terminal çalışıyor. Uygulamayı yeniden
-açmak ikinci bir kopya başlatmıyor; çalışanın penceresini, arka planda gizli
-olsa bile, öne getiriyor.
-
-Kapatma düğmesinin varsayılanı "arka planda çalış": pencere gizleniyor,
-sekmelerdeki komutlar sürüyor. Eskiden uygulamayı yeniden açmak aynı sekmeleri
-kuran yeni bir süreç başlatıyordu, eski süreç ise gizli pencerede çalışmaya
-devam ediyordu. Bildirilen hatada gizli kopyadaki `ng serve` 1453 portunu
-tutuyordu ve yeni kopyada başlatılan `ng serve` portu alamadı. Aynı anda üç
-kopya çalışıyordu ve hepsi aynı `workspace.json`a birbirinin üstüne yazıyordu.
-
-Kilit uygulamaya değil veri klasörüne bağlı: taşınabilir kopya ya da
-`NTERMINAL_DATA_DIR` ile başka klasör kullanan bir örnek yan yana açılabilir.
-Geliştirme yapısının kilidi ayrı; kurulu uygulama açıkken `npm start` yine
-açılıyor. Ayrıntılar `src-tauri/src/instance.rs` içinde.
-
-Uygulamadan gerçekten çıkmak için saatin yanındaki simgeden *Çıkış*'ı seçin ya
-da *Ayarlar › Oturum › Kapatma düğmesi*ni *Uygulamadan tamamen çık* yapın.
-Çıkışta sekmelerdeki süreçler (sunucular dahil) kapanıyor ve portlar boşalıyor.
-
----
-
-## Ayarları başka makineye taşımak
-
-İçe ve dışa aktarma *Ayarlar › Yedekleme* bölümünde; komut paletindeki
-"Ayarları içe / dışa aktar" da oraya açılır.
-
-**Dışa aktarma** neyin dosyaya yazılacağını seçtiriyor: ayarlar, çalışma alanı,
-favori komutlar, komut geçmişi, ekran çıktıları. Favoriler varsayılan olarak
-dahil — başka makinede ilk isteyeceğiniz şeylerden biri.
-
-*Taşınabilir yollar* açıkken makineye özel ön ekler belirteçlere çevrilir:
-
-```
-C:\Users\ali\Desktop\proje   →   ${HOME}\Desktop\proje
-C:\Program Files\Git\...     →   ${PROGRAMFILES}\Git\...
-```
-
-Uzun yollar önce eşleşir; `%LOCALAPPDATA%` altındaki bir yol yanlışlıkla
-`${HOME}\AppData\Local\...` olarak yazılmaz.
-
-**İçe alma** iki adımlı: dosya seçilince ne olacağı gösterilir, onaydan sonra
-uygulanır. Ön izleme ile uygulama tam olarak aynı kodu çalıştırıyor, dolayısıyla
-gördüğünüz rapor gerçekleşecek olanla birebir aynı.
-
-Karşı makinede:
-
-- Belirteçler o makinenin gerçek yollarına açılır.
-- Kabuk konumları doğrulanır. Bulunamayan bir kabuk için aynı türden kurulu bir
-  kabuk varsa yol düzeltilir ve raporda *düzeltildi* olarak görünür; yoksa
-  profil devre dışı işaretlenir ve *uyarı* olarak listelenir.
-- Var olmayan klasörler temizlenir (grup varsayılanı düşer, sekmeler ev dizinine
-  döner).
-
-Her bölüm için kip seçilebilir:
-
-| Kip | Anlamı |
-|---|---|
-| **Değiştir** | Mevcut olanı tamamen gelen dosyayla değiştir |
-| **Birleştir** | Gelen kazanır; yerelde olup gelende olmayan korunur |
-| **Atla** | Bu bölüme dokunma |
-
-Gruplarda *birleştir*, gelen grupları mevcutların yanına ekler; ad çakışırsa
-`(gelen)` eki verir. Mevcut düzeniniz bozulmaz.
-
----
-
-## Ayarlar penceresi
-
-Dokuz bölüm, dikey gezinme: **Genel** (dil, görünüm kipi), **Görünüm** (tema,
-terminal yazı tipi, **arayüz yazı tipi**, imleç), **Terminal** (kopyala/yapıştır,
-bağlantılar, komut önerisi),
-**Oturum** (devamlılık, sekme kapatma onayı), **Geçmiş**, **Profiller**,
-**Gruplar**, **Kısayollar**, **Hakkında**.
-
-**Hakkında.** Sürüm ve veri dosyalarının yanında geliştirici bilgileri de burada:
-ad, kaynak deposunun adresi (yanındaki düğme varsayılan tarayıcıda açıyor) ve
-lisans. Bağlantının kendisi tıklanabilir değil — uygulama bir tarayıcı değil ve
-dış bağlantıyı açmak kazara tıklamayla değil, düğmeyle oluyor.
-
-**Arama.** Bölüm listesinin üstündeki kutuya ayarın adını (ya da ne yaptığını)
-yazınca sonuçlar bölüm adlarıyla listeleniyor; birine tıklamak o bölüme
-götürüyor **ve ilgili satırı kısa süre vurguluyor** — yalnızca bölüme götürmek
-yarım iş, on ayarlı bir bölümde kullanıcı aradığı satırı gözle taramak zorunda
-kalıyor. Arama aksana bakmıyor: "gorunum" yazmak "Görünüm"ü buluyor. Açıklama
-metinleri de taranıyor, çünkü kullanıcı çoğu zaman ayarın adını değil ne
-yaptığını biliyor ("PSReadLine" yalnızca açıklamada geçiyor). Etiket eşleşmeleri
-açıklama eşleşmelerinden önce geliyor.
-
-Arama indeksi elle tutulan bir liste ama sürüklenemiyor: arayüzdeki her ayar
-satırı `data-setting="<anahtar>"` taşıyor ve bir test o anahtarların kümesini
-indeksle birebir karşılaştırıyor. Yeni bir ayar eklenip indekse yazılmazsa test
-düşüyor — aksi hâlde arama onu bulamaz ve bu ancak elle deneyerek görülür.
-
-Pencere bu hâline üç ölçülmüş kusurdan geçerek geldi:
-
-- **Altı bölüm yatay bir şeritteydi** ve iki bölüm birbiriyle ilgisiz ayarları
-  taşıyacak kadar büyümüştü: dil "Görünüm" altındaydı, kopyala/yapıştır ile
-  sekme kapatma onayı aynı "Terminal" başlığını paylaşıyordu ve **aynı başlık
-  iki ayrı bölümde** geçiyordu. Tek bir bölümün içeriği 776px, görünür alan
-  461px'ti. Şimdi en uzun bölüm 564px ve dokuz bölümün altısı kaydırmasız
-  sığıyor.
-- **İlgili metinler dört ayrı sol kenardaydı**: bölüm ipuçları 14px, alan
-  etiketleri 215px, onay kutusu etiketleri 244px, denetimler 415px. İpucunun
-  bazı yerlerde alanın içinde, bazı yerlerde bölümün doğrudan çocuğu olması
-  hizalamayı rastgele bırakıyordu. Şimdi bölüm de aynı ızgarayı taşıyor: iki
-  kenar kaldı, etiketler ve denetimler.
-- **Pencere içeriğe göre büyüyüp küçülüyordu** (379px ile 590px arası), bölüm
-  değiştirmek görsel bir zıplama üretiyordu. Gövde artık sabit yükseklikte.
-- **Bölüm adları ortalanmıştı.** Düğme sistemi yenilenirken temel `button`
-  kuralına `justify-content: center` konulmuştu; düğme bir flex kabı olduğu için
-  bu `text-align: left`i ezdi ve sola dayalı olması gereken her şey ortaya kaydı
-  — bölüm listesi, sağ tık menüsü girdileri, öneri listesi satırları ve "sekme
-  ekle". Merkezleme artık temel kuralda değil, yalnızca içerikten geniş olabilen
-  düğmelerde (`.seg`, panel sekmeleri, pencere altlığı).
-
-## Düğmeler
-
-Üç kademe: sessiz (varsayılan), çerçeveli ve dolgulu. Bir kutuda yalnızca bir
-dolgulu düğme var — dolgu "burada devam et" demek, ikisi olunca hiçbiri demiyor.
-Yıkıcı birincil eylem (onay penceresindeki *Kapat* / *Sil*) dolgulu ve kırmızı.
-
-Dolgulu düğmede yazı **beyaz**, zemin ise vurgu renginin beyaza en az 4.5:1
-karşıtlık verecek kadar koyulaştırılmış hâli (`--accent-solid` / `--err-solid`; yazı
-`--accent-fg` / `--err-fg`). CSS bu hesabı yapamadığı için tema uygulanırken
-`filledColors()` (`src/lib/contrast.ts`) yazıyor. Açık mavi bir vurguda (One Half
-Dark `#61afef`) zemin `#447ba7` oluyor; vurgu zaten koyuysa (açık temalar) olduğu gibi
-kalıyor, çok açık bir renk (sarı gibi) çamurlaşmasın diye eski kurala düşüyor.
-`--accent` / `--err` yüzeyde metin ve gösterge olarak açık kalıyor: aynı renk hem koyu
-yüzeyde okunacak kadar açık hem beyaz yazıya zemin olacak kadar koyu olamaz.
-
-Üzerine gelince zemin biraz koyulaşıyor (açıklaşsaydı beyaz yazı 4.5'in altına
-inerdi). **Devre dışı** dolgulu düğme soluk zemin ve açık gri yazı taşıyor, `opacity`
-yok: eskiden düğme bütünüyle soluyor, koyu yazı zemine karışıyordu (2.5:1); şimdi en az
-3:1. Sayaç hapı yazının TERSİ renkten türüyor (beyaz yazıda koyu hap).
-
-Bu yazı rengi kuralı iki kez değişti. İlkinde `color-mix(accent 12%, #000)` vardı — koyu
-vurgu renginde koyu üstüne koyu. Sonra karşıtlığı yüksek olan siyah/beyaz seçildi; açık
-bir vurguda bu hep koyu yazı demekti ve "Commit düğmesindeki metin rengi yanlış gibi"
-diye bildirildi.
-
-Odak halkası iki katmanlı: iç katman yüzey renginde bir ayırıcı çiziyor. Tek
-katmanlı vurgu renkli bir halka, vurgu renkli **dolgunun** üzerinde
-kayboluyordu — halka ile dolgu aynı renk.
-
-Durum renkleri (kırmızı/yeşil) terminal paletinden geliyor ama arayüz
-yüzeyinde de kullanılıyor; ikisi farklı zemin. Ölçüm: Windows Terminal
-temasında kırmızı metinli düğme **2.87** karşıtlık, okunmuyordu. Aynı renkler
-artık arayüz yüzeyine göre de düzeltiliyor — en kötü değer 4.56, hepsi WCAG AA.
-
----
+- `sudo` komutu yönetici yetkisiyle çalıştırır ve **Mac'inizin giriş
+  parolasını** sorar. Parolayı yazarken ekranda hiçbir şey görünmez; bu
+  normaldir, yazıp Enter'a basın.
+- Hesabınız yönetici değilse `sudo` çalışmaz. Komutu yönetici hesabıyla
+  çalıştırın ya da bilgisayarın yöneticisinden yardım isteyin.
+- Uygulamayı Uygulamalar klasörü dışında bir yere koyduysanız komuttaki yolu ona
+  göre değiştirin. N-Terminal'i Finder'dan Terminal penceresine sürüklemek yolu
+  kendisi yazar.
+
+Komut bir kez çalıştırılır; sonrasında uygulama normal açılır.
+
+**İzin istekleri.** Terminalde çalıştırdığınız bir komut ilk kez Masaüstü,
+Belgeler ya da İndirilenler klasörüne eriştiğinde macOS, N-Terminal'in o klasöre
+erişmesine izin verip vermediğinizi sorar; **İzin Ver**'e basın. Bütün diskte sorunsuz çalışmak için
+N-Terminal'i *Sistem Ayarları › Gizlilik ve Güvenlik › Tam Disk Erişimi*
+listesine ekleyebilirsiniz. Uygulama Apple sertifikasıyla imzalı olmadığı için
+macOS bu izinleri yeni sürüme geçişte yeniden sorabilir.
+
+Teknik ayrıntılar (imzanın türü, ölçümler, Developer ID ile tamamen uyarısız
+dağıtım): [docs/gelistirme.md](docs/gelistirme.md#macos-paketinin-imzası-ve-ilk-açılış).
 
 ## Klavye kısayolları
 
-Hepsi Ayarlar → Kısayollar altından değiştirilebilir ve ayarlarla birlikte
-dışa aktarılır.
+| Ne yapar | macOS | Windows |
+|---|---|---|
+| Yeni sekme / Sekmeyi kapat | ⌘T / ⌘W | Ctrl+T / Ctrl+W |
+| Sonraki / Önceki sekme | ⌃Tab / ⌃⇧Tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Yeni grup | ⌘⇧N | Ctrl+Shift+N |
+| Dosya ara | ⌘P | Ctrl+P |
+| Dosyaların içinde ara | ⌘⇧F | Ctrl+Shift+G |
+| Komut paleti | ⌘⇧P | Ctrl+Shift+P |
+| Geçmişte hızlı arama | ⌘R | Ctrl+R |
+| Favori komutlar | ⌘⇧B | Ctrl+Shift+B |
+| Sekme / bölme görünümü | ⌘⇧E | Ctrl+Shift+E |
+| Terminalde ara | ⌘F | Ctrl+Shift+F |
+| Terminali temizle | ⌘K | Ctrl+Shift+K |
+| Ayarlar | ⌘, | Ctrl+, |
 
-| Kısayol | Eylem |
+Hepsi *Ayarlar › Kısayollar*'dan değiştirilebilir. Tam liste ve fare
+davranışları: [docs/ozellikler.md](docs/ozellikler.md#klavye-kısayolları).
+
+## Verileriniz
+
+Ayarlar, gruplar, komut geçmişi, favoriler ve kaydedilen ekran çıktıları sizin
+bilgisayarınızda, tek bir klasörde durur; hiçbir yere gönderilmez. Uygulama
+yalnızca yeni sürüm olup olmadığını GitHub'dan sorar (*Ayarlar › Hakkında*'dan
+kapatılabilir).
+
+| Sistem | Klasör |
 |---|---|
-| `Ctrl+T` | Yeni sekme |
-| `Ctrl+W` | Sekmeyi kapat |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Sonraki / önceki sekme |
-| `Ctrl+1`…`Ctrl+9` | Gruptaki n. sekmeye geç |
-| `Ctrl+Shift+N` | Yeni grup |
-| `Ctrl+Shift+H` | Geçmiş panelini aç/kapat |
-| `Ctrl+R` | Geçmişte hızlı arama (`Ctrl+A` kapsam, `Ctrl+F` favoriler) |
-| `Ctrl+Shift+B` | Favori komutlar |
-| `Ctrl+Shift+P` | Komut paleti |
-| `Ctrl+P` | Bu dizinde dosya ara |
-| `Ctrl+Shift+G` | Dosyaların içinde ara (mac'te `⌘⇧F`) |
-| `Ctrl+Shift+R` | Sekmeyi yeniden adlandır |
-| `Ctrl+Shift+L` | Sekmeyi kilitle / kilidi aç |
-| `Ctrl+Shift+E` | Sekme / bölme görünümü |
-| `Ctrl+Shift+K` | Terminali temizle |
-| `Ctrl+Shift+F` | Terminalde ara |
-| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Kopyala / yapıştır |
-| `Ctrl+,` | Ayarlar |
-| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Yazıyı büyült / küçült / sıfırla |
+| macOS | `~/Library/Application Support/NTerminal` |
+| Windows | `%APPDATA%\NTerminal` |
 
-Kenar çubuğu başlığındaki üç düğme sırayla: yıldız favori grup süzgecini açıp
-kapatır (süzgeç etkinken yıldız dolu görünür), ortadaki düğme **Grupları Daralt** /
-**Grupları Aç**, artı yeni grup ekler. Sekme çubuğunun sağındaki iki düğme sekme /
-bölme görünümünü seçer.
+Programın yanına `nterminal-data` adlı bir klasör açarsanız uygulama taşınabilir
+kipte çalışır ve her şeyi oraya yazar. Dosyaların ayrıntısı ve ayarları başka
+makineye taşımak: [docs/ozellikler.md](docs/ozellikler.md#veri-dosyaları).
 
-Başlık çubuğunun sol köşesindeki iki düğme birer **açma/kapama**: soldaki grup
-kenar çubuğunu daraltıp geri getirir, sağdaki bulunulan dizinin dosya ağacını
-terminalin üstünde açar ve ikinci tıkta kapatır. Sıraları düzenin sırasını izliyor — en soldaki
-düğme en soldaki paneli açıyor. Tek yönlü hâllerinde ikinci tıklama hiçbir şey
-yapmıyormuş gibi görünüyordu: ağacı kapatmak için panelin kendi `×` düğmesini
-bulmak gerekiyordu, kenar çubuğunu kapatmanın ise hiçbir yolu yoktu.
+## Belgeler
 
-**Durum çubuğu** yalnızca kimlik taşıyor: hangi grup, hangi profil, hangi
-klasör. Okumalar — komut çalışıyor mu, komut takibi tam mı, geçmişten tamamlama
-açık mı, kabuk pid'i, kayıtlı komut ve sekme sayısı — sağdaki **⋯** düğmesinde.
-Ayrım önceden yer darlığına göreydi: hepsi çubuktaydı, sığmayan menüye
-düşüyordu. Sonuç pencerenin genişliğine göre değişen bir şeritti; her açılışta
-aynı şeyi aynı yerde bulmak mümkün değildi ve çubuğun yarısı hiç değişmeyen üç
-rozetle doluydu ("komut takibi tam" bir kez okunacak bir şey, sürekli değil).
-Bugün ayrım işleve göre: kimlik görünür, okuma bir tık uzakta — ipuçlarıyla
-birlikte, çünkü "sınırlı" tek başına ne yapılacağını söylemiyor. Kimlik alanı
-da sığmazsa aynı menünün altına, ayrı bir bölüme düşüyor.
-
-`Ctrl+C` terminalde iki iş yapar: seçim varsa kopyalar, seçim yoksa kabuğa
-gider. Kopyalamadan sonra seçim temizlendiği için ikinci `Ctrl+C` çalışan
-komutu durdurur. Komut kutusunda da aynı: seçili metin kopyalanır ve seçim
-kalkar, seçim yoksa satır bırakılır ve kesme kabuğa gider. Komut çalışırken
-kutu o komutun yanıt satırı olduğundan orada da tek basış yetiyor.
-
-Sekme çubuğunda çift tık yeniden adlandırır, orta tuş kapatır, sağ tık menüyü
-açar. Kenar çubuğundaki grup ve sekme satırlarında da aynı davranışlar geçerli.
-
----
-
-## Proje yapısı
-
-```
-src/                          arayüz (React + TypeScript)
-  terminal/TerminalSession.ts   xterm ↔ PTY ↔ geçmiş bağlayıcısı, OSC durum makinesi
-  store/useStore.ts             gruplar, sekmeler, ayarlar; oturum kayıt defteri
-  components/                   kenar çubuğu, sekmeler, geçmiş, favoriler, ayarlar
-  lib/contrast.ts               palet okunabilirlik süzgeci (WCAG karşıtlık)
-  lib/labels.ts                 sekme adı / kabuk kodu / ikincil satır mantığı
-  lib/ipc.ts                    Rust komutlarının tek geçiş noktası
-  lib/i18n.ts                   dil motoru (t, çoğul, dil değişince yeniden çizim)
-  lib/messages.ts               arayüz metinleri: [Türkçe, English]
-  lib/panes.ts                  bölme ızgarası ve görünüm kipi mantığı
-  lib/links.ts                  çıktıda bağlantı bulma, hücre indeksi eşlemesi
-  lib/suggest.ts                komut önerisi sıralaması ve kabul dizisi
-src-tauri/
-  src/pty.rs                    ConPTY oturumları, çıktı toplama
-  src/history.rs                komut geçmişi deposu (JSONL günlük)
-  src/favorites.rs              favori komutlar deposu
-  src/transfer.rs               içe/dışa aktarım, yol taşınabilirliği
-  src/store.rs                  settings/workspace kalıcılığı (atomik yazma)
-  src/shells.rs                 kurulu kabukların tespiti
-  shell-integration/            PowerShell / bash / cmd betikleri
-scripts/                        MSVC ortamı, dev, build, test sarmalayıcıları
-```
-
-### Neden bazı kararlar böyle
-
-**Çıktı toplama.** `dir /s C:\` saniyede binlerce küçük parça üretiyor. Her
-parçayı ayrı bir IPC olayı yapmak arayüzü kilitliyordu; okuyucu iş parçası
-kanala yazıyor, ayrı bir yayıncı iş parçası 6 ms'lik pencerelerde toplayıp tek
-olay gönderiyor. Olay sayısı ~50 kat azalıyor, gecikme göze görünmüyor.
-
-**Base64.** PTY çıktısı geçerli UTF-8 olmak zorunda değil: çok baytlı bir
-karakter iki okuma arasında bölünebilir. Ham baytlar base64 olarak taşınıp
-xterm'e `Uint8Array` veriliyor — xterm parçalı UTF-8'i kendi içinde doğru
-birleştiriyor.
-
-**Teşhis sondası boştayken uyuyor.** Kare ölçümü uygulama ömrü boyunca sürekli
-çalışıyordu (16 ms zamanlayıcı + her karede rAF) ve uygulama boştayken bile
-toplam CPU'nun yarısından fazlasını yiyordu (%12,9; ölçülen). Şimdi yalnızca
-kullanıcı etkinliğinden sonra beş saniye sık örnekliyor, boştayken 250 ms'de bir
-yokluyor, pencere gizliyken duruyor. Donma etkileşim sırasında fark edildiği ve
-uzun donmalar seyrek kipte de kaydedildiği için sondanın amacı bozulmuyor.
-
-Seyrek kipte kayıt **zamanlayıcının geç ateşlemesinden** geliyor, çizim isteğinden
-değil: ilk seyrek kip yalnızca rAF'a bakıyordu ve ana iş parçacığı donmalarını
-neredeyse hiç göremiyordu (elle sürülen zamanlayıcıyla 50 evrede 2 kayıt; panel
-"kayda geçen takılma yok" diyordu, bu da "donma arayüzde değil" demek).
-Garanti dürüstçe şu: 500 ms ve üstü donmalar yoklamanın her evresinde
-kaydediliyor, 250-500 ms arası evreye bağlı, 250 ms altı hiçbir kipte takılma
-sayılmıyor. Bildirilen belirti saniyelerce süren donmaydı; daha kesin yakalama
-isteyen yoklama aralığını küçültür ve maliyetini ölçer.
-
-**Geçmiş için SQLite değil JSONL.** Kayıt sayısı on binler mertebesinde
-kalıyor, tam liste bellekte rahat duruyor. Düz JSON olması dışa/içe aktarımı
-bedava hâle getiriyor ve native bir bağımlılık eklemiyor.
-
-**Sıralama matematiği tek yerde.** Sürükle-bırak hedefi ekranda görülen
-sıraya göre hesaplanıyor, ama öğeyi diziden çıkarmak sonraki indeksleri bir
-kaydırıyor. Bu düzeltme `reorder()` içinde, tek noktada; sekme çubuğu ve kenar
-çubuğu aynı fonksiyonu çağırıyor. İki ayrı kod yolu olsa düzeltme birinde
-yanlış kalırdı — testler ileri/geri/uç durumları ayrı ayrı doğruluyor.
-
-**Favoriler geçmişten ayrı depoda.** Aynı yerde tutulsa favoriler geçmiş
-sınırı aşıldığında ya da kullanıcı "bu sekmenin geçmişini temizle" dediğinde
-sessizce kaybolurdu. Ayrıca favorilerin sırası kullanıcının belirlediği sıra,
-geçmişin sırası ise zaman — tek listede ikisi olamaz.
-
-**Sekme adlandırma odağı.** Terminale odak vermek koşulsuz yapıldığında
-adlandırma kullanılamıyordu: sekmeye çift tıklandığında kutu açılıyor, hemen
-ardından (sekme ilk kez açılıyorsa kabuk başlatıldıktan sonra, asenkron olarak)
-`setActive` terminale odaklanıyor, kutu `onBlur` ile kapanıp kaydediyordu.
-Artık odak verilirken etkin öğe bir metin kutusuysa dokunulmuyor — xterm'in
-kendi gizli textarea'sı bu kuralın dışında.
-
-**Terminal boşluk dolgusu xterm öğesinin kendisinde.** `FitAddon` satır
-sayısını `floor((ebeveyn yüksekliği − xterm öğesinin dolgusu) / hücre)` ile
-buluyor — **ebeveynin** dolgusunu hesaba katmıyor. Dolgu sarmalayıcıda
-(`.term-host`) olduğunda fit gerçek iç alandan büyük bir yükseklik görüp fazla
-satır üretiyordu ve son satır — kullanıcının yazdığı satır — durum çubuğunun
-altına taşıyordu. Ölçülen: 627 px yükseklik / 12 px hücre = 52 satır = 624 px,
-gerçek iç alan 609 px → **5 px bindirme**. Dolgu xterm öğesine taşındığında 50
-satır ve 19 px boşluk. Ana ızgara satırları da sabit yükseklikten `auto`ya
-geçirildi: sabit 34 px, sekme çubuğunun gerçek 35 px'inden küçüktü.
-
-**Gizli sekmeler `display:none` değil.** Görünmeyen terminaller
-`visibility:hidden` ile saklanıyor ama düzende kalıyor; `display:none` xterm'in
-ölçüm hesabını sıfırlıyor ve sekmeye dönüldüğünde satırlar kayıyor.
-
-**Sürükle-bırak yapılandırmaya bağlı.** Sıralama matematiğinin testleri
-geçiyordu, kod doğruydu, ama paketlenmiş uygulamada sürükleme hiç çalışmıyordu.
-Sebep koddan bağımsızdı: Tauri'nin `dragDropEnabled` ayarı varsayılan olarak
-açık ve açıkken webview'in sürükleme olaylarını işletim sistemi katmanı
-yutuyor. Derleme geçiyor, test geçiyor, hata çıkmıyor — yalnızca özellik
-çalışmıyor. Bu yüzden yapılandırmanın kendisi testle bağlı.
-
-**Öneri terminalin üstüne binmiyor, onu küçültüyor.** Öneri listesi ızgarada
-ayrı bir satır. Terminalin üstüne bindirmek istem satırını — yani tam olarak
-yazdığınız yeri — kapatırdı. Geçmiş önerisi en fazla beş satır: sekizde çubuk
-191px oluyordu, 627px'lik bir terminalin üçte biri. `cd` yazarken gelen klasör
-listesi bu sınıra bağlı değil — orada her satır eşit derecede olası bir hedef
-ve hepsi ok tuşlarıyla gezilebilmeli; kutu beş satır yüksekliğinde kalıyor,
-fazlası kaydırılıyor.
-
-**Öneri listesi ters sırada.** En yeni komut en altta, istem satırına en yakın.
-Kabuk alışkanlığıyla "yukarı ok = daha eski" tutarlı kalsın diye; sıralamayı
-CSS `column-reverse` yapıyor, JavaScript tarafı listeyi her zaman en yeniden
-eskiye veriyor.
-
-**Renkli yüzeylerde soluk metin ana metinden türetiliyor.** Grup rengi arka
-plana vurunca `--text-dim` gibi sabit bir rengin karşıtlığı düşüyor: ölçülen en
-kötü değer 2.12'ydi (Solarized Açık + siyah grup rengi). Aynı hata öneri
-listesinde de çıktı — seçili satırın metni vurgu renginde, arka planı vurgu
-tonluydu; 2.54. İkisi de artık ana metinden türetiliyor ve oranlar testle bağlı.
-
-**WebGL yalnızca etkin terminalde.** Her sekme kendi WebGL bağlamını tutsa
-tarayıcının bağlam sınırına çarpardık. Sekme değişince bağlam bırakılıyor;
-bağlam kaybında sessizce DOM oluşturucuya dönülüyor.
-
----
-
-## Testler
-
-```bash
-npm test
-```
-
-- **Arayüz (412 test)** — OSC kaçış çözme ve 133/633/7 ayrıştırma (betiklerle
-  simetrik olmak zorunda), base64 çözücü (UTF-8 dışı baytlar dahil), kısayol
-  eşleştirme, biçimlendirme, bulanık arama, sekme etiketi mantığı, sekme kilidi
-  kuralları, sıralama/sürükle-bırak indeks matematiği, grup görünürlük süzgeci,
-  bölme ızgarası matematiği (her bölme ızgaraya sığmalı, boş hücre kalmamalı),
-  tüm temalar için palet karşıtlık güvencesi, düzen değişmezleri (dolgunun doğru
-  yerde durması, gizli bölmenin düzenden çıkmaması, bölme çerçevesinin `border`
-  değil `outline` olması) ve iki ölçülü değişmez:
-  - **Sözlük** — her metnin iki dili var mı, çoğul anahtarları çift mi, yer
-    tutucular iki dilde aynı mı (İngilizcede `{n}` yazıp Türkçede unutmak
-    kullanıcıya sayı göstermeyen bir cümle bırakır).
-  - **Yüzey okunabilirliği** — karışım oranları CSS'ten okunup aynı hesap
-    testte yapılıyor; 4 tema × 11 grup rengi (saf siyah/beyaz dahil) için grup
-    adı ≥ 4.5, soluk metin ≥ 3.0; öneri listesinin seçili satırı için de aynısı.
-    Oran yükseltilirse test düşüyor. Ölçülen ilk hâlleri 2.12 ve 2.54'e kadar
-    iniyordu.
-  - **Bağlantı bulma** — gerçek araç çıktısı biçimleriyle: cümle içinde adres,
-    parantez içinde adres, dengeli/dengesiz parantez, sorgu dizesi, tırnak
-    içinde adres, geniş karakterlerin (CJK) hücre indekslerini kaydırması.
-    Yanlış kırpma iki yönlü zarar veriyor: fazla kırpınca adres bozuk açılıyor,
-    az kırpınca sondaki nokta adrese girip 404 üretiyor.
-  - **Komut önerisi** — sıralama (en yeni önce, yinelenensiz, büyük/küçük harf
-    duyarsız) ve **kabul dizisi**. İkincisi kritik: fazla silme kullanıcının
-    yazdığını bozar, o yüzden silme sayısının yazılan karakter sayısıyla birebir
-    olduğu ayrıca sınanıyor.
-  - **Arayüz bileşenleri (jsdom)** — onay penceresi (kararın çağırana ulaşması,
-    Esc/Enter, örtüye tıklama, ikinci istek gelince ilk bekleyenin asılı
-    kalmaması), öneri listesi ve **sürükle-bırak**: gerçek
-    `dragstart`/`dragover`/`drop` olaylarıyla sekme ve grup sıralaması, bırakma
-    göstergesi, favori süzgeci açıkken doğru indeks, sekme sürüklemesinin grup
-    sırasını bozmaması.
-  - **Sözlük hijyeni** — kullanılmayan anahtar bırakılmıyor (bu test yazıldığında
-    sekiz ölü anahtar buldu) ve çoğul kökleri gerçekten `tp()` ile çağrılıyor.
-  - **Tauri yapılandırması** — `dragDropEnabled` kapalı, CSP `script-src 'self'`.
-  - **Sabit kodlanmış metin taraması** — yorumlar ve `{...}` ifadeleri
-    çıkarıldıktan sonra kalan JSX metni ile `placeholder`/`title`/`label`
-    değerleri taranıyor; iki sözcükten uzun olanlar sözlüğe taşınmamış sayılıyor.
-    Bu test bir kez ödenmiş bedelden geliyor: elle `grep` ile tararken dört
-    metni kaçırdım, hepsi arada `{}` ya da satır sonu olduğu için.
-  - **Ayarlar penceresi** — dokuz bölüm, gezinmenin çalışması, her bölümün en az
-    bir başlığı olması, **aynı başlığın iki bölümde geçmemesi** ve arama
-    (sonuçların bölüm adı taşıması, tıklamanın satırı vurgulaması, Enter/Esc,
-    aksansız yazım, eşleşme yok iletisi).
-  - **Ayar arama indeksi** — indeksin arayüzle birebir olması (kaynaktaki
-    `data-setting` anahtarlarıyla karşılaştırılıyor), Türkçe harf sadeleştirme
-    ve sıralama (etiket eşleşmesi açıklamadan önce).
-  - **Düğme hizalaması** — temel `button` kuralının hizalamayı zorlamaması;
-    sola dayalı düğmelerin `text-align: left` taşıması. Kullanıcının ayarlar
-    penceresinde gördüğü gerilemenin testi.
-  - **"Silme her zaman sorar"** — her silme yolu için iki şey: soruluyor mu ve
-    **vazgeçilince silme gerçekten olmuyor mu**. İkincisi kritik; onayı
-    gösterip cevabı yok saymak en kötü durum. Ayrıca eklemenin ve
-    yapılamayacak işlemlerin soru sormaması.
-  - **Düğme renkleri** — 4 tema için dolgulu birincil ve yıkıcı düğmede beyaz yazı
-    ≥ 4.5 karşıtlık, zeminin çamurlaşmaması, üzerine gelince/basılınca okunma, devre
-    dışı düğmede ≥ 3:1 (iki yüzeyde), sayaç hapında okunma; sessiz kırmızı, yeşil rozet
-    ve çerçeveli düğme ≥ 4.5; odak halkasının iki katmanlı olması. `filledColors`
-    renk uzayını tarayarak her rengin okunduğunu sınıyor.
-  - **Bağlam menüsü** — alt menünün üzerine gelince/tıklayınca açılması, başka
-    satıra geçince kapanması, alt menüden seçimin TÜM menüyü kapatması, devre
-    dışı alt menünün açılmaması.
-  - **Git paneli (commit, push, stash)** — saf kurallar (`gitStage`, `gitStash`),
-    satır kutusunun üç hâli, yazma kuyruğunun sırası ve hata sonrası tazeleme,
-    satırların varsayılan kapalı gelmesi ve farkın yalnızca açılınca istenmesi,
-    Stash penceresinin liste seçimiyle açılması ve klasör yolu kutusu, Stash
-    bölümünün varsayılan kapalı olması ve silmenin onayı; `lib/ipcContract.test.ts`
-    arayüzün çağırdığı her Rust komutunun kayıtlı olduğunu ve argüman adlarının
-    tuttuğunu denetliyor. Rust tarafı gerçek git depolarıyla (bare uzak dâhil)
-    sınanıyor.
-- **Rust birim (51 test)** — geçmiş deposu (filtreleme, arama, sınır aşımı, diskten
-  yeniden okuma, bozuk satıra dayanıklılık, sıkıştırma), yol taşınabilirliği
-  (gidiş-dönüş, harf duyarsızlığı, uzun yol önceliği), birleştirme kipleri,
-  kabuk başlatma argümanları, Windows sürüm okuma, favori deposu (sıralama,
-  yinelenen komut, bozuk dosyaya dayanıklılık) ve **dışa aktar → başka makine
-  gibi oku → uygula** zincirinin tamamı. Windows'ta ayrıca **tek örnek kilidi**
-  (aynı klasörle ikinci açılış açılmıyor ve ilk örneğe haber veriyor, farklı
-  klasörler yan yana açılıyor, klasörün farklı yazımları aynı kilidi veriyor)
-  ve **kapanışta portun boşalması**: sekmede port dinleyen bir torun sunucu
-  başlatılıp önce sekme kapatılıyor, sonra (ayrı bir süreçte) uygulama
-  oturumları kapatmadan çıkıyor. İkisinde de portun gerçekten boşaldığına
-  bakılıyor.
-- **Uçtan uca (13 test)** — gerçek ConPTY içinde gerçek PowerShell, bash ve
-  cmd.exe başlatıp OSC işaretlerini okuyor: istem işaretleri, komut metni, çıkış
-  kodu `0` ve yerel uygulamanın `3`'ü, hatadan sonra tekrar `0`, noktalı virgül
-  kaçışı, klasör bildirimi. Bash testi ayrıca iki şeyi kilitliyor: ilk bildirilen
-  komut kullanıcının komutu olmalı (başlangıç betiğinin satırı değil) ve bir boru
-  hattı tek kayıt açmalı. Ayrı bir test de boş satırda Enter'a basmanın önceki
-  komutu ikinci kez kaydetmediğini doğruluyor.
-
-  Sonradan eklenenler:
-  - **Renk** — `ng serve` / `dotnet run` gibi araçlar rengi kendileri üretiyor;
-    bizim işimiz yalnızca ANSI'yi geçirmek değil, onlara "renk üretebilirsin"
-    demek. Test gerçek ConPTY içinde gerçek Node'a soruyor: `isTTY` doğru mu,
-    `getColorDepth()` kaç, `TERM` ve `COLORTERM` çocuğa ulaşıyor mu. Ölçülen
-    değer 24 (truecolor). Testin ANSI temizleyicisine ihtiyaç duyması kanıtın
-    kendisi: Node renk desteği gördüğü için çıktısını kendiliğinden renkliyor.
-  - **Öneri isteği entegrasyonu bozmuyor** — PSReadLine 2.0
-    `-PredictionSource` parametresini tanımıyor. Betik bunu yakalamazsa
-    yüklenirken hata verir ve entegrasyonun **tamamı** (geçmiş, çıkış kodu,
-    dizin) sessizce ölür; kullanıcı yalnızca "geçmiş boş" görür. Test tahmini
-    desteklemeyen kabukla çalışıyor: önemli olan önerinin görünmesi değil,
-    isteğin zarar vermemesi.
-  - **Yürütme ilkesi** — betiğin "internetten indirildi" işaretli
-    (`Zone.Identifier`) bir kopyası `-File` ile yüklenmiyor (hatanın
-    mekanizması; `Bypass` dışındaki her ilkede) ama uygulamanın yükleyicisiyle
-    yükleniyor. Yanında üç test daha: PSReadLine'ın `.psm1`i düştüğünde betik
-    modülü DLL'inden yüklüyor ve komut başlangıcı yine Enter anında geliyor;
-    yükleyici başarısız olursa bunu bildiriyor; `-Command` metni kullanıcının
-    `Get-History`sinde kalmıyor.
-
-Entegrasyon testleri ConPTY'nin açılışta gönderdiği `ESC[6n` imleç konumu
-sorgusunu elle yanıtlıyor — gerçek uygulamada bunu xterm.js kendiliğinden
-yapıyor, yanıtlanmazsa kabuk çıktı üretmeye başlamıyor.
-
-### GitHub Actions
-
-`.github/workflows/build.yml`: her dala itmede ve elle tetiklendiğinde
-koşuyor. `pull_request` tetikleyicisi yok — aynı depoda push ile PR iki ayrı
-koşu demek; koşu head commit'e bağlı olduğu için PR'ın denetimlerinde yine
-görünüyor.
-
-- **Arayüz** (ubuntu) — tip denetimi + vitest. jsdom platformdan bağımsız,
-  bir kez koşması yeterli; her platformda tekrarlamak iki katı runner dakikası
-  demek.
-- **Windows ve macOS** — `cargo test -- --test-threads=1`, ardından
-  `npx tauri build`. Rust testleri paketlemeden ÖNCE: PTY ve kabuk
-  entegrasyonu platforma bağlı ve kırıldığında paketin derlenmesi bunu
-  söylemiyor. Kabuğunu bulamayan testler kendini atlıyor (macOS'ta
-  `powershell.exe`, `cmd.exe` ve Git Bash yok).
-
-- **Yayın** (ubuntu, yalnızca `main`'de ve `v*` etiketinde) — yayın etiketini
-  Actions oluşturuyor. `package.json`daki sürümün `v<sürüm>` etiketi henüz
-  yoksa, testler ve iki platformun paketleri geçtikten sonra etiket o commit'te
-  açılıyor ve paketler bir GitHub Release'ine bağlanıyor (notlar commit'lerden).
-  Etiket zaten varsa yayın yok. Paketler önce `scripts/release-files.mjs` ile
-  düz bir klasöre alınıyor ve hepsinin yerinde olduğu denetleniyor; imzalıysa
-  `latest.json` da yazılıyor (aşağıda *Güncelleme imzası*). Yani **yeni bir
-  sürüm çıkarmak için sürüm numarasını üç dosyada — `src-tauri/Cargo.toml`,
-  `package.json` (ve kilidi),
-  `src-tauri/tauri.conf.json` — yükseltip main'e itmek yeterli**; elle etiket
-  gerekmiyor. Üçünün aynı olduğunu bir test denetliyor: uygulama kendi sürümünü
-  Release etiketiyle karşılaştırıyor ve ayrışırlarsa her açılışta "yeni sürüm
-  var" derdi. Yeni commit olmadan yayınlamak için Actions'ta "Run workflow"
-  (main). Elle itilen `v*` etiketi de çalışıyor, ama sürümle eşleşmeyen etiket
-  yayın yapmıyor.
-
-Çıktılar koşunun **Artifacts** bölümünde, 14 gün: Windows için NSIS kurucusu
-ve MSI, macOS için DMG. İkisi de bir yayıncı kimliğiyle imzalı DEĞİL — depoda
-ne Windows sertifikası ne Apple kimliği var; macOS paketi yalnızca ad-hoc
-mühürlü (`APPLE_SIGNING_IDENTITY: "-"`). Windows'ta SmartScreen uyarısı
-çıkıyor (*Ek bilgi › Yine de çalıştır*); macOS'ta "Apple doğrulayamadı" ve
-*Sistem Ayarları › Gizlilik ve Güvenlik › Yine de Aç* — ayrıntısı
-**[macOS: ilk açılış](#macos-ilk-açılış)**. Ad-hoc mühür olmadan macOS
-"hasarlı" deyip yalnızca Terminal'den açılmaya izin veriyordu. İkisi de
-**tarayıcıdan indirilen** paketin işaretine bakıyor (macOS'ta karantina,
-Windows'ta "internetten indirildi" / Mark of the Web), yani ilk kurulumda
-çıkıyor. Uygulamanın kendi indirip kurduğu güncellemede bu işaret yok —
-macOS'ta ölçüldü; Windows'ta aynı sebepten SmartScreen'in bakacağı bir şey
-kalmıyor.
-
-Linux yok: uygulama orada denenmedi (`src-tauri/src/platform.rs`) ve paket
-türlerinin hiçbiri Linux'ta karşılık bulmuyor.
-
-#### Güncelleme imzası
-
-Uygulama içinden kurulum (*Güncelle ve yeniden başlat*) paketin bu depodan
-çıktığını bir imzayla doğruluyor. Bu, işletim sisteminin kod imzasından
-(Apple / Windows sertifikası) AYRI ve ücretsiz bir şey: bir anahtar çifti
-(minisign). Açık anahtar `src-tauri/tauri.conf.json`da
-(`plugins.updater.pubkey`); özel anahtar yalnızca CI'da, depo sırrı olarak.
-
-**Kurulum (bir kez).** GitHub'da *Settings › Secrets and variables › Actions ›
-New repository secret*:
-
-| Ad | Değer |
+| Belge | İçinde ne var |
 |---|---|
-| `TAURI_SIGNING_PRIVATE_KEY` | özel anahtar dosyasının içeriği |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | anahtarın parolası — parolasız anahtarda bu sırrı **oluşturmayın** (GitHub boş sır kabul etmiyor; yokken değişken boş geçiyor, doğrusu da bu) |
+| [Özellikler ve kullanım](docs/ozellikler.md) | Her özelliğin ayrıntısı: gruplar, geçmiş, favoriler, Git, dosya paneli, kabuk entegrasyonu, ayarlar |
+| [Kaynaktan derleme](KURULUM.md) | Hangi klasörde hangi komut, hangi dosya oluşuyor |
+| [Geliştirme](docs/gelistirme.md) | Mimari, testler, CI, paket imzası ve güncelleme anahtarı |
+| [Geliştirme notları](NOTLAR.md) | Kararların arkasındaki ölçülmüş hatalar ve açık işler |
 
-Sır tanımlıyken *Paketle* adımı `--config '{"bundle":{"createUpdaterArtifacts":true}}'`
-ile derliyor: kurucuların yanında `.sig` imzaları ve macOS için
-`.app.tar.gz` çıkıyor. *Yayın* işi bunları `scripts/release-files.mjs` ile
-düz bir klasöre alıp `latest.json`ı yazıyor; uygulama o dosyayı
-`releases/latest/download/latest.json` adresinden okuyor. Sır yoksa paketler
-eskisi gibi çıkıyor, `latest.json` yazılmıyor ve kurulu uygulamalar o sürüm için
-yalnızca **haber** veriyor (koşuda bir uyarı satırı bunu söylüyor).
+N-Terminal [Tauri 2](https://tauri.app) (Rust), React ve
+[xterm.js](https://xtermjs.org) ile yazıldı. Terminal katmanı `portable-pty`
+üzerinden Windows'ta ConPTY, macOS'ta yerel Unix PTY kullanır.
 
-**Anahtarı kaybetmeyin.** Kurulu her uygulama açık anahtarı içinde taşıyor;
-özel anahtar kaybolursa yeni sürümler o kurulumlara uygulama içinden
-**kurulamaz** — anahtarı değiştiren sürümü kullanıcılar bir kez elle
-kurmak zorunda kalır. Dosyayı bir parola yöneticisinde yedekleyin.
+## Lisans
 
-Yeni anahtar üretmek (yalnızca kaybolduysa ya da sızdıysa):
-
-```bash
-npx tauri signer generate -w ~/.tauri/nterminal.key
-```
-
-Çıkan `.pub` dosyasının içeriği `tauri.conf.json`daki `pubkey`in yerine, özel
-anahtar da yukarıdaki sırra gidiyor.
-
-Yerelde imzalı paket üretmek için (çoğu zaman gerekmiyor):
-
-```bash
-TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/nterminal.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" npm run bundle -- --config '{"bundle":{"createUpdaterArtifacts":true}}'
-```
-
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""` parolasız anahtarda bile **gerekli**:
-değişken hiç tanımlı değilse CLI parola sormaya kalkıyor ve terminalsiz
-ortamda düşüyor (ölçüldü, Tauri CLI 2.11).
-
----
-
-## Bilinen sınırlar
-
-- Kabuk süreçleri uygulamayla kapanır; arka planda canlı oturum tutulmuyor.
-- Komut önerisi (hayalet metin / liste) kabuğa bağlı. PowerShell'de PSReadLine
-  2.2+ gerekiyor; Windows PowerShell 5.1'in getirdiği 2.0 desteklemiyor,
-  `Install-Module PSReadLine -MinimumVersion 2.2.6 -Force -SkipPublisherCheck`
-  ile güncellenir. zsh'de `zsh-autosuggestions` gerekiyor
-  (`brew install zsh-autosuggestions`) — kurmuyoruz, varsa kullanıyoruz.
-  cmd, bash ve fish'te karşılığı yok. Uygulamanın **kendi** önerisi bundan
-  bağımsız ve her kabukta çalışıyor.
-- Bağlantı renklendirmesi yalnızca **görünür satırlara** uygulanıyor; çok hızlı
-  akan çıktıda renk bir kare gecikmeli oturuyor (erteleme penceresi 90 ms).
-- `cmd.exe` için çıkış kodu bildirilemiyor (yukarıda anlatıldı).
-- Komut çalışırken kutuya yazılan yanıt programa **Enter'la** gidiyor. Yazdıkça
-  süzülen listeler (bazı `npx create-*` araçlarının arama kutuları) süzgeci bu
-  yüzden yazarken değil Enter'da görüyor; Jest/Vitest'in izleme kipindeki tek
-  harflik kısayollar da harf + Enter ile çalışıyor. Tuşları anında göndermek
-  gereken bir programda *Ayarlar › Terminal › Komut satırını uygulama çizsin*
-  kapatılabilir; o zaman terminal klasik davranışa döner.
-- Bölünmüş bölme (split pane) yok; ayrım gruplar ve sekmeler üzerinden.
-- **fish** için kabuk entegrasyonu yok: bash/zsh söz dizimini paylaşmadığı için
-  kendi betiği gerekiyor. Profil olarak açılıyor ve terminal çalışıyor, ama
-  komut geçmişi, çıkış kodu ve klasör takibi gelmiyor. Bilinçli olarak
-  "desteklenmiyor" işaretli — yarım çalışan bir entegrasyon sessiz olurdu.
-- **macOS'ta Option tuşu** varsayılan olarak Meta değil: Türkçe Mac klavyesinde
-  `@` = Option+Q ve Meta yapılırsa `@` yazılamıyor. Kelime kelime gezinme
-  (Option+B/F) isteyenler Ayarlar › Terminal › Klavye'den açabilir.
-- macOS derlemesi bir Mac'te yapılmak zorunda: Apple SDK'sı olmadan çapraz
-  derleme mümkün değil.
+[MIT](LICENSE) © 2026 Nurullah YAYAN

@@ -1,7 +1,7 @@
 # Kurulum
 
 Kısa yol: derle, kur, çalıştır. Ayrıntılar ve gerekçeler için
-[README.md](README.md).
+[docs/gelistirme.md](docs/gelistirme.md).
 
 ---
 
@@ -128,7 +128,8 @@ olur. macOS paketi bir Mac'te üretilmek zorunda — Apple SDK'sı olmadan
 İsteğe bağlı, bir kez: `sh scripts/macos-cert.sh` anahtar zincirine
 **NTerminal Dev** imza kimliğini ekler. `npm run bundle` sonra paketi onunla
 imzalar ve macOS izinleri (Tam Disk Erişimi vb.) her derlemede sıfırlanmaz.
-Kabuktaki `APPLE_SIGNING_IDENTITY` kullanılmaz; gerekçe README'de.
+Kabuktaki `APPLE_SIGNING_IDENTITY` kullanılmaz; gerekçe
+[docs/gelistirme.md](docs/gelistirme.md#macos-paketinin-imzası-ve-ilk-açılış)'de.
 
 ## Temizlik
 
