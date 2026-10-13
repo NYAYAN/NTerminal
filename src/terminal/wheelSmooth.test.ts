@@ -131,11 +131,12 @@ function kareleriSahtele() {
 }
 
 /**
- * Bir kare (60 Hz): saat 16,7 ms ilerliyor, o ana kadar istenen geri çağrılar
- * koşuyor. Kare içinde istenen bir sonraki kareye kalıyor (tarayıcıdaki gibi).
+ * Bir kare: saat `ms` ilerliyor (varsayılan 60 Hz), o ana kadar istenen geri
+ * çağrılar koşuyor. Kare içinde istenen bir sonraki kareye kalıyor
+ * (tarayıcıdaki gibi).
  */
-function kare() {
-  saat += 1000 / 60;
+function kare(ms = 1000 / 60) {
+  saat += ms;
   const sira = [...bekleyenKareler.values()];
   bekleyenKareler.clear();
   for (const cb of sira) cb(saat);
@@ -214,6 +215,30 @@ describe("ana tamponda tekerleği oturum kaydırıyor", () => {
     expect(istenen(kaydir)).toBe(-3);
     expect(Math.min(...cagri), "bir karede birden fazla satır atladı").toBe(-1);
     expect(cagri.length, "hareket karelere yayılmadı").toBeGreaterThan(1);
+    void s.dispose(true);
+  });
+
+  /*
+   * KARAR (2026-10-13, kullanıcı): adım kare sayısına değil GEÇEN SÜREYE göre
+   * atılıyor, geciken kare aradaki mesafeyi kapatıyor (bkz.
+   * `WheelScroller.step`). Bedeli bilerek kabul edildi: takılan bir karede
+   * tek çentik iki satır kayabiliyor. 17 px hücrede bu, olaydan sonraki 1.
+   * kare olaydan ≥58,9 ms ya da 2. kare öncekinden ≥40,5 ms sonra gelirse
+   * oluyor; 60 ve 144 Hz'de hiç olmuyor, uygulamada kare p99 16,9 ms (NOTLAR
+   * §1.32). Seçilmeyen yol, geciken kareyi tek kare saymak, gerçek
+   * `WheelScroller`la hesaplandı (17 px hücre): çentik 30 Hz'de 167 ms,
+   * 10 Hz'de 500 ms sürerdi; saniyede 25 çentikle dönen tekerlek bırakılınca
+   * 30 Hz'de 0,27 sn, 10 Hz'de 1,3 sn daha kayardı (bugünkü: 0,1 sn).
+   *
+   * Oturumun kare süresini kaydırıcıya geçirdiğini de yalnızca bu test
+   * bağlıyor: 60 Hz'de fark görünmüyor, geçirilmezse son satır 30 Hz'de
+   * 133 ms'de, 10 Hz'de 400 ms'de geliyor.
+   */
+  it.each([60, 30, 10])("%i Hz'de de çentik 100 ms içinde kayıyor: adım kareye değil süreye bağlı", async (hz) => {
+    const { s, kaydir } = await oturum(`w1-${hz}`);
+    tekerlek(s);
+    for (let i = 0; i < hz / 10; i++) kare(1000 / hz);
+    expect(istenen(kaydir), "seyrek karede çentik yavaşladı").toBe(-3);
     void s.dispose(true);
   });
 });
