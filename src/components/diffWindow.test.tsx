@@ -142,9 +142,26 @@ afterEach(() => {
 });
 
 /**
- * Saat `ms` ilerlesin: sahte saatte (bkz. "sağ tarafta yazmak") vadesi gelen
- * zamanlayıcılar ateşleniyor, gerçek saatte bekleniyor. Ayrı bir `act`: React
- * adımın sonunda çiziyor.
+ * Bölümün testleri sahte saatte: kayıt ertelemesi, canlı yoklama ve geri
+ * almanın birleştirme penceresi (`Date`) yalnızca test ilerletince akıyor.
+ * Dosyaya YAZAN bölümler için; neden: bkz. "sağ tarafta yazmak". Yalnızca
+ * bileşenin kullandığı saatler sahte; React'in kendi zamanlaması
+ * (`setImmediate`, `performance`) gerçek kalıyor.
+ */
+function fakeClock() {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+}
+
+/**
+ * Saat `ms` ilerlesin: sahte saatte (`fakeClock`) vadesi gelen zamanlayıcılar
+ * ateşleniyor, gerçek saatte bekleniyor. Ayrı bir `act`: React adımın sonunda
+ * çiziyor.
  */
 async function tick(ms: number) {
   await act(async () => {
@@ -365,6 +382,17 @@ describe("tek fark penceresi", () => {
 });
 
 describe("» ile bloğu geri almak", () => {
+  /*
+   * SAAT SAHTE, "sağ tarafta yazmak"taki sebeple: bölümün her testi `»` ile
+   * dosyaya YAZIYOR. KIRILGANDI (2026-10-13 ölçüldü): tam takım 166 dosyaya
+   * çıkıp yük artınca "Ctrl+Z geri alıyor" 3 koşunun 1'inde düştü. Son yazma
+   * `»`ün kendisiydi, Ctrl+Z hiç yazmadı: `»`ten sonra gelen yoklama sahte
+   * diski eski hâliyle okumuş, kaydedilmiş sağ taraf diskteki metne dönmüş,
+   * geri alma geçmişi silinmiş. `»`ten sonra 600 ms beklemek aynı iletiyle
+   * düşürdü.
+   */
+  fakeClock();
+
   it("sağ dosyada YALNIZCA o bloğu HEAD'deki hâline çeviriyor", async () => {
     const write = vi.spyOn(api, "gitWriteFile").mockResolvedValue(undefined);
     const { container } = render(<DiffWindow target={{ root: ROOT, path: "a.ts" }} />);
@@ -897,20 +925,13 @@ describe("sağ tarafta yazmak", () => {
    * Ctrl+Z arası 400 ms'yi aşınca kendiliğinden kayıt önce yazıyor; iki tuş
    * arası 1 sn'yi (`MERGE_MS`) aşınca tek Ctrl+Z ikiye bölünüyor.
    *
-   * Sahte saatte kayıt ertelemesi, yoklama ve birleştirme penceresi (`Date`)
-   * yalnızca `wait` / `until` ilerletince akıyor: her koşu aynı sırayı
-   * izliyor. Yalnızca bileşenin kullandığı saatler sahte; React'in kendi
-   * zamanlaması (`setImmediate`, `performance`) gerçek kalıyor. Yazmadan
-   * sonra yoklamayı bekleyen bir test diski kendisi tutmalı (bkz.
-   * "kaydedilmiş hâldeyken…"), yoksa yukarıdaki düşüş her koşuda olur.
+   * Sahte saatte (`fakeClock`) kayıt ertelemesi, yoklama ve birleştirme
+   * penceresi yalnızca `wait` / `until` ilerletince akıyor: her koşu aynı
+   * sırayı izliyor. Yazmadan sonra yoklamayı bekleyen bir test diski kendisi
+   * tutmalı (bkz. "kaydedilmiş hâldeyken…"), yoksa yukarıdaki düşüş her
+   * koşuda olur.
    */
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
-  });
-  afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
-  });
+  fakeClock();
 
   const editor = (c: HTMLElement) => c.querySelector(".dw-editor") as HTMLTextAreaElement;
   const type = (c: HTMLElement, value: string) => fireEvent.input(editor(c), { target: { value } });
