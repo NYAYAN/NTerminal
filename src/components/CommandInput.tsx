@@ -300,6 +300,23 @@ export function CommandInput() {
       return;
     }
     useStore.getState().setAppInputSink((text, mode) => {
+      const el = ref.current;
+      /*
+       * Yapıştırma: metin imlecin olduğu yere, seçim varsa seçimin yerine —
+       * tarayıcının kendi yapıştırmasıyla aynı sonuç (bkz. `pasteClipboard`).
+       *
+       * `insertText` tarayıcının düzenleme komutu ve iki işi birden görüyor:
+       * yapıştırma Cmd+Z ile tek adımda geri alınıyor, çıkan `input` olayı da
+       * React'ın `onChange`ine gidiyor. Komutu tanımayan ortamda (jsdom) metin
+       * elle yerleştiriliyor.
+       */
+      if (mode === "insert" && el) {
+        el.focus();
+        if (document.execCommand?.("insertText", false, text)) return;
+        el.setRangeText(text, el.selectionStart, el.selectionEnd, "end");
+        setValue(el.value);
+        return;
+      }
       // Ekleme kipinde araya boşluk konuyor: `code` + `src/a.ts` birleşip
       // `codesrc/a.ts` olmamalı. Zaten boşlukla bitiyorsa ikincisi eklenmiyor.
       setValue((prev) => {

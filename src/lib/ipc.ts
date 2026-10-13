@@ -122,6 +122,13 @@ export const api = {
   revealInExplorer: (path: string) => invoke<void>("reveal_in_explorer", { path }),
   /** Terminalde tıklanan bağlantıyı varsayılan tarayıcıda açar. */
   openExternal: (url: string) => invoke<void>("open_external", { url }),
+  /**
+   * Panodaki düz metin; pano boşsa ya da metin taşımıyorsa `null`.
+   *
+   * `navigator.clipboard.readText()` YERİNE: macOS'ta WebKit o çağrıya kendi
+   * "Paste" onay düğmesini çiziyor (gerekçe `pasteClipboard` üzerinde).
+   */
+  clipboardReadText: () => invoke<string | null>("clipboard_read_text"),
   listDirs: (path: string) => invoke<string[]>("list_dirs", { path }),
   listFiles: (path: string) => invoke<string[]>("list_files", { path }),
   /**

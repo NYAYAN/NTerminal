@@ -19,6 +19,11 @@ strip = true
 
 [dependencies]
 anyhow = "1.0.104"
+# Panodan metin okuma (platform.rs `clipboard_text`). Arayuzun kendi okumasi
+# (`navigator.clipboard.readText`) macOS'ta WebKit'in "Paste" onay dugmesini
+# cikariyordu. Yalnizca metin: varsayilan ozellik (gorsel, `image` crate'i)
+# kapali.
+arboard = { version = "3.6.1", default-features = false }
 base64 = "0.23.1"
 dirs = "7.0.0"
 parking_lot = "0.12.5"

@@ -619,16 +619,21 @@ export function App() {
        * şey yapmıyor."
        *
        * İki ayrı kusur aynı satırdan geliyordu. Birincisi o düğme: mac'te
-       * Cmd+V burada yakalanıp `session.paste()`e gidiyor, o da
-       * `navigator.clipboard.readText()` çağırıyor ve WebKit panoyu okumak
-       * için kullanıcıdan izin isteyen kendi "Paste" düğmesini çiziyor.
+       * Cmd+V burada yakalanıp `session.paste()`e gidiyordu, o da
+       * `navigator.clipboard.readText()` çağırıyordu ve WebKit panoyu okumak
+       * için kullanıcıdan izin isteyen kendi "Paste" düğmesini çiziyordu.
        * İkincisi daha derin: izin verilse bile metin KUTUYA değil kabuğa
-       * gidiyordu, çünkü `session.paste()` PTY'ye yazıyor.
+       * gidiyordu, çünkü `session.paste()` PTY'ye yazıyordu.
        *
        * Kutu zaten bir `textarea`: tarayıcının kendi yapıştırması tam olarak
        * doğru şeyi yapıyor — izin sormuyor (kullanıcı jesti panoyu doğrudan
        * getiriyor), metni imlecin olduğu yere koyuyor. Yapılacak tek şey
        * yoldan çekilmek.
+       *
+       * Kutunun DIŞINDA (terminal, sekme çubuğu, kenar paneli) kısayol hâlâ
+       * burada yakalanıyor ve aynı düğme oradan bir kez daha geldi. Pano artık
+       * Rust tarafından okunuyor, metin kutu açıksa kutuya gidiyor
+       * (`pasteClipboard`; ikinci bildirimin hikâyesi orada).
        *
        * KOPYALAMA için bu gerekçe yalnızca YARI doğru ve bir kez yanılttı:
        * Ctrl+V/Cmd+V gibi Ctrl+Shift+V de tarayıcının yerel yapıştırması
@@ -642,7 +647,8 @@ export function App() {
         if (session) return run(() => void session.copySelection());
       }
       if (!inCommandInput && matchCombo(event, keys.paste)) {
-        if (session) return run(() => void session.paste());
+        const active = store.activeTab();
+        if (active) return run(() => void store.pasteClipboard(active.tab.id));
       }
       // Yakınlaştırma ayardaki boyuta DOKUNMUYOR; ⌘0 o boyuta döndürüyor
       // (eskiden sabit 14'e dönüyordu). Sınırlar `settingsLimits`te.

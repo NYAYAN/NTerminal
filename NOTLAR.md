@@ -249,6 +249,19 @@ değil kabuğa giderdi. Kutu zaten bir `textarea`: kopyala/yapıştır artık
 yakalanmıyor. Aynı satırın ikizi kaçış kapısındaydı (`e.ctrlKey || e.metaKey`)
 ve mac'te Cmd+C'yi SIGINT'e çeviriyordu — yalnızca gerçek Ctrl'e bağlandı.
 
+**Yapıştırma, ikinci tur: "Paste" düğmesi hiçbir yoldan çıkmıyor.** Düğme
+kutunun DIŞINDAN geri geldi: terminalin sağ tık menüsündeki "Yapıştır", sağ
+tıkla yapıştırma ayarı ve odak kutuda değilken basılan kısayol hâlâ
+`navigator.clipboard.readText()` çağırıyordu. Pano artık Rust tarafından
+okunuyor ([`platform.rs`](src-tauri/src/platform.rs) `clipboard_text`,
+`arboard` yalnızca metin), WebKit'e hiç sorulmuyor. "Tıklıyorum, bir şey
+olmuyor" kısmı da buradaydı: metin `term.paste()`e gidiyordu ve kutu açıkken
+terminalin girdisi kapalı (`disableStdin`), xterm onu sessizce atıyordu. Karar
+tek yerde, [`useStore.ts`](src/store/useStore.ts) `pasteClipboard`: kutu
+açıksa imlecin olduğu yere, değilse terminale. Testler:
+`store/pasteClipboard.test.ts` (kaynakta `clipboard.readText` kalmadığını da
+bağlıyor), `components/terminalPaste.test.tsx`, `CommandInput.test.tsx`.
+
 **Diff'te bağlam açıcıları** (eski açık iş 2.2). Fark bloklarının arasındaki
 değişmemiş satırlar artık açılabiliyor: "59 değişmemiş satır" yazan bir şerit,
 solunda satır numarası sütunuyla aynı genişlikte bir düğme bloğu, iki ok ve

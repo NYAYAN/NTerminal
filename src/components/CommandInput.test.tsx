@@ -1155,3 +1155,60 @@ describe("IME birleştirmesi", () => {
     expect(sendKeys).toHaveBeenCalledWith("ls\r");
   });
 });
+
+/*
+ * Yapıştırma kutuya İMLECİN olduğu yere gidiyor (bkz. `pasteClipboard`).
+ *
+ * BİLDİRİLEN HATA: "Bir şeyi kopyalayıp yapıştır dediğimde komut satırında
+ * 'paste' diye bir şey çıkıyor; buna gerek yok, doğrudan yapıştırabilmeliyim."
+ * Menüden ya da odak kutunun dışındayken yapıştırılan metin eskiden
+ * terminalin kapalı girdisine gidip kayboluyordu. Artık kutuya geliyor ve
+ * tarayıcının kendi yapıştırmasıyla aynı yere oturmalı.
+ */
+describe("yapıştırma", () => {
+  const paste = (text: string) =>
+    act(() => {
+      useStore.getState().appInputSink!(text, "insert");
+    });
+
+  it("imlecin olduğu yere koyuyor, imleç yapıştırılanın sonunda", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "git commit" } });
+    el.setSelectionRange(4, 4);
+    paste("-C repo ");
+    expect(el.value).toBe("git -C repo commit");
+    expect(el.selectionStart).toBe(12);
+  });
+
+  it("seçili metnin yerine geçiyor", () => {
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    fireEvent.change(el, { target: { value: "git checkout main" } });
+    el.setSelectionRange(13, 17);
+    paste("dev");
+    expect(el.value).toBe("git checkout dev");
+  });
+
+  it("odak kutunun dışındayken de kutuya geliyor ve odağı alıyor", () => {
+    // Sağ tık menüsünden yapıştırırken odak menüdeydi; yazmaya kutuda devam
+    // edilebilmeli.
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    el.blur();
+    expect(document.activeElement).not.toBe(el);
+    paste("ls -la");
+    expect(el.value).toBe("ls -la");
+    expect(document.activeElement, "odak kutuya dönmedi").toBe(el);
+  });
+
+  it("komut çalışırken yanıt satırına yazıyor, Enter'a kadar programa göndermiyor", () => {
+    // Kutunun içindeki Cmd+V de böyle: satır Enter'la gidiyor.
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    paste("y");
+    expect(el.value).toBe("y");
+    expect(sendKeys, "yapıştırılan yanıt kendiliğinden gitti").not.toHaveBeenCalled();
+  });
+});

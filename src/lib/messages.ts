@@ -723,6 +723,7 @@ export const MESSAGES = {
   "common.restartShell": ["Yeniden başlat", "Restart"],
   "common.openFolder": ["Klasörü aç", "Open folder"],
   "common.clipboardFailed": ["Panoya kopyalanamadı", "Could not copy to clipboard"],
+  "common.clipboardReadFailed": ["Pano okunamadı", "Could not read the clipboard"],
   "common.escClose": ["Esc kapat", "Esc to close"],
 
   // ------------------------------------------------------------- başlık çubuğu

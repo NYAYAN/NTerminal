@@ -108,6 +108,24 @@ pub fn file_manager_name_en() -> &'static str {
     return "Files";
 }
 
+/// Panodaki düz metin.
+///
+/// Arayüz panoyu KENDİSİ okumuyor (`navigator.clipboard.readText()`): macOS'ta
+/// WebKit o çağrıya kendi "Paste" onay düğmesini çiziyor ve kullanıcı
+/// yapıştırmak için bir kez daha tıklamak zorunda kalıyordu. Uygulamanın kendi
+/// okuması böyle bir onaya bağlı değil. Hikâyesi depodaki `pasteClipboard`
+/// üzerinde.
+///
+/// Pano boşsa ya da metin değil başka bir şey taşıyorsa (görsel, dosya) `None`:
+/// bu bir hata değil, yapıştırılacak bir şey yok.
+pub fn clipboard_text() -> Result<Option<String>, arboard::Error> {
+    match arboard::Clipboard::new()?.get_text() {
+        Ok(text) => Ok(Some(text)),
+        Err(arboard::Error::ContentNotAvailable) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

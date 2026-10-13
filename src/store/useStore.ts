@@ -534,8 +534,11 @@ interface Store {
    * `CommandInput` kendini buraya kaydediyor. Depodan bileşene doğrudan
    * erişim yok; bu kayıt olmadan `acceptSuggestionAt` iki ayrı yola
    * bölünürdü ve listeye tıklamak yalnızca ham kipte çalışırdı.
+   *
+   * `mode`: "replace" satırı değiştirir, "append" sona ekler, "insert"
+   * imlecin olduğu yere koyar (yapıştırma, bkz. `pasteClipboard`).
    */
-  appInputSink: ((text: string, mode: "replace" | "append") => void) | null;
+  appInputSink: ((text: string, mode: "replace" | "append" | "insert") => void) | null;
   /** Oturum yeniden kurulduğunda artan sayaç; TerminalArea buna bakıp DOM'u yeniler. */
   sessionEpoch: Record<string, number>;
   /**
@@ -734,7 +737,7 @@ interface Store {
    */
   openHistorySuggestions: (scope?: "tab" | "all") => boolean;
   closeSuggestions: () => void;
-  setAppInputSink: (sink: ((text: string, mode: "replace" | "append") => void) | null) => void;
+  setAppInputSink: (sink: ((text: string, mode: "replace" | "append" | "insert") => void) | null) => void;
   insertPath: (path: string) => void;
   /**
    * Dosyayı görüntüleyicide açar; `at` verilirse o satıra gidip eşleşmeyi
@@ -742,6 +745,11 @@ interface Store {
    */
   openFile: (path: string, at?: { line: number; col: number; len: number }) => void;
   insertCommand: (command: string, execute: boolean) => void;
+  /**
+   * Panodaki metni yapıştırır: o sekmenin komut kutusu açıksa kutuya, değilse
+   * terminaline. Panoyu Rust tarafı okuyor; gerekçesi uygulamada.
+   */
+  pasteClipboard: (tabId: string) => Promise<void>;
   /**
    * Etkin sekme kilitli mi? Kilit yalnızca kapatmayı değil KLASÖRÜ de
    * koruyor, bu yüzden arayüz de yola dokunan denetimleri buna göre kısıyor.
@@ -2798,6 +2806,49 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     get().activeSession()?.insertCommand(command, execute);
+  },
+
+  /*
+   * Panodaki metni yapıştırır: komut kutusu açıksa KUTUYA, değilse terminale.
+   *
+   * BİLDİRİLEN HATA: "Bir şeyi kopyalayıp yapıştır dediğimde komut satırında
+   * 'paste' diye bir şey çıkıyor; buna gerek yok, doğrudan yapıştırabilmeliyim."
+   *
+   * O düğme WebKit'in: macOS'ta `navigator.clipboard.readText()` panoyu ancak
+   * kullanıcı kendi "Paste" düğmesine tıklarsa veriyor. Kutunun içinde basılan
+   * Cmd+V'de görünmüyordu — orada tarayıcının kendi yapıştırması çalışıyor ve
+   * izin sormuyor (bkz. `App.tsx`). Görünen yollar okumanın BİZDE olduğu
+   * yerlerdi: terminalin sağ tık menüsündeki "Yapıştır", sağ tıkla yapıştırma
+   * ayarı ve odak kutunun dışındayken (sekme çubuğu, kenar paneli) basılan
+   * yapıştırma kısayolu. Pano artık Rust tarafından okunuyor
+   * (`clipboard_read_text`); onay düğmesi hiçbir yolda çıkmıyor.
+   *
+   * Düğmeye tıklamak da çoğu zaman bir şey yapmıyordu, ikinci kusur buydu:
+   * metin `term.paste()`e gidiyordu ve kutu açıkken terminalin girdisi kapalı
+   * (`disableStdin`, bkz. `setAppInput`) — xterm onu sessizce atıyordu. Kutu
+   * açıksa metin artık kutuya, imlecin olduğu yere gidiyor; tarayıcının kendi
+   * yapıştırması da tam olarak bunu yapıyor.
+   *
+   * `tabId`: sağ tıklanan bölme. Kutu yalnızca ETKİN sekmenin; başka bir
+   * bölmeye yapıştırılan metin o bölmenin terminaline gidiyor.
+   */
+  async pasteClipboard(tabId) {
+    let text: string | null;
+    try {
+      text = await api.clipboardReadText();
+    } catch {
+      get().toast(t("common.clipboardReadFailed"), "err");
+      return;
+    }
+    // Boş pano ya da metin olmayan içerik (görsel, dosya): yapıştırılacak bir
+    // şey yok, bu bir hata değil.
+    if (!text) return;
+    const sink = get().appInputSink;
+    if (sink && get().activeTab()?.tab.id === tabId) {
+      sink(text, "insert");
+      return;
+    }
+    sessions.get(tabId)?.pasteText(text);
   },
 
   activeTabLocked() {

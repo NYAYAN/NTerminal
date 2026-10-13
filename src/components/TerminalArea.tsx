@@ -221,7 +221,8 @@ export function TerminalArea() {
         kind: "item",
         label: t("term.paste"),
         hint: prettyCombo(keys.paste ?? ""),
-        run: () => void session.paste(),
+        // Kutu açıksa metin kutuya gidiyor (bkz. `pasteClipboard`).
+        run: () => void store.pasteClipboard(id),
       },
       { kind: "separator" },
       { kind: "item", label: t("term.selectAll"), run: () => session.selectAll() },
@@ -271,13 +272,13 @@ export function TerminalArea() {
 
     if (rightClickAction === "paste") {
       event.preventDefault();
-      void session.paste();
+      void useStore.getState().pasteClipboard(id);
       return;
     }
     if (rightClickAction === "copyPaste") {
       event.preventDefault();
       if (session.hasSelection()) copy(session);
-      else void session.paste();
+      else void useStore.getState().pasteClipboard(id);
       return;
     }
     menu.open(event, terminalEntries(id, session));

@@ -632,6 +632,24 @@ fn open_external(url: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// Panodaki duz metin; pano bossa ya da metin tasimiyorsa `None`.
+///
+/// Arayuz yapistirirken panoyu buradan okuyor, `navigator.clipboard`tan degil:
+/// macOS'ta o yol WebKit'in "Paste" onay dugmesini cikariyordu (bkz.
+/// `platform::clipboard_text`).
+///
+/// `async` + `spawn_blocking`: okuma panoyu tutan surecin cevabini bekliyor -
+/// Windows'ta panoyu acik birakan bir uygulama, macOS'ta veriyi ancak
+/// istenince ureten bir kaynak. Bekleyen ana is parcacigi olmamali (gerekce
+/// `git_info` basinda).
+#[tauri::command]
+async fn clipboard_read_text() -> CmdResult<Option<String>> {
+    tauri::async_runtime::spawn_blocking(platform::clipboard_text)
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
 /// Verilen dizinin git durumu; depo degilse `None`.
 ///
 /// Cagri SEYREK olmali (dizin degisimi, komut sonu): her cagri bir `git`
@@ -1424,6 +1442,7 @@ pub fn run() {
             config_import_apply,
             reveal_in_explorer,
             open_external,
+            clipboard_read_text,
             list_dirs,
             list_files,
             search_text,

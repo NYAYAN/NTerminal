@@ -2435,13 +2435,15 @@ ${dim}[${
     this.term.write("\x1b[3J");
   }
 
-  async paste() {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) this.term.paste(text);
-    } catch {
-      /* pano erişimi yoksa sessizce geç */
-    }
+  /**
+   * Metni terminale yapıştırır; bracketed paste ve satır sonları xterm'in işi.
+   *
+   * Panoyu burası OKUMUYOR: okuma da metnin kutuya mı terminale mi gideceği
+   * kararı da depoda (`pasteClipboard`). Burada `navigator.clipboard` vardı ve
+   * macOS'ta WebKit'in "Paste" onay düğmesini çıkarıyordu.
+   */
+  pasteText(text: string) {
+    if (text) this.term.paste(text);
   }
 
   hasSelection(): boolean {

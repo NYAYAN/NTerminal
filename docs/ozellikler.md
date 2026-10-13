@@ -500,7 +500,10 @@ bağlıdır (bkz. Testler).
 tümünü seç, temizle, ara, görünüm kipi, kabuğu yeniden başlat, klasörü Gezgin'de
 aç. Eskiden koşulsuz yapıştırıyordu — metin seçip sağ tıklayan kullanıcı için tam
 ters sonuç. Ayardan "seçim varsa kopyala, yoksa yapıştır" ya da "her zaman
-yapıştır" seçilebilir. `Ctrl+C` seçim varken kopyalar, seçim yokken kabuğa SIGINT
+yapıştır" seçilebilir. Yapıştırılan metin komut kutusu açıksa **kutuya, imlecin
+olduğu yere** gider, kutu kapalıysa (klasik terminal, tam ekran program) kabuğa;
+nereden yapıştırılırsa yapıştırılsın ara bir onay ("Paste" düğmesi) çıkmaz.
+`Ctrl+C` seçim varken kopyalar, seçim yokken kabuğa SIGINT
 olarak gider; kopyaladıktan sonra seçim temizlendiği için **ikinci `Ctrl+C` her
 zaman komutu durdurur**.
 
