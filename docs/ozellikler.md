@@ -455,7 +455,8 @@ sekme, sıra, silme) ve sürüklenerek sıralanır; bölmenin altındaki ok dü�
 bölmeyi genişletip grup adlarını yazar. Bölme genişken başlığındaki yıldız
 yalnızca favori grupları listeler (bölme daraltılmışken süzgeç açıksa yıldız
 bölmenin en üstünde kalır), ağaç simgesi ise sekmeleri grupların altında
-listeler ve yandaki sekme kartlarını kaldırır: her grup kendi okuyla açılıp
+listeler ve yandaki sekme kartlarını kaldırır: her grup kendi renginde bir
+karta dönüşür, sekmeleri kartın içinde durur ve kendi okuyla açılıp
 kapanır (açık bıraktığınız gruplar başka gruba geçince de açık kalır), sekmeye
 tıklamak ona geçer, sağ tık sekme menüsünü açar, sekmeler sürüklenerek
 sıralanır ya da başka grubun altına taşınır.

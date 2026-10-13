@@ -417,18 +417,70 @@
 
 /* --------------------------------------------- sekme ağacı (geniş rayda) */
 
-/* Grup: karo, sağ ucunda açma oku, altında sekmeleri. Ok karonun KARDEŞİ
-   (düğme içinde düğme olmuyor) ve karonun üstüne oturuyor; karo ona ve
-   kapalıyken sekme sayısına yer bırakıyor. */
+/* Grup bir KART: başında karo (sağ ucunda açma oku), sekmeleri içinde. Ok
+   karonun KARDEŞİ (düğme içinde düğme olmuyor) ve karonun üstüne oturuyor;
+   karo ona ve kapalıyken sekme sayısına yer bırakıyor.
+
+   SEÇİLEN: ağaç için çizilen dört örnekten "grup kartı". Çizgili ağaçta
+   sekmeler karodan dallanıyordu ama grubun rengi yalnızca karodaydı; kartta
+   sekmelerin arkasında da duruyor, çok grupta hangi sekmenin kimin olduğu
+   girintiden değil renkten okunuyor. Zemin raya karıştırılmış (opak):
+   meşgul noktasının kesiği aynı rengi kullanabilsin. */
 :root[data-layout="kokpit"] .grail-node {
+  --node-bg: color-mix(in srgb, var(--group-color) 9%, var(--rail-bg));
   position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
+  border-radius: 12px;
+  background: var(--node-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group-color) 22%, transparent);
+}
+
+/* Etkin grubun halkası karoda değil kartta: karo kartın yalnızca başı. */
+:root[data-layout="kokpit"] .grail-node.on {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--group-ink) 70%, transparent);
 }
 
 :root[data-layout="kokpit"] .grail.expanded .grail-node > .grail-item {
   padding-right: 38px;
+}
+
+/* Karonun zemini kartın zemini. Etkin halkasını kaldıran kural `:where`
+   içinde: odak ve bırakma halkalarını ezmesin, düzenlenen grubunkini hiç
+   seçmiyor. */
+:root[data-layout="kokpit"] .grail-node > .grail-item {
+  background: transparent;
+}
+
+:root[data-layout="kokpit"] .grail-node > .grail-item:where(.on:not(.editing)) {
+  box-shadow: none;
+}
+
+:root[data-layout="kokpit"] .grail-node > .grail-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--group-color) 10%, transparent);
+}
+
+/* Baş harfler kartın başında küçük bir rozet: grubun rengi kartın zemininde
+   seyreldi, rozet onu yoğun tutuyor. */
+:root[data-layout="kokpit"] .grail.expanded .grail-node .grail-initials {
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--group-color) 22%, transparent);
+  font-size: 0.8077rem;
+}
+
+:root[data-layout="kokpit"] .grail.expanded .grail-node .grail-name {
+  font-weight: 600;
+}
+
+/* Meşgul noktası rozetin köşesinde; kesiği kartın zemini. */
+:root[data-layout="kokpit"] .grail.expanded .grail-node .grail-busy {
+  top: 4px;
+  left: 26px;
+  box-shadow: 0 0 0 2px var(--node-bg);
 }
 
 :root[data-layout="kokpit"] .grail-caret {
@@ -466,32 +518,29 @@
   text-align: center;
 }
 
-/* Sekmeler karodan dallanıyor: dikey çizgi baş harflerin ortasından (40px'lik
-   sütunun ortası) iniyor, her satıra kısa bir kol. Satırın `::after`ı
-   bırakma çizgisinin; kol `::before`.
+/* Sekmeler kartın içinde, karodan ince bir ayraçla ayrı; ayraç aradaki
+   boşluğun ortasında. Satırın `::after`ı bırakma çizgisinin.
 
-   İlk sekme karodan 10px aşağıda. BİLDİRİLEN: "grup altındaki ilk sekme
-   gruba çok yakın, arasında boşluk olmalı." 4px'te etkin grubun halkası
-   (karonun 4px dışına taşıyor) ilk satırın kenarına değiyordu. Çizgi o
-   boşluğu halkanın dış kenarından başlayarak geçiyor: sekmeler karodan
-   kopuk görünmesin. */
+   İlk sekme karodan 8px aşağıda. BİLDİRİLEN: "grup altındaki ilk sekme
+   gruba çok yakın, arasında boşluk olmalı." 4px'te karonun odak halkası
+   (karonun 4px dışına taşıyor) ilk satırın kenarına değiyordu. */
 :root[data-layout="kokpit"] .grail-tabs {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin-top: 10px;
-  padding-left: 30px;
+  margin-top: 8px;
+  padding: 0 5px 5px;
 }
 
 :root[data-layout="kokpit"] .grail-tabs::before {
   content: "";
   position: absolute;
-  left: 19.5px;
-  top: -6px;
-  bottom: 13px;
-  width: 1px;
-  background: var(--hairline-strong);
+  left: 10px;
+  right: 10px;
+  top: -5px;
+  height: 1px;
+  background: var(--hairline);
   pointer-events: none;
 }
 
@@ -508,25 +557,17 @@
   cursor: default;
 }
 
-:root[data-layout="kokpit"] .grail-tab::before {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: 50%;
-  width: 9px;
-  height: 1px;
-  background: var(--hairline-strong);
-  pointer-events: none;
-}
-
 :root[data-layout="kokpit"] .grail-tab:hover {
   background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text);
 }
 
+/* Etkin sekme kartın renginde, kenar çubuğundaki sekme kartları gibi
+   (`.tab-row.active`): vurgu rengi, başka renkteki bir kartta ikinci bir
+   renk olurdu. */
 :root[data-layout="kokpit"] .grail-tab.on {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--group-color) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group-color) 34%, transparent);
   color: var(--text);
   font-weight: 500;
 }

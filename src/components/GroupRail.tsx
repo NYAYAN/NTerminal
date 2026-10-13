@@ -102,6 +102,9 @@ type TabDrop = { groupId: string; index: number } | null;
  * basınca sekmeler grupların altına diziliyor ve kart sütunu çizilmiyor —
  * aynı sekmeleri iki kez göstermezdi (`railTree`, ayarı `railTabs`).
  *
+ * Ağaçta her grup kendi renginde bir kart: karo kartın başlığı, sekmeler
+ * içinde; etkin grubun halkası karoda değil kartta (biçim `kokpit.css`).
+ *
  * Her grup kendi okuyla açılıp kapanıyor; durum grubun kendisinde
  * (`collapsed`). Etkin grup değişince hiçbir grup kendiliğinden kapanmıyor,
  * yeniden açılışta da aynı. Premium ve Klasik'in kenar çubuğu aynı alanı
@@ -486,6 +489,10 @@ export function GroupRail() {
           // Sekme bu grubun sonuna gidecek ve sekmeleri görünmüyor: karo halkalı.
           const into =
             tabDropShown?.groupId === group.id && (group.collapsed || group.tabs.length === 0);
+          const colors = {
+            ["--group-color" as string]: group.color ?? "var(--accent)",
+            ["--group-ink" as string]: ink ?? "var(--accent)",
+          };
           const tile = (
             <button
               key={group.id}
@@ -495,10 +502,7 @@ export function GroupRail() {
               }${editGroup?.id === group.id ? " editing" : ""}`}
               aria-current={active ? "true" : undefined}
               aria-label={name}
-              style={{
-                ["--group-color" as string]: group.color ?? "var(--accent)",
-                ["--group-ink" as string]: ink ?? "var(--accent)",
-              }}
+              style={colors}
               data-drop={tree ? undefined : drop}
               data-into={tree && into ? "" : undefined}
               draggable={!group.ungrouped}
@@ -531,10 +535,13 @@ export function GroupRail() {
             </button>
           );
           if (!tree) return tile;
+          // Ağaçta grup bir KART: karo başlığı, sekmeler içinde. Zemini ve
+          // etkin grubun halkası kartta, renkleri bu yüzden kartta da.
           return (
             <div
               key={group.id}
-              className={dragGroupId === group.id ? "grail-node dragging" : "grail-node"}
+              className={`grail-node${active ? " on" : ""}${dragGroupId === group.id ? " dragging" : ""}`}
+              style={colors}
               data-drop={drop}
             >
               {tile}
