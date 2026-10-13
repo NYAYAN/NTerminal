@@ -16,6 +16,9 @@ export default defineConfig({
     watch: { ignored: ["**/src-tauri/**"] },
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],
+  // Renklendiricinin iş parçacığı (`lib/syntax.worker.ts`) gramerleri ayrı
+  // parçalar olarak yüklüyor; varsayılan `iife` biçimi parçalamaya izin vermiyor.
+  worker: { format: "es" },
   test: {
     // jsdom eksikleri icin yamalar; ortam dosya basina secildigi icin
     // (`// @vitest-environment jsdom`) kurulum her testte zararsiz calisiyor.

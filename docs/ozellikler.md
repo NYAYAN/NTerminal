@@ -376,6 +376,19 @@ yazılmaz: **Diskteki hâli yükle** ya da **Benimkini kaydet**. Satır sonları
 (LF / CRLF) korunur. İkili, yarım megabayttan büyük ya da satır sonları karışık
 dosya düzenlenemez; kalem kapalıdır ve üzerine gelince nedenini söyler.
 
+**Sözdizimi renkleri.** Görüntüleyici kodu VS Code'un kendi gramerleriyle
+renklendirir: anahtar sözcükler, dizeler, sayılar, yorumlar, işlev ve tür
+adları, özellikler, HTML/JSX etiketleri ve öznitelikleri ayrı renklerde.
+TypeScript, JavaScript, JSON, Markdown, C#, Java, Python, Go, Rust, C/C++, SQL,
+PowerShell, kabuk betikleri, HTML/CSS, YAML, TOML, XML ve Dockerfile dahil
+~80 dil dosya adından tanınır; tanınmayan dosya düz metin kalır. Renkler
+seçili temanın geldiği editör temasından: N-Terminal Koyu/Açık GitHub'ın,
+One Half Dark One Dark'ın, Solarized kendi renklerini, Windows Terminal VS
+Code'un varsayılan koyusunu (Dark+) taşır. Renklendirme ayrı bir iş
+parçacığında yapılır: dosya önce düz görünür, renkler birkaç yüz milisaniye
+içinde gelir; arayüz ve terminal beklemez. Düzenlerken de renkler yazdıkça
+güncellenir (bir yorum ya da dize açmak alttaki satırları da etkiler).
+
 **Dosya arama (`Ctrl+P`).** Başlık çubuğunun ortasındaki kutu ya da kısayol,
 bulunulan dizindeki dosyalarda bulanık arama açıyor. Enter dosyayı dosya
 panelindeki görüntüleyicide açar, `Shift+Enter` yolu komut satırının sonuna ekler

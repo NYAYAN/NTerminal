@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   applyEdit,
@@ -17,9 +17,11 @@ import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { prettyCombo } from "../lib/keys";
 import { isMac } from "../lib/platform";
+import { useSyntax, type LineTokens } from "../lib/syntax";
 import { useStore } from "../store/useStore";
 import { EditorLayer, type EditorBinding, type EditorHandle } from "./DiffEditor";
 import { CloseIcon, ImageIcon, PencilIcon, RedoIcon, SaveIcon, UndoIcon } from "./Icons";
+import { CHUNK, CodeLayer, sameLines, tokenSpans } from "./SyntaxText";
 import type { FileText, ViewerReveal } from "../types";
 
 /**
@@ -56,11 +58,19 @@ import type { FileText, ViewerReveal } from "../types";
  * kaydediyor). Dosya okunduktan sonra başka bir yerde kaydedildiyse üzerine
  * yazılmıyor; kullanıcı seçiyor.
  *
- * ## Neden sözdizimi renklendirmesi yok
+ * ## Sözdizimi renklendirmesi
  *
- * Bir renklendirici (Prism, Shiki, highlight.js) onlarca dil grameri ve
- * yüzlerce kilobayt demek. Satır numarası ve eş aralıklı yazı tipi "şu
- * dosyada ne var" sorusunu yanıtlamaya yetiyor.
+ * İSTEK: "Dosyaları açtığımda kodları renkli göstermek mümkün mü? VS Code'da,
+ * IntelliJ'de, WebStorm'da nasıl oluyorsa öyle." Önceki karar "renklendirici
+ * yok"tu: onlarca gramer, yüzlerce kilobayt. Kullanıcı isteyince maliyet
+ * yerine KONUM değişti: gramerler yalnızca o dilde bir dosya açılınca ve ayrı
+ * bir iş parçacığında yükleniyor (`lib/syntax.ts`); arayüz beklemiyor, dosya
+ * önce düz görünüp renkler gelince boyanıyor.
+ *
+ * Okurken satırlar belirteç `span`larıyla çiziliyor. Düzenlerken yazı alanının
+ * harfleri SAYDAM ve altında aynı metnin renkli bir katmanı var (`.viewer-hl`)
+ * — komut satırındaki renklendirmenin yolu (`CommandInput`). İmleç, seçim ve
+ * yazmanın kendisi yine tarayıcının yazı alanı.
  *
  * ## Sınırlar BİLDİRİLİYOR
  *
@@ -105,18 +115,86 @@ function bringIntoView(scroller: HTMLElement, row: HTMLElement, mark: HTMLElemen
 }
 
 /** Satırın metni, eşleşmesi `<mark>` içinde. Satır o arada kısaldıysa kırpılıyor. */
-function markedLine(line: string, col: number, len: number) {
+function markedLine(line: string, col: number, len: number, tokens: LineTokens | undefined) {
   const start = Math.min(col, line.length);
   const end = Math.min(start + len, line.length);
-  if (end <= start) return line || " ";
+  if (end <= start) return line ? tokenSpans(line, tokens) : " ";
   return (
     <>
-      {line.slice(0, start)}
-      <mark className="viewer-mark">{line.slice(start, end)}</mark>
-      {line.slice(end)}
+      {tokenSpans(line, tokens, 0, start)}
+      <mark className="viewer-mark">{tokenSpans(line, tokens, start, end)}</mark>
+      {tokenSpans(line, tokens, end)}
     </>
   );
 }
+
+/**
+ * Okuma görünümünün bir satırı.
+ *
+ * `memo`: belirteçler parça parça geliyor ve her parça yalnızca kendi
+ * satırlarını değiştiriyor; öbür satırların belirteç dizisi aynı nesne
+ * kalıyor, React onları yeniden çizmiyor. Satırlar ayrıca dilimli
+ * (`RowChunk`): değişmeyen dilimin satır öğeleri hiç kurulmuyor.
+ */
+const ViewerRow = memo(function ViewerRow({
+  no,
+  line,
+  tokens,
+  hit,
+}: {
+  no: number;
+  line: string;
+  tokens: LineTokens | undefined;
+  /** Aramadan gelinen eşleşme; yalnızca o satıra veriliyor. */
+  hit: ViewerReveal | null;
+}) {
+  return (
+    <div className={hit ? "viewer-line hit" : "viewer-line"}>
+      {/* Satır numarası seçime girmiyor: kodu kopyalayan biri numaraları da
+          kopyalamak istemiyor. */}
+      <span className="viewer-no">{no}</span>
+      <span className="viewer-text">
+        {hit ? markedLine(line, hit.col, hit.len, tokens) : line ? tokenSpans(line, tokens) : " "}
+      </span>
+    </div>
+  );
+});
+
+interface RowChunkProps {
+  from: number;
+  to: number;
+  lines: readonly string[];
+  tokens: readonly (LineTokens | undefined)[] | null;
+  reveal: ViewerReveal | null;
+}
+
+/** Eşleşme bu dilimde mi (yalnızca o dilim işaretle yeniden çiziliyor)? */
+const hitIn = (p: RowChunkProps) => (p.reveal && p.reveal.line > p.from && p.reveal.line <= p.to ? p.reveal : null);
+
+/** Okuma görünümünün `CHUNK` satırlık dilimi; sarmalayıcı öğe yok (tablo satırları). */
+const RowChunk = memo(
+  function RowChunk({ from, to, lines, tokens, reveal }: RowChunkProps) {
+    const rows = [];
+    for (let i = from; i < to; i++) {
+      rows.push(
+        <ViewerRow
+          key={i}
+          no={i + 1}
+          line={lines[i]}
+          tokens={tokens?.[i]}
+          hit={reveal && reveal.line === i + 1 ? reveal : null}
+        />,
+      );
+    }
+    return <>{rows}</>;
+  },
+  (a, b) =>
+    a.from === b.from &&
+    a.to === b.to &&
+    hitIn(a) === hitIn(b) &&
+    sameLines(a.from, a.to, a.lines, b.lines) &&
+    (a.tokens === b.tokens || (!!a.tokens && !!b.tokens && sameLines(a.from, a.to, a.tokens, b.tokens))),
+);
 
 export function FileViewer({
   path,
@@ -298,7 +376,17 @@ export function FileViewer({
         }
       : null;
 
-  const lines = loaded && !loaded.binary ? display.split("\n") : [];
+  const lines = useMemo(() => (loaded && !loaded.binary ? display.split("\n") : []), [loaded, display]);
+  /*
+   * Renklendiriciye giden satırlar. Düzenlenemeyen dosyada (kesilmiş ya da
+   * satır sonları karışık) `\r` satırın içinde kalıyor; gramer onu metnin
+   * parçası sanmasın.
+   */
+  const codeLines = useMemo(
+    () => (!loaded || loaded.binary ? null : eol ? lines : lines.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l))),
+    [loaded, eol, lines],
+  );
+  const syntax = useSyntax(path, codeLines);
   const numbers = useMemo(
     () => Array.from({ length: Math.max(1, lines.length) }, (_, i) => i + 1).join("\n"),
     [lines.length],
@@ -462,23 +550,30 @@ export function FileViewer({
               {numbers}
             </pre>
             <div className="viewer-edit-area" style={{ minWidth: `calc(${columns}ch + 20px)` }}>
-              <EditorLayer {...binding} className="viewer-editor" scroller=".viewer-body" lines={lines.length} />
+              {/* Renkli katman yazı alanının ALTINDA; yazı alanının harfleri
+                  saydam (`.colored`), görünen metin bu katman. */}
+              {syntax && <CodeLayer lines={lines} tokens={syntax.tokens} keys={syntax.keys} />}
+              <EditorLayer
+                {...binding}
+                className={syntax ? "viewer-editor colored" : "viewer-editor"}
+                scroller=".viewer-body"
+                lines={lines.length}
+              />
             </div>
           </div>
         ) : (
           lines.length > 0 && (
             <div className="viewer-code">
-              {lines.map((line, i) => {
-                const hit = reveal && reveal.line === i + 1 ? reveal : null;
-                return (
-                  <div key={i} className={hit ? "viewer-line hit" : "viewer-line"}>
-                    {/* Satır numarası seçime girmiyor: kodu kopyalayan biri
-                        numaraları da kopyalamak istemiyor. */}
-                    <span className="viewer-no">{i + 1}</span>
-                    <span className="viewer-text">{hit ? markedLine(line, hit.col, hit.len) : line || " "}</span>
-                  </div>
-                );
-              })}
+              {Array.from({ length: Math.ceil(lines.length / CHUNK) }, (_, k) => (
+                <RowChunk
+                  key={k}
+                  from={k * CHUNK}
+                  to={Math.min((k + 1) * CHUNK, lines.length)}
+                  lines={lines}
+                  tokens={syntax?.tokens ?? null}
+                  reveal={reveal}
+                />
+              ))}
             </div>
           )
         )}

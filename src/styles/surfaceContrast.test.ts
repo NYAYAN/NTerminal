@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { contrastRatio, luminance as luminanceOf } from "../lib/contrast";
 import { ensureContrast, filledColors } from "../lib/contrast";
-import { THEMES, getTheme } from "../lib/themes";
+import { SYNTAX_CLASSES } from "../lib/syntaxScopes";
+import { THEMES, getTheme, syntaxColors, syntaxVariables } from "../lib/themes";
 
 /**
  * Grup rengi artık yalnızca ince bir şeritte değil ARKA PLANDA da görünüyor.
@@ -290,6 +291,61 @@ describe("komut satırı sözdizimi renkleri", () => {
       }
     });
   }
+});
+
+/**
+ * Kod renkleri (dosya görüntüleyicisinin sözdizimi renklendirmesi).
+ *
+ * Editör temalarının renkleri KENDİ zeminleri için seçilmiş; bizim yüzeyimiz
+ * (`--surface`) her temada onların zemini değil. Solarized'ın yorum rengi kendi
+ * zemininde bile 2.48 karşıtlıkta, One Dark'ınki 2.32. Değişkenler bu yüzden
+ * `ensureContrast`ten geçiyor; test hem okunurluğu hem de renklendirmenin
+ * anlamını (temel türlerin birbirinden ayrılması) bağlıyor.
+ */
+describe("kod renkleri", () => {
+  const MIN = 4.5;
+
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+    const vars = syntaxVariables(theme);
+
+    it(`${meta.id}: her tür görüntüleyicinin zemininde okunuyor`, () => {
+      for (const [ad, renk] of Object.entries(vars)) {
+        const ratio = contrastRatio(renk, theme.ui.surface);
+        expect(ratio, `${ad} (${renk}) / zemin ${theme.ui.surface}: ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(MIN);
+      }
+    });
+
+    it(`${meta.id}: yorum, anahtar sözcük, dize, işlev ve tür ayrı renkte ve düz metinden farklı`, () => {
+      // Aynı tona düşen iki tür, renklendirmeyi o ayrım için anlamsız kılar.
+      const temel = [vars.comment, vars.keyword, vars.string, vars.function, vars.type];
+      expect(new Set(temel).size, temel.join(" ")).toBe(temel.length);
+      const metin = ensureContrast(theme.ui.text, theme.ui.surface, MIN);
+      for (const renk of temel) expect(renk, "düz metinle aynı").not.toBe(metin);
+    });
+  }
+
+  it("listede olmayan tema renklerini terminal paletinden türetiyor", () => {
+    // Yeni bir tema eklenip `SYNTAX`a yazılmazsa kod renksiz kalmamalı.
+    const base = getTheme("nterminal-dark");
+    const colors = syntaxColors({ ...base, id: "yeni-tema" });
+    expect(colors.keyword).toBe(base.xterm.magenta);
+    expect(colors.string).toBe(base.xterm.green);
+    expect(colors.function).toBe(base.xterm.blue);
+    expect(colors.comment).toBe(base.ui.textDim);
+  });
+
+  it("CSS'teki her `.syn-*` sınıfının değişkeni tema uygulanırken yazılıyor", () => {
+    // Sınıf listesi (`syntaxScopes.ts`), CSS ve tema ayrı yerlerde; biri
+    // eklenip öbürü unutulursa o tür sessizce düz metin renginde kalır.
+    const vars = Object.keys(syntaxVariables(getTheme("nterminal-dark")));
+    const used = [...CSS.matchAll(/var\(--syn-([a-z]+)\)/g)].map((m) => m[1]);
+    expect(new Set(used)).toEqual(new Set(vars));
+    for (const cls of SYNTAX_CLASSES) {
+      if (!cls) continue;
+      expect(CSS.includes(`.syn-${cls}`), `.syn-${cls} kuralı yok`).toBe(true);
+    }
+  });
 });
 
 /**

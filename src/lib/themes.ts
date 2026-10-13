@@ -372,6 +372,9 @@ export function applyThemeToDocument(theme: TerminalTheme) {
     "--tok-str",
     ensureContrast(theme.xterm.yellow ?? "#d29922", termBg, MIN_UI_TEXT_CONTRAST),
   );
+  for (const [key, color] of Object.entries(syntaxVariables(theme))) {
+    root.style.setProperty(`--syn-${key}`, color);
+  }
   root.dataset.theme = theme.id;
   // Açık temalarda arayüz metin/gölge tonlarının ters çevrilmesi gerekiyor.
   root.dataset.tone = isLightTheme(theme) ? "light" : "dark";
@@ -400,4 +403,224 @@ export function readableAccent(
 ): string | undefined {
   if (!color) return undefined;
   return ensureContrast(color, getTheme(themeId).ui.surfaceAlt, MIN_UI_TEXT_CONTRAST);
+}
+
+/** Renkli sözdizimi sınıfları (`syntaxScopes.ts`; kalın/eğik olanların rengi yok). */
+export type SyntaxColorKey =
+  | "comment"
+  | "keyword"
+  | "control"
+  | "string"
+  | "number"
+  | "constant"
+  | "function"
+  | "type"
+  | "variable"
+  | "property"
+  | "param"
+  | "tag"
+  | "attr"
+  | "regexp"
+  | "escape"
+  | "decorator"
+  | "operator"
+  | "punct"
+  | "heading"
+  | "link"
+  | "code"
+  | "quote"
+  | "inserted"
+  | "deleted"
+  | "changed"
+  | "invalid";
+
+/**
+ * Kod renkleri — dosya görüntüleyicisinin sözdizimi renklendirmesi.
+ *
+ * İSTEK: "VS Code'da, IntelliJ'de, WebStorm'da nasıl oluyorsa öyle." Her tema
+ * GELDİĞİ editör temasının renklerini taşıyor: N-Terminal Koyu/Açık GitHub'ın
+ * temalarından (paletleri de oradan), One Half Dark, Atom'un One Dark'ından,
+ * Solarized kendisinden, Windows Terminal (Campbell) VS Code'un varsayılan
+ * koyusundan (Dark+). Kullanıcı bu temalarda kodu zaten bu renklerle görmüş.
+ *
+ * Verilmeyen tür bir yakınına düşüyor (`syntaxColors`): kontrol sözcükleri
+ * anahtar sözcüğe, değişken düz metne, özellik değişkene... Listede olmayan
+ * bir tema bütün renkleri terminal paletinden türetiyor.
+ */
+const SYNTAX: Record<string, Partial<Record<SyntaxColorKey, string>>> = {
+  "nterminal-dark": {
+    comment: "#8b949e",
+    keyword: "#ff7b72",
+    string: "#a5d6ff",
+    number: "#79c0ff",
+    constant: "#79c0ff",
+    function: "#d2a8ff",
+    type: "#ffa657",
+    property: "#79c0ff",
+    tag: "#7ee787",
+    attr: "#79c0ff",
+    escape: "#7ee787",
+    heading: "#79c0ff",
+    link: "#a5d6ff",
+    code: "#79c0ff",
+    quote: "#7ee787",
+    inserted: "#7ee787",
+    deleted: "#ffa198",
+    changed: "#ffa657",
+    invalid: "#ffa198",
+  },
+  "nterminal-light": {
+    comment: "#6e7781",
+    keyword: "#cf222e",
+    string: "#0a3069",
+    number: "#0550ae",
+    constant: "#0550ae",
+    function: "#8250df",
+    type: "#953800",
+    property: "#0550ae",
+    tag: "#116329",
+    attr: "#0550ae",
+    escape: "#116329",
+    heading: "#0550ae",
+    link: "#0a3069",
+    code: "#0550ae",
+    quote: "#116329",
+    inserted: "#116329",
+    deleted: "#82071e",
+    changed: "#953800",
+    invalid: "#82071e",
+  },
+  "one-half-dark": {
+    comment: "#7f848e",
+    keyword: "#c678dd",
+    string: "#98c379",
+    number: "#d19a66",
+    constant: "#d19a66",
+    function: "#61afef",
+    type: "#e5c07b",
+    variable: "#e06c75",
+    tag: "#e06c75",
+    attr: "#d19a66",
+    regexp: "#56b6c2",
+    escape: "#56b6c2",
+    operator: "#56b6c2",
+    heading: "#e06c75",
+    link: "#61afef",
+    inserted: "#98c379",
+    deleted: "#e06c75",
+    changed: "#e5c07b",
+    invalid: "#e06c75",
+  },
+  "solarized-light": {
+    comment: "#93a1a1",
+    keyword: "#859900",
+    string: "#2aa198",
+    number: "#d33682",
+    constant: "#cb4b16",
+    function: "#268bd2",
+    type: "#b58900",
+    property: "#268bd2",
+    tag: "#268bd2",
+    attr: "#b58900",
+    regexp: "#dc322f",
+    escape: "#cb4b16",
+    decorator: "#cb4b16",
+    heading: "#268bd2",
+    link: "#6c71c4",
+    inserted: "#859900",
+    deleted: "#dc322f",
+    changed: "#b58900",
+    invalid: "#dc322f",
+  },
+  "windows-terminal": {
+    comment: "#6a9955",
+    keyword: "#569cd6",
+    control: "#c586c0",
+    string: "#ce9178",
+    number: "#b5cea8",
+    constant: "#4fc1ff",
+    function: "#dcdcaa",
+    type: "#4ec9b0",
+    variable: "#9cdcfe",
+    tag: "#569cd6",
+    attr: "#9cdcfe",
+    regexp: "#d16969",
+    escape: "#d7ba7d",
+    punct: "#808080",
+    heading: "#569cd6",
+    quote: "#6a9955",
+    inserted: "#b5cea8",
+    deleted: "#ce9178",
+    changed: "#569cd6",
+    invalid: "#f44747",
+  },
+};
+
+/** Temanın kod renkleri, eksikler yakınlarından doldurulmuş. */
+export function syntaxColors(theme: TerminalTheme): Record<SyntaxColorKey, string> {
+  const x = theme.xterm;
+  const own = SYNTAX[theme.id];
+  // Listede olmayan tema: terminal paletinden, editörlerin genel düzeniyle.
+  const base: Partial<Record<SyntaxColorKey, string>> = own ?? {
+    comment: theme.ui.textDim,
+    keyword: x.magenta,
+    string: x.green,
+    number: x.cyan,
+    constant: x.cyan,
+    function: x.blue,
+    type: x.yellow,
+    tag: x.red,
+    attr: x.yellow,
+  };
+  const pick = (key: SyntaxColorKey, fallback: string): string => base[key] ?? fallback;
+  const text = theme.ui.text;
+  const keyword = pick("keyword", text);
+  const string = pick("string", text);
+  const constant = pick("constant", text);
+  const comment = pick("comment", theme.ui.textDim);
+  const variable = pick("variable", text);
+  return {
+    comment,
+    keyword,
+    control: pick("control", keyword),
+    string,
+    number: pick("number", constant),
+    constant,
+    function: pick("function", text),
+    type: pick("type", text),
+    variable,
+    property: pick("property", variable),
+    param: pick("param", variable),
+    tag: pick("tag", keyword),
+    attr: pick("attr", variable),
+    regexp: pick("regexp", string),
+    escape: pick("escape", constant),
+    decorator: pick("decorator", pick("function", text)),
+    operator: pick("operator", text),
+    punct: pick("punct", theme.ui.textDim),
+    heading: pick("heading", keyword),
+    link: pick("link", string),
+    code: pick("code", string),
+    quote: pick("quote", comment),
+    inserted: pick("inserted", x.green ?? text),
+    deleted: pick("deleted", x.red ?? text),
+    changed: pick("changed", x.yellow ?? text),
+    invalid: pick("invalid", x.red ?? text),
+  };
+}
+
+/**
+ * `--syn-*` değişkenlerinin değerleri: kod renkleri görüntüleyicinin
+ * zeminine (`--surface`, bkz. `.file-viewer-pane`) göre OKUNUR hâle
+ * getirilmiş. Editör temaları kendi zeminleri için seçilmiş; bizim yüzeyimiz
+ * her temada onların zemini değil; Solarized'ın yorum rengi `#93a1a1` ise
+ * kendi zemininde (`#fdf6e3`) bile 2.48 karşıtlıkta.
+ */
+export function syntaxVariables(theme: TerminalTheme): Record<SyntaxColorKey, string> {
+  const colors = syntaxColors(theme);
+  const out = {} as Record<SyntaxColorKey, string>;
+  for (const key of Object.keys(colors) as SyntaxColorKey[]) {
+    out[key] = ensureContrast(colors[key], theme.ui.surface, MIN_UI_TEXT_CONTRAST);
+  }
+  return out;
 }

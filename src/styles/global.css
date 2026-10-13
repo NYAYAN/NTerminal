@@ -1145,7 +1145,16 @@ button.hit-head:hover {
   width: max-content;
   font-family: var(--mono-font);
   font-size: 0.8846rem;
+  /* Satır yüksekliği TAM PİKSEL (bkz. `.diff-text`).
+   *
+   * ÖLÇÜLEN HATA: 7.940 satırlık dosyada düzenlerken son 11 satırın metni
+   * görünmüyordu, numaraları görünüyordu. 12.38px yazıda 1.55 = 19.1958px;
+   * tarayıcı satır kutularını 19.2031'e, yazı alanının boyunu veren `1lh`yi
+   * (`EditorLayer`) 19.1719'a yuvarlıyor. Satır başına 0.03px, toplamda yazı
+   * alanı içeriğinden 229px kısa kalıp kesiliyordu. Tam pikselde ikisi aynı
+   * sayı. İlk satır eski motorlar için. */
   line-height: 1.55;
+  line-height: round(1.55em, 1px);
 }
 
 .viewer-gutter {
@@ -1163,7 +1172,9 @@ button.hit-head:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Konumlu: renkli katman (`.viewer-hl`) bunun sol üst köşesine oturuyor. */
 .viewer-edit-area {
+  position: relative;
   flex: 1;
 }
 
@@ -1194,6 +1205,46 @@ button.hit-head:hover {
   scrollbar-width: none;
 }
 
+/* Sözdizimi renkli düzenleme (bkz. `FileViewer` başı).
+ *
+ * Renk bir `textarea`nın içine çizilemiyor (tek renk alıyor). Bu yüzden komut
+ * satırındaki yol: yazı alanının harfleri SAYDAM, aynı metin altında renkli bir
+ * katmanda. İki öğe PİKSEL PİKSEL aynı akmak zorunda — aynı yazı tipi ve satır
+ * yüksekliği (ikisi de `.viewer-edit`ten), aynı dolgu (0 10px), sıfır kenarlık,
+ * sarmasız. Birinde 1px fark imleci renkli harflerin arasına düşürür.
+ *
+ * Katman ÖNCE, yazı alanı SONRA ve `position: relative`: ikisi konumlu olunca
+ * sonraki üstte çiziliyor; imleç ve seçim harflerin üstünde kalıyor. */
+.viewer-hl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  color: var(--text);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.viewer-editor.colored,
+.viewer-editor.colored:focus {
+  position: relative;
+  color: transparent;
+}
+
+/* Seçim: harfler saydam olduğu için varsayılan seçim içi boş bir dikdörtgen
+   gösterirdi. Yalnızca zemin boyanıyor, renkli harfler altından görünüyor
+   (komut satırındakiyle aynı oran). */
+.viewer-editor.colored::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: transparent;
+}
+
 .viewer-body {
   flex: 1;
   min-height: 0;
@@ -1207,7 +1258,10 @@ button.hit-head:hover {
   min-width: 100%;
   font-family: var(--mono-font);
   font-size: 0.8846rem;
+  /* Düzenlemeyle aynı tam piksel (bkz. `.viewer-edit`): kalem açılıp
+     kapanınca satırlar yerinden oynamasın. */
   line-height: 1.55;
+  line-height: round(1.55em, 1px);
   /* Kod kopyalanabilmeli; numaralar `.viewer-no`da seçim dışı. Gövdenin
      "seçilmesin" kuralı burayı da kapatıyordu (bkz. `.diff-text`). */
   -webkit-user-select: text;
@@ -1253,6 +1307,129 @@ button.hit-head:hover {
   color: inherit;
   border-radius: 2px;
   box-shadow: 0 0 0 1px color-mix(in srgb, #e3b341 70%, transparent);
+}
+
+/* Sözdizimi renkleri (bkz. `lib/syntaxScopes.ts`).
+ *
+ * Renkler temanın geldiği editör temasından (`themes.ts` › `SYNTAX`) ve
+ * görüntüleyicinin zeminine göre okunur hâle getirilmiş: `--syn-*`
+ * değişkenleri tema uygulanırken yazılıyor. Tema değişince belge yeniden
+ * renklendirilmiyor, yalnızca bu değişkenler. */
+.syn-comment {
+  color: var(--syn-comment);
+}
+
+.syn-keyword {
+  color: var(--syn-keyword);
+}
+
+.syn-control {
+  color: var(--syn-control);
+}
+
+.syn-string {
+  color: var(--syn-string);
+}
+
+.syn-number {
+  color: var(--syn-number);
+}
+
+.syn-constant {
+  color: var(--syn-constant);
+}
+
+.syn-function {
+  color: var(--syn-function);
+}
+
+.syn-type {
+  color: var(--syn-type);
+}
+
+.syn-variable {
+  color: var(--syn-variable);
+}
+
+.syn-property {
+  color: var(--syn-property);
+}
+
+.syn-param {
+  color: var(--syn-param);
+}
+
+.syn-tag {
+  color: var(--syn-tag);
+}
+
+.syn-attr {
+  color: var(--syn-attr);
+}
+
+.syn-regexp {
+  color: var(--syn-regexp);
+}
+
+.syn-escape {
+  color: var(--syn-escape);
+}
+
+.syn-decorator {
+  color: var(--syn-decorator);
+}
+
+.syn-operator {
+  color: var(--syn-operator);
+}
+
+.syn-punct {
+  color: var(--syn-punct);
+}
+
+.syn-heading {
+  color: var(--syn-heading);
+}
+
+.syn-link {
+  color: var(--syn-link);
+  text-decoration: underline;
+}
+
+.syn-code {
+  color: var(--syn-code);
+}
+
+.syn-quote {
+  color: var(--syn-quote);
+}
+
+.syn-inserted {
+  color: var(--syn-inserted);
+}
+
+.syn-deleted {
+  color: var(--syn-deleted);
+}
+
+.syn-changed {
+  color: var(--syn-changed);
+}
+
+.syn-invalid {
+  color: var(--syn-invalid);
+}
+
+/* Kalınlık ve eğiklik YALNIZCA okurken. Düzenlerken renkli katman saydam
+   yazı alanının altında harf harf hizalı durmalı; yazı tipinin kalın ya da
+   eğik kesimi farklı genişlikteyse imleç harflerden kayardı. */
+.viewer-code .syn-heading,
+.viewer-code .syn-strong {
+  font-weight: 600;
+}
+
+.viewer-code .syn-emphasis {
+  font-style: italic;
 }
 
 /* ------------------------------------------------------- gorsel onizlemesi

@@ -1689,6 +1689,71 @@ tarayıcı düzeneği (sahte IPC) ve ekran dışı/görünür WKWebView aracı
 (`callAsyncJavaScript`; görünmez pencerede zamanlayıcılar kısılıyor, ölçüm
 için pencere ekranda olmalı).
 
+---
+
+### 1.29 Dosya görüntüleyicisinde sözdizimi renklendirmesi
+
+**İstek:** "Dosyaları açtığımda kodları renkli göstermek mümkün mü? VS Code'da,
+IntelliJ'de, WebStorm'da nasıl oluyorsa öyle bir şey istiyorum." Önceki karar
+"renklendirici yok"tu (onlarca gramer, yüzlerce KB; §1.23, §2.7).
+
+**Gramerler VS Code'un kendileri** (Shiki 4.4.3: `@shikijs/primitive`,
+`@shikijs/engine-javascript`, `@shikijs/langs`). Hafif bir sözcükçü (yorum,
+dize, sayı, anahtar sözcük) istenen "IDE gibi"yi vermezdi: işlev, tür, özellik,
+parametre, etiket, öznitelik ayrımları gramerden geliyor. ~80 dil, dosya
+adından ([`syntaxLanguages.ts`](src/lib/syntaxLanguages.ts)); tanınmayan dosya
+düz kalıyor.
+
+**Renk temadan, belirteç sınıf.** Shiki'ye verilen "tema" renk değil ~30
+sınıfı kodluyor ([`syntaxScopes.ts`](src/lib/syntaxScopes.ts), kurallar
+Dark+'tan). Renk `--syn-*` değişkenlerinde: her uygulama teması geldiği editör
+temasının paletini taşıyor (`themes.ts` › `SYNTAX`: GitHub Koyu/Açık, One Dark,
+Solarized, Dark+) ve görüntüleyicinin zeminine göre `ensureContrast`tan geçiyor.
+Tema değişince belge yeniden renklendirilmiyor.
+
+**Ayrı iş parçacığında** ([`syntax.worker.ts`](src/lib/syntax.worker.ts)).
+ÖLÇÜLDÜ (Node 24): JS düzenli ifade motorunda `DiffWindow.tsx` (1.570 satır)
+600 ms; ilk açılışta, ifadeler derlenirken tek satır 175 ms. Oniguruma'nın WASM
+motoru altı kat hızlı ama CSP (`script-src 'self'`) WASM derlemeyi kapatıyor;
+CSP gevşetilmedi, iş ana pencereden çıktı. Her satırın bitiş durumu saklanıyor
+([`syntaxDocument.ts`](src/lib/syntaxDocument.ts)): düzenlemede yalnızca
+değişen satırdan, durum eskisine kavuşana kadar. Gramerler ayrı parçalar,
+yalnızca o dilde dosya açılınca yükleniyor (TS 181 KB, C++ 797 KB).
+
+**Düzenlerken** yazı alanının harfleri saydam, altında aynı metnin renkli
+katmanı (`SyntaxText.tsx` › `CodeLayer`) — komut satırının yolu. Yazılan
+satırın renkleri iş parçacığını beklemiyor (`carryTokens`); geciken yanıt
+düzenleme kaydından geçip yerine oturuyor (`mapLine`). Katman 64 satırlık
+dilimler, her dilim AYRI blok. ÖLÇÜLDÜ (geliştirme yapısı, harften ekrana):
+tek `pre`de 1.570 satırda 46 ms, 7.940 satırda 120 ms; dilimli ve bloklu 20 ve
+34 ms (renksiz yazı alanı 15 ve 23).
+
+**Yolda bulunan eski hata: düzenlerken son satırlar görünmüyordu.** 7.940
+satırlık dosyada son 11 satırın metni yoktu, numaraları vardı. `line-height:
+1.55` 12.38px yazıda 19.1958px; tarayıcı satır kutularını 19.2031'e, yazı
+alanının boyunu veren `1lh`yi 19.1719'a yuvarlıyor ve yazı alanı içeriğinden
+229px kısa kalıyordu. `.viewer-edit` ve `.viewer-code` artık
+`round(1.55em, 1px)` (emsali `.diff-text`).
+
+**Satırın süre sınırı 500 ms, dolarsa bir kez daha.** 100 ms'lik sınırla soğuk
+motorda ilk dosyanın ilk satırı yarıda kesiliyordu: süreye ifadelerin
+derlenmesi de giriyor (testte yakalandı).
+
+**Doğrulama.** [`syntax.test.ts`](src/lib/syntax.test.ts): kapsamdan sınıfa
+(TS, JSON, YAML, CSS, Markdown, PowerShell, Python), her gramerin JS motorunda
+yüklenmesi, 400 rastgele düzenlemeden sonra artımlı = baştan renklendirme,
+geciken yanıtın kayması, renk taşıma. `syntaxViewer.test.tsx`: okuma ve
+düzenlemede sınıflar, katmanın yazı alanıyla aynı metni çizmesi (dilim
+sınırları dahil), tanınmayan dosya, renklendiricinin hiç olmaması.
+`surfaceContrast.test.ts` › "kod renkleri": beş temada her tür ≥ 4.5, temel
+türler ayrık. Üç mutasyonun üçü yakalandı (ilk turda "satır silinince alttaki
+satırı kirlet" kaçtı: rastgele düzenlemeler bütün bir satırı neredeyse hiç
+silmiyordu; hedefli test ve üretece satır silme eklendi). Gözle (ayrı veri
+klasörlü örnek, CDP 9334): beş tema; yazı alanının harfleri kırmızıya boyanıp
+katmanın üstüne bindirildi, 7.940 satırın sonuna kadar örtüşüyor. Üretim yapısı uygulamanın CSP başlığıyla sunulup iş
+parçacığı Chromium'da koşturuldu: ihlal yok, TS 0,3 sn, C++ 1,4 sn.
+
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.
@@ -1906,9 +1971,11 @@ Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 - **Geri alma geçmişi dosya başına ve geçişte siliniyor**; IntelliJ belge
   başına tutuyor.
 - Yazma Windows'ta (WebView2) denenmedi; hizalama Chromium'da ölçüldü.
-- **Sözdizimi renklendirmesi yok** — IntelliJ'de var. Hafif bir sözcükçü
-  (yorum, dize, sayı, anahtar sözcük; renkler terminal paletinden) en makul yol;
-  `FileViewer`'daki "renklendirici yok" kararıyla birlikte tartışılmalı.
+- **Fark penceresinde sözdizimi renklendirmesi yok** — IntelliJ'de var. Dosya
+  görüntüleyicisinde artık var (§1.29); renklendirici (`lib/syntax.ts`) fark
+  penceresine de bağlanabilir ama iki taraf iki ayrı belge ve bölme satırları
+  sanal çiziliyor, renkli harfler fark zeminlerinin ve sözcük parçalarının
+  üstüne binecek. Ayrı iş.
 - **"Align Changes in Side-by-Side Diff" yok** (dişli menüsünde): karşılıklı
   satırları boş dolguyla hizalayan kip. Satır modeli (`buildRows`) dolgu
   satırını taşıyabilecek biçimde, eklenmesi orada.
@@ -1940,6 +2007,16 @@ Bkz. §1.25.
 - Görüntüleyici dosyanın ilk 512 KB'ını gösteriyor, arama 2 MB'a kadar
   bakıyor: aradaki eşleşmede görüntüleyici "satır gösterilen kısmın dışında"
   diyor; o satıra gitmenin yolu yok.
+- **Sözdizimi renklendirmesinin açık uçları** (§1.29):
+  - Büyük dosyayı OKURKEN her belirteç paketi tablonun değişen dilimlerini
+    yeniden çiziyor. Geliştirme yapısında 7.940 satırlık CSS'te 170-200 ms'lik
+    2-3 ek uzun görev (renksiz açılış zaten 2 × 300 ms); 3.000 satırda bir ek
+    ~100 ms. Üretim yapısında ölçülmedi (React'ın geliştirme kipi öğe başına
+    ek iş yapıyor, profilde ~290 ms).
+  - Markdown'daki kod blokları gömülü dili ancak o dil iş parçacığında daha
+    önce yüklendiyse boyuyor (gömülü diller tembel, ayrıca yüklenmiyor).
+  - macOS'ta (WKWebView) denenmedi. JS motoru `v` bayrağı yoksa ES2018'e
+    düşüyor (`target: "auto"`), modül iş parçacığı Safari 15+ istiyor.
 
 ### 2.9 Windows'ta dışarıdan dosya bırakmak — DENENMEDİ
 
