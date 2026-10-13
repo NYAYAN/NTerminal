@@ -13,6 +13,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * değer. İlk sürüm varsayılanla karşılaştırıyordu ve kullanıcının aylar önce
  * kurduğu her ayar "değişmiş" sayıldığı için neredeyse her satırda bir düğme
  * duruyordu — düğme hiçbir şey söylemiyordu. Bu testler o ayrımı bağlıyor.
+ *
+ * ## Süre sınırı neden 30 sn
+ *
+ * İlk test iki tam takım aynı anda koşarken (138 sn'lik ağır tur, makine %100
+ * dolu) iki takımda da "Test timed out in 5000ms" ile düştü: 5368 ve 6539
+ * ms. Sonraki testler 0,1–2,5 sn sürdü. ÖLÇÜLDÜ (2026-10-13, 16 mantıksal
+ * çekirdek; adım adım duvar saati ve sürecin işlemci süresi test içinden):
+ *
+ * - Süre işlemci işi: dosyadaki ilk çizim ve Görünüm bölümüne ilk geçiş
+ *   soğuk. Sakin makinede ilk test 174–175 ms (çizim 90–91, bölüm 77–79 ms);
+ *   ikinci testin tamamı 58–76 ms. İki tam takım + işlemci yükünde (143 ve
+ *   154 sn'lik turlar) ilk test 2937–5140 ms; çizim ve bölüm geçişi 2801–4707
+ *   ms duvar / 594–828 ms işlemci: süreç çekirdek bekliyor. 5140 ms'lik koşu
+ *   eski sınırla yine düşerdi.
+ * - Tek gerçek bekleme `waitFor`. Bölüm tıklamayla eşzamanlı çizildiği için
+ *   ilk denetimde geçiyor (ölçülen 5 koşunun 5'inde tek denetim); ardındaki
+ *   sıfır gecikmeli zamanlayıcıyla sakinken 3–4 ms, aynı yükte 6–207 ms.
+ *
+ * Sınır, ölçülen en kötü sürenin (6539 ms) ~4,5 katı; takılıp kalan bir
+ * çizim yine yakalanır.
  */
 
 vi.mock("../lib/ipc", () => ({
@@ -59,7 +79,8 @@ afterEach(() => {
   useStore.setState({ ui: { ...ui, settingsOpen: false } });
 });
 
-describe("ayar değişikliğini geri alma", () => {
+// Süre sınırının gerekçesi başlıkta: "Süre sınırı neden 30 sn".
+describe("ayar değişikliğini geri alma", { timeout: 30_000 }, () => {
   it("açılışta hiçbir satırda geri al yok — varsayılandan farklı olsa bile", async () => {
     // Kullanıcının ÖNCEDEN kurduğu bir değer: fabrika varsayılanı 14, kayıtlı
     // değer 22. Pencere bunu "değişiklik" saymamalı.
