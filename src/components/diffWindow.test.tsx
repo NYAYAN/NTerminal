@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it as vitestIt, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   setTitle: vi.fn(async (_title: string) => {}),
@@ -48,7 +48,92 @@ import { DiffWindow } from "./DiffWindow";
  * `»` dosyaya YAZIYOR. En önemli test "dosya arada değiştiyse yazmıyor"
  * zincirinin arayüz yarısı: Rust `changed` dönünce kullanıcı bunu duymalı ve
  * fark tazelenmeli (Rust yarısı `git_tests.rs`te).
+ *
+ * ## Zaman aşımı zinciri: süre sınırı ve sarılı `it`
+ *
+ * KIRILGANDI (2026-10-13 ölçüldü): iki tam takım + işlemci yükünde (154 sn'lik
+ * tur, makine %100, boş bellek 0,84 GB) "görünüm › eş zamanlı kaydırma"nın bir
+ * testi 5 sn sınırına takıldı (iki takımda 5280 ve 5080 ms) ve ardından
+ * dosyanın kalan testleri arka arkaya düştü: 61 testin 37'si ve 36'sı
+ * ("Unable to fire a "click" event", "Unable to find an element"). İki ayrı
+ * sorun:
+ *
+ * - Zincir: vitest zaman aşımında testin sözünü bırakıp söküme ve sonraki
+ *   teste geçiyor ama testi durdurmuyor. Yarım kalan `act` sökümün ve sonraki
+ *   testin `act`leriyle çakışıyor ("You seem to have overlapping act() calls")
+ *   ve React'in act kuyruğu kalıcı olarak bozuluyor; sonraki çizimler hiç
+ *   gelmiyor. Kasıtlı üretildi: bir teste küçük bir sınır verince ardından
+ *   gelen testlerin neredeyse hepsi düştü (kaydırmada 61'in 37'si, canlı
+ *   tazelemede 24'ü, sahte saatli yazmada 20'si; her biri 3/3).
+ * - Tetik: süre çoğunlukla işlemci işi. "Sağı yatay kaydırmak" sakinken
+ *   446–485 ms; bunun 274–298 ms'si `settle`deki 24 gerçek `setTimeout(0)`
+ *   (Windows'ta her biri ~12 ms). İki takım + işlemci yükünde (118 sn'lik tur)
+ *   4549–4743 ms: bekleme 856–885 ms, gerisi çekirdek bekleyen işlemci işi
+ *   (süreç 359–469 ms işlemci). Böyle turlarda (118 ve 143 sn) öteki testler de
+ *   sınıra yaklaşıyor: öteki kaydırma testleri 2,3–4,1 sn, "yok sayılan
+ *   farklar" 3,0–4,5 sn, "damga değişmediyse" 2,8–3,5 sn.
+ *
+ * Bu yüzden bütün testler `it` yerine aşağıdaki sarmalayıcıdan geçiyor. Süre
+ * sınırı 30 sn: ölçülen en kötünün (5280 ms'de kesildi) ~5,7 katı. Testin
+ * sözü izleniyor: test bırakıldıysa söküm önce onun bitmesini bekliyor,
+ * bırakılan testin bir sonraki adımı (`adim`, `tick`) hata atıp onu
+ * bitiriyor. Hiçbir `act` sökümle ya da sonraki testle çakışmıyor; aynı
+ * deneyde yalnızca sınırı küçültülen test düşüyor.
  */
+
+/** Süre sınırının gerekçesi başlıkta: "Zaman aşımı zinciri". */
+const SURE_SINIRI = 30_000;
+/** Sahte saat kurulsa da gerçek: bırakılan testi beklemenin üst sınırı için. */
+const gercekSetTimeout = globalThis.setTimeout;
+
+type TestFn = () => Promise<void>;
+/** Koşan testin sözü; vitest testi bırakırsa `bitti` söküme kadar false kalır. */
+let suren: { soz: Promise<void>; bitti: boolean } | null = null;
+/** Bırakılan test yeni bir adıma (`act`) girmesin. */
+let durdur = false;
+
+/** vitest'in `it`i; süre sınırı `SURE_SINIRI` ve testin sözü izleniyor. */
+function it(ad: string, a: TestFn | { timeout?: number }, b?: TestFn) {
+  const [ayar, fn] = typeof a === "function" ? [{}, a] : [a, b!];
+  vitestIt(ad, { timeout: SURE_SINIRI, ...ayar }, () => {
+    const kayit = { soz: Promise.resolve(), bitti: false };
+    kayit.soz = (async () => {
+      try {
+        await fn();
+      } finally {
+        kayit.bitti = true;
+      }
+    })();
+    suren = kayit;
+    return kayit.soz;
+  });
+}
+
+/**
+ * Söküm bundan başlıyor. Test zaman aşımıyla bırakıldıysa (sözü sürüyorsa)
+ * bitmesini bekliyor: yarım kalan adımı bitiyor, bir sonraki adımı `durdur`a
+ * çarpıp hata atıyor. En çok 8 sn; takılıp kalmış bir testte söküm yine
+ * koşuyor (eski davranış).
+ */
+async function birakilaniBekle() {
+  const kayit = suren;
+  suren = null;
+  if (!kayit || kayit.bitti) return;
+  durdur = true;
+  try {
+    await Promise.race([kayit.soz.catch(() => {}), new Promise((r) => gercekSetTimeout(r, 8_000))]);
+  } finally {
+    durdur = false;
+  }
+}
+
+/** Testin bir `act` adımı. Bırakılan test buradan geçemiyor. */
+async function adim(fn: () => unknown) {
+  if (durdur) throw new Error("zaman aşımına düşen test durduruldu");
+  await act(async () => {
+    await fn();
+  });
+}
 
 const ROOT = "/depo";
 
@@ -132,7 +217,8 @@ beforeEach(() => {
   vi.spyOn(api, "diffWindowReady").mockResolvedValue(null);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await birakilaniBekle();
   cleanup();
   vi.restoreAllMocks();
   h.setTitle.mockClear();
@@ -152,7 +238,8 @@ function fakeClock() {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await birakilaniBekle();
     cleanup();
     vi.useRealTimers();
   });
@@ -160,11 +247,11 @@ function fakeClock() {
 
 /**
  * Saat `ms` ilerlesin: sahte saatte (`fakeClock`) vadesi gelen zamanlayıcılar
- * ateşleniyor, gerçek saatte bekleniyor. Ayrı bir `act`: React adımın sonunda
- * çiziyor.
+ * ateşleniyor, gerçek saatte bekleniyor. Ayrı bir `act` (`adim`): React adımın
+ * sonunda çiziyor.
  */
 async function tick(ms: number) {
-  await act(async () => {
+  await adim(async () => {
     if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(ms);
     else await new Promise((r) => setTimeout(r, ms));
   });
@@ -311,7 +398,7 @@ describe("gezinme", () => {
  */
 describe("tek fark penceresi", () => {
   const send = async (target: { root: string; path: string }) => {
-    await act(async () => h.listeners.get(DIFF_TARGET_EVENT)?.({ payload: diffQuery(target) }));
+    await adim(() => h.listeners.get(DIFF_TARGET_EVENT)?.({ payload: diffQuery(target) }));
     await settle();
   };
 
@@ -344,9 +431,7 @@ describe("tek fark penceresi", () => {
 
     // Bekleyen bir "ilk farka git" de kalmadı: dosya değişip fark tazelenince imleç yerinde.
     disk = "a\nB\nc\nd\nE\nf\n";
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 700));
-    });
+    await tick(700);
     await settle();
     expect(vi.mocked(api.gitDiffSides).mock.calls.length).toBeGreaterThan(loads);
     expect(caretRight(container)).toBe("5");
@@ -365,7 +450,7 @@ describe("tek fark penceresi", () => {
     await send({ root: "/baska", path: "a.ts" });
     // Yol aynı (`a.ts`) ama depo başka: yüklenirken eski deponun farkı gösterilmiyor.
     expect(container.querySelector(".dw-title"), "eski deponun farkı").toBe(null);
-    await act(async () => release());
+    await adim(() => release());
     await settle();
     expect(vi.mocked(api.gitInfo)).toHaveBeenLastCalledWith("/baska");
     expect(h.setTitle).toHaveBeenLastCalledWith("a.ts (/baska)");
@@ -529,7 +614,7 @@ describe("görünüm", () => {
     await settle();
     expect(collapseBtn(container).getAttribute("aria-pressed")).toBe("false");
 
-    await act(async () =>
+    await adim(() =>
       h.listeners.get(DIFF_TARGET_EVENT)?.({ payload: diffQuery({ root: ROOT, path: "uzun.ts" }) }),
     );
     await settle();
@@ -845,10 +930,8 @@ describe("dişli menüsündeki seçenekler", () => {
  * düzenleyicinin yanında duruyor ve ona tıklanmadan bakılıyor.
  */
 describe("canlı tazeleme", () => {
-  const wait = (ms: number) =>
-    act(async () => {
-      await new Promise((r) => setTimeout(r, ms));
-    });
+  /** Gerçek saat: yoklama gerçekten koşmalı. `tick` bırakılan testi de durduruyor. */
+  const wait = (ms: number) => tick(ms);
 
   it("dosya diskte değişince pencere kendiliğinden yeni farkı gösteriyor", async () => {
     let disk = "a\nB\nc\nd\nE\n";
@@ -1074,7 +1157,7 @@ describe("sağ tarafta yazmak", () => {
     await settle();
     await startEditing(container);
     type(container, "a\nB\nc\nd\nE\n1\n");
-    await act(async () => h.closeRequested?.());
+    await adim(() => h.closeRequested?.());
     expect(write).toHaveBeenCalledWith(ROOT, "a.ts", "a\nB\nc\nd\nE\n", "a\nB\nc\nd\nE\n1\n");
 
     type(container, "a\nB\nc\nd\nE\n12\n");
@@ -1300,10 +1383,8 @@ describe("sağ tarafta yazmak", () => {
  * okunuyor. Damga okunamıyorsa (eski ikili) eski yol: her seferinde metin.
  */
 describe("canlı yoklama damgayla", () => {
-  const wait = (ms: number) =>
-    act(async () => {
-      await new Promise((r) => setTimeout(r, ms));
-    });
+  /** Gerçek saat: yoklama gerçekten koşmalı. `tick` bırakılan testi de durduruyor. */
+  const wait = (ms: number) => tick(ms);
 
   it("damga değişmediyse metin yeniden okunmuyor, değişince okunuyor", async () => {
     let stamp = { size: 10, modifiedMs: 1000 };
