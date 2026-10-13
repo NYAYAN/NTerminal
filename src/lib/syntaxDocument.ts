@@ -1,4 +1,10 @@
-import { EncodedTokenMetadata, INITIAL, type IGrammar, type StateStack } from "@shikijs/primitive/textmate";
+import {
+  EncodedTokenMetadata,
+  INITIAL,
+  type IGrammar,
+  type ITokenizeLineResult2,
+  type StateStack,
+} from "@shikijs/primitive/textmate";
 
 /**
  * Bir dosyanın satır satır renklendirilmesi — VS Code'un yaptığı gibi.
@@ -31,15 +37,28 @@ export interface TokenChunk {
 export const MAX_LINE = 10_000;
 
 /**
- * Tek satıra ayrılan en uzun süre (ms; VS Code'unki de 500). Aşılınca satırın
- * kalanı düz kalıyor.
+ * Bir satırın bir denemesine ayrılan en uzun süre (ms; VS Code'unki de 500).
+ * Son deneme de dolarsa satırın kalanı düz kalıyor.
  *
  * Süreye gramerin düzenli ifadelerinin DERLENMESİ de giriyor ve o, dilin ilk
  * satırlarında oluyor. ÖLÇÜLDÜ: TSX'in ilk satırı soğuk motorda 175 ms; 100
- * ms'lik sınırla ilk dosyanın ilk satırı yarıda kesiliyordu. Bu yüzden süre
- * dolan satır bir kez daha deneniyor — derlenen ifadeler artık hazır.
+ * ms'lik sınırla ilk dosyanın ilk satırı yarıda kesiliyordu. Derlenen
+ * ifadeler kalıcı: süre dolan satır yeniden deneniyor (`LINE_ATTEMPTS`).
  */
-const LINE_TIME_LIMIT = 500;
+export const LINE_TIME_LIMIT = 500;
+
+/**
+ * Süresi dolan satır, her deneme bir öncekinden İLERİ gittikçe (`advanced`)
+ * yeniden deneniyor, en çok bu kadar kez. İlerlemeyen deneme ağır bir satır
+ * demek: bırakılıyor, maliyeti iki deneme.
+ *
+ * Tek yeniden deneme yük altında yetmiyordu. ÖLÇÜLDÜ (tam test takımı
+ * paralel koşarken, 2026-10-13): TypeScript'in soğuk ilk satırı ilk denemede
+ * üç koşunun üçünde kesildi (535–544 ms); yeniden deneme 61, 494 ve 504 ms,
+ * sonuncusunda yine kesildi. Kesilen satırın kalanı düz: test `return`den
+ * sonrasını (`fetch`, `"x"`, `42`) renksiz bularak düştü.
+ */
+export const LINE_ATTEMPTS = 8;
 
 export class SyntaxDocument {
   private lines: string[];
@@ -56,6 +75,12 @@ export class SyntaxDocument {
     /** Renk kimliği → sınıf (`syntaxScopes.classTable`). */
     private readonly classOf: Uint8Array,
     lines: readonly string[],
+    /**
+     * Bir denemenin süre sınırı (ms); 0: sınırsız (vscode-textmate'te de).
+     * Testler kaldırıyor: renk sınıfını sınayan bir test makinenin yüküne
+     * bağlı kalmasın (bkz. `syntax.test.ts`).
+     */
+    private readonly lineTimeLimit = LINE_TIME_LIMIT,
   ) {
     this.lines = lines.slice();
     this.states = new Array(lines.length).fill(undefined);
@@ -139,8 +164,14 @@ export class SyntaxDocument {
 
   private tokenize(line: string, start: StateStack): { tokens: LineTokens; end: StateStack } {
     if (line.length > MAX_LINE) return { tokens: [], end: start };
-    let result = this.grammar.tokenizeLine2(line, start, LINE_TIME_LIMIT);
-    if (result.stoppedEarly) result = this.grammar.tokenizeLine2(line, start, LINE_TIME_LIMIT);
+    let result = this.grammar.tokenizeLine2(line, start, this.lineTimeLimit);
+    for (let n = 1; result.stoppedEarly && n < LINE_ATTEMPTS; n++) {
+      const next = this.grammar.tokenizeLine2(line, start, this.lineTimeLimit);
+      // Yerinde sayan ya da geri kalan (makine o an daha yüklü) deneme: en
+      // ileri gideni tut, bırak.
+      if (next.stoppedEarly && !advanced(result, next)) break;
+      result = next;
+    }
     const raw = result.tokens;
     const out: number[] = [];
     let last = -1;
@@ -157,6 +188,25 @@ export class SyntaxDocument {
     // durumla sonraki satırları boyamak, bir satırı düz bırakmaktan kötü.
     return { tokens, end: result.stoppedEarly ? start : result.ruleStack };
   }
+}
+
+/**
+ * Süresi dolan `next`, `prev`den ileri gitti mi? Satırın aynı durumdan
+ * taranışı belirlenimci: ikisi aynı belirteçlerle başlıyor, fark kesildikleri
+ * yerde. İleri: son belirteç daha sonra başlıyor, ya da aynı yerde başlıyor
+ * ama kendisi ya da durum değişmiş — tarama birçok adımda yeni belirteç
+ * açmadan kural değiştiriyor. ÖLÇÜLDÜ: `syntax.test.ts`teki TypeScript
+ * satırının 30 tarama adımının 12'sinde son belirteç yerinde kalıyor,
+ * bunların 10'unda durum değişiyor; yalnızca belirtece bakmak o denemeleri
+ * ilerlemiyor sayardı.
+ */
+function advanced(prev: ITokenizeLineResult2, next: ITokenizeLineResult2): boolean {
+  const a = prev.tokens;
+  const b = next.tokens;
+  const from = a[a.length - 2];
+  const to = b[b.length - 2];
+  if (to !== from) return to > from;
+  return b[b.length - 1] !== a[a.length - 1] || !next.ruleStack.equals(prev.ruleStack);
 }
 
 /** `arr[from, to)` yerine `items`; yeni dizi (büyük yapıştırmada `...` yığını taşırırdı). */

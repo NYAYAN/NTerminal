@@ -58,6 +58,8 @@ interface Engine {
 export function createSyntaxService(
   post: (reply: SyntaxReply) => void,
   schedule: (run: () => void) => void = (run) => setTimeout(run, 0),
+  /** Satırın süre sınırı (bkz. `SyntaxDocument`); verilmezse uygulamanınki. */
+  lineTimeLimit?: number,
 ): (request: SyntaxRequest) => void {
   const docs = new Map<number, Entry>();
   const grammars = new Map<string, Promise<IGrammar>>();
@@ -138,7 +140,7 @@ export function createSyntaxService(
         void Promise.all([getEngine(), getGrammar(request.lang)]).then(
           ([{ classOf }, grammar]) => {
             if (docs.get(request.doc) !== entry) return;
-            entry.doc = new SyntaxDocument(grammar, classOf, entry.lines);
+            entry.doc = new SyntaxDocument(grammar, classOf, entry.lines, lineTimeLimit);
             entry.lines = [];
             wake();
           },

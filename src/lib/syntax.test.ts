@@ -1,9 +1,10 @@
 import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
 import { createShikiPrimitiveAsync } from "@shikijs/primitive";
+import { INITIAL, type IGrammar, type StateStack } from "@shikijs/primitive/textmate";
 import { describe, expect, it } from "vitest";
 
 import { carryTokens, SyntaxSession, type SyntaxHost } from "./syntax";
-import { SyntaxDocument, type LineTokens } from "./syntaxDocument";
+import { LINE_ATTEMPTS, LINE_TIME_LIMIT, SyntaxDocument, type LineTokens } from "./syntaxDocument";
 import { GRAMMARS } from "./syntaxGrammars";
 import { syntaxLanguage } from "./syntaxLanguages";
 import { CLASSIFIER_THEME, classTable, SYNTAX_CLASSES } from "./syntaxScopes";
@@ -26,6 +27,14 @@ const shiki = createShikiPrimitiveAsync({
   langs: [],
   engine: createJavaScriptRegexEngine({ forgiving: true }),
 });
+
+/**
+ * Satırın süre sınırı YOK (vscode-textmate'te 0). Uygulamanın sınırı gerçek
+ * saate bakıyor: makine yüklüyken satırı yarıda bırakıp buradaki sınıf
+ * beklentilerini düşürüyordu (bkz. "TypeScript: VS Code'un ayrımları").
+ * Sınırın kendisi "satırın süre sınırı"nda, gerçek saat olmadan sınanıyor.
+ */
+const NO_LIMIT = 0;
 
 async function grammar(lang: string) {
   const s = await shiki;
@@ -59,7 +68,7 @@ function classified(line: string, tokens: LineTokens): [string, string][] {
 async function classify(lang: string, source: string): Promise<[string, string][][]> {
   const { grammar: g, classOf } = await grammar(lang);
   const lines = source.split("\n");
-  const doc = new SyntaxDocument(g, classOf, lines);
+  const doc = new SyntaxDocument(g, classOf, lines, NO_LIMIT);
   return tokenizeAll(doc).map((t, i) => classified(lines[i], t));
 }
 
@@ -92,6 +101,17 @@ describe("dosya adından dil", () => {
 
 describe("kapsamdan sınıfa", () => {
   it("TypeScript: VS Code'un ayrımları", async () => {
+    // KIRILGANDI (2026-10-13 ölçüldü): tam takımda 3 koşunun 1'inde düştü,
+    // gelen dizide 13 yerine 10 öğe vardı: `return`den sonrası (`fetch`,
+    // `"x"`, `42`) düzdü. Sebep satırın süre sınırı (500 ms): bu, dosyada
+    // renklendirilen İLK satır ve süreye ifadelerin ilk derlenmesi giriyor.
+    // Tek başına 262–421 ms (6 koşu). Ölçümlü 3 tam takım koşusunun üçünde de
+    // ilk deneme kesildi (535–544 ms); tek yeniden deneme birinde 504 ms'de
+    // yine kesildi (satırın sonuna denk geldi, geçti). Saat sahte yapılıp iki
+    // deneme 30 tarama adımının 15'incisinde kesilince düşüşteki fark birebir
+    // çıktı; 24'üncü adımdan önce kesilen her deneme bu testi düşürüyor.
+    // Sınıflar artık süre sınırı olmadan (`NO_LIMIT`); sınırın davranışı
+    // "satırın süre sınırı"nda.
     const [decl, call, comment] = await classify(
       "typescript",
       ['export function load(path: string): Promise<number> { return fetch("x", 42); }', "load(p);", "// açıklama"].join(
@@ -165,9 +185,11 @@ describe("kapsamdan sınıfa", () => {
   it("her gramer yükleniyor ve bir satırı renklendiriyor", { timeout: 120_000 }, async () => {
     // JavaScript'in düzenli ifade motoru Oniguruma'nın her kalıbını
     // çeviremiyor; çeviremediği bir dil hatayla değil düz metinle sonuçlanmalı.
+    // Süre sınırı yok: satır yarıda kesilirse kalanının kalıpları hiç
+    // denenmezdi (C++'ın ilk satırı tam takımda iki denemede de kesiliyordu).
     for (const lang of Object.keys(GRAMMARS)) {
       const { grammar: g, classOf } = await grammar(lang);
-      const doc = new SyntaxDocument(g, classOf, ["abc = 1 # x // y", ""]);
+      const doc = new SyntaxDocument(g, classOf, ["abc = 1 # x // y", ""], NO_LIMIT);
       expect(() => tokenizeAll(doc), lang).not.toThrow();
     }
   });
@@ -212,7 +234,7 @@ describe("artımlı renklendirme", () => {
     const { grammar: g, classOf } = await grammar("typescript");
     const rnd = random(7);
     let text = SOURCE.join("\n");
-    const doc = new SyntaxDocument(g, classOf, text.split("\n"));
+    const doc = new SyntaxDocument(g, classOf, text.split("\n"), NO_LIMIT);
     let tokens = tokenizeAll(doc);
 
     for (let n = 0; n < 400; n++) {
@@ -251,14 +273,14 @@ describe("artımlı renklendirme", () => {
       text = next;
     }
 
-    const fresh = tokenizeAll(new SyntaxDocument(g, classOf, text.split("\n")));
+    const fresh = tokenizeAll(new SyntaxDocument(g, classOf, text.split("\n"), NO_LIMIT));
     expect(tokens).toEqual(fresh);
   });
 
   it("satır silinince alttaki satır, kendisi değişmese de yeniden renkleniyor", async () => {
     // Silinen satır bir yorum açıyordu: alttaki satır artık yorumun içinde değil.
     const { grammar: g, classOf } = await grammar("typescript");
-    const doc = new SyntaxDocument(g, classOf, ["/* açık", "const a = 1;"]);
+    const doc = new SyntaxDocument(g, classOf, ["/* açık", "const a = 1;"], NO_LIMIT);
     const before = tokenizeAll(doc);
     expect(classified("const a = 1;", before[1])).toEqual([["const a = 1;", "comment"]]);
     doc.replace(0, 1, []);
@@ -274,21 +296,132 @@ describe("artımlı renklendirme", () => {
   it("dilim süresi dolunca iş kaldığı yerden sürüyor", async () => {
     const { grammar: g, classOf } = await grammar("typescript");
     const lines = Array.from({ length: 300 }, (_, i) => `const v${i} = "${i}"; // ${i}`);
-    const doc = new SyntaxDocument(g, classOf, lines);
+    const doc = new SyntaxDocument(g, classOf, lines, NO_LIMIT);
     // Süresi geçmiş bir dilim yine en az bir satır ilerliyor: iş hiç takılmıyor.
     const first = doc.work(0);
     expect(first).toHaveLength(1);
     expect(first[0]).toMatchObject({ start: 0 });
     expect(first[0].tokens).toHaveLength(1);
     const rest = tokenizeAll(doc);
-    expect(rest.slice(1)).toEqual(tokenizeAll(new SyntaxDocument(g, classOf, lines)).slice(1));
+    expect(rest.slice(1)).toEqual(tokenizeAll(new SyntaxDocument(g, classOf, lines, NO_LIMIT)).slice(1));
   });
 });
 
-/** Süreç içi renklendirici; yanıtlar iş parçacığındaki gibi SONRAKİ görevde. */
+/*
+ * Satırın süre sınırı: uygulamanın davranışı, gerçek saat olmadan.
+ *
+ * Bir deneme `LINE_TIME_LIMIT` (500 ms). Süreye ifadelerin ilk derlenmesi de
+ * giriyor; derlenen ifadeler kalıcı olduğundan süresi dolan satır, her deneme
+ * öncekinden ileri gittikçe yeniden deneniyor (en çok `LINE_ATTEMPTS`). Tek
+ * yeniden deneme yük altında yetmedi (bkz. "TypeScript: VS Code'un
+ * ayrımları"). İlerlemeyen deneme ağır bir satır demek: bırakılıyor, yarım
+ * belirteçler kalıyor, sonraki satır bu satırın BAŞINDAKİ durumdan.
+ *
+ * Gramer sahte: "süre doldu"yu ve satırda nereye kadar geldiğini kendisi
+ * söylüyor; sonuç makinenin yüküne bağlı değil.
+ */
+describe("satırın süre sınırı", () => {
+  const KEYWORD = SYNTAX_CLASSES.indexOf("keyword");
+  const STRING = SYNTAX_CLASSES.indexOf("string");
+  /** Renk kimliği sınıfın sırası. */
+  const IDENTITY = Uint8Array.from(SYNTAX_CLASSES, (_, i) => i);
+  const LINES = ["export const s = 1;", "x;"];
+
+  interface Reply {
+    stopped: boolean;
+    /** Son belirtecin başı: deneme satırda buraya kadar geldi. */
+    at: number;
+    /** Bitiş durumunun adı; verilmezse `at`tan. */
+    state?: string;
+  }
+
+  /** Her çağrıda sıradaki yanıt: baştan anahtar sözcük, `at`tan dize. */
+  function scripted(replies: Reply[]) {
+    const calls: { start: StateStack; limit: number | undefined }[] = [];
+    const states = new Map<string, StateStack>();
+    const state = (name: string): StateStack => {
+      if (!states.has(name)) {
+        const s = { equals: (other: StateStack) => other === s } as unknown as StateStack;
+        states.set(name, s);
+      }
+      return states.get(name)!;
+    };
+    const grammar = {
+      tokenizeLine2(_line: string, start: StateStack, limit?: number) {
+        calls.push({ start, limit });
+        const r = replies.shift();
+        if (!r) throw new Error("beklenmeyen deneme");
+        // Ön plan rengi 15. bitten (vscode-textmate `EncodedTokenMetadata`).
+        return {
+          tokens: Uint32Array.of(0, KEYWORD << 15, r.at, STRING << 15),
+          ruleStack: state(r.state ?? `@${r.at}`),
+          stoppedEarly: r.stopped,
+        };
+      },
+    } as unknown as IGrammar;
+    return { grammar, calls, state };
+  }
+
+  it("süresi dolan satır ilerledikçe yeniden deneniyor; biten denemenin belirteçleri ve durumu", () => {
+    const { grammar, calls, state } = scripted([
+      { stopped: true, at: 4 },
+      { stopped: true, at: 9 },
+      // Aynı yerde ama başka kuralda: yine ilerleme (bkz. `advanced`).
+      { stopped: true, at: 9, state: "tür açıklamasında" },
+      { stopped: false, at: 12, state: "satır sonu" },
+      { stopped: false, at: 1 },
+    ]);
+    const [first] = tokenizeAll(new SyntaxDocument(grammar, IDENTITY, LINES));
+    expect(first).toEqual([0, KEYWORD, 12, STRING]);
+    // Hepsi satırın başındaki durumdan, uygulamanın sınırıyla.
+    expect(calls.slice(0, 4).map((c) => c.start === INITIAL)).toEqual([true, true, true, true]);
+    expect(calls.map((c) => c.limit)).toEqual(new Array(5).fill(LINE_TIME_LIMIT));
+    // Sonraki satır biten denemenin bitişinden.
+    expect(calls[4].start).toBe(state("satır sonu"));
+  });
+
+  it("ilerlemeyen denemede bırakılıyor: en ileri giden yarım sonuç, sonraki satır bu satırın başındaki durumdan", () => {
+    // Aynı yerde aynı durumda: tek bir ifade ağır (süre bir ifadenin içini
+    // kesemiyor). Geride: makine o an daha yüklü, önceki daha ileriydi.
+    for (const again of [
+      { stopped: true, at: 6 },
+      { stopped: true, at: 3 },
+    ]) {
+      const { grammar, calls } = scripted([{ stopped: true, at: 6 }, again, { stopped: false, at: 1 }]);
+      const [first] = tokenizeAll(new SyntaxDocument(grammar, IDENTITY, LINES));
+      expect(calls, `ikinci denemenin son belirteci ${again.at}`).toHaveLength(3);
+      expect(first).toEqual([0, KEYWORD, 6, STRING]);
+      expect(calls[2].start).toBe(INITIAL);
+    }
+  });
+
+  it("hep ilerleyip bitmeyen satır en çok LINE_ATTEMPTS kez deneniyor", () => {
+    const { grammar, calls } = scripted(
+      Array.from({ length: LINE_ATTEMPTS + 1 }, (_, i) => ({ stopped: true, at: i + 1 })),
+    );
+    const [first] = tokenizeAll(new SyntaxDocument(grammar, IDENTITY, LINES.slice(0, 1)));
+    expect(calls).toHaveLength(LINE_ATTEMPTS);
+    expect(first).toEqual([0, KEYWORD, LINE_ATTEMPTS, STRING]);
+  });
+
+  it("verilen sınır gramere aynen gidiyor: buradaki NO_LIMIT sınırsız demek", () => {
+    const { grammar, calls } = scripted([{ stopped: false, at: 1 }]);
+    tokenizeAll(new SyntaxDocument(grammar, IDENTITY, ["x;"], NO_LIMIT));
+    expect(calls.map((c) => c.limit)).toEqual([0]);
+  });
+});
+
+/**
+ * Süreç içi renklendirici; yanıtlar iş parçacığındaki gibi SONRAKİ görevde.
+ * Kendi motoru, yani ilk satırı soğuk (tam takımda 178–357 ms): süre sınırı yok.
+ */
 function inProcessHost(): SyntaxHost & { sent: SyntaxRequest[] } {
   let receive: (reply: SyntaxReply) => void = () => {};
-  const handle = createSyntaxService((reply) => setTimeout(() => receive(structuredClone(reply)), 0));
+  const handle = createSyntaxService(
+    (reply) => setTimeout(() => receive(structuredClone(reply)), 0),
+    undefined,
+    NO_LIMIT,
+  );
   const sent: SyntaxRequest[] = [];
   return {
     sent,

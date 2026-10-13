@@ -1748,9 +1748,22 @@ alanının boyunu veren `1lh`yi 19.1719'a yuvarlıyor ve yazı alanı içeriğin
 229px kısa kalıyordu. `.viewer-edit` ve `.viewer-code` artık
 `round(1.55em, 1px)` (emsali `.diff-text`).
 
-**Satırın süre sınırı 500 ms, dolarsa bir kez daha.** 100 ms'lik sınırla soğuk
-motorda ilk dosyanın ilk satırı yarıda kesiliyordu: süreye ifadelerin
-derlenmesi de giriyor (testte yakalandı).
+**Satırın süre sınırı deneme başına 500 ms; dolarsa ilerledikçe yeniden.**
+100 ms'lik sınırla soğuk motorda ilk dosyanın ilk satırı yarıda kesiliyordu:
+süreye ifadelerin derlenmesi de giriyor (testte yakalandı). Tek yeniden deneme
+de yük altında yetmedi (2026-10-13; `syntax.test.ts` tam takımda 3 koşunun
+1'inde düştü): tam takım koşarken TypeScript'in soğuk ilk satırı ilk denemede
+535–544 ms'de kesildi, yeniden deneme bir koşuda 504 ms'de yine; satırın
+`return`den sonrası düz kaldı. Artık süresi dolan satır, her deneme öncekinden
+ileri gittikçe en çok 8 kez deneniyor (`LINE_ATTEMPTS`). İleri: son belirteç
+daha ileride ya da aynı yerde ama durum değişmiş. Yalnızca belirtece bakmak
+yetmiyor, TS satırının 30 tarama adımının 10'u yalnızca durumu değiştiriyor.
+Yerinde sayan ya da geri kalan deneme ağır bir satır: en ileri giden tutulup
+bırakılıyor, maliyeti eskisi gibi iki deneme. Yük çok ağırsa yine yarım
+kalabilir (C++'ın ilk satırı tam takımda iki denemede de ilerlemedi). Testler
+sınırı kaldırıyor (`SyntaxDocument`un son argümanı, `createSyntaxService`in
+üçüncüsü); davranışın kendisi sahte gramerle sınanıyor, sekiz mutasyonun
+sekizi yakalandı.
 
 **Doğrulama.** [`syntax.test.ts`](src/lib/syntax.test.ts): kapsamdan sınıfa
 (TS, JSON, YAML, CSS, Markdown, PowerShell, Python), her gramerin JS motorunda
