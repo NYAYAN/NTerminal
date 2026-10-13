@@ -141,19 +141,28 @@ afterEach(() => {
   h.closeRequested = null;
 });
 
+/**
+ * Saat `ms` ilerlesin: sahte saatte (bkz. "sağ tarafta yazmak") vadesi gelen
+ * zamanlayıcılar ateşleniyor, gerçek saatte bekleniyor. Ayrı bir `act`: React
+ * adımın sonunda çiziyor.
+ */
+async function tick(ms: number) {
+  await act(async () => {
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(ms);
+    else await new Promise((r) => setTimeout(r, ms));
+  });
+}
+
 /** Zincirli sözler (açılış → liste → iki taraf) çözülsün. */
 async function settle() {
-  for (let i = 0; i < 4; i++) {
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-  }
+  for (let i = 0; i < 4; i++) await tick(0);
 }
 
 /**
  * Koşul gerçekleşene kadar bekler: kayıt 400 ms sonra, yoklama 500 ms'de bir;
  * sabit bir süre beklemek tam takım yük altındayken oynuyordu. Her adım ayrı
  * bir `act`: tek bir uzun `act` React'in güncellemelerini sonuna kadar tutardı.
+ * Sahte saatte süre de sahte (`Date` dahil): sonuç makinenin yüküne bağlı değil.
  */
 async function until(check: () => void, timeout = 2000) {
   const end = Date.now() + timeout;
@@ -164,9 +173,7 @@ async function until(check: () => void, timeout = 2000) {
     } catch (err) {
       if (Date.now() > end) throw err;
     }
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 25));
-    });
+    await tick(25);
   }
 }
 
@@ -871,12 +878,46 @@ describe("canlı tazeleme", () => {
  * fark güncelleniyor, dosyaya kendiliğinden kaydediliyor.
  */
 describe("sağ tarafta yazmak", () => {
+  /*
+   * SAAT SAHTE. KIRILGANDI (2026-10-13 ölçüldü): bu bölümden bir test, her
+   * koşuda başka biri, tam takımda 3 koşunun 2'sinde, dosya tek başına 5
+   * koşunun 2'sinde düşüyordu. Görülen altı düşüşün altısı da aynı şey:
+   * canlı yoklama (500 ms) bir YAZMANIN ardına düşüyor. Buradaki sahte
+   * `gitWriteFile` diske yazmıyor; yoklama dosyayı eski hâliyle okuyup
+   * "dışarıda değişti" sanıyor ve kaydedilmiş sağ taraf, uygulamanın doğru
+   * davranışıyla (bkz. "kaydedilmiş hâldeyken…"), diskteki eski metne
+   * dönüyor, geri alma geçmişi siliniyor: "3 yerine 2 satır", İleri al
+   * pasif, İleri al'dan sonra metin eski hâlinde. Tek başına: tuş açılıştan
+   * 86 ms sonra, yazma 497 ms'de (400 ms erteleme), yoklama 512 ms'de. Tam
+   * takımda adımlar uzuyor: tuş 363 ms'de, Kaydet'in yazması 465 ms'de,
+   * yoklama 513 ms'de. Yazmadan sonra 600 ms (en az bir yoklama) beklemek üç
+   * testi de aynı iletiyle düşürdü; yazma diske işlenince üçü de geçti.
+   *
+   * Aynı saate bağlı iki risk daha (görülmedi, zorlanınca düştü): tuşla
+   * Ctrl+Z arası 400 ms'yi aşınca kendiliğinden kayıt önce yazıyor; iki tuş
+   * arası 1 sn'yi (`MERGE_MS`) aşınca tek Ctrl+Z ikiye bölünüyor.
+   *
+   * Sahte saatte kayıt ertelemesi, yoklama ve birleştirme penceresi (`Date`)
+   * yalnızca `wait` / `until` ilerletince akıyor: her koşu aynı sırayı
+   * izliyor. Yalnızca bileşenin kullandığı saatler sahte; React'in kendi
+   * zamanlaması (`setImmediate`, `performance`) gerçek kalıyor. Yazmadan
+   * sonra yoklamayı bekleyen bir test diski kendisi tutmalı (bkz.
+   * "kaydedilmiş hâldeyken…"), yoksa yukarıdaki düşüş her koşuda olur.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   const editor = (c: HTMLElement) => c.querySelector(".dw-editor") as HTMLTextAreaElement;
   const type = (c: HTMLElement, value: string) => fireEvent.input(editor(c), { target: { value } });
-  const wait = (ms: number) =>
-    act(async () => {
-      await new Promise((r) => setTimeout(r, ms));
-    });
+  /** Saat `ms` ilerlesin; 25 ms'lik adımlarla, araya çizim girsin (gerçekte de giriyor). */
+  const wait = async (ms: number) => {
+    for (let left = ms; left > 0; left -= 25) await tick(Math.min(25, left));
+  };
 
   it("yazınca fark hemen güncelleniyor, duraksayınca dosyaya yazılıyor", async () => {
     const write = vi.spyOn(api, "gitWriteFile").mockResolvedValue(undefined);
@@ -900,6 +941,7 @@ describe("sağ tarafta yazmak", () => {
     await settle();
     await startEditing(container);
     type(container, "a\nBx\nc\nd\nE\n");
+    await wait(150); // yazma hızı: birleştirme penceresinin (1 sn) içinde, kayıttan (400 ms) önce
     type(container, "a\nBxy\nc\nd\nE\n");
     await settle();
     editor(container).focus();
