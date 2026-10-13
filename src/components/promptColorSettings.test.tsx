@@ -26,6 +26,27 @@ import { SettingsDialog } from "./SettingsDialog";
  * temanın paletine düşüyor. Renk yalnızca macOS'ta ve "renkli istem" açıkken
  * anlamlı: kabuk betiği kapalıyken hiçbirini okumuyor, Windows'ta betikler
  * (Git Bash/WSL) rengi zaten uygulamıyor.
+ *
+ * ## Süre sınırı neden 30 sn
+ *
+ * İlk test iki tam takım aynı anda koşarken (138 sn'lik ağır tur, makine %100
+ * dolu) "Test timed out in 5000ms" ile düştü: 5426 ms; öteki takımda 4874
+ * ms'de, sınırın dibinde geçti. Sonraki testler 0,01–2,1 sn sürdü. ÖLÇÜLDÜ
+ * (2026-10-13, 16 mantıksal çekirdek; adım adım duvar saati ve sürecin işlemci
+ * süresi test içinden):
+ *
+ * - Süre işlemci işi: dosyadaki ilk `render(<SettingsDialog />)` soğuk. Sakin
+ *   makinede ilk test 134–135 ms, ilk çizim 89–90 ms; sonraki testlerde aynı
+ *   çizim 8–12 ms. İki tam takım + işlemci yükünde (143 ve 154 sn'lik turlar)
+ *   ilk test 1618–2666 ms, ilk çizim 1046–1930 ms duvar / 266–406 ms işlemci:
+ *   süreç çekirdek bekliyor.
+ * - Tek gerçek bekleme `settle`in 10 ms'lik zamanlayıcısı: sakinken 11–12 ms,
+ *   aynı yükte 17–187 ms, ilk testin en çok %7'si. Gecikmesi sonucu
+ *   değiştirmiyor (bekleme yalnızca uzayabiliyor); sahte saat burada bir şey
+ *   kazandırmazdı.
+ *
+ * Sınır, aynı turda düşen üç dosyada ölçülen en kötü ilk testin (settingUndo,
+ * 6539 ms) ~4,5 katı; takılıp kalan bir çizim yine yakalanır.
  */
 
 let onceki = platform();
@@ -87,7 +108,8 @@ const sifirla = (c: HTMLElement, satir: string) =>
     (b) => b.textContent!.trim() === "Varsayılana dön",
   ) as HTMLButtonElement | undefined;
 
-describe("istem renkleri ayarı", () => {
+// Süre sınırının gerekçesi başlıkta: "Süre sınırı neden 30 sn".
+describe("istem renkleri ayarı", { timeout: 30_000 }, () => {
   it("macOS'ta renkli istemin altında iki renk seçici var", async () => {
     const { container } = await terminalBolumu();
     expect(kutu(container, "promptUserColor")).not.toBe(null);
