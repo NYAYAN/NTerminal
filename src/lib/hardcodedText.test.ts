@@ -28,6 +28,30 @@ import { describe, expect, it } from "vitest";
  *
  * Şimdi TypeScript'in kendi ayrıştırıcısı kullanılıyor: `JsxText` düğümleri ve
  * dize değerli JSX öznitelikleri tam olarak biliniyor, sezgiye yer yok.
+ *
+ * ## Süre sınırı neden 30 sn
+ *
+ * Tarama tek bir eşzamanlı döngü ve tamamı işlemci işi: ayrıştırıcı her
+ * koşuda soğuk JIT'le 126 dosyayı (1,5 MB) baştan okuyor. Varsayılan 5 sn'lik
+ * sınırla tam takımda 3 koşunun 1'inde "Test timed out in 5000ms" ile
+ * düşüyordu (5644 ms). ÖLÇÜLDÜ (2026-10-13, 16 mantıksal çekirdek; tarama
+ * süresi test içinden):
+ *
+ * - Tek başına, makine sakinken 284–333 ms; makine başka işlerle %93–100
+ *   doluyken, yine tek başına, 954–1637 ms.
+ * - Tam takımda 1269, 5533 ve 6705 ms (vitest'e göre en çok 7437 ms; ikisi
+ *   zaman aşımı); iki tam takım aynı anda koşarken 1855–3695 ms, daha ağır
+ *   bir turda vitest'e göre 5341 ve 5706 ms. Makine her seferinde %100
+ *   doluydu. Aynı iş yükte 2,2–3,1 sn işlemci süresi tutuyor (sakinken
+ *   0,64–0,73 sn) ve duvar saati bunun 2,3 katına çıkıyor.
+ * - 6705 ms'lik koşuda okuma 468, ayrıştırma 4432, ağaçta gezinme 1805 ms;
+ *   sakinken 18, 180 ve 75–140 ms. Üç aşama da 13–26 kat yavaşlıyor: dar
+ *   boğaz taramanın bir parçası değil, makinenin yükü.
+ *
+ * Taramayı hızlandırmak bunu çözmezdi: ölçülen en büyük kazanç
+ * ayrıştırıcının üst işaretçilerini kapatmak (`setParentNodes`), o da ~%20 —
+ * 6,7 sn'yi 5 sn'nin altına indirmez. Sınır, ölçülen en kötü sürenin ~4
+ * katı; takılıp kalan bir tarama yine yakalanır.
  */
 
 const SRC = join(process.cwd(), "src");
@@ -198,7 +222,8 @@ describe("sabit kodlanmış arayüz metni", () => {
     expect(files.length).toBeGreaterThan(20);
   });
 
-  it("çeviriden geçmemiş metin yok", () => {
+  // Süre sınırının gerekçesi başlıkta: "Süre sınırı neden 30 sn".
+  it("çeviriden geçmemiş metin yok", { timeout: 30_000 }, () => {
     const findings = files.flatMap(scan);
     const report = findings
       .map((f) => `  ${f.file}:${f.line} [${f.kind}] ${JSON.stringify(f.text)}`)
