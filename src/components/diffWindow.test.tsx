@@ -87,15 +87,28 @@ const SURE_SINIRI = 30_000;
 const gercekSetTimeout = globalThis.setTimeout;
 
 type TestFn = () => Promise<void>;
+type TestAyari = { timeout?: number };
+type Tanimla = (ad: string, ayar: TestAyari, fn: TestFn) => void;
 /** Koşan testin sözü; vitest testi bırakırsa `bitti` söküme kadar false kalır. */
 let suren: { soz: Promise<void>; bitti: boolean } | null = null;
 /** Bırakılan test yeni bir adıma (`act`) girmesin. */
 let durdur = false;
 
-/** vitest'in `it`i; süre sınırı `SURE_SINIRI` ve testin sözü izleniyor. */
-function it(ad: string, a: TestFn | { timeout?: number }, b?: TestFn) {
+/**
+ * vitest'in `it`i; süre sınırı `SURE_SINIRI` ve testin sözü izleniyor. Hata
+ * ayıklarken `.only` ve `.skip` de aynı yoldan; `.each` yok (gerekirse döngü).
+ */
+const it = Object.assign(
+  (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt, ad, a, b),
+  {
+    only: (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt.only, ad, a, b),
+    skip: (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt.skip, ad, a, b),
+  },
+);
+
+function sarili(tanimla: Tanimla, ad: string, a: TestFn | TestAyari, b?: TestFn) {
   const [ayar, fn] = typeof a === "function" ? [{}, a] : [a, b!];
-  vitestIt(ad, { timeout: SURE_SINIRI, ...ayar }, () => {
+  tanimla(ad, { timeout: SURE_SINIRI, ...ayar }, () => {
     const kayit = { soz: Promise.resolve(), bitti: false };
     kayit.soz = (async () => {
       try {
