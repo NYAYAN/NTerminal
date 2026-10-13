@@ -29,9 +29,23 @@ function text(t: string): FileText {
 
 let disk: FileText = text("");
 
+/**
+ * Süreç içi renklendirici. Her test kendi hizmetini, yani soğuk bir motor
+ * kuruyor: ilk satır, ifadeler derlenirken renkleniyor. Satırın süre sınırı
+ * yok (son argüman 0, bkz. `syntaxDocument.ts`): sınır gerçek saate bakıyor.
+ * ÖLÇÜLDÜ (2026-10-13, tam takım ×3): "okurken…"un ilk satırı üç koşunun
+ * üçünde ilk denemede kesildi (524–715 ms). Birinde ikinci deneme de 9
+ * belirtecin 8'inde kesildi: kalan `; // not` düz, `.syn-comment` hiç
+ * gelmez. Tek yeniden denemeli eski renklendiricide test orada zaman aşımına
+ * düşerdi; yenisinde üçüncü deneme bitirdi. Tek başına en çok 352 ms.
+ */
 function inProcessHost(): SyntaxHost {
   let receive: (reply: SyntaxReply) => void = () => {};
-  const handle = createSyntaxService((reply) => setTimeout(() => receive(structuredClone(reply)), 0));
+  const handle = createSyntaxService(
+    (reply) => setTimeout(() => receive(structuredClone(reply)), 0),
+    undefined,
+    0, // satırın süre sınırı yok
+  );
   return { post: (request) => handle(structuredClone(request)), listen: (fn) => (receive = fn) };
 }
 
