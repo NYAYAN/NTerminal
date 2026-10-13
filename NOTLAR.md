@@ -1834,6 +1834,49 @@ yeni / değişen baskınlığı, silinen, yeniden adlandırılan), `treeGit.test
 commit sonrası temizlenme). Gözle (CDP 9334): bu depoda `src`, `lib`,
 `components` noktalı, takip edilmeyen dosyalar yeşil, değişen `themes.ts` sarı.
 
+### 1.32 Tekerlekle kaydırma karelere yayılıyor
+
+**İstek:** "Terminalde çok fazla geçmiş olduğunda scroll ederek geriye bakmak
+istediğimizde takılmalar oluyor ayrıca smooth değil."
+
+**Ölçüldü (13 Ekim 2026, Windows, Intel UHD, 60 Hz; ayrı veri klasörlü
+geliştirme örneği, CDP 9335, 10.000 satırlık tampon, tekerlek CDP'den).** Ana
+iş parçacığı takılmıyordu: kaydırma boyunca kare p99 17 ms, uzun görev yok —
+URL'li geçmişte, hiç çizilmemiş renkli geçmişte (doku atlası soğuk) ve arka
+plan sekmesine çıktı akarken de. Takılan HAREKETİN BİÇİMİYDİ: xterm 6 bir
+çentiği (50 px ≈ 3 satır) tek karede uyguluyor. Saniyede 10 çentikte 40 çentik
+→ 38 kare 3 satırlık sıçrama + 195 kare hiç kıpırdamama (en uzun durma 6 kare).
+
+**Denenen ve atılan: xterm'in `smoothScrollDuration`ı.** Görüntüyü düzeltiyor
+(aynı sürüşte kare başına 1 satır) ama kaydırma tamponu DOLUYKEN çıktı akarsa
+bozuluyor: her yeni satırda xterm görünümü bir satır geri çekiyor
+(`BufferService.scroll`), `Viewport._sync` kaydırma öğesine anında yazıyor ve
+süren animasyon iptal oluyor. 40 çentikte beklenen ~118 satırın ~53'ü kaydı;
+`scrollToBottom()` da animasyonlu olduğu için "Aşağı in" en alta varamadı.
+
+**Karar** (`lib/wheelScroll.ts`, bağlantısı `TerminalSession.handleWheel`):
+tekerlek ana tamponda kapsayıcının yakalama evresinde alınıyor, mesafe VS
+Code'un formülüyle aynı hesaplanıyor (hız değişmesin) ve kalan satır sayısı
+karelere yayılıyor — kare başına kalanın %25'i, en az yarım satır. Bir çentik
+1., 3. ve 5. karede birer satır; sürekli dönen tekerlekte görünüm her karede
+1-2 satır. Konum değil KALAN tutuluyor ve her karede o anki görünüme
+uygulanıyor; akan çıktı onu bozamıyor. İkincil ekran (vim, less), fareyi
+isteyen program, Ctrl/Shift ve "animasyonları azalt" xterm'e bırakılıyor.
+Bekleyen hareket "Aşağı in", terminale yazmak, fareye basmak, gizlenmek ve
+ikincil ekrana geçişle kesiliyor.
+
+**Sonuç (aynı düzenek).** 10 çentik/s: 118 kare 1 satırlık adım, en uzun durma
+2 kare, toplam 118 satır (eskisiyle aynı). 25 çentik/s: 135 kare 1, 43 kare 2
+satır, 10 boş kare. Dolu tampon + akan çıktı: tekerleğin 118 satırının tamamı
+kaydı, "Aşağı in" en altta. Kare p99 16,9 ms; uygulamanın kendi kodu kare
+başına ~0,3 ms. `less` içinde tekerlek eskisi gibi ok tuşuna çevriliyor.
+
+**Doğrulama.** `wheelScroll.test.ts` (mesafe eşitliği, kare dağılımı, kesir
+taşıma, yön değişimi, tavan, 144 Hz), `wheelSmooth.test.ts` (oturum yalnızca
+ana tamponda yakalıyor; ikincil ekran, fare kipi, Ctrl/Shift xterm'e; "Aşağı
+in" ve yazı bekleyeni kesiyor). İkinci dosya mutasyonla denendi: devralma
+koşulları ya da kesme kaldırılınca testler düşüyor.
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.
@@ -2263,6 +2306,12 @@ her testin yazma işlemini sonsuza dek bekletiyor ve hata kırılan testte deği
 ilgisiz bir testte görünüyor. `gitCommit.test.tsx` bekleyen sözleri `afterEach`te
 çözüyor; elle çözülen yeni bir söz kuruyorsan aynı yardımcıyı (`bekleyen`)
 kullan.
+
+**xterm'in kendi yumuşak kaydırması dolu tamponda akan çıktıyla bozuluyor.**
+`smoothScrollDuration` açıkken kaydırma tamponu sınırdaysa gelen her satır
+süren animasyonu iptal ediyor (`Viewport._sync`): tekerleğin yarısından fazlası
+kayboluyor, `scrollToBottom()` yarıda kalıyor. Akıcılık `lib/wheelScroll.ts`te;
+seçenek 0'da kalmalı (§1.32).
 
 ---
 

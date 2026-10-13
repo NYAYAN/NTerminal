@@ -27,6 +27,7 @@ import {
   evictions as lruEvictions,
   touch as lruTouch,
 } from "../lib/webglLru";
+import { WheelScroller, wheelLines } from "../lib/wheelScroll";
 import type { Settings } from "../types";
 
 interface BufferMark {
@@ -226,6 +227,25 @@ const INTEGRATION_PROBE_MS = 5000;
  */
 let webglOrder: TerminalSession[] = [];
 
+/**
+ * İşletim sisteminde "animasyonları azalt" açık mı.
+ *
+ * Açıksa tekerlek kaydırması karelere YAYILMIYOR, xterm'in anlık kaydırması
+ * kalıyor: hareketi azaltmak isteyen biri için kayan metin tam da istemediği
+ * şey. Sorgu bir kez kuruluyor, `matches` her olayda canlı okunuyor — ayar
+ * uygulama açıkken değişse de geçerli. jsdom'da `matchMedia` olmayabilir.
+ */
+let reducedMotionQuery: MediaQueryList | null | undefined;
+function reducedMotion(): boolean {
+  if (reducedMotionQuery === undefined) {
+    reducedMotionQuery =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+  }
+  return reducedMotionQuery?.matches ?? false;
+}
+
 export class TerminalSession {
   readonly tabId: string;
   groupId: string;
@@ -236,6 +256,17 @@ export class TerminalSession {
   private readonly serializer = new SerializeAddon();
   readonly search = new SearchAddon();
   private webgl: WebglAddon | null = null;
+  /**
+   * Tekerlek kaydırmasını karelere yayan sayaç; gerekçe ve ölçüm
+   * `lib/wheelScroll.ts` başında. Satır sayısı tembel okunuyor: alan
+   * kurulurken `term` henüz yok.
+   */
+  private readonly wheel = new WheelScroller(() => this.term.rows);
+  private wheelFrame: number | null = null;
+  /** Son tekerlek adımının zamanı (`performance.now()` saati). */
+  private wheelAt = 0;
+  /** Tekerlek dinleyicilerini kapsayıcıdan söker; kap değişince yenisine kuruluyor. */
+  private wheelUnbind: (() => void) | null = null;
   /** Kabuğun bildirdiği komut önerisi durumu; durum çubuğu gösteriyor. */
   prediction: PredictionState = "unknown";
   /** Bağlantı renklendirmesi için kaydedilen imleç ve dekorasyonlar. */
@@ -467,6 +498,15 @@ export class TerminalSession {
        * çıktıda eşleşmenin nerede olduğu kaydırmadan görünüyor.
        */
       overviewRuler: { width: 9 },
+      /*
+       * xterm'in KENDİ yumuşak kaydırması kapalı, BİLEREK.
+       *
+       * Akıcılık `lib/wheelScroll.ts`ten geliyor. xterm'inki denendi ve dolu
+       * tamponda çıktı akarken her satırda iptal ediliyordu: 40 çentiğin
+       * kaydırması gereken ~120 satırın ~53'ü kaydı, "Aşağı in" en alta
+       * varamadı. Açmak iki animasyonu birbirine düşürür.
+       */
+      smoothScrollDuration: 0,
       // macOS'ta Option'ı Meta yapmak kullanıcının seçimi. Varsayılan kapalı:
       // Türkçe Mac klavyesinde `@` = Option+Q ve açık olsa `@` yazılamazdı —
       // terminalde `@angular/cli` ya da bir e-posta adresi yazmak imkânsız
@@ -569,6 +609,7 @@ export class TerminalSession {
   attach(container: HTMLElement) {
     if (this.container === container) return;
     this.container = container;
+    this.bindWheel(container);
 
     const opened = this.term.element;
     if (opened) container.appendChild(opened);
@@ -819,6 +860,7 @@ export class TerminalSession {
       // Bağlam BIRAKILMIYOR: geri dönülürse kurulum bedeli ödenmesin. Yalnızca
       // sırada geriye atılıyor, yeni bir istek gelirse ilk kurban bu olur.
       this.demoteWebgl();
+      this.stopWheel();
       return;
     }
     this.requestWebgl();
@@ -1377,6 +1419,7 @@ export class TerminalSession {
 
   /** En alta iner. "Aşağı in" düğmesi bunu çağırıyor. */
   scrollToBottom() {
+    this.stopWheel();
     this.term.scrollToBottom();
     this.syncScrollState();
   }
@@ -1387,6 +1430,116 @@ export class TerminalSession {
     if (now === this.atBottom) return;
     this.atBottom = now;
     this.callbacks.onScrollState?.(now);
+  }
+
+  /**
+   * Tekerleği xterm'den ÖNCE, kapsayıcıda yakalama evresinde dinler.
+   *
+   * xterm 6'da kaydırmayı VS Code'un kaydırma öğesi yapıyor ve dinleyicisi
+   * terminal ögesinin İÇİNDE; `attachCustomWheelEventHandler` ise dıştaki
+   * ögede ve ana tamponda olay ona hiç ulaşmıyor (kaydırma öğesi olayı
+   * tüketiyor). Kapsayıcının yakalama evresi ikisinden de önce geliyor.
+   * `preventDefault` yeterli: kaydırma öğesi önceden engellenmiş olayı yok
+   * sayıyor, xterm'in dış dinleyicisi ana tamponda zaten bir şey yapmıyor.
+   * Yayılım DURDURULMUYOR: pencere düzeyindeki dinleyiciler (açık menüyü
+   * tekerlekle kapatan) olayı görmeye devam ediyor.
+   *
+   * Neden xterm'in ögesi değil kapsayıcı: kapsayıcı `open()`dan ÖNCE var.
+   * jsdom'da `open()` canvas yüzünden yarıda düşüyor ve ardından kurulan bir
+   * dinleyici testte hiç kurulmuyordu.
+   */
+  private bindWheel(container: HTMLElement) {
+    this.wheelUnbind?.();
+    const onWheel = (ev: WheelEvent) => this.handleWheel(ev);
+    // Kaydırma çubuğunu sürüklemek ya da seçim başlatmak: bekleyen hareket
+    // onunla yarışıp görünümü elden çekmesin.
+    const onDown = () => this.stopWheel();
+    container.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    container.addEventListener("mousedown", onDown, { capture: true });
+    this.wheelUnbind = () => {
+      container.removeEventListener("wheel", onWheel, { capture: true });
+      container.removeEventListener("mousedown", onDown, { capture: true });
+    };
+  }
+
+  /**
+   * Bu tekerlek olayını biz mi kaydıracağız, yoksa xterm'e mi kalıyor.
+   *
+   * xterm'e KALANLAR, her biri bugünkü davranışı korumak için:
+   *  - İkincil ekran (vim, less, htop): xterm tekerleği ok tuşuna çeviriyor.
+   *  - Fareyi isteyen program (`mouseTrackingMode`): tekerlek programa gidiyor.
+   *  - Ctrl/Meta (yakınlaştırma, dokunmatik yüzeyde kıstırma) ve Shift
+   *    (VS Code onu yatay kaydırmaya çeviriyor; terminalde yatay yok).
+   *  - Yatay ağırlıklı hareket.
+   *  - "Animasyonları azalt" açıksa (bkz. `reducedMotion`).
+   */
+  private takesWheel(ev: WheelEvent): boolean {
+    if (this.disposed || !this.visible || ev.defaultPrevented) return false;
+    if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return false;
+    if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return false;
+    if (this.term.buffer.active.type !== "normal") return false;
+    if (this.term.modes.mouseTrackingMode !== "none") return false;
+    return !reducedMotion();
+  }
+
+  private handleWheel(ev: WheelEvent) {
+    if (!this.takesWheel(ev)) return;
+    // Hücre ölçülmemişse satır hesabı yok: olay xterm'e kalıyor.
+    const lines = wheelLines(
+      ev,
+      this.blockGeometry()?.cellHeight ?? 0,
+      this.term.options.scrollSensitivity ?? 1,
+      this.term.options.fastScrollSensitivity ?? 5,
+    );
+    if (lines === 0) return;
+    ev.preventDefault();
+    this.wheel.add(lines);
+    if (this.wheelFrame !== null) return;
+    // İlk adım HEMEN, bir kare beklemeden: xterm de çentiği olayın içinde
+    // uyguluyordu; gecikme eklemek tekerleği ağır hissettirirdi.
+    this.wheelAt = performance.now();
+    this.applyWheelStep();
+    this.scheduleWheel();
+  }
+
+  private scheduleWheel() {
+    if (this.wheelFrame !== null || this.wheel.idle) return;
+    this.wheelFrame = window.requestAnimationFrame((now) => {
+      this.wheelFrame = null;
+      const dt = now - this.wheelAt;
+      this.wheelAt = now;
+      this.applyWheelStep(dt);
+      this.scheduleWheel();
+    });
+  }
+
+  /**
+   * Sayaçtan bir adım alıp görünüme uygular.
+   *
+   * Hedef her adımda O ANKİ görünüme göre hesaplanıyor; konum tutulmuyor.
+   * Dolu tamponda akan çıktı görünümü satır satır yukarı çekiyor (metin
+   * yerinde dursun diye) ve mutlak bir hedef her satırda geçersiz kalırdı —
+   * xterm'in kendi yumuşak kaydırmasını bozan şey tam olarak buydu.
+   */
+  private applyWheelStep(dt?: number) {
+    if (this.disposed) return;
+    const n = this.wheel.step(dt);
+    if (n === 0) return;
+    const buf = this.term.buffer.active;
+    const target = Math.max(0, Math.min(buf.baseY, buf.viewportY + n));
+    // Kenara dayandı: kalan hareket bırakılıyor, yoksa ters yöne çevrilen
+    // tekerlek önce "duvara harcanmış" satırları geri öderdi.
+    if (target !== buf.viewportY + n) this.wheel.reset();
+    if (target !== buf.viewportY) this.term.scrollLines(target - buf.viewportY);
+  }
+
+  /** Bekleyen tekerlek hareketini bırakır (en alta in, yazı, sürükleme, gizlenme). */
+  private stopWheel() {
+    this.wheel.reset();
+    if (this.wheelFrame !== null) {
+      window.cancelAnimationFrame(this.wheelFrame);
+      this.wheelFrame = null;
+    }
   }
 
   /**
@@ -1820,6 +1973,9 @@ export class TerminalSession {
     if (this.blockSyncFrame !== null) window.cancelAnimationFrame(this.blockSyncFrame);
     this.blockSyncFrame = null;
     this.blockListener = null;
+    this.stopWheel();
+    this.wheelUnbind?.();
+    this.wheelUnbind = null;
     // Yarım kalmış bir komut varsa geçmişte "çalışıyor" olarak asılı kalmasın.
     if (this.activeHistoryId) {
       void api
@@ -1894,6 +2050,7 @@ export class TerminalSession {
         const alt = this.term.buffer.active.type === "alternate";
         if (alt === this.altScreen) return;
         this.altScreen = alt;
+        this.stopWheel();
         this.emitInputSignals();
       }),
       this.term.onSelectionChange(() => this.handleSelectionChange()),
@@ -1945,6 +2102,9 @@ export class TerminalSession {
   }
 
   private handleInput(data: string) {
+    // xterm yazınca en alta iniyor (`scrollOnUserInput`); bekleyen yukarı
+    // hareket o inişi geri almasın.
+    this.stopWheel();
     if (this.exited) {
       // Kabuk bittiyse Enter'a basmak sekmeyi yeniden başlatmasın; sessizce yut.
       return;

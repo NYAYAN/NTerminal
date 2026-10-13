@@ -531,6 +531,14 @@ boğardı. Tarama iki aşamalı — önce satır metninde hızlı bir eleme, son
 yalnızca aday satırlarda hücre hücre okuma; tipik çıktıda satırların çoğunda
 bağlantı yok. Çok yoğun çıktı üreten işlerde ayardan kapatılabilir.
 
+**Kaydırma.** Tekerlekle geriye bakarken görünüm satır satır, akıcı kayar: bir
+çentik (~3 satır) tek karede sıçramak yerine ~100 ms'ye yayılır; hız xterm'in
+kendi kaydırmasıyla aynı. Komut çıktı üretirken ve kaydırma tamponu doluyken de
+tekerlek hareketi kaybolmaz, "Aşağı in" her zaman en alta iner. vim, less gibi
+tam ekran programlarda ve fareyi isteyen programlarda tekerlek eskisi gibi
+programa gider; işletim sisteminde "animasyonları azalt" açıksa kaydırma anlık
+kalır.
+
 **Komut önerisi.** Daha önce çalıştırdığınız komutlar yazarken önerilir.
 İki bağımsız kaynak var:
 
