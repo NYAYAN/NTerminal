@@ -292,6 +292,10 @@ için açık kalır.
 Yeni ve takip edilmeyen dosyada tek editör görünür (o da yazılabilir), bütün
 satırlar eklenmiş renginde. Fark penceresi tektir: açıkken başka bir dosyanın simgesine basmak
 ikinci bir pencere açmaz, açık pencereyi öne getirip o dosyaya geçirir.
+Kod iki tarafta da **sözdizimi renkli** (dosya görüntüleyicisiyle aynı
+VS Code gramerleri ve tema renkleri): değişen sözcüğün koyu zemini renkli
+harflerin altında kalır, yazarken de renkler yazdıkça güncellenir. Renkler
+fark zeminlerinin üstünde de okunur kalacak kadar açılıp koyulaştırılır.
 
 **Stash.** Değişiklikleri commit'lemeden kenara almak için commit kutusundaki
 **Stash** düğmesi bir pencere açar: hangi dosyaların gideceğini seçersiniz,

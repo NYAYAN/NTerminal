@@ -441,6 +441,28 @@
   color: transparent;
 }
 
+/* Sözdizimi renkliyken TERSİ: harfleri satırlar çiziyor (renkli), yazı alanı
+   saydam; imleç ve seçim yine onun. Satır yüksekliği tam piksel
+   (`lineHeight`), satır kutuları yazı alanının satırlarına birebir oturuyor.
+   Yazarken satırlar aynı çizimde geliyor: fark her tuşta yeniden hesaplanıyor. */
+.dw-pane.editable.syntax .dw-line {
+  color: inherit;
+}
+
+.dw-pane.editable.syntax .dw-editor {
+  color: transparent;
+}
+
+/* Seçim yarı saydam: renkli harfler altından görünsün. Ton IntelliJ'inki. */
+.dw-pane.editable.syntax .dw-editor::selection {
+  background: color-mix(in srgb, #214283 70%, transparent);
+  color: transparent;
+}
+
+:root[data-tone="light"] .dw-pane.editable.syntax .dw-editor::selection {
+  background: color-mix(in srgb, #a6d2ff 70%, transparent);
+}
+
 .dw-editor {
   position: absolute;
   top: 0;

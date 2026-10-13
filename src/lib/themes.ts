@@ -624,3 +624,54 @@ export function syntaxVariables(theme: TerminalTheme): Record<SyntaxColorKey, st
   }
   return out;
 }
+
+/**
+ * Fark penceresinin satır zeminleri (`diffWindow.css` › `.dw`): IntelliJ'in
+ * Darcula ve Light fark renkleri, tonla seçiliyor. Kod renkleri bunların
+ * ÜSTÜNDE de okunsun diye burada da duruyorlar; CSS'tekilerle aynı oldukları
+ * `surfaceContrast.test.ts`te bağlı.
+ */
+export const DIFF_LINE_COLORS = {
+  dark: { ins: "#294436", del: "#484a4a", mod: "#385570" },
+  light: { ins: "#bee6be", del: "#d6d6d6", mod: "#c2d8f2" },
+} as const;
+
+/**
+ * Fark zemininde kod renginin en az karşıtlığı.
+ *
+ * ÖLÇÜLDÜ: düz zemine göre okunur hâle getirilmiş renkler eklenen bloğun ve
+ * değişen sözcüğün tam renkli zemininde 1.97'ye kadar düşüyordu (Windows
+ * Terminal / Dark+'ta `#808080` ayraçlar, mavi "değişti" zemininde). 4.5
+ * istemek renkleri ağartıyordu: GitHub Koyu'nun yorum grisi `#c4c9cd` oluyor,
+ * düz metinle karşıtlığı 2.60'tan 1.41'e inip yorumun soluk duruşu
+ * kayboluyordu (3:1'de 2.15). 3:1 (WCAG'ın büyük metin ve arayüz öğesi
+ * sınırı) açık temalarda hiçbir rengi değiştirmiyor, koyularda hafifçe
+ * açıyor; düz zeminde zaten 4.5 var.
+ */
+const MIN_DIFF_SYNTAX_CONTRAST = 3;
+
+/**
+ * Fark penceresinin `--syn-*` değerleri: düz zeminde 4.5 (`syntaxVariables`),
+ * üç fark zemininin her birinde en az 3.
+ *
+ * Renk hep aynı YÖNE itiliyor — koyu tonda açığa, açık tonda koyuya — ve
+ * zeminlerin hepsi o tonun tarafında; birine göre itmek ötekilerden de
+ * uzaklaştırıyor. Sırayla üçüne göre itmek bu yüzden üçünü de sağlıyor.
+ */
+export function diffSyntaxVariables(theme: TerminalTheme): Record<SyntaxColorKey, string> {
+  const base = syntaxVariables(theme);
+  const backgrounds = Object.values(DIFF_LINE_COLORS[isLightTheme(theme) ? "light" : "dark"]);
+  const out = {} as Record<SyntaxColorKey, string>;
+  for (const key of Object.keys(base) as SyntaxColorKey[]) {
+    out[key] = backgrounds.reduce((color, bg) => ensureContrast(color, bg, MIN_DIFF_SYNTAX_CONTRAST), base[key]);
+  }
+  return out;
+}
+
+/** Fark penceresinde tema uygulandıktan sonra: kod renkleri fark zeminlerine göre. */
+export function applyDiffSyntaxToDocument(theme: TerminalTheme) {
+  const root = document.documentElement;
+  for (const [key, color] of Object.entries(diffSyntaxVariables(theme))) {
+    root.style.setProperty(`--syn-${key}`, color);
+  }
+}

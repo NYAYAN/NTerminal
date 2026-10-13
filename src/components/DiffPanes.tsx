@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  Fragment,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -22,8 +23,10 @@ import {
   type Segment,
   type UnifiedRow,
 } from "../lib/diffView";
+import type { LineTokens } from "../lib/syntax";
 import { transferLine, type Fold, type LineChange, type TextDiff } from "../lib/textDiff";
 import { EditorLayer, type EditorBinding } from "./DiffEditor";
+import { tokenSpans } from "./SyntaxText";
 
 /*
  * Fark penceresinin editörleri.
@@ -94,17 +97,38 @@ function isSoft(change: LineChange): boolean {
   return change.inner !== null && change.inner.length > 0;
 }
 
-function renderSegments(segments: readonly Segment[]): ReactNode {
+/**
+ * Bir tarafın satır belirteçleri (sözdizimi renklendirmesi, bkz. `lib/syntax.ts`);
+ * yoksa (dil tanınmıyor, renklendirici yok) satırlar düz.
+ */
+type SideTokens = readonly (LineTokens | undefined)[] | null | undefined;
+
+/** Satırın düz içeriği; belirteç varsa renkli. */
+function lineContent(text: string, tokens: LineTokens | undefined): ReactNode {
+  return tokens ? tokenSpans(text, tokens) : text;
+}
+
+/**
+ * Satırın parçaları. Sözcük farkının zemini (`dw-frag`) DIŞTA, sözdizimi
+ * renkleri içte: bir parça birden çok belirteci kapsayabiliyor ve belirteç
+ * parçanın sınırında bölünüyor (IntelliJ'de de değişen sözcüğün zemini
+ * renkli harflerin altında).
+ */
+function renderSegments(segments: readonly Segment[], text: string, tokens: LineTokens | undefined): ReactNode {
+  let pos = 0;
   return segments.map((s, i) => {
+    const from = pos;
+    pos += s.text.length;
     if (s.empty) return <span key={i} className={`dw-frag ${shortKind(s.kind)} empty`} />;
+    const body = tokens ? tokenSpans(text, tokens, from, pos) : s.text;
     if (s.kind) {
       return (
         <span key={i} className={`dw-frag ${shortKind(s.kind)}`}>
-          {s.text}
+          {body}
         </span>
       );
     }
-    return s.text;
+    return <Fragment key={i}>{body}</Fragment>;
   });
 }
 
@@ -199,6 +223,11 @@ interface PaneProps {
    * zaman yalnızca zemini ve fark parçalarını çiziyor; harfler yazı alanının.
    */
   editor?: ReactNode;
+  /**
+   * Sözdizimi renkli düzenleme: harfleri yine SATIRLAR çiziyor (renkli), yazı
+   * alanı saydam — yalnızca imleç ve seçim onun (bkz. `diffWindow.css`).
+   */
+  colored?: boolean;
 }
 
 /**
@@ -384,8 +413,9 @@ function Pane(props: PaneProps) {
     />
   );
 
+  const editable = props.editor ? (props.colored ? " editable syntax" : " editable") : "";
   return (
-    <div className={`dw-pane${mirror ? " mirror" : ""}${props.editor ? " editable" : ""}`}>
+    <div className={`dw-pane${mirror ? " mirror" : ""}${editable}`}>
       {mirror ? bar : gutter}
       {text}
       {mirror ? gutter : bar}
@@ -544,6 +574,9 @@ interface SideBySideProps {
   labels: PaneLabels;
   /** Sağ taraf yazılabilir mi (verilmezse salt okunur). */
   editor?: EditorBinding | null;
+  /** İki tarafın sözdizimi belirteçleri (`lines1` / `lines2` ile aynı sıra). */
+  tokens1?: SideTokens;
+  tokens2?: SideTokens;
 }
 
 /**
@@ -752,16 +785,18 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
     }
     const line = entry;
     const ci = byLine[line];
+    const tokens = (side === 1 ? props.tokens1 : props.tokens2)?.[line];
     let cls = "";
     let gutterCls = "";
-    let content: ReactNode = lines[line];
+    let content: ReactNode = lineContent(lines[line], tokens);
     if (ci >= 0 && colorize) {
       const change = changes[ci];
       const kind = kindClass(change);
       cls = isSoft(change) ? `${kind} soft` : kind;
       gutterCls = kind;
       if (change.inner) {
-        content = renderSegments(lineSegments(lines[line], offsetOf(ci, side, line), change.inner, side));
+        const segments = lineSegments(lines[line], offsetOf(ci, side, line), change.inner, side);
+        content = renderSegments(segments, lines[line], tokens);
       }
     }
     let arrow: Arrow | undefined;
@@ -881,6 +916,7 @@ export const SideBySide = forwardRef<PanesHandle, SideBySideProps>(function Side
             <EditorLayer {...props.editor} lineHeight={lh} lines={lines2.length} />
           ) : undefined
         }
+        colored={!!props.tokens2}
       />
     </div>
   );
@@ -994,6 +1030,9 @@ interface UnifiedProps {
   canApply: boolean;
   onApply: (change: number) => void;
   labels: PaneLabels;
+  /** İki tarafın sözdizimi belirteçleri: eski satır soldakinden, yenisi sağdakinden. */
+  tokens1?: SideTokens;
+  tokens2?: SideTokens;
 }
 
 /**
@@ -1120,12 +1159,13 @@ export const Unified = forwardRef<PanesHandle, UnifiedProps>(function Unified(pr
     }
     if (r.kind === "same") {
       const text = r.line2 >= 0 ? lines2[r.line2] : lines1[r.line1];
+      const tokens = r.line2 >= 0 ? props.tokens2?.[r.line2] : props.tokens1?.[r.line1];
       return {
         key: `s${r.line1}:${r.line2}`,
         cls: "",
         gutterCls: "",
         numbers: [r.line1 >= 0 ? String(r.line1 + 1) : "", r.line2 >= 0 ? String(r.line2 + 1) : ""],
-        content: text,
+        content: lineContent(text, tokens),
         caret: index === caretRow,
       };
     }
@@ -1133,12 +1173,15 @@ export const Unified = forwardRef<PanesHandle, UnifiedProps>(function Unified(pr
     const line = r.kind === "old" ? r.line1 : r.line2;
     const change = changes[r.change];
     const text = side === 1 ? lines1[line] : lines2[line];
+    const tokens = (side === 1 ? props.tokens1 : props.tokens2)?.[line];
     const kind = side === 1 ? "del" : "ins";
-    let content: ReactNode = text;
+    let content: ReactNode = lineContent(text, tokens);
     let cls = "";
     if (colorize) {
       cls = isSoft(change) ? `${kind} soft` : kind;
-      if (change.inner) content = renderSegments(lineSegments(text, offsetOf(r.change, side, line), change.inner, side));
+      if (change.inner) {
+        content = renderSegments(lineSegments(text, offsetOf(r.change, side, line), change.inner, side), text, tokens);
+      }
     }
     const first = side === 1 ? change.start1 === line : change.start1 === change.end1 && change.start2 === line;
     return {
@@ -1214,6 +1257,8 @@ interface OneSideProps {
   labels: PaneLabels;
   /** Yeni dosya yazılabilir mi (silinen dosyada hiç verilmiyor). */
   editor?: EditorBinding | null;
+  /** Satırların sözdizimi belirteçleri. */
+  tokens?: SideTokens;
 }
 
 /**
@@ -1264,7 +1309,7 @@ export const OneSide = forwardRef<PanesHandle, OneSideProps>(function OneSide(pr
           cls: colorize ? kind : "",
           gutterCls: colorize ? kind : "",
           numbers: [String(index + 1)],
-          content: lines[index],
+          content: lineContent(lines[index], props.tokens?.[index]),
           caret: caret.side === side && caret.line === index,
         })}
         gaps={[]}
@@ -1277,6 +1322,7 @@ export const OneSide = forwardRef<PanesHandle, OneSideProps>(function OneSide(pr
         onFold={() => {}}
         labels={labels}
         editor={props.editor ? <EditorLayer {...props.editor} lineHeight={lh} lines={lines.length} /> : undefined}
+        colored={!!props.tokens}
       />
     </div>
   );

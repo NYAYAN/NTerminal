@@ -1753,6 +1753,44 @@ klasörlü örnek, CDP 9334): beş tema; yazı alanının harfleri kırmızıya 
 katmanın üstüne bindirildi, 7.940 satırın sonuna kadar örtüşüyor. Üretim yapısı uygulamanın CSP başlığıyla sunulup iş
 parçacığı Chromium'da koşturuldu: ihlal yok, TS 0,3 sn, C++ 1,4 sn.
 
+---
+
+### 1.30 Fark penceresinde sözdizimi renklendirmesi
+
+**İstek:** "Fark penceresine de renklendirmeyi ekle." (§2.7'nin açık ucuydu.)
+
+**İki taraf iki AYRI belge** (`DiffWindow` › `syntax1` / `syntax2`, §1.29'un
+oturumları): eski sürümde açık kalmış bir yorum yenisinde kapanmış olabilir,
+durumlar karışmamalı. Yeniden adlandırılan dosyada solun dili eski adından.
+Tek taraflı dosyanın (yeni / silinmiş) satırları artık önbellekte; eskiden her
+çizimde (kaydırmada da) yeniden bölünüyordu.
+
+**Sözcük farkı ile renk iç içe** (`DiffPanes` › `renderSegments`): değişen
+sözcüğün zemini (`dw-frag`) DIŞTA, belirteç renkleri içte; belirteç parçanın
+sınırında bölünüyor. Biri öbürünü silseydi ya fark ya renk kaybolurdu.
+
+**Düzenlerken ilişki ters** (`.dw-pane.editable.syntax`): eskiden harfleri
+yazı alanı, zemini satırlar çiziyordu; renkliyken harfleri de SATIRLAR çiziyor,
+yazı alanı saydam, imleç ve seçim onun. Burada satır yüksekliği zaten tam
+piksel ve fark her tuşta eşzamanlı hesaplanıyor, satırlar yazı alanıyla aynı
+çizimde geliyor. Seçim IntelliJ'in renginde ama %70 saydam (renkli harfler
+altından görünsün).
+
+**Renkler fark zemininde en az 3:1** (`themes.ts` › `diffSyntaxVariables`).
+ÖLÇÜLDÜ: düz zemine göre ayarlı renkler eklenen bloğun ve değişen sözcüğün tam
+renkli zemininde 1.97'ye kadar düşüyordu (Windows Terminal / Dark+, mavi
+"değişti" zemininde `#808080` ayraçlar). 4.5 istemek GitHub Koyu'nun yorum
+grisini `#c4c9cd`ye çekip düz metinle karşıtlığını 2.60'tan 1.41'e indiriyordu
+(yorum artık soluk görünmüyordu); 3:1 açık temalarda hiçbir rengi değiştirmiyor.
+Fark zeminlerinin JS kopyası (`DIFF_LINE_COLORS`) `diffWindow.css`le testle bağlı.
+
+**Doğrulama.** `diffSyntax.test.tsx` (yan yana, birleşik, yeni dosyada
+düzenleme, tanınmayan dosya), `surfaceContrast.test.ts` › "fark penceresinde".
+Gözle (CDP 9334, karalama deposu — fark penceresi yazdığını 400 ms sonra
+kaydediyor): iki taraf, birleşik görünüm, açık tema; `/* ` yazınca alttaki
+satırlar yoruma dönüyor; yazı alanının harfleri kırmızıya boyanıp bindirildi,
+renkli satırlarla örtüşüyor.
+
 
 ## 2. Açık işler
 
@@ -1971,11 +2009,11 @@ Gerçek `RmShutdown` (`-Mode api`) için sürüm yapısı gerekiyor.
 - **Geri alma geçmişi dosya başına ve geçişte siliniyor**; IntelliJ belge
   başına tutuyor.
 - Yazma Windows'ta (WebView2) denenmedi; hizalama Chromium'da ölçüldü.
-- **Fark penceresinde sözdizimi renklendirmesi yok** — IntelliJ'de var. Dosya
-  görüntüleyicisinde artık var (§1.29); renklendirici (`lib/syntax.ts`) fark
-  penceresine de bağlanabilir ama iki taraf iki ayrı belge ve bölme satırları
-  sanal çiziliyor, renkli harfler fark zeminlerinin ve sözcük parçalarının
-  üstüne binecek. Ayrı iş.
+- ~~Fark penceresinde sözdizimi renklendirmesi yok~~ — ÇÖZÜLDÜ (§1.30). Kalan
+  bir risk, ÖLÇÜLMEDİ: satırlar sanal çiziliyor (görünen + 12 satır pay); çok
+  hızlı kaydırmada pay aşılırsa kenar bir kare boş kalabilir. Salt okunur
+  bölmelerde hep böyleydi; renkli düzenlemede yazı alanının harfleri saydam
+  olduğu için artık orada da geçerli.
 - **"Align Changes in Side-by-Side Diff" yok** (dişli menüsünde): karşılıklı
   satırları boş dolguyla hizalayan kip. Satır modeli (`buildRows`) dolgu
   satırını taşıyabilecek biçimde, eklenmesi orada.

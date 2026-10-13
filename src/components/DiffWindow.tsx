@@ -39,7 +39,8 @@ import {
   type TextDiff,
 } from "../lib/textDiff";
 import { applyDesignToDocument } from "../lib/design";
-import { applyThemeToDocument, getTheme } from "../lib/themes";
+import { useSyntax } from "../lib/syntax";
+import { applyDiffSyntaxToDocument, applyThemeToDocument, getTheme } from "../lib/themes";
 import { terminalFontSize } from "../lib/settingsLimits";
 import type { DiffSides, FileText, GitChange, Settings } from "../types";
 import type { EditorBinding, EditorHandle } from "./DiffEditor";
@@ -371,7 +372,10 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
 
   const applySettings = useCallback((next: Settings) => {
     setLanguage(next.language);
-    applyThemeToDocument(getTheme(next.appearance.theme));
+    const theme = getTheme(next.appearance.theme);
+    applyThemeToDocument(theme);
+    // Kod renkleri bu pencerede fark zeminlerinin de üstünde (bkz. `diffSyntaxVariables`).
+    applyDiffSyntaxToDocument(theme);
     applyDesignToDocument(next.appearance.design);
     applyUiFont(next.appearance.uiFontFamily, next.appearance.uiFontSize);
     setSettings(next);
@@ -560,6 +564,28 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
 
   const changes = useMemo(() => diff?.changes ?? [], [diff]);
   const visible = countChanges(changes);
+
+  /** Tek taraflı dosyanın satırları (yeni ya da silinmiş); her çizimde yeniden bölünmesin. */
+  const oneSide = useMemo(
+    () => (mode === "added" && current ? splitLines(current.text) : mode === "deleted" && base ? splitLines(base.text) : null),
+    [mode, current, base],
+  );
+
+  /*
+   * Sözdizimi renkleri (bkz. `lib/syntax.ts`). İki taraf iki AYRI belge: eski
+   * sürümde açık kalmış bir yorum yenisinde kapanmış olabilir, durumlar
+   * birbirine karışmamalı. Yazarken sağ tarafın belgesi düzenlemeyle birlikte
+   * yürüyor (fark her tuşta yeniden hesaplanıyor, satırlar onunla geliyor).
+   * Yeniden adlandırılan dosyada solun dili ESKİ adından.
+   */
+  const syntax1 = useSyntax(
+    `${root}/${change?.origPath ?? path}`,
+    mode === "two" ? (diff?.lines1 ?? null) : mode === "deleted" ? oneSide : null,
+  );
+  const syntax2 = useSyntax(
+    `${root}/${path}`,
+    mode === "two" ? (diff?.lines2 ?? null) : mode === "added" ? oneSide : null,
+  );
 
   const gaps = useMemo(
     () => (diff ? unchangedGaps(changes, diff.lines1.length, diff.lines2.length) : []),
@@ -1071,12 +1097,11 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
         {!base ? t("diff.contentAdded") : !current ? t("diff.contentRemoved") : t("diff.binaryDifferent")}
       </div>
     );
-  } else if (mode === "added" || mode === "deleted") {
-    const text = (mode === "added" ? current : base)!.text;
+  } else if ((mode === "added" || mode === "deleted") && oneSide) {
     body = (
       <OneSide
         ref={panes}
-        lines={splitLines(text)}
+        lines={oneSide}
         kind={mode === "added" ? "ins" : "del"}
         lineHeight={lineHeight}
         colorize={!highlightOff}
@@ -1084,6 +1109,7 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
         onCaret={setCaret}
         labels={labels}
         editor={mode === "added" ? binding : null}
+        tokens={(mode === "added" ? syntax2 : syntax1)?.tokens}
       />
     );
   } else if (diff && prefs.viewer === "side") {
@@ -1104,6 +1130,8 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
         onAppend={(i) => applyAt(i, true)}
         labels={labels}
         editor={binding}
+        tokens1={syntax1?.tokens}
+        tokens2={syntax2?.tokens}
       />
     );
   } else if (diff) {
@@ -1120,6 +1148,8 @@ export function DiffWindow({ target }: { target: DiffTarget }) {
         canApply={canApply}
         onApply={(i) => applyAt(i, false)}
         labels={labels}
+        tokens1={syntax1?.tokens}
+        tokens2={syntax2?.tokens}
       />
     );
   }

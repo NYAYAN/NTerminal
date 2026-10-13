@@ -6,7 +6,15 @@ import { describe, expect, it } from "vitest";
 import { contrastRatio, luminance as luminanceOf } from "../lib/contrast";
 import { ensureContrast, filledColors } from "../lib/contrast";
 import { SYNTAX_CLASSES } from "../lib/syntaxScopes";
-import { THEMES, getTheme, syntaxColors, syntaxVariables } from "../lib/themes";
+import {
+  DIFF_LINE_COLORS,
+  THEMES,
+  diffSyntaxVariables,
+  getTheme,
+  isLightTheme,
+  syntaxColors,
+  syntaxVariables,
+} from "../lib/themes";
 
 /**
  * Grup rengi artık yalnızca ince bir şeritte değil ARKA PLANDA da görünüyor.
@@ -333,6 +341,50 @@ describe("kod renkleri", () => {
     expect(colors.string).toBe(base.xterm.green);
     expect(colors.function).toBe(base.xterm.blue);
     expect(colors.comment).toBe(base.ui.textDim);
+  });
+
+  /*
+   * Fark penceresinde aynı renkler fark zeminlerinin ÜSTÜNDE. ÖLÇÜLEN: düz
+   * zemine göre ayarlanmış renkler "değişti" mavisinde 1.97'ye kadar düşüyordu
+   * (Windows Terminal / Dark+). Sınır 3:1 (gerekçesi `MIN_DIFF_SYNTAX_CONTRAST`).
+   */
+  for (const meta of THEMES) {
+    const theme = getTheme(meta.id);
+    const backgrounds = DIFF_LINE_COLORS[isLightTheme(theme) ? "light" : "dark"];
+    const vars = diffSyntaxVariables(theme);
+
+    it(`${meta.id}: fark penceresinde her tür fark zemininde de okunuyor`, () => {
+      for (const [ad, renk] of Object.entries(vars)) {
+        for (const [tur, zemin] of Object.entries(backgrounds)) {
+          const ratio = contrastRatio(renk, zemin);
+          expect(ratio, `${ad} (${renk}) / ${tur} ${zemin}: ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(3);
+        }
+        const bg = theme.xterm.background ?? theme.ui.surface;
+        expect(contrastRatio(renk, bg), `${ad} düz zeminde`).toBeGreaterThanOrEqual(MIN);
+      }
+    });
+  }
+
+  it("fark zeminlerinin JS kopyası `diffWindow.css`tekiyle aynı", () => {
+    // Renkler CSS'te tanımlı (`.dw`); kod renklerinin hesabı JS'teki kopyayı
+    // kullanıyor. Biri değişip öbürü kalırsa güvence sessizce yanlış zemine
+    // göre hesaplanır.
+    const css = readFileSync(join(process.cwd(), "src/styles/diffWindow.css"), "utf8");
+    const block = (selector: string) => {
+      const at = css.indexOf(`${selector} {`);
+      expect(at, `${selector} bulunamadı`).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    const read = (body: string, name: string) => new RegExp(`--dw-${name}:\\s*(#[0-9a-f]{6})`, "i").exec(body)?.[1];
+    for (const [tone, selector] of [
+      ["dark", ".dw"],
+      ["light", ':root[data-tone="light"] .dw'],
+    ] as const) {
+      const body = block(selector);
+      for (const name of ["ins", "del", "mod"] as const) {
+        expect(read(body, name), `${tone} ${name}`).toBe(DIFF_LINE_COLORS[tone][name]);
+      }
+    }
   });
 
   it("CSS'teki her `.syn-*` sınıfının değişkeni tema uygulanırken yazılıyor", () => {
