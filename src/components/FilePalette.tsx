@@ -19,7 +19,8 @@ import { prettyCombo } from "../lib/keys";
 import type { MsgKey } from "../lib/messages";
 import { segments, useTextSearch } from "../lib/textSearch";
 import { useStore } from "../store/useStore";
-import { useActiveGit, useLabel } from "./gitShared";
+import { GitMark } from "./gitLabel";
+import { useActiveGit } from "./gitShared";
 import {
   ArrowIcon,
   FileKindIcon,
@@ -602,16 +603,6 @@ function FileRow({
         </span>
       )}
     </button>
-  );
-}
-
-/** Değişen dosyanın durum simgesi: Değişiklikler listesindekiyle aynı (`useLabel`). */
-function GitMark({ status }: { status: string }) {
-  const { text, tone, Icon } = useLabel(status);
-  return (
-    <span className={`git-icon ${tone}`} title={text} role="img" aria-label={text}>
-      <Icon size={12} />
-    </span>
   );
 }
 

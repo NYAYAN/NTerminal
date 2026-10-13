@@ -4,8 +4,11 @@ import { joinDir, sameDir } from "../lib/dirs";
 import { baseName } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/ipc";
+import { NO_MARKS, treeMarks, type TreeMarks } from "../lib/treeMarks";
 import { sessions, useStore } from "../store/useStore";
 import { fileKind } from "../lib/images";
+import { GitMark, statusTone } from "./gitLabel";
+import { useActiveGit } from "./gitShared";
 import { ChevronIcon, FileKindIcon, FolderIcon } from "./Icons";
 import type { DirEntry } from "../types";
 
@@ -39,6 +42,13 @@ import type { DirEntry } from "../types";
  * İçeriğini görüntüleyicide açıyor — Ctrl+P paletiyle aynı. Shift ile tıklamak
  * ise yolu komut satırına ekliyor; ikisi de gerçek bir ihtiyaç ve ayrımı tek
  * bir değiştirici tuş taşıyor.
+ *
+ * ## Değişen dosyalar işaretli
+ *
+ * İSTEK: "Dosyalar kısmında değişiklik olan dosyaları da anlamalıyım." Değişen
+ * dosyanın adı Değişiklikler listesinin renginde ve sağında onun simgesi;
+ * içinde değişiklik olan klasörün sağında aynı renkte bir nokta (VS Code'un
+ * gezgini, IntelliJ'in proje ağacı gibi). Karar `lib/treeMarks.ts`te.
  */
 /**
  * Etkin sekmenin çalışma dizini.
@@ -104,6 +114,22 @@ export function FileTree() {
     [anahtar],
   );
 
+  /*
+   * Git işaretleri. Durum Değişiklikler paneliyle AYNI kancadan; odak
+   * dönüşünde ve yoklamada içerik aynı olsa da yeni nesneyle yazılıyor (bkz.
+   * `refreshGit`), hesap bu yüzden değişikliklerin METNİNE bağlı (paletteki gibi).
+   */
+  const { git } = useActiveGit();
+  const changes = git?.changes;
+  const changeKey = changes?.map((c) => `${c.status}\t${c.path}`).join("\n") ?? "";
+  const gitRoot = git?.root || cwd;
+  const marks = useMemo(
+    () => (cwd && gitRoot && changes ? treeMarks(changes, gitRoot, cwd) : NO_MARKS),
+    // `changes` anahtarıyla izleniyor (bkz. yukarı).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [changeKey, gitRoot, cwd],
+  );
+
   if (!cwd) return <div className="pop-empty">{t("tree.noDir")}</div>;
 
   return (
@@ -119,6 +145,8 @@ export function FileTree() {
       <Level
         key={cwd}
         path={cwd}
+        rel=""
+        marks={marks}
         depth={0}
         expanded={expanded}
         onToggle={toggle}
@@ -139,6 +167,8 @@ export function FileTree() {
  */
 function Level({
   path,
+  rel,
+  marks,
   depth,
   expanded,
   onToggle,
@@ -146,6 +176,9 @@ function Level({
   onSelectedRow,
 }: {
   path: string;
+  /** Klasörün ağacın köküne göre yolu (`/` ile; kökte boş): işaretlerin anahtarı. */
+  rel: string;
+  marks: TreeMarks;
   depth: number;
   expanded: ReadonlySet<string>;
   onToggle: (full: string) => void;
@@ -181,13 +214,18 @@ function Level({
         const full = joinDir(path, entry.name);
         const acik = expanded.has(full);
         const secili = !entry.dir && !!selected && sameDir(full, selected);
+        const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+        const status = entry.dir ? undefined : marks.files.get(childRel);
+        const dirMark = entry.dir ? marks.dirs.get(childRel) : undefined;
+        const tone = status ? statusTone(status) : dirMark;
+        const cls = entry.dir ? "tree-row dir" : secili ? "tree-row on" : "tree-row";
 
         return (
           <div key={entry.name}>
             <button
               type="button"
               ref={secili ? onSelectedRow : undefined}
-              className={entry.dir ? "tree-row dir" : secili ? "tree-row on" : "tree-row"}
+              className={tone ? `${cls} git-${tone}` : cls}
               aria-current={secili || undefined}
               style={{ paddingLeft: pad(depth) }}
               title={full}
@@ -216,11 +254,22 @@ function Level({
                 {entry.dir ? <FolderIcon size={12} /> : <FileKindIcon path={entry.name} size={12} />}
               </span>
               <span className="tree-name">{entry.name}</span>
+              {status && <GitMark status={status} />}
+              {dirMark && (
+                <span
+                  className={`tree-dot ${dirMark}`}
+                  title={t("tree.changedInside")}
+                  role="img"
+                  aria-label={t("tree.changedInside")}
+                />
+              )}
             </button>
 
             {entry.dir && acik && (
               <Level
                 path={full}
+                rel={childRel}
+                marks={marks}
                 depth={depth + 1}
                 expanded={expanded}
                 onToggle={onToggle}

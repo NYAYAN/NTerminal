@@ -341,7 +341,11 @@ sıkıştırıyordu). Sekme çubuğu, komut kutusu ve durum çubuğu görünür 
 ağaçta `Shift`+tıklama yolu komut kutusuna ekler. Bir dosyaya tıklamak onu
 ağacın **yanında, terminalin kalan bütün genişliğinde** açar; ağaç yerinde
 kalır, açık dosya ağaçta işaretlidir ve başka bir dosyaya tıklamak
-görüntüleyiciyi değiştirir. Görüntüleyicinin `×`'i yalnızca dosyayı, panelin
+görüntüleyiciyi değiştirir. **Değişen dosyalar ağaçta belli olur**: adı
+Değişiklikler listesinin renginde (değişen sarı, yeni ve takip edilmeyen yeşil)
+ve sağında aynı durum simgesi; içinde değişiklik olan klasörün sağında aynı
+renkte bir nokta durur, klasörü açmadan nerede değişiklik olduğu görünür.
+Görüntüleyicide kaydedilen dosya hemen işaretlenir. Görüntüleyicinin `×`'i yalnızca dosyayı, panelin
 `×`'i ya da klasör düğmesi paneli kapatır. Panelin içindeyken `Esc` önce aramayı,
 sonra paneli kapatır ve odak terminale (ya da komut kutusuna) döner;
 düzenlerken basılan `Esc` paneli kapatmaz. Açık bir dosya terminali örtüyorsa

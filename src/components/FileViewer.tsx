@@ -97,6 +97,15 @@ function byteLength(text: string): number {
 const WIDTH_STEP = 40;
 
 /**
+ * Kayıttan sonra git durumu hemen tazeleniyor: dosya ağacı ve Değişiklikler
+ * paneli dosyayı "değişti" diye işaretlesin. Yoklama (`pollGit`) bunu görmüyor —
+ * yalnızca HEAD'e ve indekse bakıyor, çalışma ağacındaki yazmaya değil.
+ */
+function gitChanged(root: string | null) {
+  if (root) void useStore.getState().refreshGit(root);
+}
+
+/**
  * Satırı kaydırıcının ortasına getirir; eşleşme yatayda görünmüyorsa onu da.
  *
  * `scrollIntoView` kullanılmıyor: panelin ATALARINI da kaydırıyor (terminal
@@ -261,7 +270,10 @@ export function FileViewer({
       // Başka dosyaya geçiliyor ya da ağaca dönülüyor: yazılmamış olan kaybolmasın.
       const ed = editRef.current;
       if (ed && ed.raw !== ed.base && !issueRef.current) {
-        void api.writeTextFile(path, ed.base, ed.raw).catch((err) => useStore.getState().toast(String(err), "err"));
+        void api
+          .writeTextFile(path, ed.base, ed.raw)
+          .then(() => gitChanged(root))
+          .catch((err) => useStore.getState().toast(String(err), "err"));
       }
     };
   }, [path, putEdit, putIssue]);
@@ -315,6 +327,7 @@ export function FileViewer({
     const latest = editRef.current;
     if (latest) putEdit({ ...latest, base: ed.raw });
     setFile((prev) => (prev && prev !== "err" ? { ...prev, text: ed.raw, size: byteLength(ed.raw) } : prev));
+    gitChanged(root);
   };
 
   /** Kalem: düzenlemeyi açıp kapatıyor; kapatırken yazılmamış olan kaydediliyor. */

@@ -40,15 +40,39 @@ type StatusLook = {
   Icon: (props: { size?: number; className?: string }) => React.ReactElement;
 };
 
+export type StatusTone = "untracked" | "new" | "del" | "ren" | "mod";
+
+/** Durumun tonu (renk sınıfı): `useLabel`in kararı, metin ve simge olmadan. */
+export function statusTone(status: string): StatusTone {
+  const trimmed = status.trim();
+  if (trimmed === "??") return "untracked";
+  const kod = trimmed[0] ?? "";
+  if (kod === "A") return "new";
+  if (kod === "D") return "del";
+  if (kod === "R") return "ren";
+  return "mod";
+}
+
 /** Durum harflerinin simgesi, rengi ve metni; stash satırları da aynı dili kullanıyor. */
 export function useLabel(status: string): StatusLook {
   const t = useT();
-  const trimmed = status.trim();
-  if (trimmed === "??")
-    return { text: t("git.untracked"), tone: "untracked", Icon: GitUntrackedIcon };
-  const kod = trimmed[0] ?? "";
-  if (kod === "A") return { text: t("git.added"), tone: "new", Icon: GitAddedIcon };
-  if (kod === "D") return { text: t("git.deleted"), tone: "del", Icon: GitDeletedIcon };
-  if (kod === "R") return { text: t("git.renamed"), tone: "ren", Icon: GitRenamedIcon };
-  return { text: t("git.modified"), tone: "mod", Icon: GitModifiedIcon };
+  const tone = statusTone(status);
+  if (tone === "untracked") return { text: t("git.untracked"), tone, Icon: GitUntrackedIcon };
+  if (tone === "new") return { text: t("git.added"), tone, Icon: GitAddedIcon };
+  if (tone === "del") return { text: t("git.deleted"), tone, Icon: GitDeletedIcon };
+  if (tone === "ren") return { text: t("git.renamed"), tone, Icon: GitRenamedIcon };
+  return { text: t("git.modified"), tone, Icon: GitModifiedIcon };
+}
+
+/**
+ * Değişen dosyanın durum simgesi: Değişiklikler listesindekiyle aynı simge ve
+ * renk (`useLabel`). Ctrl+P paleti ve dosya ağacı kullanıyor.
+ */
+export function GitMark({ status }: { status: string }) {
+  const { text, tone, Icon } = useLabel(status);
+  return (
+    <span className={`git-icon ${tone}`} title={text} role="img" aria-label={text}>
+      <Icon size={12} />
+    </span>
+  );
 }

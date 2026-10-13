@@ -1791,6 +1791,35 @@ kaydediyor): iki taraf, birleşik görünüm, açık tema; `/* ` yazınca alttak
 satırlar yoruma dönüyor; yazı alanının harfleri kırmızıya boyanıp bindirildi,
 renkli satırlarla örtüşüyor.
 
+---
+
+### 1.31 Dosya ağacında değişen dosyalar
+
+**İstek:** "Dosyalar kısmında değişiklik olan dosyaları da anlamalıyım."
+
+**Karar** (`lib/treeMarks.ts`): değişen dosyanın adı Değişiklikler listesinin
+renginde (değişti `--warn`, yeni / takip edilmeyen / yeniden adlandırılan
+`--ok`) ve sağında aynı simge (`GitMark`, Ctrl+P paletinden `gitLabel.tsx`e
+taşındı); içinde değişiklik olan klasörün sağında aynı renkte nokta — klasör
+kapalıyken de görünüyor. Klasörde "değişti" baskın: yeşil ancak yalnızca yeni
+dosyalar varsa. Silinen dosya ağaçta yok ama klasörünü sarıya çeviriyor. Renk
+satıra değil ADA veriliyor: açık dosyanın satırı (`.on`) kendi rengini koysa
+da durum görünsün.
+
+Git yolları depo köküne, ağaç sekmenin dizinine göre (`changedInDir` ile aynı
+çözüm); ağacın dışındaki değişiklik düşüyor. İşaretler değişikliklerin
+METNİNE bağlı hesaplanıyor: yoklama aynı içeriği yeni nesneyle yazıyor.
+
+**Kayıttan sonra tazeleme** (`FileViewer` › `gitChanged`): `pollGit` yalnızca
+HEAD'e ve indekse bakıyor, çalışma ağacındaki yazmayı görmüyor; görüntüleyicide
+kaydedilen dosya bir sonraki odak dönüşüne kadar işaretsiz kalırdı. ÖLÇÜLDÜ:
+kayıttan sonra ağaçta "değişti" 189 ms'de, pencere odağı hiç değişmeden.
+
+**Doğrulama.** `treeMarks.test.ts` (alt dizindeki sekme, dışarıda kalan,
+yeni / değişen baskınlığı, silinen, yeniden adlandırılan), `treeGit.test.tsx`
+(renk ve simge, kapalı klasörde nokta, açık klasörde yalnızca değişen,
+commit sonrası temizlenme). Gözle (CDP 9334): bu depoda `src`, `lib`,
+`components` noktalı, takip edilmeyen dosyalar yeşil, değişen `themes.ts` sarı.
 
 ## 2. Açık işler
 

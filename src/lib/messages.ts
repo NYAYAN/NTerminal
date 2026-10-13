@@ -193,6 +193,8 @@ export const MESSAGES = {
   // yüzden "geri aç" — daraltmadan önce açık olanları geri getiriyor.
   "tree.collapseAll": ["Tüm klasörleri daralt", "Collapse all folders"],
   "tree.reopen": ["Klasörleri geri aç", "Reopen folders"],
+  // Klasörün sağındaki nokta: içinde değişen dosya var (bkz. `lib/treeMarks.ts`).
+  "tree.changedInside": ["İçinde değişiklik var", "Contains changes"],
   // Görüntüleyici ağacın YANINDA açılıyor; "geri" yok, yalnızca dosya kapanıyor.
   "viewer.close": ["Dosyayı kapat", "Close file"],
   // Görsel önizlemesi (PNG, JPEG, SVG…; bkz. `lib/images.ts`).

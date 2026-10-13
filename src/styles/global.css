@@ -986,6 +986,50 @@ button.hit-head:hover {
   white-space: nowrap;
 }
 
+/* Değişen dosya ve içinde değişiklik olan klasör (bkz. `lib/treeMarks.ts`):
+   ad Değişiklikler listesinin renginde — değişti sarı, yeni yeşil. Renk ADA
+   veriliyor, satıra değil: açık dosyanın satırı (`.on`) kendi rengini koysa da
+   durum görünsün. */
+.tree-row.git-mod .tree-name {
+  color: var(--warn);
+}
+
+.tree-row.git-new .tree-name,
+.tree-row.git-untracked .tree-name,
+.tree-row.git-ren .tree-name {
+  color: var(--ok);
+}
+
+/* Simge ve nokta satırın SAĞ ucunda, aynı 16px'lik sütunda: ad kırpılsa da
+   durum görünüyor ve alt alta satırlarda tek hizada. */
+.tree-row .git-icon,
+.tree-dot {
+  margin-left: auto;
+}
+
+.tree-dot {
+  flex: none;
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
+}
+
+.tree-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.tree-dot.mod {
+  color: var(--warn);
+}
+
+.tree-dot.new {
+  color: var(--ok);
+}
+
 .tree-info {
   padding: 2px 8px;
   color: var(--text-dim);
