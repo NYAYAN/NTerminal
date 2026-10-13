@@ -13,6 +13,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *
  * jsdom'da xterm görünümü gerçekten kaydıramıyor (hücre yüksekliği 0);
  * `scrollLines` taklit ediliyor ve oturumun ondan İSTEDİĞİ satırlar sayılıyor.
+ *
+ * KARELERİ TEST SÜRÜYOR. KIRILGANDI (2026-10-13 ölçüldü): "çentik ilk karede
+ * başlıyor…" tam takımda 3 koşunun 2'sinde "bir karede birden fazla satır
+ * atladı: expected -2 to be -1" ile düşüyordu. Kareler jsdom'un gerçek
+ * `requestAnimationFrame`'inden geliyordu — Node'da 16,7 ms'lik bir
+ * `setInterval` — ve oturum adımı GEÇEN SÜREYE göre atıyor: geciken kare
+ * aradaki mesafeyi bir seferde kapatıyor (bkz. `WheelScroller.step`). İzle
+ * ölçülen 18 koşu (11 tek başına, 7 tam takım): kare aralığı p50 25 ms, p90
+ * 35 ms, en çok 74 ms. Düşen koşuda (iki tam takım aynı anda) olaydan sonraki
+ * 2. kare öncekinden 73,9 ms sonra geldi ve iki satır kaydırdı: adımlar
+ * [-1, 0, -2]. Eşik 2. karede 53,4 ms, 3. karede 35,9 ms (bir koşuda 35,7 ms
+ * ölçüldü); sahte karelerle aynı ileti birebir çıktı, eşiğin 0,1 ms altı
+ * geçiyor.
+ *
+ * Bir tuhaflık daha: jsdom'da rAF'ın zaman damgası pencerenin açıldığı andan,
+ * oturumun `performance.now()`u sürecin başından sayıyor; ilk karenin süresi
+ * eksi çıkıyor (-570…-11.600 ms) ve 4 ms'ye kırpılıyordu. Tarayıcıda ikisi
+ * aynı saat.
+ *
+ * Şimdi kareler 1000/60 ms arayla, `performance.now()` ile AYNI sahte saatten
+ * geliyor ve yalnızca test ilerletince akıyor: her koşu aynı adımları izliyor,
+ * sonuç makinenin yüküne bağlı değil.
  */
 
 const h = vi.hoisted(() => {
@@ -80,9 +102,46 @@ function olcuVer() {
 
 const flush = (s: { term: { write: (data: string, cb: () => void) => void } }) =>
   new Promise<void>((resolve) => s.term.write("", () => resolve()));
-const kare = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-async function kareler(n: number) {
-  for (let i = 0; i < n; i++) await kare();
+
+/*
+ * Sahte kareler (gerekçe dosya başında). Oturum kurulmadan ÖNCE devreye
+ * giriyor, xterm'in kendi çizim istekleri de bu kuyruğa düşüyor. Kurulumdan
+ * sonra devreye sokulduğunda xterm'in açılışta gerçek rAF'a bıraktığı istek
+ * oturum kapandıktan sonra ateşlenip "Cannot read properties of undefined
+ * (reading 'dimensions')" atıyordu: xterm kapanırken onu iptal ediyor ama
+ * `cancelAnimationFrame` artık sahteydi.
+ */
+let saat = 0;
+let sonKare = 0;
+const bekleyenKareler = new Map<number, FrameRequestCallback>();
+
+function kareleriSahtele() {
+  // Sıfır değil: oturum farkı (`now - wheelAt`) değil zamanın kendisini
+  // kullansaydı 0'dan başlayan saatte ilk kare yine 16,7 ms görünürdü.
+  saat = 1000;
+  bekleyenKareler.clear();
+  vi.spyOn(performance, "now").mockImplementation(() => saat);
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    bekleyenKareler.set(++sonKare, cb);
+    return sonKare;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+    bekleyenKareler.delete(id);
+  });
+}
+
+/**
+ * Bir kare (60 Hz): saat 16,7 ms ilerliyor, o ana kadar istenen geri çağrılar
+ * koşuyor. Kare içinde istenen bir sonraki kareye kalıyor (tarayıcıdaki gibi).
+ */
+function kare() {
+  saat += 1000 / 60;
+  const sira = [...bekleyenKareler.values()];
+  bekleyenKareler.clear();
+  for (const cb of sira) cb(saat);
+}
+function kareler(n: number) {
+  for (let i = 0; i < n; i++) kare();
 }
 
 async function oturum(tabId: string) {
@@ -131,10 +190,13 @@ const istenen = (kaydir: { mock: { calls: unknown[][] } }) =>
 beforeEach(() => {
   jsdomEksikleri();
   olcuVer();
+  kareleriSahtele();
 });
 
 afterEach(() => {
   Element.prototype.getBoundingClientRect = gercekRect;
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("ana tamponda tekerleği oturum kaydırıyor", () => {
@@ -146,7 +208,7 @@ describe("ana tamponda tekerleği oturum kaydırıyor", () => {
     expect(kaydir.mock.calls.length, "ilk adım bir kare gecikti").toBe(1);
     expect(kaydir.mock.calls[0][0] as number).toBeLessThan(0);
 
-    await kareler(12);
+    kareler(12);
     const cagri = kaydir.mock.calls.map((c) => c[0] as number);
     // 40 piksel = bir çentik = 50 px; 400 px / 24 satır = 16,67 px hücre → 3 satır.
     expect(istenen(kaydir)).toBe(-3);
@@ -166,7 +228,7 @@ describe("xterm'e bırakılanlar", () => {
     // engellemek ise xterm'in ok tuşu çevirisini öldürürdü (jsdom'da xterm'in
     // kendi dinleyicisi kurulmuyor, yani olayı engelleyen ancak oturum olur).
     const ev = tekerlek(s);
-    await kareler(3);
+    kareler(3);
     expect(ev.defaultPrevented, "ikincil ekranda tekerleği oturum yuttu").toBe(false);
     expect(kaydir, "ikincil ekranda oturum kaydırdı; ok tuşuna çevrilmedi").not.toHaveBeenCalled();
     void s.dispose(true);
@@ -178,7 +240,7 @@ describe("xterm'e bırakılanlar", () => {
     await flush(s);
     expect(s.term.modes.mouseTrackingMode).not.toBe("none");
     const ev = tekerlek(s);
-    await kareler(3);
+    kareler(3);
     expect(ev.defaultPrevented, "tekerlek programa gitmedi, oturum yuttu").toBe(false);
     expect(kaydir).not.toHaveBeenCalled();
     void s.dispose(true);
@@ -188,7 +250,7 @@ describe("xterm'e bırakılanlar", () => {
     const { s, kaydir } = await oturum("w4");
     expect(tekerlek(s, { ctrlKey: true }).defaultPrevented).toBe(false);
     expect(tekerlek(s, { shiftKey: true }).defaultPrevented).toBe(false);
-    await kareler(3);
+    kareler(3);
     expect(kaydir).not.toHaveBeenCalled();
     void s.dispose(true);
   });
@@ -200,7 +262,7 @@ describe("bekleyen hareket kesiliyor", () => {
     tekerlek(s, { deltaY: -400 });
     s.scrollToBottom();
     const once = kaydir.mock.calls.length;
-    await kareler(6);
+    kareler(6);
     expect(kaydir.mock.calls.length, "en alta inildi, tekerlek hâlâ yukarı itiyor").toBe(once);
     void s.dispose(true);
   });
@@ -212,7 +274,7 @@ describe("bekleyen hareket kesiliyor", () => {
     tekerlek(s, { deltaY: -400 });
     s.term.input("a", true);
     const once = kaydir.mock.calls.length;
-    await kareler(6);
+    kareler(6);
     expect(kaydir.mock.calls.length).toBe(once);
     void s.dispose(true);
   });
