@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Görünmeyen sekme kare başına iş yapmamalı.
@@ -22,6 +22,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Bu testler işin GERÇEKTEN kesildiğini ve sekme görünür olunca katmanın bir
  * kez tazelendiğini bağlıyor — tazeleme olmasa bloklar bir sonraki çıktıya
  * kadar eski yerinde kalırdı, sessiz bir sekmede belki hiç.
+ *
+ * ## Neden sahte saat ve 30 sn
+ *
+ * İlk test iki tam takım aynı anda koşarken (138 sn'lik ağır tur, makine %100
+ * dolu) "Test timed out in 5000ms" ile düştü: 5157 ms; öteki takımda 3953
+ * ms'de, sınırın dibinde geçti. Sonraki testler 0,1–3,9 sn sürdü. ÖLÇÜLDÜ
+ * (2026-10-13, 16 mantıksal çekirdek; adım adım duvar saati ve sürecin işlemci
+ * süresi test içinden):
+ *
+ * - Sürenin çoğu işlemci işi, dosyanın ilk testindeki soğuk kurulum. Sakin
+ *   makinede ilk test 148–165 ms, bunun 84–87 ms'si xterm'in ilk `open()`u
+ *   (`attach`); sonraki testlerde aynı adım 13–22 ms. İki tam takım + işlemci
+ *   yükünde (143 sn'lik tur) ilk test 1416–1739 ms, `attach` 1044–1189 ms
+ *   duvar / 329–360 ms işlemci: süreç çekirdek bekliyor.
+ * - Gerisi gerçek bekleme: yazma kuyruğu ve iki kare sakinken 54–69 ms, aynı
+ *   yükte 219–533 ms.
+ *
+ * Saat artık sahte (zamanlayıcılar, `requestAnimationFrame`, `Date`,
+ * `performance`): yazma kuyruğu, kareler ve 150 ms'lik beklemeler yalnızca
+ * test ilerletince akıyor, her koşuda aynı sırayla. Daha ağır bir turda (154
+ * sn) ilk test 836–920 ms sürdü. Kalan tek gerçek süre vitest'in test başına
+ * sınırı ve içinde yalnızca işlemci işi var. Sınır 30 sn: aynı turda düşen üç
+ * dosyada ölçülen en kötü ilk testin (settingUndo, 6539 ms) ~4,5 katı;
+ * takılıp kalan bir test yine yakalanır.
  */
 
 const h = vi.hoisted(() => {
@@ -105,19 +129,62 @@ async function oturum(tabId: string) {
   return { s, host };
 }
 
-/** xterm yazmayı kuyruğa alıyor; ayrıştırma bitince geri çağırıyor. */
-const flush = (s: { term: { write: (data: string, cb: () => void) => void } }) =>
-  new Promise<void>((resolve) => s.term.write("", () => resolve()));
+/**
+ * Yazma kuyruğu boşalsın. xterm yazmayı kuyruğa alıp ayrıştırmayı bir
+ * zamanlayıcıya bırakıyor; sahte saatte o da ancak saat ilerleyince koşuyor.
+ * Ayrıştırma sahte saatte süre tüketmiyor, yani 0 ms yetiyor.
+ */
+async function flush(s: { term: { write: (data: string, cb: () => void) => void } }) {
+  let bitti = false;
+  s.term.write("", () => {
+    bitti = true;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(bitti, "yazma kuyruğu boşalmadı").toBe(true);
+}
 
-const kare = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-const bekle = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/**
+ * Bir kare. Sahte saatte kareler 16 ms'lik sınırlarda ateşleniyor; 16 ms
+ * ilerletmek tam bir sınır geçiyor. O ana kadar istenen kareler koşuyor, kare
+ * içinde istenen bir sonrakine kalıyor — tarayıcıdaki gibi.
+ */
+const kare = () => vi.advanceTimersByTimeAsync(16);
+/** Saat `ms` ilerlesin: vadesi gelen kareler ve zamanlayıcılar sırayla ateşleniyor. */
+const bekle = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+
+/** Süre sınırının gerekçesi başlıkta: "Neden sahte saat ve 30 sn". */
+const SURE_SINIRI = { timeout: 30_000 };
 
 beforeEach(() => {
   h.reset();
   jsdomEksikleri();
+  // Oturum kurulmadan önce: xterm kurulumda bir kare istiyor, o da sahte
+  // saatte olmalı. `performance` da sahte, çünkü xterm yazma kuyruğunu
+  // `performance.now()` ile 12 ms'lik dilimlere bölüyor: dilimi aşan
+  // ayrıştırmanın kalanı yeni bir zamanlayıcıya kalıyor ve sahte saat
+  // ilerletme sırasında kurulan zamanlayıcıyı en az 1 ms sonraya koyduğu için
+  // 0 ms ilerletme onu koşturmuyor. ÖLÇÜLDÜ: 4000 satırlık bir yazmada
+  // `performance` gerçekken 3 koşunun 3'ünde "yazma kuyruğu boşalmadı",
+  // sahteyken 3/3 geçti.
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "Date",
+      "performance",
+    ],
+  });
 });
 
-describe("gizli sekmede kare başına iş", () => {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("gizli sekmede kare başına iş", SURE_SINIRI, () => {
   it("gizliyken blok katmanı yeniden çizilmiyor", async () => {
     const { s } = await oturum("t1");
     let cizim = 0;
@@ -196,7 +263,7 @@ describe("gizli sekmede kare başına iş", () => {
  * hesaplatıyor ve bu değer kare başına iki kez okunuyordu. Oysa yalnızca
  * yeniden boyutlandırma, `fit` ve yazı tipi/boyut değişimiyle değişiyor.
  */
-describe("blok geometrisi", () => {
+describe("blok geometrisi", SURE_SINIRI, () => {
   it("ölçü değişmedikçe yeniden okunmuyor", async () => {
     const { s } = await oturum("t5");
     const gercek = Element.prototype.getBoundingClientRect;
@@ -301,7 +368,7 @@ describe("blok geometrisi", () => {
  * `flushAllState` iki dakikada bir de koşuyor ve her sekme için `serialize()`
  * çağırmak on sekmede on kez 2000 satırın metne çevrilmesi demek.
  */
-describe("kaydedilecek çıktı işareti", () => {
+describe("kaydedilecek çıktı işareti", SURE_SINIRI, () => {
   it("yeni çıktı gelmeden kaydedilecek bir şey yok", async () => {
     const { s } = await oturum("t6");
     s.markOutputSaved();
