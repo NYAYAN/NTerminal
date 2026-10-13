@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Bağlantı renklendirmesi KENDİNİ beslememeli.
@@ -33,6 +33,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * İkinci ve üçüncü test kapının yanlış tarafa kapanmadığını bağlıyor: içerik
  * değişince yeniden boyanmalı, ayar değişince de — yoksa belirti sessizce
  * tersine döner ve bağlantılar kalıcı olarak sönük kalır.
+ *
+ * ## Neden sahte saat
+ *
+ * Testler gerçek saatle 150 ms bekliyordu ve tam takımda 3 koşunun 1'inde
+ * düşüyordu: "içerik değişti ama yeniden boyanmadı: expected 1 to be greater
+ * than 1". Boyayı yazmadan sonraki ilk kare (`onRender`) 90 ms'lik
+ * zamanlayıcıyla kuruyor; kare yazmadan 60 ms ya da daha geç gelirse
+ * zamanlayıcının vadesi beklemenin vadesini geçiyor ve kontrol boyadan önce
+ * koşuyor. ÖLÇÜLDÜ (2026-10-13):
+ *
+ * - Yeniden üretim: yazmanın ardından olay döngüsünü 60 ya da 70 ms tıkamak
+ *   iki iletiyi de her koşuda verdi — ikinci pencerede yukarıdaki, birinci
+ *   pencerede "ilk adres boyanmadı: expected 0 to be greater than 0"; 40–55
+ *   ms tıkamada hiç düşmedi. Eşik tam olarak 150 − 90.
+ * - Tam takımda (3 koşu, makine %100 dolu) yazmadan sonraki kare 3–121 ms
+ *   sonra geldi, 150 ms'lik bekleme gerçekte 150–249 ms sürdü. Bir koşuda
+ *   kare 70 ms gecikti; boya kontrolden 1,1 ms sonra geldi ve test "ilk adres
+ *   boyanmadı" diye düştü. Tek başına bile, makine %93–100 doluyken, boyadan
+ *   sonra kalan pay 42 ms'ye indi.
+ *
+ * Artık saat sahte (zamanlayıcılar, `requestAnimationFrame`, `Date`,
+ * `performance`): xterm'in yazma kuyruğu, çizim karesi ve erteleme penceresi
+ * yalnızca test ilerletince akıyor, her koşuda aynı sırayla. 150 ms
+ * gerçekten 150 ms; her yazmanın ardından 70 ms tıkama artık hiçbir testi
+ * düşürmüyor. İlk test de keskinleşti: imza kapısı kaldırılınca sayaç 600 ms'de
+ * her koşuda tam 6 artıyor; gerçek saatte tur sayısı makinenin hızına
+ * bağlıydı (tek başına 5).
+ *
+ * Kalan tek gerçek süre vitest'in test başına sınırı ve içinde artık yalnızca
+ * işlemci işi var (ilk testte xterm'in soğuk kurulumu). İki tam takım aynı
+ * anda koşarken ilk test 631–3218 ms sürdü, tek başına ~150 ms. Eski sürüm
+ * (750 ms gerçek bekleme dahil) tek tam takımda 4324 ms'ye çıkıyor, iki
+ * eşzamanlı takımda 2 koşunun 2'sinde 5 sn'yi aşıyordu. Sınır bu yüzden 30 sn.
  */
 
 const h = vi.hoisted(() => {
@@ -106,9 +139,22 @@ async function oturum(tabId: string) {
   return s;
 }
 
-const flush = (s: { term: { write: (data: string, cb: () => void) => void } }) =>
-  new Promise<void>((resolve) => s.term.write("", () => resolve()));
-const bekle = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/**
+ * Yazma kuyruğu boşalsın. xterm ayrıştırmayı bir zamanlayıcıya bırakıyor;
+ * sahte saatte o da ancak saat ilerleyince koşuyor. Ayrıştırma sahte saatte
+ * süre tüketmiyor, yani 0 ms yetiyor.
+ */
+async function flush(s: { term: { write: (data: string, cb: () => void) => void } }) {
+  let bitti = false;
+  s.term.write("", () => {
+    bitti = true;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(bitti, "yazma kuyruğu boşalmadı").toBe(true);
+}
+
+/** Saat `ms` ilerlesin: vadesi gelen kareler ve zamanlayıcılar sırayla ateşleniyor. */
+const bekle = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
 /** Erteleme penceresi 90 ms; birkaç turun sığacağı kadar bekliyoruz. */
 const TURLAR = 600;
@@ -116,9 +162,31 @@ const TURLAR = 600;
 beforeEach(() => {
   h.reset();
   jsdomEksikleri();
+  // Oturum kurulmadan önce: xterm'in kurulumda istediği kare de sahte saatte
+  // olmalı. `performance` da sahte, çünkü xterm yazma kuyruğunu
+  // `performance.now()` ile 12 ms'lik dilimlere bölüyor. Gerçek kalınca
+  // soğuk ilk ayrıştırma dilimi aşıp kalanı bir zamanlayıcıya bırakıyordu;
+  // 0 ms ilerletme onu kaçırdı ("yazma kuyruğu boşalmadı", 6 koşuda 1).
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "Date",
+      "performance",
+    ],
+  });
 });
 
-describe("bağlantı renklendirme döngüsü", () => {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// Süre sınırının gerekçesi başlıkta: "Neden sahte saat"in son paragrafı.
+describe("bağlantı renklendirme döngüsü", { timeout: 30_000 }, () => {
   it("ekranda adres dururken kendini yeniden tetiklemiyor", async () => {
     const s = await oturum("l1");
     const marker = vi.spyOn(s.term, "registerMarker");
