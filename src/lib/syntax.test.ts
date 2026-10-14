@@ -1,7 +1,7 @@
 import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
 import { createShikiPrimitiveAsync } from "@shikijs/primitive";
 import { INITIAL, type IGrammar, type StateStack } from "@shikijs/primitive/textmate";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { carryTokens, SyntaxSession, type SyntaxHost } from "./syntax";
 import { LINE_ATTEMPTS, LINE_TIME_LIMIT, SyntaxDocument, type LineTokens } from "./syntaxDocument";
@@ -99,7 +99,33 @@ describe("dosya adından dil", () => {
   });
 });
 
-describe("kapsamdan sınıfa", () => {
+/*
+ * ## Süre sınırı neden 30 sn
+ *
+ * "TypeScript: VS Code'un ayrımları" dosyada TypeScript'i renklendiren İLK
+ * test: gramerin düzenli ifadeleri onun ilk satırında derleniyor (JavaScript
+ * motoruna çeviri + JIT), sonraki testler derlenmiş ifadeleri kullanıyor. İki
+ * tam takım + 16 dönen iş parçacığı koşarken (147 sn'lik ağır tur, makine
+ * %100) iki takımda da "Test timed out in 5000ms" ile düştü: 5434 ve 7619 ms.
+ * ÖLÇÜLDÜ (2026-10-14, 16 mantıksal çekirdek; adım adım duvar saati, sürecin
+ * işlemci süresi ve olay döngüsünün boşta geçen süresi test içinden):
+ *
+ * - Süre işlemci işi, bekleme yok: olay döngüsü hiç boşta kalmıyor. Tek başına
+ *   279–295 ms; bunun 274–290 ms'si ilk renklendirme, içe aktarma ve gramerin
+ *   yüklenmesi 2'şer ms.
+ * - Aynı tarifle üç ağır tur daha (157'şer sn, makine %99–100): 3348–7852 ms;
+ *   ölçüm sayaçlı ikisinde ilk renklendirme 3340–5668 ms duvar / 688–1046 ms
+ *   işlemci, yani süreç çekirdek bekliyor. 5 sn'lik sınırla ilk turda iki
+ *   takımda da yeniden düştü (5475 ve 5691 ms); bu sınırla son turda 6027 ve
+ *   7852 ms sürüp geçti.
+ *
+ * Sahte saatin kısaltacağı bir bekleme yok. Sınır ölçülen en kötünün (7852 ms)
+ * ~4 katı; takılıp kalan bir renklendirme yine yakalanır. "Her gramer
+ * yükleniyor" bütün gramerleri derliyor: o turlarda 30,4–41,5 sn, önceki ağır
+ * turlarda 78,3 sn'ye kadar (olay döngüsü yalnızca içe aktarmalarda boşta,
+ * 0,9–3,1 sn). Onun sınırı da en kötünün ~4 katı.
+ */
+describe("kapsamdan sınıfa", { timeout: 30_000 }, () => {
   it("TypeScript: VS Code'un ayrımları", async () => {
     // KIRILGANDI (2026-10-13 ölçüldü): tam takımda 3 koşunun 1'inde düştü,
     // gelen dizide 13 yerine 10 öğe vardı: `return`den sonrası (`fetch`,
@@ -182,11 +208,12 @@ describe("kapsamdan sınıfa", () => {
     expect(lines[2]).toEqual(expect.arrayContaining([["const", "keyword"]]));
   });
 
-  it("her gramer yükleniyor ve bir satırı renklendiriyor", { timeout: 120_000 }, async () => {
+  it("her gramer yükleniyor ve bir satırı renklendiriyor", { timeout: 300_000 }, async () => {
     // JavaScript'in düzenli ifade motoru Oniguruma'nın her kalıbını
     // çeviremiyor; çeviremediği bir dil hatayla değil düz metinle sonuçlanmalı.
     // Süre sınırı yok: satır yarıda kesilirse kalanının kalıpları hiç
     // denenmezdi (C++'ın ilk satırı tam takımda iki denemede de kesiliyordu).
+    // Testin kendi sınırı: bkz. "Süre sınırı neden 30 sn".
     for (const lang of Object.keys(GRAMMARS)) {
       const { grammar: g, classOf } = await grammar(lang);
       const doc = new SyntaxDocument(g, classOf, ["abc = 1 # x // y", ""], NO_LIMIT);
@@ -435,15 +462,53 @@ function inProcessHost(): SyntaxHost & { sent: SyntaxRequest[] } {
   };
 }
 
+/** Koşul sağlanana kadar sahte saati ilerletir; sınır da sahte zamanda (bkz. "Saat sahte"). */
 async function until(check: () => boolean, ms = 10_000) {
   const end = Date.now() + ms;
   while (!check()) {
     if (Date.now() > end) throw new Error("zaman aşımı");
-    await new Promise((r) => setTimeout(r, 5));
+    await vi.advanceTimersByTimeAsync(5);
   }
 }
 
-describe("ana pencere oturumu", () => {
+/*
+ * ## Saat sahte, süre sınırı 30 sn
+ *
+ * "Gerçek renklendiriciyle uçtan uca" bir ağır turda (iki tam takım + 16
+ * dönen iş parçacığı, 120 sn, makine %100) "Test timed out in 5000ms" ile
+ * düştü: 5893 ms; tam takımda 248–508 ms. ÖLÇÜLDÜ (2026-10-14; adım adım
+ * duvar saati, sürecin işlemci süresi ve olay döngüsünün boşta geçen süresi
+ * test içinden):
+ *
+ * - Süre çoğunlukla işlemci işi: oturumun renklendiricisi kendi motorunu
+ *   kuruyor, ifadeler yeniden derleniyor. Tek başına 104–134 ms; aynı tarifle
+ *   iki ağır turda (157'şer sn, makine %99–100) 1629–2407 ms, renklendiricinin
+ *   dilimleri 1344–1848 ms duvar / 266–360 ms işlemci.
+ * - Gerisi gerçek bekleme: `until`in 5 ms'lik yoklaması ve renklendiricinin
+ *   dilimler ve yanıtlar arasındaki sıfır gecikmeli zamanlayıcıları. Olay
+ *   döngüsü tek başınayken 21–44 ms, ağır turlarda 180–391 ms boşta: tek bir
+ *   5 ms'lik bekleme 200 ms'ye uzuyor. `until`in 10 sn'lik sınırı da gerçek
+ *   saatti.
+ *
+ * Bu yüzden saat sahte (setTimeout/setInterval, Date): dilimler ve yanıtlar
+ * yalnızca test ilerletince akıyor, `until` sahte zamanda sayıyor. Sahte
+ * zamanın süremediği tek bekleme gramer modülünün ilk içe aktarılması (gerçek
+ * G/Ç): `until`in sahte 10 sn'si gerçekte 15–142 ms sürdü, modül bu yüzden
+ * saat kurulmadan önce yükleniyor (test tek başına koşsa da). Kalan işlemci
+ * işine sınır 30 sn, ölçülen en kötünün (5893 ms) ~5 katı. Sahte saatle tek
+ * başına 84–97 ms ve olay döngüsü hiç boşta değil; ağır turda 1814–2235 ms.
+ */
+describe("ana pencere oturumu", { timeout: 30_000 }, () => {
+  beforeAll(async () => {
+    await GRAMMARS.typescript();
+  });
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("geciken yanıt o arada eklenen satırların altına kayıyor, değişen satırınki atılıyor", () => {
     const posted: SyntaxRequest[] = [];
     const host: SyntaxHost = { post: (r) => posted.push(r), listen: () => {} };
