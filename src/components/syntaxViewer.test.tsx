@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, vi } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
 import { setSyntaxHost, type SyntaxHost } from "../lib/syntax";
+import { GRAMMARS } from "../lib/syntaxGrammars";
 import { createSyntaxService, type SyntaxReply } from "../lib/syntaxService";
+import { zincirKorumasi } from "../test/timeoutChain";
 import type { FileText } from "../types";
 import { FileViewer } from "./FileViewer";
 
@@ -21,7 +23,44 @@ import { FileViewer } from "./FileViewer";
  * Asıl güvence düzenlemede: yazı alanının harfleri saydam, görünen metin
  * altındaki katman. Katman yazı alanının metninden bir harf bile ayrışırsa
  * kullanıcı yazdığından başka bir şey görür.
+ *
+ * ## Saat sahte, süre sınırı 30 sn, zincir koruması
+ *
+ * KIRILGANDI (2026-10-13): "dilim sınırlarında satır kaybolmuyor" iki tam
+ * takım + 16 dönen iş parçacığı koşarken (147 sn'lik ağır tur, makine %100)
+ * iki takımda da "Test timed out in 5000ms" ile düştü: 5221 ve 6273 ms.
+ * vitest zaman aşımında testi durdurmuyor: bırakılan testin `until`i act'le
+ * yoklamayı sürdürdü, sonraki testte iki "overlapping act" uyarısı çıktı (o
+ * turda geçti; fark penceresinin renk testlerinde aynı çakışma üç testi daha
+ * düşürdü). ÖLÇÜLDÜ (2026-10-14, 16 mantıksal çekirdek; adım adım duvar saati,
+ * sürecin işlemci süresi ve olay döngüsünün boşta geçen süresi test içinden):
+ *
+ * - Süre çoğunlukla işlemci işi: her test kendi renklendiricisini (soğuk
+ *   motor) kuruyor; bu test 150 satırı renklendirip düzenleme katmanını
+ *   çiziyor. Tek başına 143–153 ms; aynı tarifle iki ağır turda (157'şer sn,
+ *   makine %99–100) 2952–4899 ms duvar / 609–687 ms işlemci.
+ * - Gerisi gerçek bekleme: `until`in 10 ms'lik yoklaması ve renklendiricinin
+ *   sıfır gecikmeli zamanlayıcıları. Olay döngüsü tek başınayken 23–31 ms,
+ *   ağır turlarda 200–397 ms boşta: tek bir 10 ms'lik bekleme 200 ms'ye
+ *   uzuyor.
+ *
+ * Bu yüzden saat sahte (setTimeout/setInterval, Date; React'in kullandığı
+ * setImmediate gerçek) ve çizimden önce kuruluyor: renklendiricinin dilimleri
+ * ve yanıtları yalnızca `until` ilerletince akıyor, `until`in sınırı da sahte
+ * zamanda. Sahte zamanın süremediği tek bekleme gramer modülünün ilk içe
+ * aktarılması (gerçek G/Ç): `until`in sahte 15 sn'si gerçekte 0,1–0,5 sn
+ * sürdüğü için ona yetmeyebilirdi, modül bu yüzden saat kurulmadan önce
+ * `beforeAll`da yükleniyor (deney fark penceresinin renk testlerinde). Kalan
+ * işlemci işine sınır 30 sn, ölçülen en kötünün (6273 ms) ~5 katı. Testler
+ * `zincirKorumasi`nın `it`inden geçiyor: zaman aşımına düşen test bir sonraki
+ * `adim`da duruyor, söküm onu bekliyor. Kasıtlı üretildi: ilk teste 50 ms'lik
+ * sınır verilince korumasız dosyada üç koşuda 6/6, 5/6 ve 6/6 test düştü,
+ * korumalı dosyada 1/6. Sahte saatle bu test tek başına 111–117 ms ve olay
+ * döngüsü hiç boşta değil; ağır turda 2259–3246 ms.
  */
+
+/** Gerekçe başlıkta: "Saat sahte, süre sınırı 30 sn, zincir koruması". */
+const { it, adim, birakilaniBekle } = zincirKorumasi(30_000);
 
 function text(t: string): FileText {
   return { text: t, binary: false, truncated: false, size: t.length };
@@ -49,7 +88,13 @@ function inProcessHost(): SyntaxHost {
   return { post: (request) => handle(structuredClone(request)), listen: (fn) => (receive = fn) };
 }
 
+// Gramerin modülü gerçek saatle, bir kez (bkz. başlık).
+beforeAll(async () => {
+  await GRAMMARS.typescript();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   setLanguage("tr");
   setPlatform("windows");
   setSyntaxHost(inProcessHost());
@@ -57,20 +102,20 @@ beforeEach(() => {
   vi.spyOn(api, "writeTextFile").mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await birakilaniBekle();
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   setSyntaxHost(undefined);
 });
 
-/** Koşul sağlanana kadar React'ı ve zamanlayıcıları ilerlet. */
+/** Koşul sağlanana kadar React'ı ve sahte saati ilerlet; sınır da sahte zamanda. */
 async function until(check: () => unknown, ms = 15_000) {
   const end = Date.now() + ms;
   while (!check()) {
     if (Date.now() > end) throw new Error("zaman aşımı");
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 10));
-    });
+    await adim(() => vi.advanceTimersByTimeAsync(10));
   }
 }
 
