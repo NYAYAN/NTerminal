@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it as vitestIt, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   setTitle: vi.fn(async (_title: string) => {}),
@@ -32,6 +32,7 @@ import { diffQuery } from "../lib/diffWindow";
 import { setLanguage } from "../lib/i18n";
 import { api, DIFF_TARGET_EVENT } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
+import { zincirKorumasi } from "../test/timeoutChain";
 import type { Bootstrap, DiffSides, FileText, GitInfo, Settings } from "../types";
 import { DiffWindow } from "./DiffWindow";
 
@@ -73,80 +74,18 @@ import { DiffWindow } from "./DiffWindow";
  *   sınıra yaklaşıyor: öteki kaydırma testleri 2,3–4,1 sn, "yok sayılan
  *   farklar" 3,0–4,5 sn, "damga değişmediyse" 2,8–3,5 sn.
  *
- * Bu yüzden bütün testler `it` yerine aşağıdaki sarmalayıcıdan geçiyor. Süre
- * sınırı 30 sn: ölçülen en kötünün (5280 ms'de kesildi) ~5,7 katı. Testin
- * sözü izleniyor: test bırakıldıysa söküm önce onun bitmesini bekliyor,
- * bırakılan testin bir sonraki adımı (`adim`, `tick`) hata atıp onu
- * bitiriyor. Hiçbir `act` sökümle ya da sonraki testle çakışmıyor; aynı
- * deneyde yalnızca sınırı küçültülen test düşüyor.
+ * Bu yüzden bütün testler `it` yerine ortak sarmalayıcıdan geçiyor
+ * (`zincirKorumasi`, `src/test/timeoutChain.ts`). Süre sınırı 30 sn: ölçülen
+ * en kötünün (5280 ms'de kesildi) ~5,7 katı. Testin sözü izleniyor: test
+ * bırakıldıysa söküm önce onun bitmesini bekliyor, bırakılan testin bir
+ * sonraki adımı (`adim`, `tick`) hata atıp onu bitiriyor. Hiçbir `act`
+ * sökümle ya da sonraki testle çakışmıyor; aynı deneyde yalnızca sınırı
+ * küçültülen test düşüyor.
  */
 
 /** Süre sınırının gerekçesi başlıkta: "Zaman aşımı zinciri". */
 const SURE_SINIRI = 30_000;
-/** Sahte saat kurulsa da gerçek: bırakılan testi beklemenin üst sınırı için. */
-const gercekSetTimeout = globalThis.setTimeout;
-
-type TestFn = () => Promise<void>;
-type TestAyari = { timeout?: number };
-type Tanimla = (ad: string, ayar: TestAyari, fn: TestFn) => void;
-/** Koşan testin sözü; vitest testi bırakırsa `bitti` söküme kadar false kalır. */
-let suren: { soz: Promise<void>; bitti: boolean } | null = null;
-/** Bırakılan test yeni bir adıma (`act`) girmesin. */
-let durdur = false;
-
-/**
- * vitest'in `it`i; süre sınırı `SURE_SINIRI` ve testin sözü izleniyor. Hata
- * ayıklarken `.only` ve `.skip` de aynı yoldan; `.each` yok (gerekirse döngü).
- */
-const it = Object.assign(
-  (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt, ad, a, b),
-  {
-    only: (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt.only, ad, a, b),
-    skip: (ad: string, a: TestFn | TestAyari, b?: TestFn) => sarili(vitestIt.skip, ad, a, b),
-  },
-);
-
-function sarili(tanimla: Tanimla, ad: string, a: TestFn | TestAyari, b?: TestFn) {
-  const [ayar, fn] = typeof a === "function" ? [{}, a] : [a, b!];
-  tanimla(ad, { timeout: SURE_SINIRI, ...ayar }, () => {
-    const kayit = { soz: Promise.resolve(), bitti: false };
-    kayit.soz = (async () => {
-      try {
-        await fn();
-      } finally {
-        kayit.bitti = true;
-      }
-    })();
-    suren = kayit;
-    return kayit.soz;
-  });
-}
-
-/**
- * Söküm bundan başlıyor. Test zaman aşımıyla bırakıldıysa (sözü sürüyorsa)
- * bitmesini bekliyor: yarım kalan adımı bitiyor, bir sonraki adımı `durdur`a
- * çarpıp hata atıyor. En çok 8 sn; takılıp kalmış bir testte söküm yine
- * koşuyor (eski davranış).
- */
-async function birakilaniBekle() {
-  const kayit = suren;
-  suren = null;
-  if (!kayit || kayit.bitti) return;
-  durdur = true;
-  try {
-    await Promise.race([kayit.soz.catch(() => {}), new Promise((r) => gercekSetTimeout(r, 8_000))]);
-  } finally {
-    durdur = false;
-  }
-}
-
-/** Testin bir `act` adımı. Bırakılan test buradan geçemiyor. */
-async function adim(fn: () => unknown) {
-  if (durdur) throw new Error("zaman aşımına düşen test durduruldu");
-  await act(async () => {
-    await fn();
-  });
-}
+const { it, adim, birakilaniBekle } = zincirKorumasi(SURE_SINIRI);
 
 const ROOT = "/depo";
 
