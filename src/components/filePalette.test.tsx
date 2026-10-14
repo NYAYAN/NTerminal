@@ -335,7 +335,29 @@ const isaretler = (el: Element, parca: "file-name" | "file-dir" = "file-name") =
 
 const satirlar = (c: HTMLElement) => [...c.querySelectorAll<HTMLElement>(".file-row")];
 
-describe("ad sekmesi: vurgu ve bölümler", () => {
+/*
+ * ## Süre sınırı neden 30 sn
+ *
+ * "Sağdaki sayı" iki tam takım + 16 dönen iş parçacığı koşarken (147 sn'lik
+ * ağır tur, makine %100) iki takımda da "Test timed out in 5000ms" ile düştü:
+ * 6046 ve 6531 ms; tam takımda 348–619 ms. ÖLÇÜLDÜ (2026-10-14, 16 mantıksal
+ * çekirdek; adım adım duvar saati, sürecin işlemci süresi ve olay döngüsünün
+ * boşta geçen süresi test içinden):
+ *
+ * - Süre işlemci işi, bekleme yok: olay döngüsü hiç boşta kalmıyor. Tek başına
+ *   122–126 ms; 251 dosyalık ilk liste 46–48 ms, 200 satırlık "kayit" sonucu
+ *   61–64 ms.
+ * - Aynı tarifle iki ağır turda (157'şer sn, makine %99–100) 3382–3811 ms
+ *   duvar / 531–734 ms işlemci, yani süreç çekirdek bekliyor; ilk liste
+ *   1067–1459 ms, "kayit" 1733–2032 ms.
+ *
+ * Sınır ölçülen en kötünün (6531 ms) ~4,5 katı; takılıp kalan bir çizim yine
+ * yakalanır. O testte ilk listeyi `waitFor` değil bir `act` bekliyor:
+ * listeleme taklidi hemen çözülüyor, `waitFor`un 3 sn'lik gerçek saatli
+ * sınırı ise ağır turda ilk listenin süresine (1,5 sn'ye kadar) fazla yakındı.
+ * Bu hâliyle ağır turda 2620–3243 ms sürüp geçti.
+ */
+describe("ad sekmesi: vurgu ve bölümler", { timeout: 30_000 }, () => {
   it("eşleşen harfler işaretli; dağınıklar 'Yakın eşleşmeler' başlığının altında", async () => {
     seed("files", "palet");
     vi.spyOn(api, "listFiles").mockResolvedValue([
@@ -462,7 +484,9 @@ describe("ad sekmesi: vurgu ve bölümler", () => {
     const { container } = render(<FilePalette />);
     const sayi = () => container.querySelector(".palette-count")?.textContent;
 
-    await waitFor(() => expect(sayi()).toBe("251 dosya"));
+    // Listeleme taklidi hemen çözülüyor: bekleyen işi bir act boşaltıyor.
+    await act(async () => {});
+    expect(sayi()).toBe("251 dosya");
     // 250 eşleşme çizilen sınırın (200) üstünde: sayı "en az" diyor.
     await type(container, "kayit");
     expect(sayi()).toBe("200+ sonuç · 251 dosya");
