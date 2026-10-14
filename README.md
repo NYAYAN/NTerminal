@@ -18,7 +18,7 @@ macOS ve Windows için · Türkçe ve İngilizce arayüz · Ücretsiz ve açık 
 [Kısayollar](#klavye-kısayolları) &nbsp;·&nbsp;
 [Belgeler](#belgeler)
 
-<img src="docs/gorseller/kokpit.png" width="900" alt="N-Terminal: solda gruplar ve sekmeleri, ortada komut blokları ve süreleriyle terminal, altta komut kutusu">
+<img src="docs/gorseller/kokpit.png" width="900" alt="N-Terminal, Kokpit tasarımı: solda her grup kendi renginde bir kart ve sekmeleri kartın içinde, ortada komut blokları ve süreleriyle terminal, altta komut kutusu">
 
 </div>
 
@@ -26,10 +26,12 @@ macOS ve Windows için · Türkçe ve İngilizce arayüz · Ücretsiz ve açık 
 
 ### Her proje bir grup
 
-Her grubun kendi rengi, sekmeleri ve başlangıç klasörü var. Kokpit tasarımında
-soldaki grup bölmesini genişletince sekmeler grubun altında ağaç gibi listelenir.
-Sekmeleri sürükleyerek gruplar arasında taşıyabilir, yıldızla işaretlediğiniz
-favori grupları tek tıkla süzebilirsiniz. Uygulamayı kapatıp açtığınızda gruplar, sekmeler, çalışma
+Her grubun kendi rengi, sekmeleri ve başlangıç klasörü var. Varsayılan Kokpit
+tasarımında soldaki grup bölmesini genişletip ağaç görünümüne geçince her grup
+kendi renginde bir karta dönüşür, sekmeleri kartın içinde listelenir; komut
+çalışan grubun rozetinde bir nokta yanar. Sekmeleri sürükleyerek gruplar
+arasında taşıyabilir, yıldızla işaretlediğiniz favori grupları tek tıkla
+süzebilirsiniz. Uygulamayı kapatıp açtığınızda gruplar, sekmeler, çalışma
 klasörleri ve ekran çıktısı kaldığı yerden gelir.
 
 ### Her komut kendi bloğunda
@@ -49,9 +51,9 @@ Enter'a basınca komutun tamamı çalışır; ne çalışacağı kutunun içinde
 yazar.
 
 **Değişiklikler.** Dosyaları seçip commit'leyin, push'layın, stash'e alın. Farkı
-panelin içinde ya da ayrı bir pencerede yan yana görün, dal seçiciyle dal
-değiştirin. Komut kutusunun üstünde dal adı, gönderilmemiş commit sayısı ve
-değişen dosya sayısı her zaman görünür.
+panelin içinde ya da ayrı bir pencerede, iki tarafı da sözdizimi renkli olarak
+yan yana görün; dal seçiciyle dal değiştirin. Komut kutusunun üstünde dal adı,
+gönderilmemiş commit sayısı ve değişen dosya sayısı her zaman görünür.
 
 <p align="center">
   <img src="docs/gorseller/paneller.png" width="820" alt="Solda Favoriler paneli: klasörlere ayrılmış favori komutlar ve kısaltmaları. Sağda Değişiklikler paneli: commit iletisi, Stash, Commit ve Push düğmeleri, değişen dosyalar ve açılmış bir fark">
@@ -62,7 +64,9 @@ değişen dosya sayısı her zaman görünür.
 Bulunduğunuz klasörde dosyayı adıyla ya da `*.tsx`, `src/**/*.test.ts`,
 `*.{ts,tsx}` gibi kalıplarla bulun; her dosya türü kendi etiketiyle görünür. Aynı
 pencerenin **Dosya içeriği** sekmesi dosyaların içinde arar. Dosya paneli ise
-klasör ağacını, dosya görüntüleyiciyi ve küçük düzenlemeleri tek yerde toplar.
+klasör ağacını, kodu VS Code'un renkleriyle gösteren görüntüleyiciyi ve küçük
+düzenlemeleri tek yerde toplar; değişen dosyalar ve klasörler ağaçta Git
+durumunun rengiyle işaretlidir.
 
 <p align="center">
   <img src="docs/gorseller/dosya-arama.png" width="900" alt="Ctrl+P penceresi: *term* kalıbıyla bulunan farklı türde dosyalar">
@@ -79,10 +83,10 @@ tek tuşla geçin (macOS'ta ⌘⇧E, Windows'ta Ctrl+Shift+E).
 
 ### Size göre
 
-Üç tasarım (Kokpit, Premium, Klasik), açık ve koyu renk temaları; yazı tipi, satır
-aralığı, istem renkleri, kabuk profilleri ve kısayollar. Değişiklikler anında
-uygulanır. Bütün yapılandırmanızı tek dosyayla başka bir bilgisayara
-taşıyabilirsiniz (*Ayarlar › Yedekleme*).
+Üç tasarım (varsayılan Kokpit, Premium, Klasik), açık ve koyu renk temaları;
+yazı tipi, satır aralığı, istem renkleri, kabuk profilleri ve kısayollar.
+Değişiklikler anında uygulanır. Bütün yapılandırmanızı tek dosyayla başka bir
+bilgisayara taşıyabilirsiniz (*Ayarlar › Yedekleme*).
 
 <p align="center">
   <img src="docs/gorseller/ayarlar.png" width="49%" alt="Ayarlar: tasarım ve renk teması seçimi">
