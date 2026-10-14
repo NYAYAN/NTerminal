@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -15,7 +15,9 @@ import { setLanguage } from "../lib/i18n";
 import { api } from "../lib/ipc";
 import { setPlatform } from "../lib/platform";
 import { setSyntaxHost, type SyntaxHost } from "../lib/syntax";
+import { GRAMMARS } from "../lib/syntaxGrammars";
 import { createSyntaxService, type SyntaxReply } from "../lib/syntaxService";
+import { zincirKorumasi } from "../test/timeoutChain";
 import type { Bootstrap, DiffSides, FileText, GitInfo, Settings } from "../types";
 import { DiffWindow } from "./DiffWindow";
 
@@ -28,7 +30,47 @@ import { DiffWindow } from "./DiffWindow";
  * harfleri renkli satırlar çiziyor, yazı alanı saydam (`.syntax`).
  *
  * Kurulum `diffWindow.test.tsx`inkiyle aynı; renklendirici süreç içinde.
+ *
+ * ## Saat sahte, süre sınırı 30 sn, zincir koruması
+ *
+ * KIRILGANDI (2026-10-13): iki tam takım + 16 dönen iş parçacığı koşarken
+ * (147 sn'lik ağır tur, makine %100) dört testin dördü iki takımda da "Test
+ * timed out in 5000ms" ile düştü. Yalnızca ilki gerçekten yavaştı (6218 ve
+ * 5901 ms); öteki üçü 5017–5073 ms'de bırakılan ilk testin yüzünden düştü:
+ * vitest zaman aşımında testi durdurmuyor, `until`i 15 sn'lik kendi sınırına
+ * kadar act'le yoklamayı sürdürüp sökümün ve sonraki testlerin act'leriyle
+ * çakıştı (iki takımın çıktısında bu dosyadan 1288 ve 1185 "overlapping act"
+ * uyarısı). ÖLÇÜLDÜ (2026-10-14, 16 mantıksal çekirdek; adım adım duvar saati,
+ * sürecin işlemci süresi ve olay döngüsünün boşta geçen süresi test içinden):
+ *
+ * - Süre çoğunlukla işlemci işi: her test kendi renklendiricisini (soğuk
+ *   motor) kuruyor, ilk test ayrıca ilk çizimi ve gramerin içe aktarılmasını
+ *   ödüyor. İlk test tek başına 208–228 ms; aynı tarifle iki ağır turda
+ *   (157'şer sn, makine %99–100) 3314–4869 ms duvar / 812–891 ms işlemci,
+ *   renklendiricinin dilimleri 1840–2791 ms duvar.
+ * - Gerisi gerçek bekleme: `until`in 10 ms'lik yoklaması ve renklendiricinin
+ *   sıfır gecikmeli zamanlayıcıları. Olay döngüsü tek başınayken 22–45 ms,
+ *   ağır turlarda 0–146 ms boşta (üçüncü testte 187–224 ms). Yükte testler
+ *   saniyelerce sürünce pencerenin kendi saatleri de (400 ms'lik kayıt, 500
+ *   ms'lik canlı yoklama) test ortasında çalışabiliyordu.
+ *
+ * Bu yüzden saat sahte (setTimeout/setInterval, Date; React'in kullandığı
+ * setImmediate gerçek) ve çizimden önce kuruluyor: renklendiricinin dilimleri
+ * ve yanıtları yalnızca `until` ilerletince akıyor, `until`in sınırı da sahte
+ * zamanda. Sahte zamanın süremediği tek bekleme gramer modülünün ilk içe
+ * aktarılması (gerçek G/Ç; ağır turlarda 36–302 ms): `until`in sahte 15 sn'si
+ * gerçekte 0,1–0,5 sn sürdüğü için ona yetmeyebilirdi, modül bu yüzden saat
+ * kurulmadan önce `beforeAll`da yükleniyor. Kalan işlemci işine sınır 30 sn,
+ * ölçülen en kötünün (6218 ms) ~5 katı. Testler `zincirKorumasi`nın `it`inden
+ * geçiyor: zaman aşımına düşen test bir sonraki `adim`da duruyor, söküm onu
+ * bekliyor. Kasıtlı üretildi: ilk teste 50 ms'lik sınır verilince korumasız
+ * dosyada üç koşunun üçünde 4/4 test düştü, korumalı dosyada 1/4. Sahte saatle
+ * ilk test tek başına 176–181 ms ve olay döngüsü hiç boşta değil; ağır turda
+ * 3938–3985 ms.
  */
+
+/** Gerekçe başlıkta: "Saat sahte, süre sınırı 30 sn, zincir koruması". */
+const { it, adim, birakilaniBekle } = zincirKorumasi(30_000);
 
 const ROOT = "/depo";
 
@@ -97,7 +139,13 @@ function inProcessHost(): SyntaxHost {
   return { post: (request) => handle(structuredClone(request)), listen: (fn) => (receive = fn) };
 }
 
+// Gramerin modülü gerçek saatle, bir kez (bkz. başlık).
+beforeAll(async () => {
+  await GRAMMARS.typescript();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   setLanguage("tr");
   setPlatform("windows");
   try {
@@ -114,19 +162,20 @@ beforeEach(() => {
   vi.spyOn(api, "diffWindowReady").mockResolvedValue(null);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await birakilaniBekle();
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   setSyntaxHost(undefined);
 });
 
+/** Koşul sağlanana kadar sahte saati ilerletir; sınır da sahte zamanda. */
 async function until(check: () => unknown, ms = 15_000) {
   const end = Date.now() + ms;
   while (!check()) {
     if (Date.now() > end) throw new Error("zaman aşımı");
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 10));
-    });
+    await adim(() => vi.advanceTimersByTimeAsync(10));
   }
 }
 
