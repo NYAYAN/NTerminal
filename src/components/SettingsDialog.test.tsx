@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
-import { act } from "react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect } from "vitest";
 
 import { setLanguage } from "../lib/i18n";
 import { defaultFontStack, setPlatform } from "../lib/platform";
 import { LIMITS } from "../lib/settingsLimits";
 import { useStore } from "../store/useStore";
+import { zincirKorumasi } from "../test/timeoutChain";
 import { SettingsDialog } from "./SettingsDialog";
 
 /**
@@ -22,12 +22,45 @@ import { SettingsDialog } from "./SettingsDialog";
  *
  * Bu testler yapıyı bağlıyor: bölüm sayısı, gezinmenin çalışması ve **aynı
  * başlığın iki bölümde geçmemesi**.
+ *
+ * ## Zaman aşımı zinciri: süre sınırı ve sarılı `it`
+ *
+ * KIRILGANDI (2026-10-13 ölçüldü): iki tam takım + işlemci yükünde (147 sn'lik
+ * tur, makine %100) "her bölümün en az bir başlığı var" 5 sn sınırına takıldı
+ * (5325 ms) ve ardından dosyanın kalan testleri düştü: 69 testin 62'si
+ * ("Unable to fire a "click" event", "Cannot read properties of null"). Aynı
+ * turun öteki takımında aynı test 4986 ms'de, sınırın dibinde geçti. İki ayrı
+ * sorun:
+ *
+ * - Zincir (mekanizması `src/test/timeoutChain.ts`te): bırakılan testin yarım
+ *   kalan `settle`i sökümün ve sonraki testlerin `act`lerini içine alıyor.
+ *   Kasıtlı üretildi, her konumda 3 koşu: bu teste 50 ms sınır verince 69'un
+ *   60/61/59'u düştü; "argüman kutusu boşluğu yutmuyor"a 50 ms verince ondan
+ *   sonraki testlerin hepsi (8/8/8); "bölüm düğmesinde ↑/↓"ya 30 ms verince
+ *   1/42/1 (bırakılan testin kalan `settle`leri sonrakilerle çakışırsa).
+ * - Tetik: süre işlemci işi değil, işlemci beklemesi. Bölümleri tek tek gezen
+ *   iki test (bu ve "aynı başlık iki bölümde geçmiyor": 10 tıklama, 10
+ *   `settle`) sakinken 315–343 ms; bunun 179–202 ms'si 10 ms'lik on
+ *   zamanlayıcı (Windows'ta her biri ~20 ms). İki takım + işlemci yükünde
+ *   (152–156 sn'lik iki tur, dört koşu) 3554–4775 ms, ama süreç bunun yalnızca
+ *   453–734 ms'sinde işlemcide: 10 ms'lik zamanlayıcı ortalama 131–194 ms, bir
+ *   bölüme geçiş (tıklama + çizim) 15–156 ms işlemciyle 22–661 ms sürdü. Aynı
+ *   turlarda ilk çizim 1515–2008 ms, Görünüm'e ilk geçiş 1763–2499 ms.
+ *
+ * Bu yüzden bütün testler ortak sarmalayıcıdan geçiyor (`zincirKorumasi`).
+ * Süre sınırı 20 sn: ölçülen en kötünün ~4 katı (5325 ms'de kesilen koşunun
+ * 3,8, test içinden ölçülen en uzun 4775 ms'nin 4,2 katı). Söküm önce
+ * bırakılan testi bekliyor, bırakılan test bir sonraki `settle`de duruyor;
+ * aynı deneyde yalnızca sınırı küçültülen test düşüyor.
  */
 
+/** Süre sınırının gerekçesi başlıkta: "Zaman aşımı zinciri". */
+const SURE_SINIRI = 20_000;
+const { it, adim, birakilaniBekle } = zincirKorumasi(SURE_SINIRI);
+
+/** Pencerenin zincirli güncellemeleri çizilsin. Bırakılan test burada duruyor. */
 async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 10));
-  });
+  await adim(() => new Promise((r) => setTimeout(r, 10)));
 }
 
 beforeEach(() => {
@@ -80,7 +113,8 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await birakilaniBekle();
   cleanup();
   const ui = useStore.getState().ui;
   useStore.setState({ ui: { ...ui, settingsOpen: false } });
@@ -194,9 +228,7 @@ describe("ayarlar penceresi", () => {
 
   it("dil değişince bölüm adları da değişiyor", async () => {
     const { container } = render(<SettingsDialog />);
-    await act(async () => {
-      setLanguage("en");
-    });
+    await adim(() => setLanguage("en"));
     expect(navLabels(container).slice(0, 5)).toEqual([
       "General",
       "Appearance",
