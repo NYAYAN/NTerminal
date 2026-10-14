@@ -354,8 +354,17 @@ describe("arama", () => {
  * DOM öğesi. Kuralın kendisi (tavan, sayı, gezilemezlik) `lib/branches.test.ts`
  * içinde; burada bağlanan arayüzün payı: DOM'a gerçekten en fazla tavan kadar
  * satır girmesi, "daha" satırının metni ve ok tuşlarının onu atlaması.
+ *
+ * SÜRE SINIRI 30 sn. KIRILGANDI (2026-10-13/14 ölçüldü): ağır turda (iki tam
+ * takım + 16 dönen iş parçacığı) "aramada da tavan" iki takımda da 5 sn
+ * sınırına takıldı (6083 ve 7229 ms), komşuları 2,8–3,8 sn sürdü. Testler
+ * tavan kadar (200) satır çiziyor; "aramada da tavan" onları dil değişince
+ * bir kez daha: tek başına 123–134 ms, normal tam takımda 521 ms, ağır turda
+ * 12–14 katı. Saf işlemci işi, 30 sn en kötü ölçülenin ~4 katı. Zincir yok:
+ * ilk `act`ten sonrası eşzamanlı, teste `{ timeout: 50 }` verince yalnızca o
+ * düşüyor (iki ayrı testte 3/3), ortak sarmalayıcıya gerek yok.
  */
-describe("çok sayıda dal", () => {
+describe("çok sayıda dal", { timeout: 30_000 }, () => {
   const cok = (n: number): GitBranch[] => [
     { name: "main", remote: null },
     ...Array.from({ length: n }, (_, i) => ({ name: `dal-${i}`, remote: "origin" })),
