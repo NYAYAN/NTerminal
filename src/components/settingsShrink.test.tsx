@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
-import { act } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
+
+import { zincirKorumasi } from "../test/timeoutChain";
 
 /**
  * Silen iki ayar: kaydırma tamponu ve geçmiş sınırı.
@@ -12,7 +13,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * dosyadan çıkarıyor. Kullanıcının kuralı "silme her zaman sorar"
  * (`deleteConfirm.test.ts`): (1) soruluyor mu, (2) VAZGEÇ denince silme
  * gerçekten olmuyor mu. Geri al düğmesi de küçültebilir; o da aynı yoldan.
+ *
+ * ## Süre sınırı ve zaman aşımı zinciri
+ *
+ * KIRILGANDI (2026-10-13/14 ölçüldü): ağır turda (iki tam takım + 16 dönen
+ * iş parçacığı) ilk test 5423 ms'de 5 sn sınırına takıldı, kalan dördü
+ * "Unable to fire a "click" event" ile düştü. İlk test soğuk kurulum
+ * (ayarlar penceresinin ilk çizimi): tek başına 150–175 ms, normal tam
+ * takımda 743 ms; öbür dördü 48–68 ve 138–219 ms. Düşüş zincirdi (bkz.
+ * `src/test/timeoutChain.ts`): ilk teste `{ timeout: 50 }` verince beş test
+ * de düştü (3/3 koşu). Bu yüzden testler ortak sarmalayıcıdan geçiyor; aynı
+ * deneyde artık yalnızca o test düşüyor (3/3). Süre sınırı 30 sn, kesildiği
+ * 5423 ms'nin ~5,5 katı.
  */
+const SURE_SINIRI = 30_000;
+const { it, adim, birakilaniBekle } = zincirKorumasi(SURE_SINIRI);
 
 vi.mock("../lib/ipc", () => ({
   api: new Proxy(
@@ -40,9 +55,7 @@ function answer(ok: boolean) {
 }
 
 async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 10));
-  });
+  await adim(() => new Promise((r) => setTimeout(r, 10)));
 }
 
 async function open(section: number) {
@@ -74,7 +87,8 @@ beforeEach(() => {
   } as never);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await birakilaniBekle();
   cleanup();
   sessions.delete("dolu");
 });
