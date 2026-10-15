@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { BlockView } from "../lib/blocks";
 import { setLanguage } from "../lib/i18n";
 import { setPlatform } from "../lib/platform";
 import { sessions, useStore } from "../store/useStore";
@@ -26,13 +27,18 @@ import { TerminalBlocks } from "./TerminalBlocks";
 const CELL = 17;
 
 /** Katmanın oturumdan çağırdığı yüzey; gerçek oturum jsdom'da kurulamıyor. */
-function sahteOturum(dividerLine: number | null, viewportTop = 0) {
+function sahteOturum(
+  dividerLine: number | null,
+  viewportTop = 0,
+  { altScreen = false, blocks = [] as BlockView[] } = {},
+) {
   return {
     setBlockListener: vi.fn(),
-    snapshotBlocks: () => [],
+    snapshotBlocks: () => blocks,
     hasBlockHeaders: () => false,
     blockHasContent: () => true,
     restoreDividerLine: () => dividerLine,
+    altScreenActive: () => altScreen,
     blockGeometry: () => ({
       top: 0,
       left: 0,
@@ -120,5 +126,48 @@ describe("geri yükleme ayıracı", () => {
     const { container } = render(<TerminalBlocks tabId="t1" />);
     const el = container.querySelector(".restore-divider")!;
     expect(el.textContent, "çizgi metne geri gömülmüş").not.toContain("─");
+  });
+
+  /*
+   * BİLDİRİLEN (macOS): şerit ekranın ortasında sabit duruyor, kaydırınca
+   * oynamıyordu. Belirti Windows'ta vim açıkken üretildi: ayıraç ana tamponun
+   * satırında, ikincil ekranın görünüm başı hep 0 ve satır programın ekranına
+   * olduğu gibi düşüyordu.
+   */
+  it("ikincil ekranda (vim, less, tam ekran Claude Code) çizilmiyor", () => {
+    seed(true);
+    // Ana tamponun 5. satırı, ikincil ekranın görünüm başı 0: eski hesap
+    // 5 - 0 = 5 diyor ve şeridi programın beşinci satırına çiziyordu.
+    sessions.set("t1", sahteOturum(5, 0, { altScreen: true }));
+    const { container } = render(<TerminalBlocks tabId="t1" />);
+    expect(container.querySelector(".restore-divider"), "şerit programın üstüne çizildi").toBe(
+      null,
+    );
+  });
+
+  it("ikincil ekranda blok şeritleri de çizilmiyor", () => {
+    // Aynı hesap: çalışan komutun (tam ekran programın kendisi) şeridi ve
+    // önceki komutların rozetleri programın metninin üstüne biniyordu.
+    seed(true);
+    const blok: BlockView = {
+      id: "b1",
+      startLine: 2,
+      endLine: null,
+      command: "claude",
+      cwd: null,
+      exitCode: null,
+      durationMs: null,
+      running: true,
+    };
+
+    // Kontrol: aynı blok ana ekranda çiziliyor; kapı yalnızca ikincil ekranda.
+    sessions.set("t1", sahteOturum(null, 0, { blocks: [blok] }));
+    const ana = render(<TerminalBlocks tabId="t1" />);
+    expect(ana.container.querySelector(".block"), "ana ekranda blok çizilmedi").not.toBe(null);
+    cleanup();
+
+    sessions.set("t1", sahteOturum(null, 0, { altScreen: true, blocks: [blok] }));
+    const { container } = render(<TerminalBlocks tabId="t1" />);
+    expect(container.querySelector(".block"), "blok programın üstüne çizildi").toBe(null);
   });
 });

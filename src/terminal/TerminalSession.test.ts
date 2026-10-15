@@ -355,6 +355,45 @@ describe("geri yüklenen ekran", () => {
 });
 
 /**
+ * İkincil ekrana geçişte ve dönüşte blok katmanı tazeleniyor.
+ *
+ * Katman ikincil ekranda hiçbir şey çizmiyor (gerekçe `TerminalBlocks`ta:
+ * "Önceki oturum burada bitti" şeridi tam ekran programın ortasında sabit
+ * kalıyordu). Bu ancak geçiş anında bir çizim olursa işe yarıyor; olmazsa
+ * eski çizim programın ekranında, dönüşte de eksik çizim ana ekranda kalır.
+ * Tazelemeyi xterm'in tampon değişiminde yaydığı kaydırma olayı getiriyor.
+ */
+describe("ikincil ekran ve blok katmanı", () => {
+  const kare = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  it("geçişte ve dönüşte katman tazeleniyor, ayıraç yerinde kalıyor", async () => {
+    const s = session("alt-katman");
+    await s.start("onceki oturumun ciktisi\r\n");
+    await flush(s);
+    const satir = s.restoreDividerLine();
+    expect(satir, "geri yüklemede ayıraç kurulmadı").not.toBe(null);
+
+    const cizim = vi.fn();
+    s.setBlockListener(cizim);
+
+    s.term.write("\x1b[?1049h" + "tam ekran program");
+    await flush(s);
+    await kare();
+    expect(s.altScreenActive()).toBe(true);
+    expect(cizim, "ikincil ekrana geçişte katman tazelenmedi").toHaveBeenCalled();
+
+    cizim.mockClear();
+    s.term.write("\x1b[?1049l");
+    await flush(s);
+    await kare();
+    expect(s.altScreenActive()).toBe(false);
+    expect(cizim, "ana ekrana dönüşte katman tazelenmedi").toHaveBeenCalled();
+    expect(s.restoreDividerLine(), "ayıraç ikincil ekrandan sonra yerini kaybetti").toBe(satir);
+    void s.dispose(true);
+  });
+});
+
+/**
  * Kapanan sekme için kabuk DOĞMAMALI; doğduysa ÖLDÜRÜLMELİ.
  *
  * `start` üç kez bekliyor (iki dinleyici kaydı, bir `ptySpawn`) ve bu

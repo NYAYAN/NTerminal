@@ -1553,6 +1553,18 @@ export class TerminalSession {
     return line >= 0 ? line : null;
   }
 
+  /**
+   * Ekranda İKİNCİL tampon mu var: tam ekran program (vim, less, htop, tam
+   * ekran Claude Code).
+   *
+   * Blok katmanı buna bakıyor: çizdiği her şey ana tamponun işaretçilerine
+   * bağlı ve ikincil ekranda yeri yok (gerekçe `TerminalBlocks`ta). Değer her
+   * okumada xterm'den türetiliyor, saklanan bayraktan değil (bkz. `inputSignals`).
+   */
+  altScreenActive(): boolean {
+    return this.term.buffer.active.type === "alternate";
+  }
+
   /** Adres listesini boşaltır ve arayüze bildirir. */
   private clearRunUrls() {
     this.serverUrls = [];
@@ -1678,7 +1690,7 @@ export class TerminalSession {
   inputSignals(): { atPrompt: boolean; altScreen: boolean; integration: boolean } {
     return {
       atPrompt: this.atPrompt,
-      altScreen: this.term.buffer.active.type === "alternate",
+      altScreen: this.altScreenActive(),
       integration: this.integration,
     };
   }
@@ -2047,7 +2059,7 @@ export class TerminalSession {
       this.term.buffer.onBufferChange(() => {
         // Değer `inputSignals()` içinde türetiliyor; burada yalnızca değişimi
         // haber veriyoruz.
-        const alt = this.term.buffer.active.type === "alternate";
+        const alt = this.altScreenActive();
         if (alt === this.altScreen) return;
         this.altScreen = alt;
         this.stopWheel();

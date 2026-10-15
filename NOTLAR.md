@@ -1890,6 +1890,45 @@ ana tamponda yakalıyor; ikincil ekran, fare kipi, Ctrl/Shift xterm'e; "Aşağı
 in" ve yazı bekleyeni kesiyor). İkinci dosya mutasyonla denendi: devralma
 koşulları ya da kesme kaldırılınca testler düşüyor.
 
+### 1.33 Tam ekran programda "Önceki oturum burada bitti" sabit kalıyordu
+
+**Bildirilen (macOS):** "Önceki oturum" şeridi ekranın ortasında `fixed` gibi
+duruyor, kaydırınca yerinden oynamıyor.
+
+**Kök neden.** Blok katmanının çizdiği her şey (ayıraç, blok şeritleri,
+rozetler) ANA tamponun işaretçilerine bağlı; ekrandaki satırı ise ETKİN
+tamponun görünüm başından (`viewportY`) çıkarıyordu. İkincil ekranda (vim,
+less, tam ekran Claude Code) görünüm başı hep 0: ana tampondaki 19. satır
+programın 19. satırına çiziliyor ve program ne kaydırırsa kaydırsın orada
+kalıyordu. Ana tamponda ayıraç kaydırmayı doğru izliyor (Windows'ta tekerlekle
+ve "animasyonları azalt" yoluyla ölçüldü, beklenen ve çizilen satır her adımda
+eşit). macOS'ta görünmesi zsh'ta istemin dibe itilmemesinden: kısa bir ekran
+geri yüklenince ayıracın satır numarası ekran boyundan küçük kalıyor. Windows'ta
+istem dipte, numara ekranı aşıyordu (41 satırda 44) ve ayıraç gizli kalıyordu.
+"İstem dipte" kapatılınca Windows'ta da üretildi: Git'in `vim`inde şerit 5.
+satıra çizildi, önceki komutun şeridi ve "31 sn 141" rozeti vim'in metninin
+üstüne bindi.
+
+**Çözüm.** İkincil ekranda katman hiçbir şey çizmiyor
+(`TerminalSession.altScreenActive`, `TerminalBlocks`); xterm kendi
+dekorasyonlarını da orada gizliyor. İşaretçilere dokunulmuyor, ana ekrana
+dönünce her şey yerinde. Geçişte katmanın yeniden çizimini xterm'in tampon
+değişiminde yaydığı kaydırma olayı getiriyor (`BufferService`), ayrı bir
+tetikleyici gerekmedi.
+
+**Doğrulama.** `restoreDivider.test.tsx` (ikincil ekranda ayıraç ve blok yok;
+ana ekranda aynı blok çiziliyor), `TerminalSession.test.ts` › "ikincil ekran
+ve blok katmanı" (geçişte ve dönüşte katman tazeleniyor, ayıraç satırı
+korunuyor). Mutasyonla: kapı kaldırılınca ilk ikisi, kaydırma olayındaki
+tazeleme kaldırılınca üçüncüsü düşüyor. Uçtan uca (ayrı veri klasörlü
+geliştirme örneği, CDP 9333): 18 satırlık kayıtla açılışta ayıraç 19. satırda;
+`vim` açıkken katman yok, çıkınca ayıraç yerinde.
+
+**Görüldü, araştırılmadı (Windows).** `vim`den çıkınca geri yüklenen satırlar
+ekrandan siliniyor, ayıraç boş alanın altında kalıyor. Büyük olasılıkla ConPTY
+ana ekrana dönerken kendi tamponunu yeniden boyuyor; geri yüklenen satırları
+yalnızca xterm biliyor. Gerçek PTY'de (macOS) beklenmiyor.
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.

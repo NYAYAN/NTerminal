@@ -85,6 +85,27 @@ export function TerminalBlocks({ tabId }: { tabId: string }) {
    */
   const geometry = session?.blockGeometry() ?? null;
   if (!session || !geometry) return null;
+  /*
+   * İkincil ekranda (vim, less, tam ekran Claude Code) katman BOŞ.
+   *
+   * BİLDİRİLEN (macOS): "Önceki oturum burada bitti" şeridi ekranın ortasında
+   * sabit duruyor, kaydırınca yerinden oynamıyordu. Belirti Windows'ta vim
+   * açıkken birebir üretildi; ana tamponda şerit kaydırmayı doğru izliyor.
+   *
+   * Sebep: katmanın çizdiği her şey — ayıraç, şeritler, rozetler — ANA tamponun
+   * işaretçilerine bağlı, satırı ise ETKİN tamponun görünüm başından
+   * çıkarıyoruz. İkincil ekranın kaydırma geçmişi yok, görünüm başı hep 0: ana
+   * tampondaki 12. satır programın ekranının 12. satırına çiziliyor ve program
+   * ne kaydırırsa kaydırsın orada kalıyor. Blok şeritleri ve süre rozetleri de
+   * aynı yoldan programın metninin üstüne biniyordu. macOS'ta görünmesi zsh'ta
+   * istemin dibe itilmemesinden: kısa bir ekran geri yüklenince ayıracın satır
+   * numarası ekran boyundan küçük kalıyor. Windows'ta istem dipte, numara
+   * ekranı aşıyor ve ayıraç görünmüyordu.
+   *
+   * xterm kendi dekorasyonlarını da ikincil ekranda gizliyor. İşaretçiler
+   * etkilenmiyor; ana ekrana dönünce her şey yerinde.
+   */
+  if (session.altScreenActive()) return null;
 
   const view = {
     top: geometry.viewportTop,
