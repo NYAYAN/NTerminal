@@ -340,9 +340,14 @@ export function stdinKeyAction(event: PassThroughKey, ctx: StdinContext): StdinA
  * İngilizce sözcüklerin iki yanı SINIRLI: "pin" "Pinging"in içinde de geçiyor
  * ve `ping` çıktısının satırı iki noktayla bitiyor. Türkçe ve Almanca
  * sözcüklere ek serbest ("parolanız", "şifresi", "Kennwortes").
+ *
+ * Sol sınır lookbehind DEĞİL: Safari 16.4'ten eski WebKit (macOS 12) regex
+ * literal'indeki lookbehind yüzünden bütün dosyayı reddediyor, arayüz hiç
+ * açılmıyor. Yalnızca `test` ile kullanıldığı için önceki karakteri tüketmek
+ * aynı sonucu veriyor.
  */
 const SECRET_PROMPT =
-  /(?<![\p{L}\p{N}])(?:(?:password|passphrase|passcode|pin|token|secret|contraseña|senha|mot de passe)(?![\p{L}\p{N}])|(?:parola|şifre|sifre|passwort|kennwort)\p{L}*)/iu;
+  /(?:^|[^\p{L}\p{N}])(?:(?:password|passphrase|passcode|pin|token|secret|contraseña|senha|mot de passe)(?![\p{L}\p{N}])|(?:parola|şifre|sifre|passwort|kennwort)\p{L}*)/iu;
 
 /**
  * İmlecin durduğu satır bir parola sorusu mu?
