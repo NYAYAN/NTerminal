@@ -85,9 +85,19 @@ describe("yayın işi", () => {
   });
 
   it("imzalar ve macOS güncelleme paketi de yükleniyor", () => {
-    for (const path of ["nsis/*.exe.sig", "msi/*.msi.sig", "macos/*.app.tar.gz", "macos/*.app.tar.gz.sig"]) {
+    for (const path of ["nsis/*.exe.sig", "msi/*.msi.sig"]) {
       expect(paket, `${path} yüklenmiyor`).toContain(`src-tauri/target/release/bundle/${path}`);
     }
+    // macOS evrensel derleniyor; Tauri çıktıyı hedefin klasörüne yazıyor.
+    for (const path of ["dmg/*.dmg", "macos/*.app.tar.gz", "macos/*.app.tar.gz.sig"]) {
+      expect(paket, `${path} yüklenmiyor`).toContain(`src-tauri/target/universal-apple-darwin/release/bundle/${path}`);
+    }
+  });
+
+  it("macOS paketi Intel Mac'te de açılıyor: evrensel hedef", () => {
+    expect(paket).toContain("hedef: --target universal-apple-darwin");
+    expect(paket).toContain("targets: ${{ matrix.rust_hedefleri }}");
+    expect(paket.match(/npx tauri build \$\{\{ matrix\.hedef \}\}/g)).toHaveLength(2);
   });
 
   it("Release'e indirilen klasör değil betiğin düz klasörü gidiyor", () => {
@@ -235,6 +245,22 @@ describe("release-files.mjs", () => {
       "windows-x86_64-msi": { signature: "SIG-MSI", url: `${base}/N-Terminal_0.3.0_x64_en-US.msi` },
       "darwin-aarch64-app": { signature: "SIG-APP", url: `${base}/N-Terminal_0.3.0_aarch64.app.tar.gz` },
     });
+  });
+
+  it("evrensel macOS paketi Intel ve Apple Silicon'a aynı dosyayı veriyor", () => {
+    // CI macOS'ta `--target universal-apple-darwin` ile paketliyor; Intel
+    // Mac'teki kurulumlar da güncellemeyi `darwin-x86_64-app`ten buluyor.
+    const { ["N-Terminal_0.3.0_aarch64.dmg"]: _dmg, ...digerleri } = IMZALI;
+    artifacts({ ...digerleri, "N-Terminal_0.3.0_universal.dmg": "dmg" });
+    const r = run();
+    expect(r.code, r.output).toBe(0);
+    expect(r.files).toContain("N-Terminal_0.3.0_universal.dmg");
+    expect(r.files).toContain("N-Terminal_0.3.0_x86_64-aarch64.app.tar.gz");
+
+    const { platforms } = r.manifest();
+    const url = "https://github.com/NYAYAN/NTerminal/releases/download/v0.3.0/N-Terminal_0.3.0_x86_64-aarch64.app.tar.gz";
+    expect(platforms["darwin-x86_64-app"]).toEqual({ signature: "SIG-APP", url });
+    expect(platforms["darwin-aarch64-app"]).toEqual({ signature: "SIG-APP", url });
   });
 
   it("kurucu türü olmayan genel anahtar YOK", () => {

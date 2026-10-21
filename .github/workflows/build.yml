@@ -93,12 +93,18 @@ jobs:
               src-tauri/target/release/bundle/nsis/*.exe.sig
               src-tauri/target/release/bundle/msi/*.msi
               src-tauri/target/release/bundle/msi/*.msi.sig
+          # macos-latest yalnızca Apple Silicon; tek mimarili paket Intel
+          # Mac'te "bu Mac'te desteklenmiyor" diyerek hiç açılmıyor. Evrensel
+          # paket iki mimariyi tek .app'te taşıyor (DMG `_universal.dmg`;
+          # release-files.mjs ikisine de `darwin-*-app` yazıyor).
           - os: macos-latest
             ad: macOS
+            hedef: --target universal-apple-darwin
+            rust_hedefleri: aarch64-apple-darwin,x86_64-apple-darwin
             cikti: |
-              src-tauri/target/release/bundle/dmg/*.dmg
-              src-tauri/target/release/bundle/macos/*.app.tar.gz
-              src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
+              src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
     steps:
       - uses: actions/checkout@v7
 
@@ -109,6 +115,8 @@ jobs:
 
       - name: Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_hedefleri }}
 
       # Tauri'nin bağımlılık ağacı sıfırdan on dakikanın üzerinde derleniyor;
       # önbellek olmadan her koşu bunu yeniden ödüyor.
@@ -177,10 +185,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            npx tauri build --config '{"bundle":{"createUpdaterArtifacts":true}}'
+            npx tauri build ${{ matrix.hedef }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
           else
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY tanımlı değil: güncelleme paketleri üretilmedi, uygulama bu sürümü kendisi kuramayacak (yalnızca haber verecek)."
-            npx tauri build
+            npx tauri build ${{ matrix.hedef }}
           fi
 
       - name: Paketleri yükle

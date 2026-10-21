@@ -114,7 +114,7 @@ Bir kez kurduktan sonra yeni sürümler **uygulamanın içinden** gelir
 (*Ayarlar › Hakkında › Güncelle ve yeniden başlat*); aşağıdaki adımlar yalnızca
 ilk kurulum için.
 
-**macOS 11+ (Apple Silicon):** `N-Terminal_<sürüm>_aarch64.dmg` dosyasını açıp
+**macOS 11+ (Apple Silicon ve Intel):** `N-Terminal_<sürüm>_universal.dmg` dosyasını açıp
 N-Terminal'i **Uygulamalar** klasörüne sürükleyin. İlk açılışta macOS "Apple,
 N-Terminal'in kötü amaçlı yazılım içermediğini doğrulayamadı" der
 (*“N-Terminal” Not Opened*). **Bitti**'ye (*Done*) basın, sonra:
