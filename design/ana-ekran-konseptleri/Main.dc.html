@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>A · Yüzen Tuval</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.nt{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;--mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;--accent:#58a6ff}
+.nt.koyu{--chrome:#13171e;--glow:rgba(88,166,255,.14);--canvas:#0d1117;--bar:#11161d;--raise:#1b2129;--line:rgba(230,237,243,.14);--hair:rgba(230,237,243,.08);--text:#e6edf3;--dim:#9aa3ad;--faint:#7d8590;--ok:#3fb950;--err:#ff7b72;--cyan:#39c5cf;--blue:#58a6ff;--red:#ff7b72;--green:#56d364;--amber:#e3b341;--g1:#58a6ff;--g2:#3fb950;--g3:#bc8cff;--badge-fg:#56d364;--badge-bg:rgba(63,185,80,.14);--shadow:rgba(1,4,9,.7);--rim:rgba(230,237,243,.06)}
+.nt.acik{--chrome:#eef1f4;--glow:rgba(9,105,218,.10);--canvas:#ffffff;--bar:#f6f8fa;--raise:#ffffff;--line:rgba(31,35,40,.16);--hair:rgba(31,35,40,.09);--text:#1f2328;--dim:#59636e;--faint:#6e7781;--ok:#1a7f37;--err:#cf222e;--cyan:#1b7c83;--blue:#0969da;--red:#cf222e;--green:#1a7f37;--amber:#9a6700;--g1:#0969da;--g2:#1a7f37;--g3:#8250df;--badge-fg:#1a7f37;--badge-bg:rgba(26,127,55,.10);--shadow:rgba(31,35,40,.22);--rim:rgba(255,255,255,.7)}
+.nt button{font:inherit;color:inherit;cursor:pointer}
+.nt svg.i{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+a{color:var(--accent)}a:hover{color:var(--text)}
+@media (max-width:900px){.nt .side{display:none}.nt .canvas{margin-left:8px}}
+</style>
+</helmet>
+<div class="nt {{themeClass}}" style="--accent: {{accent}}; height: 100vh; min-height: 620px; display: flex; flex-direction: column; overflow: hidden; color: var(--text); font-family: var(--ui); font-size: 13px; background: radial-gradient(900px 420px at -8% -18%, var(--glow), transparent 70%), var(--chrome)">
+
+  <header style="height: 42px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px">
+    <div aria-hidden="true" style="display: flex; gap: 8px; margin-right: 14px">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25)"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25)"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25)"></span>
+    </div>
+    <button aria-label="Kenar çubuğu" style="width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: transparent; color: var(--dim)">
+      <svg class="i" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"></rect><path d="M6.5 3v10"></path></svg>
+    </button>
+    <button aria-label="Dosyalar" style="width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: transparent; color: var(--dim)">
+      <svg class="i" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2 4.5C2 3.7 2.7 3 3.5 3H6l1.5 1.8h5c.8 0 1.5.7 1.5 1.5v5.2c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z"></path></svg>
+    </button>
+    <button aria-label="Ayarlar" style="width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: transparent; color: var(--dim)">
+      <svg class="i" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"></path></svg>
+    </button>
+    <div style="display: flex; align-items: center; gap: 8px; margin-left: 8px">
+      <svg viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><defs><linearGradient id="aIcon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: #273142"></stop><stop offset="1" style="stop-color: #0e131b"></stop></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#aIcon)"></rect><path d="M18 19.5 L30.5 32 L18 44.5" fill="none" style="stroke: #4ea6ff; stroke-width: 6.2; stroke-linecap: round; stroke-linejoin: round"></path><rect x="34.5" y="38" width="13" height="6.4" rx="1.6" fill="#3fb950"></rect></svg>
+      <span style="font-weight: 650; font-size: 14px; letter-spacing: -.01em">N-Terminal</span>
+      <span style="padding: 0 7px; border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 11px; line-height: 18px; font-variant-numeric: tabular-nums">0.3.3</span>
+    </div>
+    <div style="flex: 1"></div>
+    <button style="width: min(420px, 36vw); height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 12.5px">
+      <svg class="i" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="7" cy="7" r="4.3"></circle><path d="M10.2 10.2L13.5 13.5"></path></svg>
+      <span style="flex: 1; text-align: left">Dosya ara</span>
+      <span style="padding: 0 6px; border-radius: 6px; background: var(--hair); font-size: 11px; line-height: 18px">⌘P</span>
+    </button>
+    <div style="flex: 1"></div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex">
+    <aside class="side" aria-label="Gruplar" style="width: 268px; flex: none; display: flex; flex-direction: column; gap: 8px; padding: 4px 10px 12px 12px; overflow: hidden">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 2px 8px">
+        <span style="font-size: 11px; font-weight: 650; letter-spacing: .09em; color: var(--dim)">GRUPLAR</span>
+        <div style="display: flex; gap: 2px">
+          <button aria-label="Yalnızca favori gruplar" style="width: 26px; height: 26px; display: grid; place-items: center; border: none; border-radius: 7px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2.2l1.75 3.6 3.95.55-2.87 2.78.69 3.94L8 11.2l-3.52 1.87.69-3.94L2.3 6.35l3.95-.55z"></path></svg></button>
+          <button aria-label="Tümünü daralt" style="width: 26px; height: 26px; display: grid; place-items: center; border: none; border-radius: 7px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.5 6.5L8 3l3.5 3.5M4.5 9.5L8 13l3.5-3.5"></path></svg></button>
+          <button aria-label="Yeni grup" style="width: 26px; height: 26px; display: grid; place-items: center; border: none; border-radius: 7px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+        </div>
+      </div>
+
+      <section style="border-radius: 12px; padding: 4px 6px 8px; background: color-mix(in srgb, var(--g1) 9%, transparent); border: 1px solid color-mix(in srgb, var(--g1) 22%, transparent)">
+        <button style="width: 100%; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: none; border-radius: 9px; background: transparent; text-align: left">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" style="color: var(--dim)"><path d="M4 6l4 4 4-4"></path></svg>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--g1); box-shadow: 0 0 10px var(--g1)"></span>
+          <span style="flex: 1; font-weight: 650; font-size: 13.5px">NTerminal</span>
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 2.2l1.75 3.6 3.95.55-2.87 2.78.69 3.94L8 11.2l-3.52 1.87.69-3.94L2.3 6.35l3.95-.55z" fill="#e3b341"></path></svg>
+          <span style="min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 11px; line-height: 18px; text-align: center">3</span>
+        </button>
+        <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 15px; padding-left: 10px; border-left: 1px solid var(--hair)">
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: color-mix(in srgb, var(--g1) 20%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g1) 32%, transparent)">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px">arayüz</span><span style="font-family: var(--mono); font-size: 11px; color: var(--dim)">…/Work/NTerminal</span></span>
+            <span aria-label="Çalışıyor" style="width: 7px; height: 7px; border-radius: 50%; background: var(--accent)"></span>
+          </button>
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: transparent">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; color: var(--dim)">rust</span><span style="font-family: var(--mono); font-size: 11px; color: var(--faint)">…/NTerminal/src-tauri</span></span>
+            <span aria-label="Boşta" style="width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--faint); box-sizing: border-box"></span>
+          </button>
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: transparent">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; color: var(--dim)">sunucu</span><span style="font-family: var(--mono); font-size: 11px; color: var(--faint)">…/Work/NTerminal</span></span>
+            <span aria-label="Çalışıyor" style="width: 7px; height: 7px; border-radius: 50%; background: var(--ok)"></span>
+          </button>
+          <button style="align-self: flex-end; display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: none; border-radius: 6px; background: transparent; color: var(--faint); font-size: 11.5px">
+            <svg class="i" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg>Sekme ekle
+          </button>
+        </div>
+      </section>
+
+      <section style="border-radius: 12px; padding: 4px 6px 4px">
+        <button style="width: 100%; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: none; border-radius: 9px; background: transparent; text-align: left">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" style="color: var(--dim)"><path d="M4 6l4 4 4-4"></path></svg>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--g2)"></span>
+          <span style="flex: 1; font-weight: 600; font-size: 13.5px">CopyBoard</span>
+          <span style="min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 11px; line-height: 18px; text-align: center">1</span>
+        </button>
+        <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 15px; padding-left: 10px; border-left: 1px solid var(--hair)">
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: transparent">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; color: var(--dim)">dev</span><span style="font-family: var(--mono); font-size: 11px; color: var(--faint)">…/Work/CopyBoard</span></span>
+            <span aria-label="Boşta" style="width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--faint); box-sizing: border-box"></span>
+          </button>
+        </div>
+      </section>
+
+      <section style="border-radius: 12px; padding: 4px 6px 4px">
+        <button style="width: 100%; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: none; border-radius: 9px; background: transparent; text-align: left">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" style="color: var(--dim)"><path d="M4 6l4 4 4-4"></path></svg>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--g3)"></span>
+          <span style="flex: 1; font-weight: 600; font-size: 13.5px">Sunucular</span>
+          <span style="min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 11px; line-height: 18px; text-align: center">2</span>
+        </button>
+        <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 15px; padding-left: 10px; border-left: 1px solid var(--hair)">
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: transparent">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; color: var(--dim)">prod</span><span style="font-family: var(--mono); font-size: 11px; color: var(--faint)">/srv</span></span>
+            <span aria-label="Boşta" style="width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--faint); box-sizing: border-box"></span>
+          </button>
+          <button style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: none; border-radius: 9px; text-align: left; background: transparent">
+            <span style="padding: 2px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; color: var(--dim)">staging</span><span style="font-family: var(--mono); font-size: 11px; color: var(--faint)">/srv</span></span>
+            <span aria-label="Boşta" style="width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--faint); box-sizing: border-box"></span>
+          </button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="canvas" style="flex: 1; min-width: 0; display: flex; flex-direction: column; margin: 0 10px 10px 0; border: 1px solid var(--line); border-radius: 13px; background: var(--canvas); box-shadow: 0 1px 2px var(--shadow), 0 18px 44px -22px var(--shadow); overflow: hidden">
+      <nav aria-label="Sekmeler" style="flex: none; display: flex; align-items: center; gap: 4px; padding: 7px 8px; background: var(--bar); border-bottom: 1px solid var(--hair); box-shadow: inset 0 1px 0 var(--rim)">
+        <button style="position: relative; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border: none; border-radius: 9px; background: var(--raise); box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px var(--shadow); min-width: 150px">
+          <span style="padding: 1px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>
+          <span style="flex: 1; text-align: left">arayüz</span>
+          <span aria-label="Kapat" style="width: 18px; height: 18px; display: grid; place-items: center; border-radius: 6px; color: var(--faint)"><svg class="i" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"></path></svg></span>
+          <span aria-hidden="true" style="position: absolute; left: 14px; right: 14px; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent)"></span>
+        </button>
+        <button style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 10px; border: none; border-radius: 9px; background: transparent; color: var(--dim); min-width: 120px">
+          <span style="padding: 1px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>rust
+        </button>
+        <button style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 10px; border: none; border-radius: 9px; background: transparent; color: var(--dim); min-width: 120px">
+          <span style="padding: 1px 5px; border-radius: 5px; background: var(--badge-bg); color: var(--badge-fg); font-family: var(--mono); font-size: 9.5px; font-weight: 700">ZSH</span>sunucu
+        </button>
+        <div style="flex: 1"></div>
+        <button aria-label="Yeni sekme" style="width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+        <button aria-label="Profil seç" style="width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button>
+        <div role="group" aria-label="Görünüm" style="display: flex; gap: 2px; padding: 2px; margin-left: 4px; border: 1px solid var(--line); border-radius: 9px; background: var(--hair)">
+          <button aria-label="Sekmeler" style="width: 28px; height: 24px; display: grid; place-items: center; border: none; border-radius: 7px; background: var(--raise); box-shadow: 0 1px 2px var(--shadow)"><svg class="i" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 4.5C2 3.7 2.7 3 3.5 3H6l1.5 1.8h5c.8 0 1.5.7 1.5 1.5v5.2c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z"></path></svg></button>
+          <button aria-label="Bölmeler" style="width: 28px; height: 24px; display: grid; place-items: center; border: none; border-radius: 7px; background: transparent; color: var(--dim)"><svg class="i" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"></rect><path d="M8 3v10M8 8h6"></path></svg></button>
+        </div>
+      </nav>
+
+      <section aria-label="Terminal" style="flex: 1; min-height: 0; padding: 14px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.6; white-space: pre; overflow: hidden">
+        <div><span style="color: var(--green)">➜</span>  <span style="color: var(--cyan)">NTerminal</span> <span style="color: var(--blue)">git:(</span><span style="color: var(--red)">main</span><span style="color: var(--blue)">)</span> npm test</div>
+        <div> </div>
+        <div> <span style="color: var(--ok)">✓</span> src/lib/design.test.ts <span style="color: var(--faint)">(4 tests)</span> 12ms</div>
+        <div> <span style="color: var(--ok)">✓</span> src/styles/premium.test.ts <span style="color: var(--faint)">(7 tests)</span> 8ms</div>
+        <div> <span style="color: var(--ok)">✓</span> src/components/SettingsDialog.test.tsx <span style="color: var(--faint)">(65 tests)</span> 1.2s</div>
+        <div> </div>
+        <div> <span style="font-weight: 700">Test Files</span>  <span style="color: var(--ok); font-weight: 700">137 passed</span> (137)</div>
+        <div>      <span style="font-weight: 700">Tests</span>  <span style="color: var(--ok); font-weight: 700">2244 passed</span> | 1 skipped (2245)</div>
+        <div>   <span style="color: var(--faint)">Duration</span>  16.27s</div>
+        <div> </div>
+        <div><span style="color: var(--green)">➜</span>  <span style="color: var(--cyan)">NTerminal</span> <span style="color: var(--blue)">git:(</span><span style="color: var(--red)">main</span><span style="color: var(--blue)">)</span> git status --short</div>
+        <div><span style="color: var(--amber)"> M</span> src/App.tsx</div>
+        <div><span style="color: var(--amber)"> M</span> src/styles/premium.css</div>
+        <div><span style="color: var(--red)">??</span> src/components/BackupPanel.tsx</div>
+      </section>
+
+      <div style="flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 14px 4px">
+        <button style="display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; height: 24px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 12px">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M2 4.5C2 3.7 2.7 3 3.5 3H6l1.5 1.8h5c.8 0 1.5.7 1.5 1.5v5.2c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z"></path></svg>…/Work/NTerminal
+        </button>
+        <button style="display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; height: 24px; border: 1px solid color-mix(in srgb, var(--ok) 38%, var(--line)); border-radius: 999px; background: transparent; color: var(--ok); font-size: 12px">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5" r="1.5"></circle><path d="M4.5 5v6M11.5 6.5c0 2.5-3 2.5-5.5 4.5"></path></svg>main ↑1
+        </button>
+        <button style="display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 999px; background: transparent; color: var(--accent); font-size: 12px; font-variant-numeric: tabular-nums">± 3</button>
+        <button style="display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; height: 24px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 12px">
+          <svg class="i" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z"></path></svg>22.11.0
+        </button>
+      </div>
+
+      <div style="flex: none; margin: 4px 10px 10px; display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 44px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--text) 3%, var(--canvas)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), 0 8px 24px -10px var(--shadow)">
+        <span aria-hidden="true" style="font-family: var(--mono); color: var(--accent); font-size: 12.5px">&gt;_</span>
+        <input aria-label="Komut" placeholder="Komut yazın" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text); font-family: var(--mono); font-size: 13px">
+      </div>
+
+      <footer style="flex: none; display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 12px; background: var(--bar); border-top: 1px solid var(--hair); color: var(--dim); font-size: 12px">
+        <span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--g1)"></span>NTerminal</span>
+        <span style="font-family: var(--mono); font-size: 11.5px">…/nyayan/Work/NTerminal</span>
+        <div style="flex: 1"></div>
+        <button aria-label="Diğer" style="height: 22px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim)">⋯</button>
+        <button style="height: 22px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 12px">Geçmiş</button>
+        <button style="display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--hair); color: var(--dim); font-size: 12px"><svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M8 2.2l1.75 3.6 3.95.55-2.87 2.78.69 3.94L8 11.2l-3.52 1.87.69-3.94L2.3 6.35l3.95-.55z" fill="currentColor"></path></svg>Favoriler</button>
+      </footer>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Koyu","Açık"],"default":"Koyu"},"accent":{"editor":"color","default":"#58a6ff","options":["#58a6ff","#a371f7","#3fb950","#f0883e"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      themeClass: this.props.theme === 'Açık' ? 'acik' : 'koyu',
+      accent: this.props.accent ?? '#58a6ff'
+    };
+  }
+}
+</script>
+</body>
+</html>

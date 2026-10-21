@@ -1,0 +1,18 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-10T14:20:00Z" },
+  "title": "N-Terminal ana ekran konseptleri",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 900, "title": "A · Yüzen Tuval", "expand": "fill" },
+    "Odak.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 900, "title": "B · Odak", "expand": "fill" },
+    "Kokpit.dc.html": { "x": 0, "y": 1020, "w": 1440, "h": 900, "title": "C · Kokpit", "expand": "fill" },
+    "Defter.dc.html": { "x": 1520, "y": 1020, "w": 1440, "h": 900, "title": "D · Defter", "expand": "fill" }
+  },
+  "order": ["Main.dc.html", "Odak.dc.html", "Kokpit.dc.html", "Defter.dc.html"],
+  "notes": {
+    "baslik": { "x": 0, "y": -300, "text": "N-Terminal · Ana ekran konseptleri", "kind": "title1", "maxW": 2960 }
+  },
+  "designSystems": []
+}
