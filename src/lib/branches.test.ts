@@ -43,6 +43,27 @@ describe("dal araması", () => {
   it("uzağın adıyla da bulunuyor", () => {
     expect(filterBranches(liste, "origin")).toEqual([uzak("feature/api-v2")]);
   });
+
+  it("uzağın adıyla başlayan arama yalnızca o uzağın dallarını getiriyor", () => {
+    // BİLDİRİLEN İSTEK: "origin ile başlarsam sadece origindekiler gelmeli"
+    // (WebStorm gibi). Adında "origin" geçen yerel dal ve başka uzak dışarıda.
+    const l = [
+      yerel("origin-fix"),
+      uzak("feature/api-v2"),
+      uzak("main"),
+      uzak("api", "upstream"),
+    ];
+    expect(filterBranches(l, "Origin")).toEqual([uzak("feature/api-v2"), uzak("main")]);
+    expect(filterBranches(l, "origin/")).toEqual([uzak("feature/api-v2"), uzak("main")]);
+    expect(filterBranches(l, "origin/api")).toEqual([uzak("feature/api-v2")]);
+    expect(filterBranches(l, "upstream/api")).toEqual([uzak("api", "upstream")]);
+    // Uzak adı değilse eski içeren eşleşme sürüyor.
+    expect(filterBranches(l, "orig")).toEqual([
+      yerel("origin-fix"),
+      uzak("feature/api-v2"),
+      uzak("main"),
+    ]);
+  });
 });
 
 /**

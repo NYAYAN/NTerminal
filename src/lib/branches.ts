@@ -26,10 +26,25 @@ export function checkoutCommand(branch: GitBranch): string {
  *
  * Büyük/küçük harf gözetmiyor, İÇEREN eşleşme: `feature/api-v2` için "api"
  * yazmak yetmeli. "origin" yazan kişi fetch ile yeni gelenleri arıyor.
+ *
+ * Arama bir uzağın ADIYLA başlıyorsa (`origin`, `origin/`, `origin/api`)
+ * yalnızca o uzağın dalları geliyor; `/`'tan sonrası dal adında aranıyor.
+ * BİLDİRİLEN İSTEK: "origin ile başlarsam sadece origindekiler gelmeli" —
+ * WebStorm'da da dal `origin/ad` diye tam adıyla aranıyor. Önceden "origin"
+ * adında "origin" geçen yerel dalları da getiriyor, "origin/api" ise hiçbir
+ * şey bulmuyordu (ad ile uzak ayrı ayrı karşılaştırılıyordu).
  */
 export function filterBranches(list: readonly GitBranch[], query: string): GitBranch[] {
   const q = query.trim().toLowerCase();
   if (!q) return [...list];
+  const slash = q.indexOf("/");
+  const head = slash < 0 ? q : q.slice(0, slash);
+  if (list.some((b) => b.remote?.toLowerCase() === head)) {
+    const rest = slash < 0 ? "" : q.slice(slash + 1);
+    return list.filter(
+      (b) => b.remote?.toLowerCase() === head && b.name.toLowerCase().includes(rest),
+    );
+  }
   return list.filter(
     (b) => b.name.toLowerCase().includes(q) || (b.remote ?? "").toLowerCase().includes(q),
   );
