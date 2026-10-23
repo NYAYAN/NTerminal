@@ -14,7 +14,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@shikijs/engine-javascript": "^4.4.3",
+    "@shikijs/engine-javascript": "^4.5.0",
     "@shikijs/langs": "^4.5.0",
     "@shikijs/primitive": "^4.5.0",
     "@tauri-apps/api": "^2.12.3",
