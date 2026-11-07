@@ -1220,6 +1220,18 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   de 32px, terminal 750px'te sabit) — komut başlarken terminal yeniden
   ölçülendirilmiyor, "flash" geri gelmiyor. `>_` yerine gelen nokta `2ch`
   genişlikte, metin aynı sütundan başlıyor.
+- **Boş kutuda oklar yalnızca tuş okuyan programa** ([`lineKey`](src/lib/inputMode.ts),
+  `pty_write_key`). BİLDİRİLEN: "komut çalışırken yukarı oka basıyorum… geçmişten
+  bir şey seçince ikisini birleştirmiş oluyor." `sleep`e giden `ESC [ A` okunmadan
+  kuyrukta kaldı; komut bitince zsh onu kendi geçmiş tuşu sayıp son komutu gizli
+  satırına yazdı, kutudan gelen komut arkasına eklendi (`sleep 1.5echo onceki`;
+  zsh ve bash'te PTY düzeneğiyle yeniden üretildi). Rust yazmadan hemen önce
+  master ucundan `ICANON`a bakıyor (macOS'ta iki uç aynı `tty`; Linux'ta master
+  üzerindeki `tcgetattr` slave'inkini veriyor); kanonikse ok, Tab, Esc, Boşluk
+  yazılmıyor. Enter, Backspace ve Ctrl+harf satırın kendi tuşları, her kipte
+  gidiyor. Windows'ta ConPTY kipi vermiyor, orada eski davranış. Açık kalan iki
+  yol aynı sızıntıyı verebilir: komut biter bitmez, istem gelmeden ızgaraya
+  basılan tuş ve dolu kutuda Tab/Ctrl+D ile programa devredilen yarım satır.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`

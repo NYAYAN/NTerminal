@@ -559,6 +559,18 @@ impl PtyManager {
         write_to(&writer, data)
     }
 
+    /// Yazma tutamaci - yalnizca on plandaki program tuslari TEK TEK
+    /// okuyorsa. Satir okuyan programda `None` (gerekcesi `reads_keys`
+    /// uzerinde). Kip kilit tutulurken okunuyor: `kill` master'i ayni kilitle
+    /// kapattigi icin fd bu arada gecersizlesemez.
+    pub fn key_writer(&self, id: &str) -> Result<Option<Writer>> {
+        let sessions = self.sessions.lock();
+        let session = sessions
+            .get(id)
+            .ok_or_else(|| anyhow!("oturum bulunamadi: {id}"))?;
+        Ok(reads_keys(session.master.as_ref()).then(|| session.writer.clone()))
+    }
+
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<()> {
         let sessions = self.sessions.lock();
         let session = sessions
@@ -616,6 +628,48 @@ impl PtyManager {
     pub fn list(&self) -> Vec<String> {
         self.sessions.lock().keys().cloned().collect()
     }
+}
+
+/// On plandaki program tuslari TEK TEK mi okuyor?
+///
+/// Terminal kanonik kipteyse (ICANON) program satir okuyor ya da hic
+/// okumuyor: `sleep`, `git pull`, `npm install`. Ona giden bir yon tusu
+/// (`ESC [ A`) satirin icine cop olarak giriyor; program okumadan biterse
+/// bayt kuyrukta kaliyor ve kabugun satir duzenleyicisi onu KENDI tusu
+/// sayiyor. BILDIRILEN HATA buydu: komut calisirken basilan yukari ok, komut
+/// bitince son komutu kabugun gizli satirina yaziyordu; kutudan gelen sonraki
+/// komut onun arkasina eklendi (`sleep 1.5echo onceki`). Secim listeleri,
+/// REPL'ler ve ssh terminali kanonik olmayan kipe aliyor; yon tuslari onlara
+/// gidiyor.
+///
+/// Kip master ucundan okunuyor: macOS'ta iki uc ayni `tty` yapisini
+/// paylasiyor, Linux'ta master uzerindeki `tcgetattr` slave'in ayarini
+/// veriyor. Olculdu (macOS, zsh): istemde ve ham kipte tus bekleyen programda
+/// ICANON kapali, `sleep` calisirken acik.
+///
+/// Okunamazsa tus eskisi gibi gidiyor: yanlislikla gondermek eski davranis,
+/// yanlislikla yutmak secim listesinde kilitlenmek demek.
+#[cfg(unix)]
+fn reads_keys(master: &dyn MasterPty) -> bool {
+    let Some(fd) = master.as_raw_fd() else {
+        return true;
+    };
+    let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: `tcgetattr` yalnizca verilen yapiya yaziyor; fd, cagiranin
+    // tuttugu `sessions` kilidi altinda acik olan master'in.
+    if unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) } != 0 {
+        return true;
+    }
+    // SAFETY: `tcgetattr` basariyla dondu, yapi dolu.
+    let termios = unsafe { termios.assume_init() };
+    (termios.c_lflag & libc::ICANON) == 0
+}
+
+/// Windows'ta kip gorunmuyor: ConPTY konsolun girdi kipini disari vermiyor
+/// (parola sezgisinin de metne bakmasinin sebebi bu). Tus eskisi gibi gidiyor.
+#[cfg(windows)]
+fn reads_keys(_master: &dyn MasterPty) -> bool {
+    true
 }
 
 /// SIGKILL'den once torunlara taninan sure.

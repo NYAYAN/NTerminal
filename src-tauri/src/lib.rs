@@ -241,6 +241,22 @@ async fn pty_write(state: State<'_, AppState>, id: String, data: String) -> CmdR
         .map_err(fail)
 }
 
+/// Bos yanit satirindan bir TUS (ok, Tab, Esc, Bosluk) yazar - on plandaki
+/// program tuslari tek tek okuyorsa. Satir okuyan programa gitmiyor ve
+/// `false` donuyor; gerekcesi `pty::reads_keys` uzerinde. Yazmanin kendisi
+/// `pty_write` ile ayni yoldan.
+#[tauri::command]
+async fn pty_write_key(state: State<'_, AppState>, id: String, data: String) -> CmdResult<bool> {
+    let Some(writer) = state.pty.key_writer(&id).map_err(fail)? else {
+        return Ok(false);
+    };
+    tauri::async_runtime::spawn_blocking(move || pty::write_to(&writer, data.as_bytes()))
+        .await
+        .map_err(fail)?
+        .map_err(fail)?;
+    Ok(true)
+}
+
 /// Arayuzun ham bayt gondermesi gereken durumlar icin (ornek: pano icerigi
 /// gecerli UTF-8 olmayan bir baytla geldiyse) base64 kabul eden yazma.
 #[tauri::command]
@@ -1413,6 +1429,7 @@ pub fn run() {
             session_end_flushed,
             pty_spawn,
             pty_write,
+            pty_write_key,
             pty_write_bytes,
             pty_resize,
             pty_kill,

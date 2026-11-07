@@ -696,6 +696,66 @@ mod oturum {
         assert!(manager.kill("sira"));
         assert!(!manager.kill("sira"));
     }
+
+    /// `pty_write_key`in yaptigi: tutamac varsa yaz, yoksa hic dokunma.
+    fn tus_yaz(manager: &PtyManager, id: &str, tus: &[u8]) -> bool {
+        match manager.key_writer(id).expect("oturum yok") {
+            Some(writer) => {
+                write_to(&writer, tus).expect("yazilamadi");
+                true
+            }
+            None => false,
+        }
+    }
+
+    #[test]
+    fn yon_tusu_satir_okuyan_programa_gitmiyor() {
+        // BILDIRILEN HATA: komut calisirken bos kutuda basilan yukari ok
+        // (`ESC [ A`) okunmadan kuyrukta kaliyor, komut bitince kabuk onu kendi
+        // gecmis tusu sayip son komutu gizli satirina yaziyordu; kutudan gelen
+        // sonraki komut onun arkasina eklendi (`sleep 1.5echo onceki`).
+        //
+        // `read` satir okuyor (kanonik kip). Ok ona gitmemeli; ardindan
+        // yazilan satir, onune cop eklenmeden okunmali. Eskiden program
+        // `ESC [ A abc` aliyordu.
+        let manager = PtyManager::default();
+        let (_pid, rx) =
+            baslat(&manager, "satir", "echo HAZIR; IFS= read -r satir; echo \"OKUNDU[$satir]\"");
+        assert!(veri_bekle(&rx, "HAZIR", Duration::from_secs(10)), "kabuk baslamadi");
+
+        assert!(!tus_yaz(&manager, "satir", b"\x1b[A"), "ok satir okuyan programa yazildi");
+        manager.write("satir", b"abc\r").expect("satir yazilamadi");
+        assert!(
+            veri_bekle(&rx, "OKUNDU[abc]", Duration::from_secs(5)),
+            "satir temiz okunmadi"
+        );
+        manager.kill("satir");
+    }
+
+    #[test]
+    fn yon_tusu_tus_okuyan_programa_gidiyor() {
+        // Secim listesi, REPL, ssh terminali kanonik olmayan kipe aliyor ve
+        // tusu o an bekliyor (`ng new`in stil listesi). Duzeltme bunlari
+        // bozmamali: ok programa aynen ulasmali.
+        //
+        // `tr`: BSD `od` baytlari iki bosluk arayla yaziyor (`1b  5b  41`),
+        // GNU tek boslukla; bosluklari atinca iki platformda ayni metin.
+        let manager = PtyManager::default();
+        let (_pid, rx) = baslat(
+            &manager,
+            "ham",
+            "stty -icanon -echo min 1; echo HAZIR; \
+             dd bs=1 count=3 2>/dev/null | od -An -tx1 | tr -d ' \\n'; echo",
+        );
+        assert!(veri_bekle(&rx, "HAZIR", Duration::from_secs(10)), "kabuk baslamadi");
+
+        assert!(tus_yaz(&manager, "ham", b"\x1b[A"), "ok tus okuyan programa yazilmadi");
+        assert!(
+            veri_bekle(&rx, "1b5b41", Duration::from_secs(5)),
+            "program oku almadi"
+        );
+        manager.kill("ham");
+    }
 }
 
 // ------------------------------------------- Windows: kapanista torun sunucu

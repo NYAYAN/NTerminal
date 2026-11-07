@@ -612,7 +612,12 @@ Böylece:
 - Boş kutuda Enter programa gider — "(Y/n)" sorusunda varsayılanı kabul etmek.
 - Boş kutuda oklar, Boşluk, Esc, Backspace ve `Ctrl+<harf>` programa gider:
   `ng new`in stil listesi gibi oklarla seçilen listeler, işaret kutuları,
-  "devam etmek için bir tuşa basın" çalışıyor.
+  "devam etmek için bir tuşa basın" çalışıyor. Oklar, Tab, Esc ve Boşluk
+  yalnızca tuşları tek tek bekleyen programa gider; `sleep`, `git pull` gibi
+  girdi okumayan bir komutta hiçbir şey yapmaz. Eskiden okunmadan bekleyip
+  komut bitince kabuğun satırına geçiyor, bir sonraki komutun önüne
+  ekleniyordu. (Windows'ta terminal bu bilgiyi vermediği için orada eskisi
+  gibi gider.)
 - Yazarken oklar ve Backspace kutuyu düzenler; **Tab** yazılanı programa
   devredip tamamlatır (REPL, ssh ardındaki kabuk), **Esc** yazılanı bırakır.
 - Program parola soruyorsa (`password:`, `passphrase … :`, `Parola:`) yazılan

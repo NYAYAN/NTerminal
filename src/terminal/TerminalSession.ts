@@ -1763,6 +1763,16 @@ export class TerminalSession {
   }
 
   /**
+   * Boş yanıt satırından gelen TUŞ (ok, Tab, Esc, Boşluk): yalnızca program
+   * tuşları tek tek okuyorsa gidiyor. Kararı Rust yazmadan hemen önce,
+   * terminalin o anki kipine bakarak veriyor; gerekçesi `lineKey` üzerinde.
+   */
+  sendKey(data: string) {
+    if (!data) return;
+    void api.ptyWriteKey(this.tabId, data).catch(() => {});
+  }
+
+  /**
    * Program "uygulama imleç tuşları" kipini açtı mı (DECCKM)?
    *
    * Komut çalışırken kutu boşsa oklar programa KUTUDAN gidiyor, xterm'den

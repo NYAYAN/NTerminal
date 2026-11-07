@@ -22,7 +22,9 @@
  * BOŞKEN tuşlar doğrudan geçiyor (`stdinKeyAction`): oklar ve Enter seçim
  * listelerini, Boşluk işaret kutularını, Ctrl tuşları programın kendi
  * kısayollarını sürüyor. Bedeli yazarak süzülen listelerde: süzgeç metni
- * programa Enter'la birlikte ulaşıyor, yazarken değil.
+ * programa Enter'la birlikte ulaşıyor, yazarken değil. Satır okuyan programa
+ * oklar gitmiyor: okunmadan kalıp komut bitince kabuğun satırına sızıyorlardı
+ * (bkz. `lineKey`).
  *
  * Girdiyi uygulamanın toplaması HİÇ olmayacak yer tam ekran programlar:
  * `vim`, `less`, `git rebase -i`'nin açtığı düzenleyici — ekranı program
@@ -179,12 +181,15 @@ export function passThroughSequence(event: PassThroughKey): string | null {
  * `stdin` kipinde bir tuşun karşılığı.
  *
  *  - `send`: bayt HEMEN programa gidiyor, kutuya dokunulmuyor.
+ *  - `key`: bayt programa YALNIZCA program tuşları tek tek okuyorsa gidiyor;
+ *    kararı yazmadan hemen önce Rust veriyor (gerekçesi `lineKey` üzerinde).
  *  - `submit`: kutudaki satır Enter'la birlikte programa, kutu boşalıyor.
  *  - `flush`: kutudaki satır ve ardından bayt programa, kutu boşalıyor.
  *  - `clear`: kutu boşalıyor, programa hiçbir şey gitmiyor.
  */
 export type StdinAction =
   | { kind: "send"; data: string }
+  | { kind: "key"; data: string }
   | { kind: "submit" }
   | { kind: "flush"; data: string }
   | { kind: "clear" };
@@ -285,6 +290,38 @@ function directSequence(event: PassThroughKey, appCursor: boolean): string | nul
 }
 
 /**
+ * Satır okuyan bir programın da anladığı tuş mu?
+ *
+ * BİLDİRİLEN HATA: "Komut çalışırken yukarı oka basıyorum, komut bitiyor.
+ * Tekrar yukarı okla geçmişten bir şey seçince ikisini birleştirmiş oluyor;
+ * iki komutu yan yana yazıyor ve doğal olarak çalışmıyor."
+ *
+ * ZİNCİR (zsh ve bash'te yeniden üretildi; kabuğun çalıştırdığı
+ * `sleep 1.5echo onceki`): boş kutudaki ok `ESC [ A` olarak programa
+ * gidiyordu. `sleep`, `git pull`, `npm install` girdi okumuyor; terminal satır
+ * kipinde (kanonik) ve bayt kuyrukta bekliyor — çıktıya da `^[[A` diye
+ * yansıyor. Komut bitince kabuğun satır düzenleyicisi kuyruğu okuyor, oku
+ * kendi geçmiş tuşu sayıyor ve son komutu KENDİ satırına yazıyor. Kutu bundan
+ * habersiz, boş görünüyor; kutudan gelen bir sonraki komut kabuğun dolu
+ * satırının arkasına ekleniyordu.
+ *
+ * Oklar, Home/End, Tab, Esc ve Boşluk yalnızca tuşları TEK TEK okuyan
+ * programın (seçim listesi, REPL, ssh) işine yarıyor; satır okuyan programa
+ * ya satırın içine çöp olarak giriyor ya da okunmadan kabuğa sızıyor. Onlar
+ * `key`: program tuş okumuyorsa hiç gönderilmiyor (`pty_write_key`).
+ *
+ * Satırın kendi tuşları her kipte gidiyor: Enter satırı bitiriyor ("(Y/n)"
+ * sorusunda varsayılan), Backspace siliyor, Ctrl tuşları terminal sürücüsünün
+ * işleri (Ctrl+D dosya sonu, Ctrl+Z askıya alma). Alt'lı biçimleri ESC ile
+ * başlıyor, satıra çöp.
+ */
+function lineKey(event: PassThroughKey): boolean {
+  if (event.altKey) return false;
+  if (event.key === "Enter" || event.key === "Backspace") return true;
+  return event.ctrlKey && /^[a-z]$/i.test(event.key);
+}
+
+/**
  * Çalışan komuta yazarken tuşun ne yapacağı.
  *
  * ## Kural tek cümle
@@ -293,8 +330,10 @@ function directSequence(event: PassThroughKey, appCursor: boolean): string | nul
  * başlayınca satır kutuda toplanıyor ve Enter'la gönderiliyor.
  *
  * Boş kutu seçim listelerini, "devam etmek için bir tuşa basın"ı ve
- * programların Ctrl kısayollarını çalıştırıyor. Dolu kutu ise sıradan bir
- * satır düzenleyici: oklar imleci yürütüyor, Backspace kutudan siliyor.
+ * programların Ctrl kısayollarını çalıştırıyor. Oklar, Tab, Esc ve Boşluk
+ * yalnızca tuşları tek tek okuyan programa gidiyor (`key`, bkz. `lineKey`).
+ * Dolu kutu ise sıradan bir satır düzenleyici: oklar imleci yürütüyor,
+ * Backspace kutudan siliyor.
  *
  * ## Dolu kutuda üç özel tuş
  *
@@ -320,7 +359,8 @@ export function stdinKeyAction(event: PassThroughKey, ctx: StdinContext): StdinA
 
   if (ctx.empty) {
     const data = directSequence(event, ctx.appCursor);
-    return data === null ? null : { kind: "send", data };
+    if (data === null) return null;
+    return lineKey(event) ? { kind: "send", data } : { kind: "key", data };
   }
 
   if (event.metaKey) return null;

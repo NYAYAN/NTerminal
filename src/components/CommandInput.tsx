@@ -590,6 +590,12 @@ export function CommandInput() {
         send(action.data);
         return;
       }
+      // Yalnızca tuşları tek tek okuyan programa; satır okuyana giden ok
+      // komut bitince kabuğun satırına sızıyordu (bkz. `lineKey`).
+      if (action.kind === "key") {
+        session?.sendKey(action.data);
+        return;
+      }
       /*
        * Satır sonları terminalin gönderdiği biçimde: Enter `\r`. Yapıştırılan
        * ya da Shift+Enter'la bölünen yanıt `\n` taşıyor; ızgaraya yapıştırmak

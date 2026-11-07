@@ -55,6 +55,11 @@ function group(tabs: TabState[]): Group {
 }
 
 const sendKeys = vi.fn();
+/**
+ * Boş yanıt satırından giden ok/Tab/Esc/Boşluk. Programın tuş okuyup
+ * okumadığına Rust bakıyor (`pty_write_key`); kutunun işi bu yolu seçmek.
+ */
+const sendKey = vi.fn();
 const focus = vi.fn();
 const setAppInput = vi.fn();
 /**
@@ -106,6 +111,7 @@ beforeEach(() => {
   // Her test yeni bir kabukla başlıyor: "ilk istem görüldü" kaydı sıfır.
   promptedTabs.clear();
   sendKeys.mockClear();
+  sendKey.mockClear();
   focus.mockClear();
   setAppInput.mockClear();
   ctrlCAction.mockReset().mockReturnValue("sigint");
@@ -116,6 +122,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
   sessions.set(TAB, {
     sendKeys,
+    sendKey,
     focus,
     setAppInput,
     ctrlCAction,
@@ -242,14 +249,37 @@ describe("komut satırı kutusu", () => {
     const { container } = render(<CommandInput />);
     const el = field(container)!;
     fireEvent.keyDown(el, { key: "ArrowDown" });
-    expect(sendKeys).toHaveBeenLastCalledWith("\x1b[B");
+    expect(sendKey).toHaveBeenLastCalledWith("\x1b[B");
     fireEvent.keyDown(el, { key: " " });
-    expect(sendKeys).toHaveBeenLastCalledWith(" ");
+    expect(sendKey).toHaveBeenLastCalledWith(" ");
 
     // Program uygulama imleç kipini açtıysa kodlama değişiyor.
     applicationCursorKeys.mockReturnValue(true);
     fireEvent.keyDown(el, { key: "ArrowUp" });
-    expect(sendKeys).toHaveBeenLastCalledWith("\x1bOA");
+    expect(sendKey).toHaveBeenLastCalledWith("\x1bOA");
+  });
+
+  it("boş yanıt satırında oklar koşulsuz yoldan gitmiyor: kabuğa sızıyorlardı", () => {
+    /*
+     * BİLDİRİLEN HATA: komut çalışırken basılan yukarı ok `sleep` tarafından
+     * okunmadan kuyrukta kaldı; komut bitince kabuk onu kendi geçmiş tuşu
+     * sayıp son komutu gizli satırına yazdı ve kutudan gelen sonraki komut
+     * onun arkasına eklendi (`sleep 1.5echo onceki`). Ok artık yalnızca
+     * program tuş okuyorsa yazılıyor; o kararı Rust veriyor, kutunun işi
+     * tuşu koşulsuz yola (`sendKeys`) DEĞİL o yola vermek.
+     */
+    seedRunning();
+    const { container } = render(<CommandInput />);
+    const el = field(container)!;
+    for (const name of ["ArrowUp", "ArrowDown", "Tab", "Escape", " "]) {
+      fireEvent.keyDown(el, { key: name });
+    }
+    expect(sendKeys, "tuş koşulsuz yoldan gitti").not.toHaveBeenCalled();
+    expect(sendKey).toHaveBeenCalledTimes(5);
+
+    // Satırın kendi tuşları her kipte gidiyor: "(Y/n)" sorusunda Enter.
+    fireEvent.keyDown(el, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("\r");
   });
 
   it("yazmaya başlayınca oklar kutunun: satır düzenleniyor, programa gitmiyor", () => {
@@ -298,7 +328,7 @@ describe("komut satırı kutusu", () => {
     const { container } = render(<CommandInput />);
     const el = field(container)!;
     fireEvent.keyDown(el, { key: "ArrowUp" });
-    expect(sendKeys).toHaveBeenCalledWith("\x1b[A");
+    expect(sendKey).toHaveBeenCalledWith("\x1b[A");
     fireEvent.change(el, { target: { value: "npm" } });
     expect(useStore.getState().ui.suggest, "öneri listesi açılmış").toBe(null);
   });

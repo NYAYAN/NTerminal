@@ -153,6 +153,8 @@ function key(name: string, mods: Partial<PassThroughKey> = {}): PassThroughKey {
 const BOS = { empty: true, appCursor: false };
 const DOLU = { empty: false, appCursor: false };
 const send = (data: string) => ({ kind: "send", data });
+/** Yalnızca tuşları tek tek okuyan programa giden tuş (bkz. `lineKey`). */
+const tus = (data: string) => ({ kind: "key", data });
 
 /*
  * Çalışan komuta yazarken tuşların yolu.
@@ -173,31 +175,53 @@ describe("çalışan komuta yazılan tuşlar", () => {
   });
 
   it("boş kutuda oklar seçim listesini sürüyor, xterm'in kodlamasıyla", () => {
-    expect(stdinKeyAction(key("ArrowUp"), BOS)).toEqual(send("\x1b[A"));
-    expect(stdinKeyAction(key("ArrowDown"), BOS)).toEqual(send("\x1b[B"));
-    expect(stdinKeyAction(key("ArrowRight"), BOS)).toEqual(send("\x1b[C"));
-    expect(stdinKeyAction(key("ArrowLeft"), BOS)).toEqual(send("\x1b[D"));
+    expect(stdinKeyAction(key("ArrowUp"), BOS)).toEqual(tus("\x1b[A"));
+    expect(stdinKeyAction(key("ArrowDown"), BOS)).toEqual(tus("\x1b[B"));
+    expect(stdinKeyAction(key("ArrowRight"), BOS)).toEqual(tus("\x1b[C"));
+    expect(stdinKeyAction(key("ArrowLeft"), BOS)).toEqual(tus("\x1b[D"));
     // Ctrl+→ sözcük atlıyor: `1 + 4·Ctrl` = 5.
-    expect(stdinKeyAction(key("ArrowRight", { ctrlKey: true }), BOS)).toEqual(send("\x1b[1;5C"));
+    expect(stdinKeyAction(key("ArrowRight", { ctrlKey: true }), BOS)).toEqual(tus("\x1b[1;5C"));
   });
 
   it("program uygulama imleç kipini açtıysa oklar ESC O ile gidiyor", () => {
     // Tuş artık xterm'den geçmiyor; kipi açan programda `ESC [ A` tanınmazdı.
     const app = { empty: true, appCursor: true };
-    expect(stdinKeyAction(key("ArrowUp"), app)).toEqual(send("\x1bOA"));
-    expect(stdinKeyAction(key("Home"), app)).toEqual(send("\x1bOH"));
+    expect(stdinKeyAction(key("ArrowUp"), app)).toEqual(tus("\x1bOA"));
+    expect(stdinKeyAction(key("Home"), app)).toEqual(tus("\x1bOH"));
   });
 
   it("boş kutuda Boşluk, Tab, Esc, Backspace ve düzenleme tuşları programa", () => {
     // Boşluk işaret kutulu listede seçimi değiştiriyor.
-    expect(stdinKeyAction(key(" "), BOS)).toEqual(send(" "));
-    expect(stdinKeyAction(key("Tab"), BOS)).toEqual(send("\t"));
-    expect(stdinKeyAction(key("Tab", { shiftKey: true }), BOS)).toEqual(send("\x1b[Z"));
-    expect(stdinKeyAction(key("Escape"), BOS)).toEqual(send("\x1b"));
+    expect(stdinKeyAction(key(" "), BOS)).toEqual(tus(" "));
+    expect(stdinKeyAction(key("Tab"), BOS)).toEqual(tus("\t"));
+    expect(stdinKeyAction(key("Tab", { shiftKey: true }), BOS)).toEqual(tus("\x1b[Z"));
+    expect(stdinKeyAction(key("Escape"), BOS)).toEqual(tus("\x1b"));
     expect(stdinKeyAction(key("Backspace"), BOS)).toEqual(send("\x7f"));
-    expect(stdinKeyAction(key("Delete"), BOS)).toEqual(send("\x1b[3~"));
-    expect(stdinKeyAction(key("PageDown"), BOS)).toEqual(send("\x1b[6~"));
-    expect(stdinKeyAction(key("End"), BOS)).toEqual(send("\x1b[F"));
+    expect(stdinKeyAction(key("Delete"), BOS)).toEqual(tus("\x1b[3~"));
+    expect(stdinKeyAction(key("PageDown"), BOS)).toEqual(tus("\x1b[6~"));
+    expect(stdinKeyAction(key("End"), BOS)).toEqual(tus("\x1b[F"));
+  });
+
+  it("boş kutuda oklar yalnızca tuş okuyan programa: satır okuyanda kabuğa sızıyordu", () => {
+    /*
+     * BİLDİRİLEN HATA: komut çalışırken basılan yukarı ok `sleep` tarafından
+     * okunmadan kuyrukta kaldı; komut bitince kabuk onu kendi geçmiş tuşu
+     * sayıp son komutu gizli satırına yazdı, kutudan gelen sonraki komut onun
+     * arkasına eklendi (`sleep 1.5echo onceki`). Oklar artık `key`: program
+     * satır okuyorsa Rust onları hiç yazmıyor.
+     */
+    expect(stdinKeyAction(key("ArrowUp"), BOS)?.kind).toBe("key");
+    // Satırın kendi tuşları terminal sürücüsünün işi, her kipte gidiyor:
+    // "(Y/n)" sorusunda Enter, silme, dosya sonu, askıya alma.
+    expect(stdinKeyAction(key("Enter"), BOS)).toEqual(send("\r"));
+    expect(stdinKeyAction(key("Backspace", { ctrlKey: true }), BOS)).toEqual(send("\x08"));
+    expect(stdinKeyAction(key("d", { ctrlKey: true }), BOS)).toEqual(send("\x04"));
+    expect(stdinKeyAction(key("z", { ctrlKey: true }), BOS)).toEqual(send("\x1a"));
+    // Alt'lı biçimleri ESC ile başlıyor; satır okuyan programa çöp.
+    expect(stdinKeyAction(key("Enter", { altKey: true }), BOS)).toEqual(tus("\x1b\r"));
+    expect(stdinKeyAction(key("Backspace", { altKey: true }), BOS)).toEqual(tus("\x1b\x7f"));
+    // Ctrl+Boşluk NUL; o da satıra çöp.
+    expect(stdinKeyAction(key(" ", { ctrlKey: true }), BOS)).toEqual(tus("\x00"));
   });
 
   it("boş kutuda Ctrl + harf denetim karakteri oluyor", () => {

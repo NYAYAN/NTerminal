@@ -74,6 +74,8 @@ export const api = {
     return invoke<SpawnResult>("pty_spawn", { spec, onData: channel });
   },
   ptyWrite: (id: string, data: string) => invoke<void>("pty_write", { id, data }),
+  // Yazıldıysa true; satır okuyan programa tuş gitmiyor (bkz. `lineKey`).
+  ptyWriteKey: (id: string, data: string) => invoke<boolean>("pty_write_key", { id, data }),
   ptyResize: (id: string, cols: number, rows: number) =>
     invoke<void>("pty_resize", { id, cols, rows }),
   ptyKill: (id: string) => invoke<boolean>("pty_kill", { id }),
