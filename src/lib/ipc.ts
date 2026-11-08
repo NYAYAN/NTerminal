@@ -34,6 +34,7 @@ import type {
   ReleaseInfo,
   SearchFlags,
   Settings,
+  ForegroundInfo,
   SpawnResult,
   SpawnSpec,
   StashFiles,
@@ -81,6 +82,8 @@ export const api = {
   ptyKill: (id: string) => invoke<boolean>("pty_kill", { id }),
   ptyAlive: (id: string) => invoke<boolean>("pty_alive", { id }),
   ptyPid: (id: string) => invoke<number | null>("pty_pid", { id }),
+  // Tam ekran çubuğu (`KeyBar`) programın adını buradan okuyor.
+  ptyForeground: (id: string) => invoke<ForegroundInfo>("pty_foreground", { id }),
   ptyList: () => invoke<string[]>("pty_list"),
 
   scrollbackSave: (tabId: string, data: string) =>

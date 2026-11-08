@@ -10,6 +10,7 @@ import { promptedTabs } from "../lib/promptSeen";
 import { terminalFontSize } from "../lib/settingsLimits";
 import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
+import { KeyBar } from "./KeyBar";
 
 /**
  * Kullanıcı komut kutusundan BAŞKA bir metin kutusuna mı yazıyor?
@@ -40,9 +41,10 @@ function typingElsewhere(): boolean {
  *
  * Kabuk istemde beklerken KOMUT satırı; komut çalışırken o komutun YANIT
  * satırı — `ng serve`in "(Y/n)" sorusu da buraya yazılıyor, yazılan Enter'la
- * çalışan programa gidiyor. `vim` gibi tam ekran programlarda ve kabuk
- * entegrasyonu olmayan profillerde tuşlar doğrudan terminale gidiyor — orada
- * ekranı program yönetiyor. Kararı `lib/inputMode.ts` veriyor; bu bileşen
+ * çalışan programa gidiyor. `vim` gibi tam ekran programlarda tuşlar
+ * doğrudan terminale gidiyor ve kutunun yerinde tuş çubuğu duruyor (programın
+ * adı, çıkış düğmeleri; bkz. `KeyBar`). Kabuk entegrasyonu olmayan
+ * profillerde kutu hiç yok. Kararı `lib/inputMode.ts` veriyor; bu bileşen
  * yalnızca sonucunu uyguluyor.
  *
  * ## Tab kutuyu TERK ETMİYOR
@@ -147,7 +149,9 @@ export function CommandInput() {
     exited,
   });
   // Kutu açık: istemde komut satırı ya da çalışan komutun yanıt satırı.
-  const active = mode !== "raw";
+  // Tam ekranda (`keys`) kutu yok, yerinde tuş çubuğu var: tuşlar xterm'e
+  // gidiyor, odak orada (bkz. `KeyBar`).
+  const active = mode === "app" || mode === "stdin";
   const stdin = mode === "stdin";
   const value = stdin ? reply : draft;
   // İlk sözcük bir favori kısaltması mı (bkz. `lib/aliases.ts`). Yalnızca
@@ -356,8 +360,8 @@ export function CommandInput() {
    *
    * Şerit AYNI yerde duruyor: gözün baktığı yer değişmiyor.
    *
-   * Tam ekran programlarda (vim, less) çizilmiyor: orada ekranı program
-   * yönetiyor ve Ctrl+C'nin anlamı programın kendisine ait.
+   * Tam ekran programlarda (vim, less) şeridin yerinde tuş çubuğu var
+   * (aşağıda, `KeyBar`).
    */
   /*
    * Kabuk kapandıysa burada hiçbir şey çizilmiyor.
@@ -366,6 +370,24 @@ export function CommandInput() {
    * terminalin üstündeki kutu söylüyor (Yeniden başlat / Sekmeyi kapat).
    */
   if (exited) return null;
+
+  /*
+   * Tam ekran program: kutunun yerinde TUŞ ÇUBUĞU.
+   *
+   * Komut metni yalnızca bir komut çalışırken geçerli: `lastCommand` komut
+   * bitince silinmiyor (sekmenin alt satırı onu gösteriyor).
+   */
+  if (mode === "keys" && tabId) {
+    return (
+      <KeyBar
+        tabId={tabId}
+        program={signals?.program ?? null}
+        command={running ? (tab?.lastCommand ?? null) : null}
+        armed={armed}
+        rowStyle={rowStyle}
+      />
+    );
+  }
 
   if (!active && running && signals?.integration && !signals.altScreen) {
     /*
@@ -433,9 +455,9 @@ export function CommandInput() {
    * yüksekliği tutmak — ölçüleri `.command-running` ile aynı olduğu için
    * terminal hiç yeniden ölçülendirilmiyor.
    *
-   * Koşullar dar: yalnızca kutunun ZATEN açılacağı durumda. Ayar kapalıysa,
-   * entegrasyon yoksa ya da tam ekran bir program (vim, less) çalışıyorsa
-   * satır gerçekten olmamalı — orada terminalin bütün alanı kullanması doğru.
+   * Koşullar dar: yalnızca kutunun ZATEN açılacağı durumda. Ayar kapalıysa ya
+   * da entegrasyon yoksa satır gerçekten olmamalı — orada terminalin bütün
+   * alanı kullanması doğru. Tam ekran programı yukarıdaki tuş çubuğu aldı.
    */
   if (!active && appInput && signals?.integration && !signals.altScreen) {
     return <div className="command-running idle" style={rowStyle} aria-hidden="true" />;

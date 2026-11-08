@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   looksLikeSecretPrompt,
   passThroughSequence,
+  programOwnsKey,
   resolveCtrlC,
   resolveInputMode,
   SIGINT,
@@ -46,10 +50,11 @@ describe("girdi kipi", () => {
     expect(resolveInputMode({ ...ACIK, atPrompt: false, running: false })).toBe("raw");
   });
 
-  it("komut çalışırken de tam ekran program ham kipte", () => {
+  it("komut çalışırken tam ekran program TUŞ kipinde: satır biriktirilmiyor, kutunun yerinde çubuk", () => {
     // `git log` less'i açtı: her tuş o an bir komut, satır biriktirmek
-    // programı kullanılamaz yapardı.
-    expect(resolveInputMode({ ...CALISIYOR, altScreen: true })).toBe("raw");
+    // programı kullanılamaz yapardı. Tuşlar terminale gidiyor; kutu
+    // kaybolmuyor, yerinde programın adı ve çıkış düğmeleri (`KeyBar`).
+    expect(resolveInputMode({ ...CALISIYOR, altScreen: true })).toBe("keys");
   });
 
   it("komut çalışırken entegrasyon, ayar ve ölü kabuk yine ham kipe düşürüyor", () => {
@@ -77,10 +82,24 @@ describe("girdi kipi", () => {
     expect(resolveInputMode({ ...ACIK, exited: true })).toBe("raw");
   });
 
-  it("tam ekran programda ham kip", () => {
-    // vim, less, htop: ikincil ekran tamponu. Entegrasyon sinyali gecikse
-    // bile bu yakalıyor.
-    expect(resolveInputMode({ ...ACIK, altScreen: true })).toBe("raw");
+  it("tam ekran programda tuş kipi", () => {
+    /*
+     * vim, less, htop: ikincil ekran tamponu. Entegrasyon sinyali gecikse
+     * bile bu yakalıyor.
+     *
+     * BİLDİRİLEN: "`git pull` dediğimde komut yazın kısmında değil üst
+     * kısımda `:q!` yazmak gerekiyor." Eskiden burada ham kip vardı ve kutu
+     * hiç çizilmiyordu.
+     */
+    expect(resolveInputMode({ ...ACIK, altScreen: true })).toBe("keys");
+  });
+
+  it("tam ekranda da ayar, entegrasyon ve ölü kabuk ham kipe düşürüyor", () => {
+    // Klasik terminal isteyen (ayar kapalı) çubuk da görmemeli; entegrasyonsuz
+    // profilde kutu hiç yok.
+    expect(resolveInputMode({ ...ACIK, altScreen: true, enabled: false }), "ayar").toBe("raw");
+    expect(resolveInputMode({ ...ACIK, altScreen: true, integration: false }), "entegrasyon").toBe("raw");
+    expect(resolveInputMode({ ...ACIK, altScreen: true, exited: true }), "ölü kabuk").toBe("raw");
   });
 
   it("kabuk entegrasyonu yoksa ham kip", () => {
@@ -99,7 +118,9 @@ describe("girdi kipi", () => {
     for (const alan of ["enabled", "integration", "atPrompt"] as const) {
       expect(resolveInputMode({ ...ACIK, [alan]: false }), alan).toBe("raw");
     }
-    expect(resolveInputMode({ ...ACIK, altScreen: true })).toBe("raw");
+    // Tuş kipi de bu kurala uyuyor: tuşlar ham kipteki gibi doğrudan
+    // terminale gidiyor, çubuk yalnızca görüntü.
+    expect(resolveInputMode({ ...ACIK, altScreen: true })).toBe("keys");
   });
 });
 
@@ -155,6 +176,47 @@ const DOLU = { empty: false, appCursor: false };
 const send = (data: string) => ({ kind: "send", data });
 /** Yalnızca tuşları tek tek okuyan programa giden tuş (bkz. `lineKey`). */
 const tus = (data: string) => ({ kind: "key", data });
+
+/*
+ * Tam ekran programda uygulama kısayolları programın tuşlarını çalmamalı.
+ *
+ * Kısayollar yakalama aşamasında xterm'den önce çalışıyor. Windows/Linux'ta
+ * çoğu düz Ctrl+harf ve vim'de aynı tuşlar başka işler yapıyor.
+ */
+describe("tam ekranda programın tuşları", () => {
+  const WIN = { mac: false, altScreen: true };
+
+  it("vim açıkken düz Ctrl+harf programa: Ctrl+W sekmeyi kapatıyordu", () => {
+    // Ctrl+W vim'in pencere öneki, Ctrl+R yinele, Ctrl+P tamamlama.
+    for (const harf of ["w", "r", "p", "t", "V"]) {
+      expect(programOwnsKey(ctrl(harf), WIN), harf).toBe(true);
+    }
+  });
+
+  it("Ctrl+Shift, Ctrl+Tab ve Ctrl+rakam uygulamada kalıyor", () => {
+    // Sekme değiştirmek ve kopyala/yapıştır vim açıkken de çalışmalı.
+    expect(programOwnsKey(ctrl("C", { shiftKey: true }), WIN), "Ctrl+Shift+C").toBe(false);
+    expect(programOwnsKey(ctrl("Tab"), WIN), "Ctrl+Tab").toBe(false);
+    expect(programOwnsKey(ctrl("1"), WIN), "Ctrl+1").toBe(false);
+    expect(programOwnsKey(ctrl("w", { altKey: true }), WIN), "AltGr").toBe(false);
+    expect(programOwnsKey(ctrl("w", { metaKey: true }), WIN), "Ctrl+Win").toBe(false);
+  });
+
+  it("App.tsx kuralı uygulama kısayollarından ÖNCE uyguluyor", () => {
+    // Kural yazılı ama kısayol eşleşmesinden sonra çağrılsa Ctrl+W yine sekmeyi
+    // kapatırdı; hiç çağrılmasa da testlerin hiçbiri bunu görmezdi.
+    const APP = readFileSync(join(process.cwd(), "src/App.tsx"), "utf8");
+    const kural = APP.indexOf("programOwnsKey(event");
+    expect(kural, "kural kullanılmıyor").toBeGreaterThan(-1);
+    expect(kural, "kısayollardan sonra").toBeLessThan(APP.indexOf("matchCombo(event, keys.newTab)"));
+  });
+
+  it("tam ekran dışında ve mac'te kısayollar eskisi gibi", () => {
+    // İstemde Ctrl+W sekmeyi kapatmalı; mac'te kısayollar Cmd'li.
+    expect(programOwnsKey(ctrl("w"), { mac: false, altScreen: false })).toBe(false);
+    expect(programOwnsKey(ctrl("w"), { mac: true, altScreen: true })).toBe(false);
+  });
+});
 
 /*
  * Çalışan komuta yazarken tuşların yolu.

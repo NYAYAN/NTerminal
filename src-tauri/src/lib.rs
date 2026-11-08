@@ -19,6 +19,10 @@ mod store;
 mod transfer;
 mod update;
 mod tray;
+// Windows'ta on plandaki program (bkz. `pty::foreground_program`). Saf kural
+// her platformda sinaniyor.
+#[cfg(any(windows, test))]
+mod winproc;
 
 use base64::Engine;
 use favorites::{Favorite, FavoritePatch, FavoriteStore, NewFavorite};
@@ -293,6 +297,14 @@ fn pty_alive(state: State<AppState>, id: String) -> bool {
 #[tauri::command]
 fn pty_pid(state: State<AppState>, id: String) -> Option<u32> {
     state.pty.pid(&id)
+}
+
+/// On plandaki program ve terminalin kipi; tam ekran cubugu programin adini
+/// buradan okuyor (bkz. `pty::Foreground`). `async`: Linux'ta `/proc`
+/// taramasi ana is parcaciginda yapilmasin.
+#[tauri::command]
+async fn pty_foreground(state: State<'_, AppState>, id: String) -> CmdResult<pty::Foreground> {
+    state.pty.foreground(&id).map_err(fail)
 }
 
 #[tauri::command]
@@ -1431,6 +1443,7 @@ pub fn run() {
             pty_write,
             pty_write_key,
             pty_write_bytes,
+            pty_foreground,
             pty_resize,
             pty_kill,
             pty_alive,

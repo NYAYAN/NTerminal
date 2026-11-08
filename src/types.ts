@@ -350,6 +350,16 @@ export interface SpawnResult {
   integration: boolean;
 }
 
+/** Ön plandaki program ve terminalin kipi (`pty_foreground`). */
+export interface ForegroundInfo {
+  /** Programın adı ("vim", "less"); kabuk istemdeyse ya da okunamadıysa null. */
+  program: string | null;
+  /** Program tuşları tek tek mi okuyor (kanonik kip kapalı); Windows'ta null. */
+  readsKeys: boolean | null;
+  /** Terminal yazılanı yansıtıyor mu (ECHO); Windows'ta null. */
+  echo: boolean | null;
+}
+
 // -------------------------------------------------------------- dosya agaci
 
 export interface DirEntry {

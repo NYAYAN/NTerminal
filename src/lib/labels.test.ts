@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isClaudeCommand, resolveProfile, shellBadge } from "./labels";
+import { commandProgram, isClaudeCommand, resolveProfile, shellBadge } from "./labels";
 import { healTabProfiles } from "./tabs";
 import type { Group, Profile, TabState } from "../types";
 
@@ -220,5 +220,30 @@ describe("profil bağının onarımı", () => {
     // Bağlanacak bir şey yok; kimliği silmek bilgiyi tümden atmak olurdu ve
     // profiller geri geldiğinde sekme yanlış kabuğa bağlı kalırdı.
     expect(healTabProfiles(groups, [], "")).toBe(groups);
+  });
+});
+
+/*
+ * Komutun çalıştırdığı program: tam ekran çubuğu (`KeyBar`) ön plandaki
+ * programın adını okuyamadığında (Windows) adı buradan alıyor.
+ */
+describe("komutun programı", () => {
+  it("zincirin son halkası: ekranı yöneten program sonda çalışıyor", () => {
+    expect(commandProgram("cd notlar && vim yapilacak.md")).toBe("vim");
+    expect(commandProgram("git log | less")).toBe("less");
+    expect(commandProgram("git pull")).toBe("git");
+  });
+
+  it("ortam atamaları, sarmalayıcılar, yol ve uzantı düşüyor", () => {
+    expect(commandProgram("EDITOR=nano crontab -e")).toBe("crontab");
+    expect(commandProgram("nohup htop")).toBe("htop");
+    expect(commandProgram("/usr/local/bin/nvim x")).toBe("nvim");
+    expect(commandProgram("C:\\Tools\\vim.exe a.txt")).toBe("vim");
+  });
+
+  it("boş halka ya da boş komut program vermiyor", () => {
+    expect(commandProgram("sleep 5 &")).toBe("sleep");
+    expect(commandProgram("   ")).toBe(null);
+    expect(commandProgram(null)).toBe(null);
   });
 });

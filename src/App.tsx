@@ -28,6 +28,7 @@ import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
 import { escapeOwnedBy, isNativeCopyKey, pageSelectionText } from "./lib/focus";
+import { programOwnsKey } from "./lib/inputMode";
 import { matchCombo, prettyCombo } from "./lib/keys";
 import { isMac } from "./lib/platform";
 import { DELETE_SUGGESTION_KEY } from "./lib/suggest";
@@ -567,6 +568,12 @@ export function App() {
           store.closeSuggestions();
           // preventDefault YOK: tuş kabuğa gitmeye devam etsin.
         }
+      }
+
+      // Tam ekran programda düz Ctrl+harf programın tuşu: vim açıkken Ctrl+W
+      // sekmeyi kapatıyordu (gerekçe ve sınırlar `programOwnsKey` üzerinde).
+      if (inTerminal && programOwnsKey(event, { mac: isMac(), altScreen: !!session?.altScreenActive() })) {
+        return;
       }
 
       if (matchCombo(event, keys.newTab)) return run(() => store.addTab());

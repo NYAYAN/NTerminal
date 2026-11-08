@@ -62,6 +62,10 @@ const h = vi.hoisted(() => {
     yazilan: [] as { id: string; data: string }[],
     /** `ptyKill` ile öldürülen kimlikler. */
     olduruldu: [] as string[],
+    /** `ptyForeground`un bildirdiği program adı. */
+    onPlan: null as string | null,
+    /** `ptyForeground` bu kapı açılana kadar yanıt vermiyor. */
+    onPlanKapi: Promise.resolve() as Promise<void>,
     /** `yavas-*` kimlikli spawn bu kapı açılana kadar dönmüyor. */
     kapi: Promise.resolve() as Promise<void>,
     kapiyiAc: (() => {}) as () => void,
@@ -98,12 +102,18 @@ vi.mock("../lib/ipc", () => {
     return true;
   });
 
+  /** Ön plandaki program (Rust `pty_foreground`); testler `h.onPlan`ı yazıyor. */
+  const ptyForeground = vi.fn(async () => {
+    await h.onPlanKapi;
+    return { program: h.onPlan, readsKeys: true, echo: false };
+  });
+
   return {
     // Gerçek `api` yüzeyi geniş; testin ilgilendiği çağrılar `ptySpawn`,
     // `ptyWrite` ve `ptyKill`. Vekil, geri kalanını sessiz birer boş çağrıya
     // indiriyor — yüzey büyüdükçe testin bozulmaması için.
     api: new Proxy(
-      { ptySpawn, ptyWrite, ptyKill } as Record<string, unknown>,
+      { ptySpawn, ptyWrite, ptyKill, ptyForeground } as Record<string, unknown>,
       {
         get: (target, prop: string) =>
           target[prop] ?? vi.fn(async () => null),
@@ -389,6 +399,51 @@ describe("ikincil ekran ve blok katmanı", () => {
     expect(s.altScreenActive()).toBe(false);
     expect(cizim, "ana ekrana dönüşte katman tazelenmedi").toHaveBeenCalled();
     expect(s.restoreDividerLine(), "ayıraç ikincil ekrandan sonra yerini kaybetti").toBe(satir);
+    void s.dispose(true);
+  });
+});
+
+/**
+ * Tam ekrandaki programın adı: tuş çubuğu (`KeyBar`) onu gösteriyor.
+ *
+ * Ad ekrana girer girmez soruluyor; ekrandan çıkınca sinyal sıfırlanıyor —
+ * yoksa bir sonraki tam ekran programda bir an eski programın düğmeleri
+ * (vim'in `:q!`'i less'e) görünürdü.
+ */
+describe("tam ekrandaki program", () => {
+  it("ikincil ekrana girince soruluyor, çıkınca sıfırlanıyor", async () => {
+    const s = session("on-plan");
+    const sinyaller: { program: string | null }[] = [];
+    s.setCallbacks({ onInputSignals: (sig) => sinyaller.push(sig) });
+    await s.start(null);
+    await flush(s);
+
+    h.onPlan = "vim";
+    s.term.write("\x1b[?1049h");
+    await flush(s);
+    // Sorgunun yanıtı bir mikro görev sonra geliyor.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.inputSignals().program).toBe("vim");
+    expect(sinyaller.at(-1)?.program, "değişim bildirilmedi").toBe("vim");
+
+    s.term.write("\x1b[?1049l");
+    await flush(s);
+    expect(s.inputSignals().program, "ana ekranda program adı kaldı").toBe(null);
+    expect(sinyaller.at(-1)?.program).toBe(null);
+
+    // İkinci tam ekran program: yanıt gelene kadar ad YOK, eski ad değil.
+    let ac!: () => void;
+    h.onPlanKapi = new Promise<void>((resolve) => (ac = resolve));
+    h.onPlan = "less";
+    s.term.write("\x1b[?1049h");
+    await flush(s);
+    expect(s.inputSignals().program, "önceki programın adı kaldı").toBe(null);
+    ac();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.inputSignals().program).toBe("less");
+
+    h.onPlan = null;
+    h.onPlanKapi = Promise.resolve();
     void s.dispose(true);
   });
 });

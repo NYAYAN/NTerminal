@@ -434,6 +434,18 @@ fn zsh_bos_kullanici_zdotdiri_yazilmiyor() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+#[test]
+fn proc_stat_satiri_ayrisiyor() {
+    // Linux'ta on plandaki program `/proc/<pid>/stat`tan okunuyor. Ad parantez
+    // icinde ve bosluk ya da parantez icerebiliyor: alanlar SON `)`ten sonra.
+    // Sonraki alanlar: durum, ebeveyn, GRUP, ..., 20.'si baslangic zamani.
+    let satir = "4242 (vim (x) y) S 4200 4242 4100 34816 4242 4194304 1 2 3 4 5 6 7 8 20 0 1 0 987654 1 2";
+    assert_eq!(parse_stat(satir), Some(("vim (x) y".to_string(), 4242, 987654)));
+    // Bozuk ya da kisa satir sessizce dusuyor; surec o anda olmus olabilir.
+    assert_eq!(parse_stat("4242 (vim) S 1"), None);
+    assert_eq!(parse_stat(""), None);
+}
+
 // ---------------------------------------------------------- oturum yasami
 //
 // Gercek bir kabukla ama Tauri olmadan: olaylar `EventSink` uzerinden bir
@@ -695,6 +707,51 @@ mod oturum {
         assert!(manager.list().contains(&"sira".to_string()));
         assert!(manager.kill("sira"));
         assert!(!manager.kill("sira"));
+    }
+
+    #[test]
+    fn on_plandaki_program_ve_kip_okunuyor() {
+        // Tam ekran cubugu (`KeyBar`) programin adini gosteriyor: `git pull`
+        // birlestirme mesaji icin vim aciyor ve cubuk "vim" + cikis
+        // dugmeleri diyor. Ad terminalin on plan grubundan (tcgetpgrp)
+        // geliyor; is denetimi olan etkilesimli kabuk komutu kendi grubuna
+        // koyuyor - gercek uygulamadaki kabuklar gibi.
+        //
+        // Kabuk kullanicinin HOME'u ve gecmis dosyasiyla acilmiyor: etkilesimli
+        // bash cikarken gecmisi yaziyor.
+        let ev = std::env::temp_dir().join(format!("nterminal-onplan-{}", std::process::id()));
+        std::fs::create_dir_all(&ev).unwrap();
+        let manager = PtyManager::default();
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = CommandBuilder::new("/bin/bash");
+        cmd.args(["--norc", "--noprofile", "-i"]);
+        cmd.env("HOME", &ev);
+        cmd.env("HISTFILE", ev.join(".hist"));
+        cmd.env("PS1", "ISTEM> ");
+        let size = PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 };
+        manager.launch("onplan", cmd, size, Kanal(tx)).expect("kabuk baslatilamadi");
+        assert!(veri_bekle(&rx, "ISTEM> ", Duration::from_secs(10)), "istem gelmedi");
+
+        // Istemde on planda kabugun kendisi var: program yok, readline
+        // tuslari tek tek okuyor.
+        let istem = manager.foreground("onplan").unwrap();
+        assert_eq!(istem.program, None, "istemde program olmamali: {istem:?}");
+        assert_eq!(istem.reads_keys, Some(true), "istemde kip: {istem:?}");
+
+        manager.write("onplan", b"sleep 30\r").unwrap();
+        let basla = Instant::now();
+        let mut son = manager.foreground("onplan").unwrap();
+        while son.program.as_deref() != Some("sleep") && basla.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(50));
+            son = manager.foreground("onplan").unwrap();
+        }
+        assert_eq!(son.program.as_deref(), Some("sleep"), "on plandaki program: {son:?}");
+        // `sleep` girdi okumuyor: terminal kabugun biraktigi satir kipinde.
+        assert_eq!(son.reads_keys, Some(false));
+        assert_eq!(son.echo, Some(true));
+
+        manager.kill("onplan");
+        let _ = std::fs::remove_dir_all(&ev);
     }
 
     /// `pty_write_key`in yaptigi: tutamac varsa yaz, yoksa hic dokunma.

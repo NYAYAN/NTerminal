@@ -77,14 +77,22 @@ const writeText = vi.fn(async () => {});
  * Kip sinyalleri OTURUMDAN okunuyor; depodaki kopya yalnızca yeniden çizimi
  * tetikliyor. Sahte oturum da bunu vermek zorunda.
  */
-const inputSignals = vi.fn(() => ({ atPrompt: true, altScreen: false, integration: true }));
+const inputSignals = vi.fn(
+  (): { atPrompt: boolean; altScreen: boolean; integration: boolean; program?: string | null } => ({
+    atPrompt: true,
+    altScreen: false,
+    integration: true,
+  }),
+);
 /** Program uygulama imleç tuşlarını istemiş mi (DECCKM); varsayılan hayır. */
 const applicationCursorKeys = vi.fn(() => false);
 /** Çalışan program parola mı soruyor; kuralın kendisi `inputMode.test.ts` içinde. */
 const secretPrompt = vi.fn(() => false);
 
 /** Kabuğun bildirdiği sinyaller; varsayılan "istemde bekliyor". */
-function seed(signals: Partial<{ atPrompt: boolean; altScreen: boolean; integration: boolean }> = {}) {
+function seed(
+  signals: Partial<{ atPrompt: boolean; altScreen: boolean; integration: boolean; program: string | null }> = {},
+) {
   const tam = { atPrompt: true, altScreen: false, integration: true, ...signals };
   // Oturum ASIL kaynak; depodaki kopya yalnızca yeniden çizim tetikleyicisi.
   inputSignals.mockReturnValue(tam);
@@ -183,9 +191,11 @@ describe("komut satırı kutusu", () => {
     expect(sendKeys).toHaveBeenCalledWith("\x03");
   });
 
-  it("tam ekran programda şerit de YOK", () => {
-    // vim/less ekranı kendisi yönetiyor; Ctrl+C'nin anlamı programa ait.
+  it("ayar kapalıyken tam ekran programda şerit de YOK", () => {
+    // Klasik terminal: vim/less ekranı kendisi yönetiyor, alanın tamamı
+    // terminalin. Ayar açıkken yerinde tuş çubuğu var (aşağıda).
     seedRunning({ altScreen: true });
+    appInputOff();
     const { container } = render(<CommandInput />);
     expect(container.innerHTML).toBe("");
   });
@@ -495,13 +505,12 @@ describe("komut satırı kutusu", () => {
   /*
    * Satır yalnızca kutunun ZATEN açılacağı durumda tutuluyor.
    *
-   * Üç durumda kutu hiç açılmayacak ve orada boş bir şerit terminalden kalıcı
-   * olarak yer çalardı — üstelik `vim` gibi tam ekran programlarda alanın
-   * tamamının terminale geçmesi İSTENEN şey.
+   * İki durumda kutu hiç açılmayacak ve orada boş bir şerit terminalden
+   * kalıcı olarak yer çalardı. Tam ekran programda ise boş şerit değil tuş
+   * çubuğu var (`KeyBar`).
    */
   it("kutunun hiç açılmayacağı durumlarda satır da yok", () => {
     for (const [ad, signals] of [
-      ["tam ekran program", { atPrompt: false, altScreen: true }],
       ["entegrasyonsuz kabuk", { atPrompt: false, integration: false }],
     ] as const) {
       promptedTabs.clear();
@@ -551,10 +560,11 @@ describe("komut satırı kutusu", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("tam ekran programda kapalı", () => {
+  it("tam ekran programda kutu yok, yerinde tuş çubuğu", () => {
     seed({ altScreen: true });
     const { container } = render(<CommandInput />);
-    expect(container.innerHTML).toBe("");
+    expect(field(container), "tam ekranda metin kutusu").toBe(null);
+    expect(container.querySelector(".command-running.keys")).not.toBe(null);
   });
 
   it("kabuk entegrasyonu yoksa kapalı", () => {
@@ -1240,5 +1250,95 @@ describe("yapıştırma", () => {
     paste("y");
     expect(el.value).toBe("y");
     expect(sendKeys, "yapıştırılan yanıt kendiliğinden gitti").not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * Tam ekran programın tuş çubuğu (`KeyBar`).
+ *
+ * BİLDİRİLEN: "`git pull` dediğimde komut yazın kısmında değil üst kısımda
+ * `:q!` yazmak gerekiyor; her şey komut yazın kısmında olmalı." Kutu tam
+ * ekranda kayboluyordu; çubuk yerinde duruyor, programın adını ve çıkış
+ * yolunu gösteriyor. Tuşlar yine xterm'e gidiyor (kodlamayı o yapıyor).
+ */
+describe("tam ekran programın tuş çubuğu", () => {
+  /** Tam ekranda çalışan program; komut metni sekmenin son komutu. */
+  function seedFullScreen(program: string | null, command: string | null = null) {
+    seedRunning({ altScreen: true });
+    inputSignals.mockReturnValue({ atPrompt: false, altScreen: true, integration: true, program });
+    useStore.setState({ groups: [group([{ ...tab(TAB), lastCommand: command }])] });
+  }
+
+  const bar = (c: HTMLElement) => c.querySelector<HTMLElement>(".command-running.keys");
+  const buttons = (c: HTMLElement) =>
+    [...c.querySelectorAll<HTMLButtonElement>(".command-running.keys button")].map((b) => b.textContent);
+
+  it("git'in açtığı vim: adı, git ipucu ve çıkış düğmeleri", () => {
+    seedFullScreen("vim", "git pull");
+    const { container } = render(<CommandInput />);
+    expect(bar(container)?.querySelector(".keys-name")?.textContent).toBe("vim");
+    expect(bar(container)?.textContent).toContain("Git mesajı");
+    expect(buttons(container)).toEqual(["Kaydet ve çık", "Kaydetmeden çık"]);
+  });
+
+  it("düğme programa tuşları gönderiyor ve odağı xterm'den almıyor", () => {
+    // Odak düğmede kalsaydı yazılan hiçbir yere gitmez, vim de odak kaybı
+    // bildirimi alırdı.
+    seedFullScreen("vim", "git pull");
+    const { container } = render(<CommandInput />);
+    const quit = [...container.querySelectorAll<HTMLButtonElement>(".keys-action")].find(
+      (b) => b.textContent === "Kaydetmeden çık",
+    )!;
+    expect(fireEvent.mouseDown(quit), "düğme odağı alıyor").toBe(false);
+    fireEvent.click(quit);
+    expect(sendKeys).toHaveBeenCalledWith("\x1b:q!\r");
+  });
+
+  it("bilinmeyen programda düğme yok, Durdur var", () => {
+    // Yanlış programa `:q!` göndermek o programda başka bir şey yapardı.
+    seedFullScreen("tmux", "tmux");
+    const { container } = render(<CommandInput />);
+    expect(container.querySelector(".keys-action")).toBe(null);
+    const stop = bar(container)?.querySelector<HTMLButtonElement>(".running-stop");
+    expect(stop, "durdurma düğmesi yok").not.toBe(null);
+    fireEvent.click(stop!);
+    expect(sendKeys).toHaveBeenCalledWith("\x03");
+  });
+
+  it("program okunamazsa ad komuttan, o da yoksa \"Tam ekran program\"", () => {
+    seedFullScreen(null, "cd notlar && less uzun.txt");
+    const { container, unmount } = render(<CommandInput />);
+    expect(bar(container)?.querySelector(".keys-name")?.textContent).toBe("less");
+    unmount();
+
+    seedFullScreen(null, null);
+    const ikinci = render(<CommandInput />);
+    expect(bar(ikinci.container)?.querySelector(".keys-name")?.textContent).toBe("Tam ekran program");
+  });
+
+  it("çubuğa basmak odağı programa veriyor, tuşlar xterm'e gidiyor", () => {
+    seedFullScreen("less", "git log");
+    const { container } = render(<CommandInput />);
+    // Kutu yok: terminalin girdisi açık, odak orada.
+    expect(setAppInput).not.toHaveBeenCalledWith(true);
+    focus.mockClear();
+    expect(fireEvent.mouseDown(bar(container)!), "çubuk odağı alıyor").toBe(false);
+    expect(focus).toHaveBeenCalled();
+  });
+
+  it("silahlı hâl çubukta: ilk Ctrl+C'nin karşılığı", () => {
+    seedFullScreen("htop", "htop");
+    useStore.setState({ stopArmed: TAB });
+    const { container } = render(<CommandInput />);
+    expect(bar(container)?.classList.contains("armed")).toBe(true);
+    expect(bar(container)?.textContent).toContain("Durdurmak için tekrar basın");
+  });
+
+  it("çubuk kutuyla aynı satır yüksekliğinde: tam ekrana girerken terminal ölçülendirilmiyor", () => {
+    // Kutu eskiden tam ekranda kayboluyordu; terminal büyüyüp programa
+    // SIGWINCH gidiyordu. Çubuk kutunun ölçüsünü taşıyor.
+    seedFullScreen("vim", null);
+    const { container } = render(<CommandInput />);
+    expect(bar(container)?.style.getPropertyValue("--cmd-row-h")).toMatch(/^\d+px$/);
   });
 });

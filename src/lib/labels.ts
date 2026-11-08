@@ -59,7 +59,30 @@ const SHELL_BADGES: Record<ShellKind, string> = {
  */
 export function isClaudeCommand(command: string | null | undefined): boolean {
   if (!command) return false;
-  return command.split(/&&|\|\||[;|&]/).some((part) => startsClaude(part.trim().split(/\s+/)));
+  return commandSegments(command).some((part) => startsClaude(segmentProgram(part)));
+}
+
+/**
+ * Zincirin SON halkasının çalıştırdığı program: `cd proje && vim x` → `vim`,
+ * `git log | less` → `less`.
+ *
+ * Tam ekran çubuğu (`KeyBar`) ön plandaki programın adını okuyamadığında
+ * (Windows'ta grup bilgisi yok) adı buradan alıyor. Son halka, çünkü ekranı
+ * yöneten program zincirin sonunda çalışıyor; boş halkalar (`a &`) atlanıyor.
+ */
+export function commandProgram(command: string | null | undefined): string | null {
+  if (!command) return null;
+  const parts = commandSegments(command);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const program = segmentProgram(parts[i]);
+    if (program) return program.name;
+  }
+  return null;
+}
+
+/** Komut zincirinin halkaları: `&&`, `||`, `;`, `|`, `&`. */
+function commandSegments(command: string): string[] {
+  return command.split(/&&|\|\||[;|&]/);
 }
 
 /** Komutun önüne yazılıp asıl programı çalıştıranlar. */
@@ -68,23 +91,39 @@ const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "caffeinate
 /** Paketi indirip çalıştıranlar: `npx @anthropic-ai/claude-code`. */
 const RUNNERS = new Set(["npx", "bunx", "pnpx"]);
 
-function startsClaude(words: string[]): boolean {
+interface SegmentProgram {
+  /** Yolu ve uzantısı düşmüş ad: `~/.local/bin/claude`, `claude.cmd` → `claude`. */
+  name: string;
+  /** Adın ardından gelen sözcükler. */
+  args: string[];
+}
+
+/**
+ * Bir halkanın çalıştırdığı program.
+ *
+ * Ortam atamaları (`ANTHROPIC_MODEL=... claude`) ve asıl programı çalıştıran
+ * sarmalayıcılar (`env`, `nohup`, `time`…) seçenekleriyle birlikte atlanıyor.
+ */
+function segmentProgram(segment: string): SegmentProgram | null {
+  const words = segment.trim().split(/\s+/);
   let i = 0;
   while (i < words.length) {
-    // `ANTHROPIC_MODEL=... claude`
     if (/^[A-Za-z_]\w*=/.test(words[i])) i += 1;
     else if (WRAPPERS.has(words[i])) {
       i += 1;
       while (words[i]?.startsWith("-")) i += 1;
     } else break;
   }
-  if (i >= words.length) return false;
-
-  // Yol ve uzantı düşüyor: `~/.local/bin/claude`, Windows'ta `claude.cmd`.
+  if (i >= words.length || !words[i]) return null;
   const name = baseName(words[i].replace(/^["']|["']$/g, "")).replace(/\.(exe|cmd|ps1)$/i, "");
-  if (name === "claude") return true;
-  if (!RUNNERS.has(name)) return false;
-  const pkg = words.slice(i + 1).find((w) => !w.startsWith("-"));
+  return name ? { name, args: words.slice(i + 1) } : null;
+}
+
+function startsClaude(program: SegmentProgram | null): boolean {
+  if (!program) return false;
+  if (program.name === "claude") return true;
+  if (!RUNNERS.has(program.name)) return false;
+  const pkg = program.args.find((w) => !w.startsWith("-"));
   return !!pkg && /^@anthropic-ai\/claude-code(@|$)/.test(pkg);
 }
 

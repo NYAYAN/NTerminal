@@ -132,6 +132,7 @@ export interface SessionCallbacks {
     atPrompt: boolean;
     altScreen: boolean;
     integration: boolean;
+    program: string | null;
   }) => void;
 }
 
@@ -217,6 +218,9 @@ const RESTORE_RESET =
  * gibi davranıyor; işaret GEÇ gelirse iddia geri açılıyor (bkz. `noteIntegration`).
  */
 const INTEGRATION_PROBE_MS = 5000;
+
+/** Tam ekrandayken ön plandaki programın yeniden sorulma aralığı (bkz. `watchForeground`). */
+const FOREGROUND_POLL_MS = 1000;
 
 /**
  * WebGL bağlamı tutan oturumlar, en son kullanılan SONDA.
@@ -403,6 +407,9 @@ export class TerminalSession {
   private atPrompt = false;
   /** İkincil ekran tamponu etkin mi (vim, less, htop). */
   private altScreen = false;
+  /** Tam ekrandaki programın adı (`pty_foreground`); ekrandan çıkınca null. */
+  private foregroundProgram: string | null = null;
+  private foregroundTimer: number | null = null;
   private blocks: TrackedBlock[] = [];
   private blockSeq = 0;
   private blockSyncFrame: number | null = null;
@@ -1687,16 +1694,57 @@ export class TerminalSession {
    * (ya da geri yüklenen ekran çıktısı tamponu bir an ikincil kipe soksa)
    * saklanan bayrak kalıcı olarak yanlış kalıyordu.
    */
-  inputSignals(): { atPrompt: boolean; altScreen: boolean; integration: boolean } {
+  inputSignals(): {
+    atPrompt: boolean;
+    altScreen: boolean;
+    integration: boolean;
+    program: string | null;
+  } {
+    const altScreen = this.altScreenActive();
     return {
       atPrompt: this.atPrompt,
-      altScreen: this.altScreenActive(),
+      altScreen,
       integration: this.integration,
+      program: altScreen ? this.foregroundProgram : null,
     };
   }
 
   private emitInputSignals() {
     this.callbacks.onInputSignals?.(this.inputSignals());
+  }
+
+  /**
+   * Tam ekrandayken ön plandaki programın adını izler (`KeyBar` gösteriyor).
+   *
+   * Ekrana girer girmez soruluyor, ekrandayken saniyede bir tazeleniyor:
+   * program ekranı bırakmadan değişebiliyor — less'te `v` vim açıyor, git
+   * mesaj için düzenleyiciyi çalıştırıyor. Değişmediyse bildirilmiyor; depo
+   * her saniye yeniden çizilmesin. Sorgu ucuz (iki ioctl ve grubun süreç
+   * listesi) ve yalnızca tam ekrandayken yapılıyor.
+   *
+   * Yanıt geldiğinde ekran çoktan kapanmış olabilir; o zaman yutuluyor.
+   */
+  private watchForeground(on: boolean) {
+    if (this.foregroundTimer !== null) window.clearInterval(this.foregroundTimer);
+    this.foregroundTimer = null;
+    if (!on) {
+      this.foregroundProgram = null;
+      return;
+    }
+    const ask = () => {
+      void api
+        .ptyForeground(this.tabId)
+        .then((fg) => {
+          if (!this.altScreenActive()) return;
+          const program = fg?.program ?? null;
+          if (program === this.foregroundProgram) return;
+          this.foregroundProgram = program;
+          this.emitInputSignals();
+        })
+        .catch(() => {});
+    };
+    ask();
+    this.foregroundTimer = window.setInterval(ask, FOREGROUND_POLL_MS);
   }
 
   /**
@@ -2015,6 +2063,7 @@ export class TerminalSession {
     this.unlisteners = [];
     if (this.integrationProbe !== null) window.clearTimeout(this.integrationProbe);
     this.integrationProbe = null;
+    this.watchForeground(false);
     if (this.linkTimer !== null) window.clearTimeout(this.linkTimer);
     this.linkTimer = null;
     if (this.inputTimer !== null) window.clearTimeout(this.inputTimer);
@@ -2073,6 +2122,7 @@ export class TerminalSession {
         if (alt === this.altScreen) return;
         this.altScreen = alt;
         this.stopWheel();
+        this.watchForeground(alt);
         this.emitInputSignals();
       }),
       this.term.onSelectionChange(() => this.handleSelectionChange()),

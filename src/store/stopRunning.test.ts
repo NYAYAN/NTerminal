@@ -68,11 +68,28 @@ describe("durdurma silahı", () => {
   });
 
   it("şerit görünmüyorsa balonla haber veriliyor", () => {
-    // Şerit yalnızca entegrasyonlu ve tam ekran olmayan sekmede çiziliyor.
-    // Onun dışında ilk basış tümüyle sessiz kalırdı.
-    useStore.setState({ inputSignals: { t1: { atPrompt: false, altScreen: true, integration: true } } });
+    // Komut satırı kapalıyken (klasik terminal) tam ekran programda ne şerit
+    // ne tuş çubuğu var. Orada ilk basış tümüyle sessiz kalırdı.
+    const state = useStore.getState();
+    useStore.setState({
+      inputSignals: { t1: { atPrompt: false, altScreen: true, integration: true } },
+      settings: { ...state.settings, behavior: { ...state.settings.behavior, appInput: false } },
+    });
     useStore.getState().armStop("t1");
     expect(useStore.getState().ui.toast?.text).toContain("tekrar basın");
+  });
+
+  it("tam ekranda tuş çubuğu silahlı hâli gösteriyor: balon YOK", () => {
+    // Komut satırı açıkken tam ekran programda şeridin yerinde tuş çubuğu
+    // (`KeyBar`) duruyor ve "tekrar basın" orada yazıyor.
+    const state = useStore.getState();
+    useStore.setState({
+      ui: { ...state.ui, toast: null },
+      inputSignals: { t1: { atPrompt: false, altScreen: true, integration: true } },
+      settings: { ...state.settings, behavior: { ...state.settings.behavior, appInput: true } },
+    });
+    useStore.getState().armStop("t1");
+    expect(useStore.getState().ui.toast).toBe(null);
   });
 
   it("şerit görünüyorsa balon YOK", () => {

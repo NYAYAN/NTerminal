@@ -1941,6 +1941,64 @@ ekrandan siliniyor, ayıraç boş alanın altında kalıyor. Büyük olasılıkl
 ana ekrana dönerken kendi tamponunu yeniden boyuyor; geri yüklenen satırları
 yalnızca xterm biliyor. Gerçek PTY'de (macOS) beklenmiyor.
 
+### 1.34 Tam ekran programda kutu kayboluyordu: tuş çubuğu
+
+**Bildirilen:** "`git pull` dediğimde bir sürü dosya geliyor ve komut yazın
+kısmında değil üst kısımda `:q!` yazmak gerekiyor. Her şey komut yazın
+kısmında olmalı."
+
+**Zincir.** `git pull` birleştirme commit'i oluşturunca git mesaj için
+düzenleyiciyi açıyor (sıra `GIT_EDITOR` > `core.editor` > `VISUAL` > `EDITOR`
+> `vi`; birleştirmede varsayılan açık). vim ikincil ekrana geçiyor,
+`resolveInputMode` `raw` dönüyordu ve kutu hiç çizilmiyordu: yazılan yer yer
+değiştiriyor, vim'den nasıl çıkılacağını kimse söylemiyordu. Yan etki: giriş
+satırı 0'a inip terminal büyüyordu, programa girişte ve çıkışta birer SIGWINCH.
+
+**Bugünkü hâl: dördüncü kip, `keys`.** İkincil ekranda (entegrasyon ve ayar
+açıkken) kutunun yerinde aynı yükseklikte bir çubuk (`KeyBar`): programın adı,
+"Tuşlar doğrudan programa gidiyor", bilinen programlar için tek tık eylemler
+([`keyPrograms.ts`](src/lib/keyPrograms.ts): vim `ESC :wq ⏎` / `ESC :q! ⏎`,
+nano `Ctrl+O ⏎` / `Ctrl+X`, less/man/htop `q`, fzf `Esc`). Bilinmeyen programda
+düğme yok (yanlış programa `:q!` başka bir şey yapar), Durdur var; bilinen
+programda Durdur yok — vim kesmeyi yok sayıyor, git'in açtığı vim'de kesme
+git'i öldürüp vim'i sahipsiz bırakırdı.
+
+Yan kararlar:
+
+- **Tuşlar xterm'e gidiyor, çubuğa değil.** Kodlama (F tuşları,
+  değiştiriciler, uygulama imleç kipi, IME, köşeli yapıştırma) xterm'in;
+  kutuda yeniden yazmak her biri için ayrı bir hata demekti. Çubuk YAZILAN
+  YERİ ve çıkış yolunu taşıyor, düğmeler `mousedown`ı engelliyor (odak xterm'de
+  kalıyor, vim'e odak kaybı bildirimi gitmiyor). Noktanın yanıp sönmesi odağın
+  programda olduğunu söylüyor; premium'da kutunun odak halkası.
+- **Program adı ön plandaki gruptan** (`pty_foreground`): mac/Linux'ta master
+  ucundan `tcgetpgrp` (BSD master için denetleyen terminal şartı aramıyor;
+  ölçüldü), grubun EN GENÇ süreci — `git pull` zincirinde vim. macOS
+  `proc_listpgrppids` pid SAYISI döndürüyor (bayt değil; ölçüldü), başlangıç
+  zamanı `proc_pidinfo(PROC_PIDTBSDINFO)`ten; Linux `/proc/*/stat`. Windows'ta
+  grup yok: kabuğun süreç ağacının en derin torunu
+  ([`winproc.rs`](src-tauri/src/winproc.rs), Toolhelp32). Dosya yalnızca std'ye
+  dayanıyor, çünkü uygulamanın tamamı mac'te Windows hedefine derlenemiyor
+  (Tauri'nin kaynak derleyicisi `llvm-rc` yok); tek başına `rustc --target
+  x86_64-pc-windows-msvc --emit=metadata` ile denetlendi. Arayüz tam ekrana
+  girince soruyor, ekrandayken saniyede bir tazeliyor (less'te `v` vim açıyor).
+  Ad okunamazsa çalışan komutun son halkasından (`commandProgram`); o zaman
+  düğme yalnızca komut programı doğrudan çalıştırıyorsa (`vim x`), `git` gibi
+  bir başlatıcıda değil.
+- **Tam ekranda düz Ctrl+harf programın** (`programOwnsKey`, Windows/Linux).
+  Uygulamanın kısayolları yakalama aşamasında xterm'den önce çalışıyordu:
+  vim açıkken Ctrl+W sekmeyi kapatıyor, Ctrl+R geçmiş aramasını açıyordu.
+  Ctrl+Shift, Ctrl+Tab ve Ctrl+rakam uygulamada kaldı.
+- **Durdurma silahı çubukta** (`armStop`): tam ekranda çubuk görünüyorsa balon
+  yok. Komut satırı kapalıyken (klasik terminal) çubuk da yok, balon kalıyor.
+
+**Doğrulama.** `inputMode.test.ts` (kip, `programOwnsKey`), `keyPrograms.test.ts`
+(eylem tablosu, ad sadeleştirme, `constructor` adlı süreç), `labels.test.ts`
+(`commandProgram`), `CommandInput.test.tsx` › "tam ekran programın tuş çubuğu",
+`stopRunning.test.ts`, Rust: `pty_tests.rs` › `on_plandaki_program_ve_kip_okunuyor`
+(etkileşimli bash, HOME/HISTFILE geçici: istemde program yok, `sleep 30` →
+"sleep", kanonik + yankı), `proc_stat_satiri_ayrisiyor`, `winproc_tests.rs`.
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.

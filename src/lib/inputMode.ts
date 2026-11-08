@@ -29,7 +29,22 @@
  * Girdiyi uygulamanın toplaması HİÇ olmayacak yer tam ekran programlar:
  * `vim`, `less`, `git rebase -i`'nin açtığı düzenleyici — ekranı program
  * yönetiyor ve her tuş o an bir komut. Bunlar ikincil ekran tamponuna geçiyor
- * ve orada kip `raw`: tuşlar doğrudan terminale.
+ * ve orada kip `keys`: tuşlar doğrudan terminale, ama kutunun YERİNDE bir tuş
+ * çubuğu duruyor — programın adı, yazılanın nereye gittiği ve bilinen
+ * programlar için çıkış düğmeleri.
+ *
+ * Eskiden orada kip `raw`dı ve kutu hiç çizilmiyordu. BİLDİRİLEN: "`git pull`
+ * dediğimde komut yazın kısmında değil üst kısımda `:q!` yazmak gerekiyor;
+ * her şey komut yazın kısmında olmalı." git birleştirme mesajı için vim
+ * açıyor; kutu kayboluyor, yazılan yer yer değiştiriyor ve vim'den nasıl
+ * çıkılacağını kimse söylemiyordu. Kutunun kaybolması terminali de iki kez
+ * yeniden ölçülendiriyordu (girişte ve çıkışta, programa SIGWINCH); aynı
+ * yükseklikteki çubuk bunu da kapattı.
+ *
+ * Tuşlar çubuğa değil terminale gidiyor ve bu bilinçli: kodlamayı (F tuşları,
+ * değiştiriciler, uygulama imleç kipi, IME, köşeli yapıştırma) xterm yapıyor.
+ * Kutuda yeniden yazmak bunların her biri için ayrı bir hata demek; çubuğun
+ * işi yazılan YERİ ve çıkış yolunu göstermek.
  *
  * Bu yüzden kip, kabuğun ne yaptığına bakarak seçiliyor. Karar burada, saf bir
  * işlevde: gerçek terminalde denemesi zor (doğru anda doğru program çalışıyor
@@ -47,7 +62,7 @@
  * `altScreen` xterm'den: tam ekran programlar (vim, less, htop) ikincil ekran
  * tamponuna geçiyor. Entegrasyon sinyali gecikse bile bu yakalıyor.
  */
-export type InputMode = "app" | "stdin" | "raw";
+export type InputMode = "app" | "stdin" | "keys" | "raw";
 
 export interface InputSignals {
   /** Ayar açık mı (kullanıcı klasik terminale dönebilmeli). */
@@ -96,7 +111,9 @@ export function resolveInputMode(signals: InputSignals): InputMode {
   // kalırdı. cmd, entegrasyonu kapatılmış profil ve eski kabuklar buraya
   // düşüyor.
   if (!signals.integration) return "raw";
-  if (signals.altScreen) return "raw";
+  // Tuşlar yine doğrudan terminale (asimetri kuralı bozulmuyor); kutunun
+  // yerinde tuş çubuğu (bkz. modül başı).
+  if (signals.altScreen) return "keys";
   if (signals.atPrompt) return "app";
   /*
    * Komut çalışıyor: kutu açık, satır ÇALIŞAN PROGRAMA gidiyor.
@@ -175,6 +192,28 @@ export function passThroughSequence(event: PassThroughKey): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Tam ekran programda bu tuş PROGRAMIN mı?
+ *
+ * Uygulamanın kısayolları yakalama aşamasında, xterm'den ÖNCE çalışıyor.
+ * Windows ve Linux'ta çoğu düz Ctrl+harf: Ctrl+W sekmeyi kapatıyor, Ctrl+R
+ * geçmiş aramasını, Ctrl+P dosya paletini açıyor. vim'de aynı tuşlar pencere
+ * öneki, yinele ve tamamlama; vim açıkken Ctrl+W sekmeyi kapatıyordu.
+ *
+ * Kural dar: yalnızca alternatif ekranda (ekranı programın yönettiği yer) ve
+ * yalnızca DÜZ Ctrl+harf. Ctrl+Shift+…, Ctrl+Tab ve Ctrl+rakam uygulamada
+ * kalıyor — sekme değiştirmek vim açıkken de çalışmalı. mac'te kısayollar
+ * Cmd'li, çakışma yok.
+ */
+export function programOwnsKey(
+  event: PassThroughKey,
+  ctx: { mac: boolean; altScreen: boolean },
+): boolean {
+  if (ctx.mac || !ctx.altScreen) return false;
+  if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return false;
+  return /^[a-z]$/i.test(event.key);
 }
 
 /**

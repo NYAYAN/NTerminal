@@ -626,8 +626,17 @@ Böylece:
   gönderilmemiş bir yanıtla biterse o yanıt silinir; istemde yarım bırakılan
   komut taslağı ise komut bitince yerinde durur.
 
-Tam ekran programlarda (`vim`, `less`, `git log`) kutu yine kapanıyor ve tuşlar
-doğrudan terminale gidiyor: orada ekranı program yönetiyor.
+**Tam ekran programlar** (`vim`, `less`, `man`, `htop`, git'in mesaj için
+açtığı düzenleyici): tuşlar doğrudan programa gidiyor ama kutu kaybolmuyor;
+yerinde programın adını gösteren bir çubuk duruyor. Bilinen programlar için
+çıkış tek tık: vim'de **Kaydet ve çık** / **Kaydetmeden çık**, nano'da
+**Kaydet** / **Çık**, less, man ve htop'ta **Çık**. `git pull` birleştirme
+mesajı için vim açtığında `:q!` yazmayı bilmek gerekmiyor. Yazdıklarınız
+programın kendi ekranında görünür (vim'in komut satırı çubuğun hemen
+üstünde). Windows ve Linux'ta vim açıkken Ctrl+W, Ctrl+R, Ctrl+P gibi düz Ctrl
+tuşları programa gidiyor, uygulamanın kısayolu olarak işlemiyor; Ctrl+Tab ve
+Ctrl+Shift'li kısayollar çalışmaya devam ediyor. Komut satırı ayarı kapalıyken
+(klasik terminal) çubuk yok, alanın tamamı programın.
 
 **Çalışan komutu durdurma.** Yanıt satırının sağındaki **Durdur** düğmesi tek
 tıkla durduruyor. Klavyeden kutudayken ya da terminalin içindeyken düz

@@ -1447,6 +1447,21 @@ export const MESSAGES = {
   // tuşun üstünde ve okuyacak vakti yok.
   "input.stopAgain": ["Durdurmak için tekrar basın", "Press again to stop"],
   "input.stopAgainShort": ["Tekrar basın", "Press again"],
+  // Tam ekran programın çubuğu (`KeyBar`). Program adı çubukta ayrı duruyor,
+  // metinlere ek olarak girmiyor: "vim'e", "less'e", "htop'a" — ünlü uyumu
+  // her adda başka.
+  "input.keysHint": ["Tuşlar doğrudan programa gidiyor", "Keys go straight to the program"],
+  "input.keysProgram": ["Tam ekran program", "Full-screen program"],
+  "input.keysGitHint": [
+    "Git mesajı: kaydedip çıkınca git devam eder",
+    "Git message: save and quit to let git continue",
+  ],
+  "input.keysSaveQuit": ["Kaydet ve çık", "Save and quit"],
+  "input.keysQuitNoSave": ["Kaydetmeden çık", "Quit without saving"],
+  "input.keysSave": ["Kaydet", "Save"],
+  "input.keysQuit": ["Çık", "Quit"],
+  "input.keysCancel": ["Vazgeç", "Cancel"],
+  "input.keysActionTitle": ["Programa {keys} gönderir", "Sends {keys} to the program"],
   "runLinks.label": ["Sunucu", "Server"],
   "block.copyCommand": ["Komutu kopyala", "Copy command"],
   "block.copyCommandShort": ["Komut", "Command"],

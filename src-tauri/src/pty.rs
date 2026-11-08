@@ -156,6 +156,24 @@ pub struct SpawnResult {
     pub integration: bool,
 }
 
+/// On plandaki program ve terminalin kipi (`pty_foreground`).
+///
+/// Tam ekran programin cubugu (`KeyBar`) programin ADINI ve bilinen programlar
+/// icin cikis yolunu gosteriyor: `git pull` birlestirme mesaji icin vim
+/// aciyor ve vim'den nasil cikilacagini bilmeyen kullanici orada kaliyordu.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Foreground {
+    /// On plandaki programin adi ("vim", "less"). Kabuk istemdeyse ya da
+    /// okunamadiysa None.
+    pub program: Option<String>,
+    /// Program tuslari tek tek mi okuyor (kanonik kip kapali). Windows'ta
+    /// None: ConPTY konsolun kipini vermiyor.
+    pub reads_keys: Option<bool>,
+    /// Terminal yazilani yansitiyor mu (ECHO). Windows'ta None.
+    pub echo: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExitEvent {
@@ -571,6 +589,26 @@ impl PtyManager {
         Ok(reads_keys(session.master.as_ref()).then(|| session.writer.clone()))
     }
 
+    /// On plandaki program ve terminalin kipi (bkz. `Foreground`).
+    ///
+    /// Kilit yalnizca master'a sorulurken tutuluyor (iki hizli ioctl); surec
+    /// listesi kilidin disinda okunuyor - Linux'ta `/proc` taramasi.
+    pub fn foreground(&self, id: &str) -> Result<Foreground> {
+        let (group, shell, flags) = {
+            let sessions = self.sessions.lock();
+            let session = sessions
+                .get(id)
+                .ok_or_else(|| anyhow!("oturum bulunamadi: {id}"))?;
+            let master = session.master.as_ref();
+            (foreground_group(master), session.pid, tty_flags(master))
+        };
+        Ok(Foreground {
+            program: foreground_program(group, shell),
+            reads_keys: flags.map(|(reads, _)| reads),
+            echo: flags.map(|(_, echo)| echo),
+        })
+    }
+
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<()> {
         let sessions = self.sessions.lock();
         let session = sessions
@@ -651,18 +689,7 @@ impl PtyManager {
 /// yanlislikla yutmak secim listesinde kilitlenmek demek.
 #[cfg(unix)]
 fn reads_keys(master: &dyn MasterPty) -> bool {
-    let Some(fd) = master.as_raw_fd() else {
-        return true;
-    };
-    let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
-    // SAFETY: `tcgetattr` yalnizca verilen yapiya yaziyor; fd, cagiranin
-    // tuttugu `sessions` kilidi altinda acik olan master'in.
-    if unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) } != 0 {
-        return true;
-    }
-    // SAFETY: `tcgetattr` basariyla dondu, yapi dolu.
-    let termios = unsafe { termios.assume_init() };
-    (termios.c_lflag & libc::ICANON) == 0
+    tty_flags(master).map_or(true, |(reads, _)| reads)
 }
 
 /// Windows'ta kip gorunmuyor: ConPTY konsolun girdi kipini disari vermiyor
@@ -670,6 +697,149 @@ fn reads_keys(master: &dyn MasterPty) -> bool {
 #[cfg(windows)]
 fn reads_keys(_master: &dyn MasterPty) -> bool {
     true
+}
+
+/// Terminalin kipi: (tuslari tek tek okuyor mu, yazilani yansitiyor mu).
+#[cfg(unix)]
+fn tty_flags(master: &dyn MasterPty) -> Option<(bool, bool)> {
+    let fd = master.as_raw_fd()?;
+    let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: `tcgetattr` yalnizca verilen yapiya yaziyor; fd, cagiranin
+    // tuttugu `sessions` kilidi altinda acik olan master'in.
+    if unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: `tcgetattr` basariyla dondu, yapi dolu.
+    let termios = unsafe { termios.assume_init() };
+    Some((
+        (termios.c_lflag & libc::ICANON) == 0,
+        (termios.c_lflag & libc::ECHO) != 0,
+    ))
+}
+
+#[cfg(windows)]
+fn tty_flags(_master: &dyn MasterPty) -> Option<(bool, bool)> {
+    None
+}
+
+/// On plandaki surec grubu (tcgetpgrp). Kabuk istemdeyse kabugun kendi grubu.
+///
+/// Master ucundan soruluyor; uygulamanin denetleyen terminali olmasi
+/// gerekmiyor (BSD bu sarti master icin aramiyor; olculdu, macOS).
+#[cfg(unix)]
+fn foreground_group(master: &dyn MasterPty) -> Option<u32> {
+    master.process_group_leader().and_then(|g| u32::try_from(g).ok())
+}
+
+#[cfg(windows)]
+fn foreground_group(_master: &dyn MasterPty) -> Option<u32> {
+    None
+}
+
+/// On plandaki programin adi: grubun EN GENC sureci.
+///
+/// `git pull` -> git -> vim zincirinde git ile vim ayni grupta; ekrani yoneten
+/// en son baslayan, vim. Grupta yalnizca kabugun kendisi varsa (istem) None.
+/// Kabuk grubunda calistiran kabuklarda (is denetimi olmayan pwsh) cocuk yine
+/// en genc oldugu icin bulunuyor.
+#[cfg(unix)]
+fn foreground_program(group: Option<u32>, shell: Option<u32>) -> Option<String> {
+    let (pid, name) = youngest_in_group(group?)?;
+    (Some(pid) != shell).then_some(name)
+}
+
+/// Windows'ta grup yok: kabugun surec agacinin en derin torunu.
+#[cfg(windows)]
+fn foreground_program(_group: Option<u32>, shell: Option<u32>) -> Option<String> {
+    crate::winproc::deepest_descendant(shell?)
+}
+
+/// Grubun en genc sureci: (pid, ad).
+#[cfg(target_os = "macos")]
+fn youngest_in_group(group: u32) -> Option<(u32, String)> {
+    use std::mem::size_of;
+    let mut pids = vec![0 as libc::pid_t; 256];
+    let bytes = (pids.len() * size_of::<libc::pid_t>()) as libc::c_int;
+    // SAFETY: tampon `bytes` bayt; cekirdek en fazla o kadar yaziyor. Donen
+    // deger pid SAYISI (olculdu: iki surecli grupta 2).
+    let count = unsafe {
+        libc::proc_listpgrppids(group as libc::pid_t, pids.as_mut_ptr().cast(), bytes)
+    };
+    let count = usize::try_from(count).ok()?.min(pids.len());
+    let mut best: Option<(u64, u32, String)> = None;
+    for &pid in &pids[..count] {
+        if pid <= 0 {
+            continue;
+        }
+        let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+        let want = size_of::<libc::proc_bsdinfo>() as libc::c_int;
+        // SAFETY: yapi `want` bayt; cekirdek en fazla o kadar yaziyor.
+        let got = unsafe {
+            libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, info.as_mut_ptr().cast(), want)
+        };
+        if got != want {
+            continue;
+        }
+        // SAFETY: `proc_pidinfo` yapinin tamamini doldurdu.
+        let info = unsafe { info.assume_init() };
+        let Some(name) = c_name(&info.pbi_name).or_else(|| c_name(&info.pbi_comm)) else {
+            continue;
+        };
+        let start = info
+            .pbi_start_tvsec
+            .saturating_mul(1_000_000)
+            .saturating_add(info.pbi_start_tvusec);
+        let pid = pid as u32;
+        if best.as_ref().map_or(true, |(s, p, _)| (start, pid) > (*s, *p)) {
+            best = Some((start, pid, name));
+        }
+    }
+    best.map(|(_, pid, name)| (pid, name))
+}
+
+#[cfg(target_os = "macos")]
+fn c_name(raw: &[libc::c_char]) -> Option<String> {
+    let bytes: Vec<u8> = raw.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+    (!bytes.is_empty()).then(|| String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[cfg(target_os = "linux")]
+fn youngest_in_group(group: u32) -> Option<(u32, String)> {
+    let mut best: Option<(u64, u32, String)> = None;
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            continue;
+        };
+        let Some((name, pgrp, start)) = parse_stat(&stat) else {
+            continue;
+        };
+        if pgrp == group && best.as_ref().map_or(true, |(s, p, _)| (start, pid) > (*s, *p)) {
+            best = Some((start, pid, name));
+        }
+    }
+    best.map(|(_, pid, name)| (pid, name))
+}
+
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
+fn youngest_in_group(_group: u32) -> Option<(u32, String)> {
+    None
+}
+
+/// `/proc/<pid>/stat`: (ad, grup, baslangic). Ad parantez icinde ve bosluk
+/// ya da parantez icerebiliyor; alanlar SON `)`ten sonra basliyor. Oradan
+/// sonraki ucuncu alan grup (`pgrp`), yirminci baslangic zamani.
+#[cfg(any(target_os = "linux", test))]
+fn parse_stat(stat: &str) -> Option<(String, u32, u64)> {
+    let open = stat.find('(')?;
+    let close = stat.rfind(')')?;
+    let name = stat.get(open + 1..close)?.to_string();
+    let fields: Vec<&str> = stat.get(close + 1..)?.split_whitespace().collect();
+    let pgrp = fields.get(2)?.parse().ok()?;
+    let start = fields.get(19)?.parse().ok()?;
+    Some((name, pgrp, start))
 }
 
 /// SIGKILL'den once torunlara taninan sure.

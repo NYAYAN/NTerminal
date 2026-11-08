@@ -498,7 +498,10 @@ interface Store {
    * Kip burada HESAPLANMIYOR: ayarla birleştirip karar veren yer
    * `lib/inputMode.ts`. Depo yalnızca oturumun bildirdiğini taşıyor.
    */
-  inputSignals: Record<string, { atPrompt: boolean; altScreen: boolean; integration: boolean }>;
+  inputSignals: Record<
+    string,
+    { atPrompt: boolean; altScreen: boolean; integration: boolean; program?: string | null }
+  >;
   /**
    * Çalışan komutun çıktısında görülen sunucu adresleri, sekme başına.
    *
@@ -2158,11 +2161,14 @@ export const useStore = create<Store>((set, get) => ({
      * Hiçbir şey yapmıyormuş gibi görünen bir ilk basış, iki basış kuralını
      * bir arızaya çeviriyor. Şerit ("Komut çalışıyor…") kullanıcının zaten
      * baktığı yer ve orada duruyor; koşulu `CommandInput` ile aynı, o yüzden
-     * ikisi ayrışamıyor. Şeridin çizilmediği durumlar (tam ekran program,
-     * entegrasyonsuz profil) balona düşüyor.
+     * ikisi ayrışamıyor. Tam ekran programda şeridin yerinde tuş çubuğu var
+     * (`KeyBar`, uygulama komut satırı açıkken) ve o da silahlı hâli
+     * gösteriyor. Çubuğun da çizilmediği durumlar (komut satırı kapalıyken tam
+     * ekran program, entegrasyonsuz profil) balona düşüyor.
      */
     const signals = get().inputSignals[tabId];
-    const stripVisible = !!signals?.integration && !signals.altScreen;
+    const stripVisible =
+      !!signals?.integration && (!signals.altScreen || get().settings.behavior.appInput);
     if (!stripVisible) get().toast(t("input.stopAgain"), "info");
   },
 
