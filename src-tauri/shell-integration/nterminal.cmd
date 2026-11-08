@@ -15,7 +15,14 @@ rem Git mesajlari kutuda: GIT_EDITOR yardimci betige (gerekcesi nterminal.zsh,
 rem bolum 4b). Git'in bash'i calistiriyor; yol ileri egik cizgiyle. Yalnizca
 rem ayar aciksa ve kullanici kendisi ayarlamadiysa; ust NTerminal sekmesinden
 rem miras kalan deger siliniyor.
-if defined GIT_EDITOR if not "%GIT_EDITOR:nterminal-edit.sh=%"=="%GIT_EDITOR%" set "GIT_EDITOR="
+rem
+rem `goto` SART, `if defined` yetmiyor: satir calismadan ONCE aciliyor ve
+rem tanimsiz degiskende degistirmeli acilim bozuk metne donuyor - CI'da cmd
+rem "set was unexpected at this time." deyip betigi yarida kesti, istem
+rem isaretleri hic gelmedi. Atlanan satir hic ayristirilmiyor.
+if not defined GIT_EDITOR goto nterm_git_editor_bos
+if not "%GIT_EDITOR:nterminal-edit.sh=%"=="%GIT_EDITOR%" set "GIT_EDITOR="
+:nterm_git_editor_bos
 set "NTERM_EDIT=%~dp0nterminal-edit.sh"
 if not defined GIT_EDITOR if "%NTERMINAL_GIT_EDITOR%"=="1" if exist "%NTERM_EDIT%" set "GIT_EDITOR=bash '%NTERM_EDIT:\=/%'"
 set "NTERM_EDIT="
