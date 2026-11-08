@@ -32,6 +32,9 @@ fn her_platformda_ortak_betikler_yaziliyor() {
     // pwsh de oyle (mac'te Homebrew ile kuruluyor).
     assert!(installed.dir.join("nterminal.sh").is_file(), "nterminal.sh yazilmadi");
     assert!(installed.dir.join("nterminal.ps1").is_file(), "nterminal.ps1 yazilmadi");
+    // Git mesaj duzenleyicisi: pwsh ve cmd de ona yonlendiriyor (Git for
+    // Windows onu kendi bash'iyle calistiriyor).
+    assert!(installed.dir.join("nterminal-edit.sh").is_file(), "nterminal-edit.sh yazilmadi");
 
     let _ = std::fs::remove_dir_all(&paths.root);
 }
@@ -46,7 +49,8 @@ fn posix_betikleri_lf_satir_sonu_kullaniyor() {
     let mut checked = 0;
     // `mut` yalnizca Unix dalinda kullaniliyor; Windows derlemesi uyarmasin.
     #[cfg_attr(windows, allow(unused_mut))]
-    let mut posix: Vec<std::path::PathBuf> = vec![installed.dir.join("nterminal.sh")];
+    let mut posix: Vec<std::path::PathBuf> =
+        vec![installed.dir.join("nterminal.sh"), installed.dir.join("nterminal-edit.sh")];
     #[cfg(unix)]
     {
         posix.push(installed.dir.join("nterminal.zsh"));

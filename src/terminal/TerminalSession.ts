@@ -111,6 +111,12 @@ export interface SessionCallbacks {
   onLinkFailed?: (uri: string) => void;
   /** Kabuk komut önerisini açabildi mi. */
   onPrediction?: (state: PredictionState) => void;
+  /**
+   * git bir mesaj istedi (`nterminal-edit.sh`, OSC 633;P;EditFile): kutu
+   * mesaj düzenleyicisine dönüyor. null: istek bitti (onaylandı, bırakıldı ya
+   * da komut sona erdi).
+   */
+  onEditRequest?: (path: string | null) => void;
   /** İstem satırında yazılmakta olan metin değişti. */
   onInput?: (state: { prefix: string; full: string; hintTail: boolean }) => void;
   /**
@@ -409,6 +415,8 @@ export class TerminalSession {
   private altScreen = false;
   /** Tam ekrandaki programın adı (`pty_foreground`); ekrandan çıkınca null. */
   private foregroundProgram: string | null = null;
+  /** git'in kutuda düzenlenmesini istediği mesaj dosyası (bkz. `requestEdit`). */
+  private editPath: string | null = null;
   private foregroundTimer: number | null = null;
   private blocks: TrackedBlock[] = [];
   private blockSeq = 0;
@@ -768,6 +776,10 @@ export class TerminalSession {
             // zeminine karşı okunur hâle getirilmiş gidiyor (bkz. `promptColors.ts`).
             NTERMINAL_PROMPT_USER_RGB: promptRgbFor(this.settings, "promptUserColor"),
             NTERMINAL_PROMPT_DIR_RGB: promptRgbFor(this.settings, "promptDirColor"),
+            // git mesajları kutuda: betikler GIT_EDITOR'u yardımcıya
+            // yönlendiriyor (bkz. `nterminal-edit.sh`). Kutu yoksa anlamsız.
+            NTERMINAL_GIT_EDITOR:
+              this.settings.behavior.appInput && this.settings.behavior.gitEditorInBox ? "1" : "0",
           },
           cols: this.term.cols,
           rows: this.term.rows,
@@ -1804,6 +1816,58 @@ export class TerminalSession {
       : theme.xterm;
   }
 
+  /**
+   * git mesaj istedi: yardımcı betik (`nterminal-edit.sh`) dosya yolunu
+   * bildirdi ve önce bir ONAY satırı, sonra sonucu bekliyor.
+   *
+   * BİLDİRİLEN: "`git pull` dediğimde komut yazın kısmında değil üst kısımda
+   * `:q!` yazmak gerekiyor." git birleştirme mesajı için vim açıyordu; mesaj
+   * artık kutuda düzenleniyor (`GitMessageEditor`).
+   *
+   * Onay hemen yazılıyor: betik 2 sn içinde onay görmezse uygulamanın bu
+   * özelliği bilmediğini varsayıp `vi`ye düşüyor. Kutu bu oturumda
+   * açılamıyorsa (ayar kapalı) yanıt "editor": betik `vi`yi açıyor — ayar
+   * sonradan kapatılsa da açık sekmeler eski yola dönüyor.
+   *
+   * Satır sonu `\n`: betik kanonik kipte okuyor ve `\r`nin satıra dönmesi
+   * ICRNL'e bağlı; `\n` her durumda satırı bitiriyor. Geri yüklenen ekran
+   * çıktısı yeniden işlenirken gelen bir istek yok sayılıyor.
+   */
+  private requestEdit(path: string) {
+    if (this.restoring || !path) return;
+    const inBox = this.settings.behavior.appInput && this.settings.behavior.gitEditorInBox;
+    if (!inBox) {
+      void api.ptyWrite(this.tabId, "editor\n").catch(() => {});
+      return;
+    }
+    void api.ptyWrite(this.tabId, "ack\n").catch(() => {});
+    this.editPath = path;
+    this.callbacks.onEditRequest?.(path);
+  }
+
+  /** git'in kutuda düzenlenmesini beklediği mesaj dosyası; yoksa null. */
+  editRequest(): string | null {
+    return this.editPath;
+  }
+
+  /**
+   * Mesaj düzenlemesini bitirir: `ok` (dosya yazıldı, git devam ediyor),
+   * `cancel` (git işlemi bırakıyor) ya da `editor` (dosya okunamadı; betik
+   * `vi`yi açıyor). Yalnızca bekleyen bir istek varken yazılıyor: çift
+   * tıklamada ikinci yanıt bir sonraki komutun satırına düşerdi.
+   */
+  finishEdit(result: "ok" | "cancel" | "editor") {
+    if (!this.editPath) return;
+    void api.ptyWrite(this.tabId, `${result}\n`).catch(() => {});
+    this.clearEdit();
+  }
+
+  private clearEdit() {
+    if (!this.editPath) return;
+    this.editPath = null;
+    this.callbacks.onEditRequest?.(null);
+  }
+
   /** Kutudan gelen metni olduğu gibi kabuğa yazar. */
   sendKeys(data: string) {
     if (!data) return;
@@ -2487,6 +2551,7 @@ ${dim}[${
           this.prediction = parsed.value as PredictionState;
           this.callbacks.onPrediction?.(this.prediction);
         }
+        if (parsed.key === "EditFile") this.requestEdit(parsed.value);
         /*
          * Kabuk entegrasyon betiğini YÜKLEYEMEDİ (bkz. pty.rs,
          * `POWERSHELL_BOOTSTRAP`): kısıtlı dil kipi, okunamayan dosya.
@@ -2630,6 +2695,8 @@ ${dim}[${
   private pendingFinish: { code: number | null; duration: number | null } | null = null;
 
   private endCommand(exitCode: number | null) {
+    // git'in beklediği yanıtın alıcısı kalmadı (Ctrl+C, git öldü).
+    this.clearEdit();
     if (!this.running && !this.activeHistoryId && !this.activeCommand) return;
 
     const duration = this.durationOverride ?? (this.activeStartedAt ? Date.now() - this.activeStartedAt : null);

@@ -10,6 +10,7 @@ import { promptedTabs } from "../lib/promptSeen";
 import { terminalFontSize } from "../lib/settingsLimits";
 import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
 import { sessions, useStore } from "../store/useStore";
+import { GitMessageEditor } from "./GitMessageEditor";
 import { KeyBar } from "./KeyBar";
 
 /**
@@ -73,6 +74,7 @@ export function CommandInput() {
   const groups = useStore((s) => s.groups);
   const activeGroupId = useStore((s) => s.activeGroupId);
   const allSignals = useStore((s) => s.inputSignals);
+  const editRequests = useStore((s) => s.editRequests);
   const suggest = useStore((s) => s.ui.suggest);
   // Kutu terminalle AYNI yazı tipinde: yazdığınız komut, bir satır sonra
   // ekranda göreceğiniz komutla aynı görünmeli.
@@ -370,6 +372,25 @@ export function CommandInput() {
    * terminalin üstündeki kutu söylüyor (Yeniden başlat / Sekmeyi kapat).
    */
   if (exited) return null;
+
+  /*
+   * git bir mesaj istiyor: kutunun yerinde MESAJ DÜZENLEYİCİSİ.
+   *
+   * git yanıt gelene kadar bekliyor (`nterminal-edit.sh`). Kip burada önemli
+   * değil — git'in komutu çalışıyor (yanıt satırı) ve düzenleyici onun önüne
+   * geçiyor; ayar kapalıysa istek hiç buraya gelmiyor, betik `vi`yi açıyor.
+   */
+  const editPath = tabId ? editRequests[tabId] : undefined;
+  if (editPath && tabId) {
+    return (
+      <GitMessageEditor
+        key={editPath}
+        tabId={tabId}
+        path={editPath}
+        typography={{ fontFamily: appearance.fontFamily, fontSize: `${fontSize}px` }}
+      />
+    );
+  }
 
   /*
    * Tam ekran program: kutunun yerinde TUŞ ÇUBUĞU.

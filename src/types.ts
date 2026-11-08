@@ -184,6 +184,14 @@ export interface Behavior {
    */
   appInput: boolean;
   /**
+   * git'in mesaj için açtığı düzenleyici (birleştirme, commit, etiket,
+   * rebase listesi) yerine mesaj komut kutusunda düzenleniyor
+   * (`GIT_EDITOR` → `nterminal-edit.sh`). Komut satırı ayarı kapalıyken
+   * etkisiz; kullanıcının kendi tercihi (core.editor, VISUAL, EDITOR) varsa o
+   * kullanılıyor.
+   */
+  gitEditorInBox: boolean;
+  /**
    * Komut blokları: her komut ve çıktısı görsel olarak ayrı bir birim.
    *
    * Sınırlar kabuk entegrasyonundan (OSC 133) geliyor; entegrasyonu olmayan

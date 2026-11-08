@@ -1462,6 +1462,23 @@ export const MESSAGES = {
   "input.keysQuit": ["Çık", "Quit"],
   "input.keysCancel": ["Vazgeç", "Cancel"],
   "input.keysActionTitle": ["Programa {keys} gönderir", "Sends {keys} to the program"],
+  // git'in mesaj için açtığı düzenleyicinin yerine kutu (`GitMessageEditor`).
+  "gitEdit.merge": ["Birleştirme mesajı", "Merge message"],
+  "gitEdit.commit": ["Commit mesajı", "Commit message"],
+  "gitEdit.tag": ["Etiket mesajı", "Tag message"],
+  "gitEdit.rebase": ["Rebase listesi", "Rebase list"],
+  "gitEdit.message": ["Git mesajı", "Git message"],
+  "gitEdit.hint": [
+    "Git bekliyor: {keys} onaylar, Esc işlemi bırakır",
+    "Git is waiting: {keys} confirms, Esc abandons the operation",
+  ],
+  "gitEdit.confirm": ["Onayla", "Confirm"],
+  "gitEdit.cancel": ["İptal", "Cancel"],
+  "gitEdit.loadFailed": [
+    "Mesaj dosyası okunamadı; git'in kendi düzenleyicisi açılıyor",
+    "Couldn't read the message file; opening git's own editor",
+  ],
+  "gitEdit.saveFailed": ["Mesaj kaydedilemedi: {error}", "Couldn't save the message: {error}"],
   "runLinks.label": ["Sunucu", "Server"],
   "block.copyCommand": ["Komutu kopyala", "Copy command"],
   "block.copyCommandShort": ["Komut", "Command"],
@@ -1597,6 +1614,11 @@ export const MESSAGES = {
   "settings.appInputHint": [
     "Yazdıklarınız pencerenin dibindeki kutuda toplanır ve kabuğa Enter’da gider; kaydırma satırı oynatmaz. Komut çalışırken kutu o komutun yanıt satırı olur: programın sorusuna yanıt buraya yazılır, kutu boşken oklar ve Enter doğrudan programa gider. vim gibi tam ekran programlarda ve kabuk entegrasyonu olmayan profillerde tuşlar doğrudan terminale gider. Tab kutuda kalır: öneri listesi açıkken seçili satırı kabul eder (cd için klasörler arasında kat kat iner), kapalıyken bir şey yapmaz; komut çalışırken yazılanı tamamlaması için programa devreder.",
     "What you type collects in a box at the bottom of the window and reaches the shell on Enter, so scrolling never moves it. While a command runs, the box becomes that command’s input line: answers to its questions are typed here, and with the box empty the arrow keys and Enter go straight to the program. In full-screen programs such as vim and in profiles without shell integration, keys go straight to the terminal. Tab stays in the box: with the suggestion list open it accepts the selected row (for cd it walks down folder by folder); with the list closed it does nothing; while a command runs it hands what you typed to the program to complete.",
+  ],
+  "settings.gitEditorInBox": ["Git mesajlarını kutuda düzenle", "Edit git messages in the box"],
+  "settings.gitEditorInBoxHint": [
+    "Git birleştirme, commit ya da etiket mesajı istediğinde vim açılmaz; mesaj alttaki kutuda düzenlenir, Onayla ile git devam eder, İptal ile işlemi bırakır. Kendi düzenleyicinizi ayarladıysanız (core.editor, VISUAL ya da EDITOR) o kullanılır. Yeni açılan sekmelerde geçerli.",
+    "When git asks for a merge, commit or tag message, vim does not open; the message is edited in the box at the bottom, Confirm lets git continue and Cancel abandons the operation. If you have set your own editor (core.editor, VISUAL or EDITOR), that one is used. Applies to newly opened tabs.",
   ],
   "settings.promptAtBottom": [
     "Komut satırı her zaman pencerenin dibinde dursun",

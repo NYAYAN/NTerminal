@@ -28,10 +28,12 @@ const durum = () => ({
   },
   runLinks: { a: ["http://localhost:4200"], b: [] },
   scrollAtBottom: { a: true, b: false },
+  // Kapanan sekmede git mesaj bekliyordu: istek de düşmeli.
+  editRequests: { a: "/repo/.git/MERGE_MSG", b: "/diger/.git/COMMIT_EDITMSG" },
 });
 
 describe("kapanan sekmenin kayıtları", () => {
-  it("altı haritanın hepsinden düşüyor", () => {
+  it("yedi haritanın hepsinden düşüyor", () => {
     const sonra = dropTabKeys(durum(), "a");
     for (const [ad, harita] of Object.entries(sonra)) {
       expect(Object.keys(harita), `${ad} haritasında kapanan sekme duruyor`).toEqual(["b"]);
@@ -60,6 +62,7 @@ describe("kapanan sekmenin kayıtları", () => {
     expect(sonra.inputSignals).toBe(once.inputSignals);
     expect(sonra.runLinks).toBe(once.runLinks);
     expect(sonra.scrollAtBottom).toBe(once.scrollAtBottom);
+    expect(sonra.editRequests).toBe(once.editRequests);
   });
 
   it("girdiyi değiştirmiyor", () => {

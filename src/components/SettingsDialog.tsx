@@ -1461,6 +1461,18 @@ export function SettingsDialog() {
                 </div>
                 <SettingHint>{t("settings.appInputHint")}</SettingHint>
                 {undoBehavior("appInput")}
+                <div className="check-row" data-setting="settings.gitEditorInBox">
+                  <input
+                    id="gitEditorInBox"
+                    type="checkbox"
+                    checked={settings.behavior.gitEditorInBox}
+                    disabled={!settings.behavior.appInput}
+                    onChange={(e) => void store().patchBehavior({ gitEditorInBox: e.target.checked })}
+                  />
+                  <label htmlFor="gitEditorInBox">{t("settings.gitEditorInBox")}</label>
+                </div>
+                <SettingHint>{t("settings.gitEditorInBoxHint")}</SettingHint>
+                {undoBehavior("gitEditorInBox")}
                 <div className="check-row" data-setting="settings.promptAtBottom">
                   <input
                     id="promptAtBottom"

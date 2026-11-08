@@ -1999,6 +1999,49 @@ Yan kararlar:
 (etkileşimli bash, HOME/HISTFILE geçici: istemde program yok, `sleep 30` →
 "sleep", kanonik + yankı), `proc_stat_satiri_ayrisiyor`, `winproc_tests.rs`.
 
+### 1.35 Git mesajları kutuda: vim hiç açılmıyor
+
+Aynı bildirimin (1.34) ikinci yarısı: tuş çubuğu vim'den çıkışı kolaylaştırdı
+ama `git pull` hâlâ vim açıyordu. Artık açmıyor.
+
+**Akış.** Entegrasyon betikleri (zsh, bash, pwsh, cmd) `GIT_EDITOR`'ü yardımcı
+betiğe yönlendiriyor ([`nterminal-edit.sh`](src-tauri/shell-integration/nterminal-edit.sh)):
+yalnızca ayar açıksa (`NTERMINAL_GIT_EDITOR`, spawn env'i) ve kullanıcı
+`GIT_EDITOR`'ü kendisi ayarlamadıysa; üst NTerminal sekmesinden miras kalan
+değer siliniyor. Betik önce kullanıcının açık tercihine bakıyor (`git config
+core.editor`, `VISUAL`, `EDITOR` — `GIT_EDITOR`'ü biz kurduğumuz için git'in
+sırasının kalanı orada); yoksa `633;P;EditFile=<mutlak yol>` gönderip yankıyı
+kapatıyor ve iki satır bekliyor: 2 sn içinde `ack` (gelmezse uygulama
+özelliği bilmiyor → `vi`), sonra sonuç (`ok` → 0, `cancel` → 1, `editor` →
+`vi`). Oturum (`requestEdit`) onayı hemen yazıyor, kutu açılamıyorsa
+`editor`; komut biterse istek düşüyor. Kutu `GitMessageEditor`a dönüyor:
+düzenlenecek satırlar üstte, git'in `#` açıklamaları altta soluk, makas
+çizgisinden sonrası (`commit -v` farkı) olduğu gibi geri yazılıyor
+([`gitMessage.ts`](src/lib/gitMessage.ts)). Yazma `writeTextFile`ın
+beklenen-içerik denetimiyle.
+
+Yan kararlar:
+
+- **Yanıt satır sonu `\n`, `\r` değil.** Betik kanonik kipte okuyor; `\r`nin
+  satıra dönmesi ICRNL'e bağlı.
+- **`bash '<yol>'` ile çağrı.** Betikler çalıştırılabilir yazılmıyor ve macOS
+  yolunda boşluk var (Application Support); git düzenleyiciyi kabukla
+  çalıştırıyor. Git for Windows kendi bash'iyle çalıştırdığı için iki
+  platformda aynı dosya; yol `cygpath -w` ile Windows biçimine çevriliyor.
+- **Mutlak yol.** git çalışma ağacının kökünden `.git/COMMIT_EDITMSG`
+  verebiliyor; uygulama dosyayı kendi sürecinden okuyor.
+- **Ayar kapatılınca açık sekmeler de eski yola dönüyor:** betik her seferinde
+  soruyor, yanıt `editor`. Açmak yeni sekmelerde geçerli (betik kabuk açılırken
+  kuruluyor).
+
+**Doğrulama.** `tests/shell_integration.rs` › `git_duzenleyicisi_*` (gerçek
+`git merge`, gerçek PTY, kullanıcı ayarları yalıtılmış: onay → commit, iptal →
+commit yok, onay gelmezse yedek düzenleyici, kullanıcının `EDITOR`'ü →
+uygulamaya hiç sorulmuyor), `TerminalSession.test.ts` › "git mesaj isteği",
+`gitMessageEditor.test.tsx`, `gitMessage.test.ts`, `shellint_tests.rs`.
+**Denenmedi:** Windows (Git for Windows'un bash'i ConPTY altında `/dev/tty` ve
+`stty`; PowerShell ve cmd yolları). Bu makinede derlenemiyor.
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.

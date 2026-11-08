@@ -320,6 +320,11 @@ pub struct Behavior {
     /// tam ekran programlarda (vim, less) ve entegrasyonsuz profillerde
     /// tuslar dogrudan terminale gidiyor.
     pub app_input: bool,
+    /// git'in mesaj icin actigi duzenleyici yerine mesaji komut kutusunda
+    /// duzenlet (`GIT_EDITOR` -> `nterminal-edit.sh`). Komut satiri ayari
+    /// kapaliyken etkisiz. Kullanicinin kendi tercihi (core.editor, VISUAL,
+    /// EDITOR) varsa o kullaniliyor.
+    pub git_editor_in_box: bool,
     /// Komut bloklari: her komut ve ciktisi gorsel olarak ayri bir birim.
     ///
     /// Sinirlar kabuk entegrasyonundan (OSC 133) geliyor; entegrasyonu olmayan
@@ -402,6 +407,7 @@ impl Default for Behavior {
             shell_prediction: "inline".into(),
             prompt_at_bottom: true,
             app_input: true,
+            git_editor_in_box: true,
             command_blocks: true,
             block_headers: true,
             color_prompt: true,

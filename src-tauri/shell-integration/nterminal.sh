@@ -204,6 +204,21 @@ case "${PS1-}" in
   *) PS1="${PS1}\[\033]133;B\007\]" ;;
 esac
 
+# Git mesajlari kutuda: GIT_EDITOR yardimci betige (gerekcesi nterminal.zsh,
+# bolum 4b). Yalnizca ayar aciksa ve kullanici kendisi ayarlamadiysa; ust
+# NTerminal sekmesinden miras kalan deger siliniyor. `%q` boslukla yolu kabuk
+# icin tirnakliyor.
+__nterm_edit="${BASH_SOURCE[0]%/*}/nterminal-edit.sh"
+case "${GIT_EDITOR-}" in
+  *nterminal-edit.sh*) unset GIT_EDITOR ;;
+esac
+if [ "${NTERMINAL_GIT_EDITOR-}" = 1 ] && [ -z "${GIT_EDITOR-}" ] && [ -r "$__nterm_edit" ]; then
+  printf -v __nterm_q '%q' "$__nterm_edit"
+  export GIT_EDITOR="bash $__nterm_q"
+  unset __nterm_q
+fi
+unset __nterm_edit
+
 __nterm_report_cwd
 
 trap '__nterm_debug_trap' DEBUG

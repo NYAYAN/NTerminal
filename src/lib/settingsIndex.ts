@@ -192,6 +192,12 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   {
     section: "terminal",
     group: "settings.commandLine",
+    key: "settings.gitEditorInBox",
+    hint: "settings.gitEditorInBoxHint",
+  },
+  {
+    section: "terminal",
+    group: "settings.commandLine",
     key: "settings.promptAtBottom",
     hint: "settings.promptAtBottomHint",
   },

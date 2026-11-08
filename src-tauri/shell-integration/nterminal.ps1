@@ -364,5 +364,21 @@ if ($Global:__NTermBlockHeader) {
     __NTermOsc '633;P;BlockHeader=0'
 }
 
+# Git mesajlari kutuda: GIT_EDITOR yardimci betige (gerekcesi nterminal.zsh,
+# bolum 4b). Git for Windows duzenleyiciyi kendi bash'iyle calistiriyor; yol
+# ileri egik cizgiyle ve tek tirnak icinde (tirnak kacirilarak) veriliyor.
+# Yalnizca ayar aciksa ve kullanici kendisi ayarlamadiysa; ust NTerminal
+# sekmesinden miras kalan deger siliniyor.
+if ($env:GIT_EDITOR -like '*nterminal-edit.sh*') {
+    Remove-Item Env:GIT_EDITOR
+}
+if ($env:NTERMINAL_GIT_EDITOR -eq '1' -and -not $env:GIT_EDITOR -and $env:NTERMINAL_INTEGRATION_SCRIPT) {
+    $__ntEdit = Join-Path (Split-Path -Parent $env:NTERMINAL_INTEGRATION_SCRIPT) 'nterminal-edit.sh'
+    if (Test-Path -LiteralPath $__ntEdit) {
+        $env:GIT_EDITOR = "bash '" + (($__ntEdit -replace '\\', '/') -replace "'", "'\''") + "'"
+    }
+    Remove-Variable __ntEdit
+}
+
 # Ilk istem icin dizin bilgisini hemen gonder.
 __NTermReportCwd

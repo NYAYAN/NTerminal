@@ -219,6 +219,26 @@ else
   unset __nterm_state
 fi
 
+# --- 4b) git mesajlari kutuda ---------------------------------------------
+#
+# git birlestirme ve commit mesaji icin vi aciyordu; kullanici komut
+# kutusundan yukariya, vi'nin ekranina yazmak zorunda kaliyordu. GIT_EDITOR
+# yardimci betige gidiyor (nterminal-edit.sh): mesaj kutuda duzenleniyor.
+#
+# Yalnizca ayar aciksa (NTERMINAL_GIT_EDITOR=1) ve kullanici GIT_EDITOR'u
+# kendisi ayarlamadiysa (bu betik kullanicinin .zshrc'sinden SONRA yukleniyor).
+# Bir NTerminal sekmesinden miras kalan deger bizim yardimcimizi gosteriyorsa
+# siliniyor: baska bir veri klasorunu gosteriyor olabilir ya da ayar kapali.
+# Yol bosluk iceriyor (Application Support): `${(q)}` kabuk icin tirnakliyor.
+__nterm_edit=${NTERMINAL_OWN_ZDOTDIR:h}/nterminal-edit.sh
+if [[ ${GIT_EDITOR-} == *nterminal-edit.sh* ]]; then
+  unset GIT_EDITOR
+fi
+if [[ ${NTERMINAL_GIT_EDITOR-} == 1 && -z ${GIT_EDITOR-} && -r $__nterm_edit ]]; then
+  export GIT_EDITOR="bash ${(q)__nterm_edit}"
+fi
+unset __nterm_edit
+
 # --- 5) ilk istem -----------------------------------------------------------
 
 # Ilk istem icin dizini hemen bildir: kullanici hicbir komut kosturmadan once

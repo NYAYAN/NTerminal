@@ -404,6 +404,78 @@ describe("ikincil ekran ve blok katmanı", () => {
 });
 
 /**
+ * git'in mesaj isteği (`nterminal-edit.sh`, OSC 633;P;EditFile).
+ *
+ * Betik önce bir ONAY satırı bekliyor (2 sn; gelmezse uygulama özelliği
+ * bilmiyor sayılıp `vi` açılıyor), sonra sonucu. Kutu açılamıyorsa yanıt
+ * `editor`. Satır sonu `\n`: betik kanonik kipte okuyor.
+ */
+describe("git mesaj isteği", () => {
+  const ISTEK = "\x1b]633;P;EditFile=/repo/.git/MERGE_MSG\x07";
+  const yazilan = () => h.yazilan.map((w) => w.data);
+
+  it("onay yazılıyor, kutuya bildiriliyor; sonuç bir kez gidiyor", async () => {
+    const s = session("duzenle");
+    const istekler: (string | null)[] = [];
+    s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
+    await s.start(null);
+    await flush(s);
+    h.yazilan.length = 0;
+
+    s.term.write(ISTEK);
+    await flush(s);
+    expect(yazilan()).toEqual(["ack\n"]);
+    expect(istekler).toEqual(["/repo/.git/MERGE_MSG"]);
+    expect(s.editRequest()).toBe("/repo/.git/MERGE_MSG");
+
+    s.finishEdit("ok");
+    // Çift tıklama: ikinci yanıt bir sonraki komutun satırına düşerdi.
+    s.finishEdit("ok");
+    expect(yazilan()).toEqual(["ack\n", "ok\n"]);
+    expect(istekler).toEqual(["/repo/.git/MERGE_MSG", null]);
+    expect(s.editRequest()).toBe(null);
+    void s.dispose(true);
+  });
+
+  it("komut biterse istek düşüyor: git'e yanıt verecek kimse kalmadı", async () => {
+    const s = session("duzenle-biter");
+    const istekler: (string | null)[] = [];
+    s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
+    await s.start(null);
+    await flush(s);
+    s.term.write(ISTEK);
+    await flush(s);
+    s.term.write("\x1b]133;D;130\x07");
+    await flush(s);
+    expect(istekler).toEqual(["/repo/.git/MERGE_MSG", null]);
+    expect(s.editRequest()).toBe(null);
+    void s.dispose(true);
+  });
+
+  it("ayar kapalıysa betik git'in kendi düzenleyicisine yönlendiriliyor", async () => {
+    // Ayar sonradan kapatılsa da açık sekmelerin betiği sormaya devam ediyor;
+    // yanıt onları eski yola döndürüyor.
+    const once = useStore.getState().settings;
+    useStore.setState({ settings: { ...once, behavior: { ...once.behavior, gitEditorInBox: false } } });
+    try {
+      const s = session("duzenle-kapali");
+      const istekler: (string | null)[] = [];
+      s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
+      await s.start(null);
+      await flush(s);
+      h.yazilan.length = 0;
+      s.term.write(ISTEK);
+      await flush(s);
+      expect(yazilan()).toEqual(["editor\n"]);
+      expect(istekler).toEqual([]);
+      void s.dispose(true);
+    } finally {
+      useStore.setState({ settings: once });
+    }
+  });
+});
+
+/**
  * Tam ekrandaki programın adı: tuş çubuğu (`KeyBar`) onu gösteriyor.
  *
  * Ad ekrana girer girmez soruluyor; ekrandan çıkınca sinyal sıfırlanıyor —

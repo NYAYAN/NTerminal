@@ -638,6 +638,15 @@ tuşları programa gidiyor, uygulamanın kısayolu olarak işlemiyor; Ctrl+Tab v
 Ctrl+Shift'li kısayollar çalışmaya devam ediyor. Komut satırı ayarı kapalıyken
 (klasik terminal) çubuk yok, alanın tamamı programın.
 
+**Git mesajları kutuda.** git bir mesaj istediğinde (`git pull` birleştirme
+commit'i oluşturduğunda, `-m`siz `git commit`, `git merge`, `git tag -a`,
+`git rebase -i`'nin listesi) vim açılmıyor: kutu bir mesaj düzenleyicisine
+dönüyor. Düzenlenecek metin üstte, git'in açıklamaları altta soluk;
+**Onayla** (⌘⏎ / Ctrl+Enter) mesajı kaydedip git'i devam ettiriyor, **İptal**
+(Esc) işlemi bırakıyor. Kendi düzenleyicinizi ayarladıysanız (`core.editor`,
+`VISUAL` ya da `EDITOR`) o açılıyor. *Ayarlar › Terminal › Komut satırı › Git
+mesajlarını kutuda düzenle* ile kapatılabilir; açmak yeni sekmelerde geçerli.
+
 **Çalışan komutu durdurma.** Yanıt satırının sağındaki **Durdur** düğmesi tek
 tıkla durduruyor. Klavyeden kutudayken ya da terminalin içindeyken düz
 `Ctrl+C` tek basışta gidiyor — kabuğun kendi tuşu. Odak başka bir yerdeyse

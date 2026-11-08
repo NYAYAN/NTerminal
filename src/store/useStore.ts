@@ -512,6 +512,12 @@ interface Store {
    */
   runLinks: Record<string, string[]>;
   /**
+   * git'in kutuda düzenlenmesini beklediği mesaj dosyası, sekme başına
+   * (`nterminal-edit.sh`). Kutu o sekmede mesaj düzenleyicisine dönüyor
+   * (`GitMessageEditor`); git yanıt gelene kadar bekliyor.
+   */
+  editRequests: Record<string, string>;
+  /**
    * Sekme en altta mı. Yokluğu "en altta" demek: yeni açılan terminal canlı
    * çıktıya bakıyor ve düğme görünmemeli.
    */
@@ -912,7 +918,13 @@ export async function flushSettings(): Promise<void> {
 /** Sekme başına tutulan haritalar — kapanan sekme hepsinden düşmeli. */
 type PerTabMaps = Pick<
   Store,
-  "running" | "exited" | "sessionEpoch" | "inputSignals" | "runLinks" | "scrollAtBottom"
+  | "running"
+  | "exited"
+  | "sessionEpoch"
+  | "inputSignals"
+  | "runLinks"
+  | "scrollAtBottom"
+  | "editRequests"
 >;
 
 /**
@@ -936,6 +948,7 @@ export function dropTabKeys(state: PerTabMaps, tabId: string): PerTabMaps {
     inputSignals: omit(state.inputSignals),
     runLinks: omit(state.runLinks),
     scrollAtBottom: omit(state.scrollAtBottom),
+    editRequests: omit(state.editRequests),
   };
 }
 
@@ -1016,6 +1029,7 @@ export const useStore = create<Store>((set, get) => ({
       shellPrediction: "inline",
       promptAtBottom: true,
       appInput: true,
+      gitEditorInBox: true,
       commandBlocks: true,
       blockHeaders: true,
       // `model.rs` ile aynı: renkli istem açık, renkler seçilmemiş (palet).
@@ -1049,6 +1063,7 @@ export const useStore = create<Store>((set, get) => ({
   suggestHistory: [],
   inputSignals: {},
   runLinks: {},
+  editRequests: {},
   scrollAtBottom: {},
   gitInfo: {},
   nodeEnv: null,
@@ -1949,6 +1964,12 @@ export const useStore = create<Store>((set, get) => ({
       onScrollState: (atBottom) => {
         // Sekme başına: bölme kipinde her bölmenin kendi kaydırma durumu var.
         set({ scrollAtBottom: { ...get().scrollAtBottom, [tab.id]: atBottom } });
+      },
+      onEditRequest: (path) => {
+        const next = { ...get().editRequests };
+        if (path) next[tab.id] = path;
+        else delete next[tab.id];
+        set({ editRequests: next });
       },
       onInputSignals: (signals) => {
         // Sinyaller SEKME BAŞINA tutuluyor: bölme kipinde arkadaki sekmede

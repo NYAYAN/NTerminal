@@ -1163,3 +1163,207 @@ fn psreadline_yuklenemezse_betik_dllden_yukluyor() {
     drop(pty);
     gecici_klasoru_sil(&dir);
 }
+
+// ------------------------------------------ git mesaj duzenleyicisi (Unix)
+//
+// BILDIRILEN: "git pull dedigimde komut yazin kisminda degil ust kisimda :q!
+// yazmak gerekiyor." git birlestirme mesaji icin vi aciyordu. GIT_EDITOR
+// yardimci betige gidiyor (`nterminal-edit.sh`): betik dosya yolunu OSC 633
+// ile bildiriyor, uygulamanin onayini ve sonucunu bekliyor. Bu testler betigi
+// gercek bir `git merge` icinde, gercek bir PTY'de suruyor; uygulamanin
+// yerine biz yaniti yaziyoruz.
+//
+// git kullanicinin ayarlarini gormuyor (GIT_CONFIG_GLOBAL=/dev/null, HOME
+// gecici klasor): kendi core.editor'u ya da imzalama ayari testi bozmasin.
+
+/// Birlestirme commit'i gerektiren bir depo: `ozellik` dali main'den
+/// ayrisiyor, hizli ileri sarma yok. git mesaj icin duzenleyici aciyor.
+#[cfg(unix)]
+fn ayrisan_depo(kok: &std::path::Path) -> PathBuf {
+    let depo = kok.join("depo");
+    std::fs::create_dir_all(&depo).unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&depo)
+            .env("HOME", kok)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("git calistirilamadi");
+        assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.name", "Test"]);
+    git(&["config", "user.email", "test@example.com"]);
+    git(&["config", "commit.gpgsign", "false"]);
+    std::fs::write(depo.join("a.txt"), "a\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "ilk"]);
+    git(&["checkout", "-qb", "ozellik"]);
+    std::fs::write(depo.join("b.txt"), "b\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "ozellik"]);
+    git(&["checkout", "-q", "main"]);
+    std::fs::write(depo.join("c.txt"), "c\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "ana"]);
+    depo
+}
+
+/// Deponun son commit'inin konu satiri.
+#[cfg(unix)]
+fn son_konu(kok: &std::path::Path, depo: &std::path::Path) -> String {
+    let out = std::process::Command::new("git")
+        .args(["log", "-1", "--format=%s"])
+        .current_dir(depo)
+        .env("HOME", kok)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .expect("git log");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// `git merge ozellik`i yardimci betikle PTY'de baslatir. `ek` ortam
+/// degiskenleri (yedek ya da kullanicinin kendi duzenleyicisi) icin.
+#[cfg(unix)]
+fn birlestir(kok: &std::path::Path, depo: &std::path::Path, ek: &[(&str, &str)]) -> PtyHarness {
+    let yardimci = script_path("nterminal-edit.sh");
+    let mut cmd = CommandBuilder::new("/bin/bash");
+    cmd.args(["--norc", "--noprofile", "-c", "git merge ozellik; echo CIKIS=$?"]);
+    cmd.cwd(depo);
+    cmd.env("HOME", kok);
+    cmd.env("HISTFILE", kok.join(".hist"));
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
+    cmd.env("GIT_CONFIG_NOSYSTEM", "1");
+    // Yol tek tirnakta: macOS'taki gercek kurulum yolunda bosluk var.
+    cmd.env("GIT_EDITOR", format!("bash '{}'", yardimci.display()));
+    // Calistiranin ortamindaki tercih betigi baska yola sokmasin.
+    cmd.env_remove("EDITOR");
+    cmd.env_remove("VISUAL");
+    for (k, v) in ek {
+        cmd.env(k, v);
+    }
+    PtyHarness::spawn(cmd)
+}
+
+/// OSC 633;P;EditFile degerini (kacislari cozulmus) okur.
+#[cfg(unix)]
+fn istenen_dosya(buffer: &str) -> Option<String> {
+    let start = buffer.find("]633;P;EditFile=")? + "]633;P;EditFile=".len();
+    let end = buffer[start..].find('\u{7}')? + start;
+    Some(buffer[start..end].replace("\\x3B", ";").replace("\\\\", "\\"))
+}
+
+/// Yedek ya da kullanicinin duzenleyicisi yerine gecen betik: mesaji yaziyor.
+#[cfg(unix)]
+fn sahte_duzenleyici(kok: &std::path::Path, mesaj: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let yol = kok.join(format!("duzenleyici-{}.sh", mesaj.len()));
+    std::fs::write(&yol, format!("#!/bin/sh\nprintf '%s\\n' '{mesaj}' > \"$1\"\n")).unwrap();
+    std::fs::set_permissions(&yol, std::fs::Permissions::from_mode(0o755)).unwrap();
+    yol
+}
+
+#[cfg(unix)]
+impl PtyHarness {
+    fn send_raw(&mut self, bytes: &[u8]) {
+        self.writer.write_all(bytes).expect("yazma");
+        self.writer.flush().expect("flush");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_mesaji_uygulamaya_soruyor_onayla_commit_olusuyor() {
+    let kok = gecici_klasor("git-onay");
+    let depo = ayrisan_depo(&kok);
+    let mut pty = birlestir(&kok, &depo, &[]);
+
+    assert!(
+        pty.wait_for("]633;P;EditFile=", Duration::from_secs(20)),
+        "betik uygulamaya sormadi. Son cikti:\n{}",
+        pty.tail()
+    );
+    let dosya = istenen_dosya(&pty.buffer).expect("dosya yolu okunamadi");
+    // Uygulama dosyayi kendi surecinden okuyor: yol mutlak olmali.
+    assert!(dosya.starts_with('/') && dosya.ends_with("MERGE_MSG"), "yol: {dosya}");
+    let hazir = std::fs::read_to_string(&dosya).unwrap();
+    assert!(hazir.starts_with("Merge branch 'ozellik'"), "git'in hazir mesaji: {hazir:?}");
+
+    pty.send_raw(b"ack\n");
+    std::fs::write(&dosya, "Birlestirme: test\n\n# yorum\n").unwrap();
+    pty.send_raw(b"ok\n");
+    assert!(
+        pty.wait_for("CIKIS=0", Duration::from_secs(20)),
+        "git devam etmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert_eq!(son_konu(&kok, &depo), "Birlestirme: test");
+    // Yanit satirlari yanki kapaliyken yazildi: ekranda gorunmemeli.
+    assert!(!pty.buffer.contains("ack\r\n"), "onay ekrana yansidi:\n{}", pty.tail());
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_iptalde_birlestirmeyi_birakiyor() {
+    let kok = gecici_klasor("git-iptal");
+    let depo = ayrisan_depo(&kok);
+    let mut pty = birlestir(&kok, &depo, &[]);
+    assert!(pty.wait_for("]633;P;EditFile=", Duration::from_secs(20)), "{}", pty.tail());
+
+    pty.send_raw(b"ack\n");
+    pty.send_raw(b"cancel\n");
+    assert!(pty.wait_for("CIKIS=", Duration::from_secs(20)), "{}", pty.tail());
+    assert!(!pty.buffer.contains("CIKIS=0"), "iptalde git basarili cikti:\n{}", pty.tail());
+    assert_eq!(son_konu(&kok, &depo), "ana", "iptalde birlestirme commit'i olustu");
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_onay_gelmezse_yedege_dusuyor() {
+    // Ozelligi bilmeyen bir uygulama (ya da eski surum) hic yanit vermez: betik
+    // 2 sn sonra git'in kendi duzenleyicisini aciyor, git takilip kalmiyor.
+    let kok = gecici_klasor("git-yedek");
+    let depo = ayrisan_depo(&kok);
+    let yedek = sahte_duzenleyici(&kok, "yedek duzenleyici");
+    let yedek_yol = yedek.to_string_lossy().to_string();
+    let mut pty = birlestir(&kok, &depo, &[("NTERMINAL_FALLBACK_EDITOR", yedek_yol.as_str())]);
+    assert!(pty.wait_for("]633;P;EditFile=", Duration::from_secs(20)), "{}", pty.tail());
+    assert!(
+        pty.wait_for("CIKIS=0", Duration::from_secs(20)),
+        "yedek duzenleyici calismadi. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert_eq!(son_konu(&kok, &depo), "yedek duzenleyici");
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_kullanicinin_kendi_duzenleyicisine_saygi_gosteriyor() {
+    // EDITOR (ya da VISUAL, core.editor) ayarlamis kullanici kendi
+    // duzenleyicisini istiyor: betik uygulamaya hic sormuyor.
+    let kok = gecici_klasor("git-kendi");
+    let depo = ayrisan_depo(&kok);
+    let kendi = sahte_duzenleyici(&kok, "kendi duzenleyicim");
+    let kendi_yol = kendi.to_string_lossy().to_string();
+    let mut pty = birlestir(&kok, &depo, &[("EDITOR", kendi_yol.as_str())]);
+    assert!(
+        pty.wait_for("CIKIS=0", Duration::from_secs(20)),
+        "kullanicinin duzenleyicisi calismadi. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert!(!pty.buffer.contains("633;P;EditFile"), "betik yine de uygulamaya sordu");
+    assert_eq!(son_konu(&kok, &depo), "kendi duzenleyicim");
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}

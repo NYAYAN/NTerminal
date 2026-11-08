@@ -70,6 +70,7 @@ function settings(patch: Partial<Settings["appearance"]> = {}, behavior = {}): S
       shellPrediction: "inline",
       promptAtBottom: true,
       appInput: true,
+      gitEditorInBox: true,
       commandBlocks: true,
       blockHeaders: true,
       colorPrompt: true,

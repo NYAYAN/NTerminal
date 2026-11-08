@@ -17,6 +17,10 @@ use std::path::PathBuf;
 const PS1: &str = include_str!("../shell-integration/nterminal.ps1");
 /// bash iki platformda da var: Windows'ta Git Bash, mac'te /bin/bash.
 const SH: &str = include_str!("../shell-integration/nterminal.sh");
+/// Git mesaj duzenleyicisi (GIT_EDITOR): mesaj komut kutusunda duzenleniyor.
+/// Iki platformda da yaziliyor - Git for Windows duzenleyiciyi kendi bash'iyle
+/// calistiriyor, betiklerin hepsi (pwsh ve cmd dahil) ona yonlendiriyor.
+const EDIT: &str = include_str!("../shell-integration/nterminal-edit.sh");
 #[cfg(windows)]
 const CMD: &str = include_str!("../shell-integration/nterminal.cmd");
 
@@ -117,6 +121,7 @@ pub fn install(paths: &DataPaths) -> Result<Installed> {
     // LF'e zorluyoruz. (Depo Windows'ta tutuluyor, git core.autocrlf CRLF
     // yazabilir.)
     write_posix(&dir.join("nterminal.sh"), SH)?;
+    write_posix(&dir.join("nterminal-edit.sh"), EDIT)?;
     // PowerShell her iki bicimi de kabul ediyor; oldugu gibi yaziyoruz.
     write_if_changed(&dir.join("nterminal.ps1"), PS1)?;
 
