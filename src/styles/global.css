@@ -5021,6 +5021,70 @@ button.pop-group {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+/* git'in mesaj icin actigi duzenleyicinin yerine kutu (`GitMessageEditor`).
+ *
+ * Ust satir kutunun satir olcusunde (baslik, ipucu, Iptal/Onayla); altinda
+ * mesaj, en altta git'in aciklamalari soluk. Kutu bu sirada buyuyor ve
+ * terminal kisaliyor: git yanit bekliyor, ekranda akan bir sey yok. */
+.git-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: var(--cmd-row-h, 20px);
+  min-width: 0;
+}
+
+.git-edit-title {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.git-edit-hint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-edit-head .spacer {
+  flex: 1;
+}
+
+.git-edit-head button {
+  flex: none;
+}
+
+.git-edit-field {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  line-height: 1.45;
+  resize: none;
+}
+
+/* Kutunun kurali: surekli odakta duran alana halka yok (bkz. asagida,
+   `.command-input-field:focus`). Kenarligin rengi yetiyor. */
+.git-edit-field:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: none;
+  outline: none;
+}
+
+.git-edit-help {
+  max-height: 7.5em;
+  margin: 0;
+  overflow: auto;
+  color: var(--text-dim);
+  font-size: 0.8462rem;
+  white-space: pre-wrap;
+}
+
 /* Odak halkasi YOK.
  *
  * Genel `textarea:focus` kurali bir `box-shadow` halkasi koyuyor; iletisim
@@ -5720,11 +5784,15 @@ button.pop-group {
 
 .panel-list {
   flex: 1;
-  overflow-y: auto;
   /* Cubugun yeri HER ZAMAN ayrilmis: cubuk ancak icerik tasinca beliriyor ve
      belirince iceriği 9px sola itiyordu. Bir farki acmak listeyi tasirmaya
-     yetiyor; yani katlama her seferinde satirlari yatay kaydiriyordu. */
-  scrollbar-gutter: stable;
+     yetiyor; yani katlama her seferinde satirlari yatay kaydiriyordu.
+
+     `scrollbar-gutter: stable` DEGIL, `scroll`: macOS'un WebKit'i gutter'i
+     taniyor ama ozel stilli cubuga yer ayirmiyor (olculdu, bkz.
+     `.modal.settings .modal-body`). Kisa listede cubuk cizilmiyor, yalnizca
+     yeri duruyor. */
+  overflow-y: scroll;
   padding: 5px;
   min-height: 0;
 }
@@ -6313,6 +6381,23 @@ button.pop-group {
    dizilmesi icin olcu kabi: bkz. `.profile-grid` kapsayici sorgusu. */
 .modal.settings .modal-body {
   container-type: inline-size;
+  /* Cubugun yeri HER ZAMAN ayrilmis: cubuk hep var, kisa bolumde bos.
+   *
+   * BILDIRILEN: "Ayarlarda Kisayollar sekmesine gelince acilan sekmenin
+   * icerigi bir anda daraliyor, kipirdama oluyor" - Gorunum, Terminal,
+   * Oturum ve Kisayollar'da, yani tasan bolumlerde. Cubuk ozel stilli (bkz.
+   * `::-webkit-scrollbar`) ve ozel stilli cubuk iki motorda da yer
+   * kapliyor: yalnizca tasan bolumde beliriyor, kartlari daraltiyordu.
+   * Kapsayici sorgusu da (`.profile-grid`) bu genislige bakiyor.
+   *
+   * `scrollbar-gutter: stable` DEGIL: ilk duzeltme oydu ve macOS'ta ise
+   * yaramadi. OLCULEN (ekran disi WKWebView, uygulamanin kendi stilleri):
+   * WebKit ozelligi taniyor (`CSS.supports` true, hesaplanan deger
+   * `stable`) ama ozel cubuk icin yer AYIRMIYOR - kisa govde 473px, tasan
+   * 464px kaldi. `overflow-y: scroll` ile ikisi de 464px (Chromium'da
+   * ikisi de 121px); kisa bolumde cubuk cizilmiyor, yalnizca yeri duruyor
+   * (iki motorda da goruntuyle bakildi). */
+  overflow-y: scroll;
 }
 
 .settings-nav {

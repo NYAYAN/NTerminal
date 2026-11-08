@@ -1113,3 +1113,27 @@ describe("bırakma göstergesi", () => {
     );
   });
 });
+
+describe("ayarlar penceresi", () => {
+  it("gövde kaydırma çubuğunun yerini her bölümde ayırıyor", () => {
+    // BİLDİRİLEN: "Kısayollar sekmesine gelince açılan sekmenin içeriği bir
+    // anda daralıyor, kıpırdama oluyor." Özel stilli çubuk yer kaplıyor ve
+    // yalnızca taşan bölümlerde beliriyordu. ÖLÇÜLEN: kısa bölümde gövde
+    // 130px, taşan bölümde 121px. Yer hep ayrılınca bölümler aynı genişlikte.
+    //
+    // `scrollbar-gutter: stable` yetmiyor: macOS'un WebKit'i özelliği
+    // tanıyor ama özel stilli çubuğa yer ayırmıyor (473px / 464px kaldı).
+    // Çubuğun HEP var olması iki motorda da tutuyor.
+    const body = ruleBody(".modal.settings .modal-body");
+    expect(body).toMatch(/overflow-y\s*:\s*scroll\s*;/);
+    expect(body, "WebKit'te işe yaramayan çözüm geri geldi").not.toMatch(/scrollbar-gutter/);
+  });
+
+  it("yan panel listesi de çubuğun yerini her zaman ayırıyor", () => {
+    // Bir klasörü açmak listeyi taşırıyor, çubuk belirince satırlar 9px
+    // kayıyordu. Aynı WebKit sınırı: gutter macOS'ta tutmadı (ölçüldü).
+    const body = ruleBody(".panel-list");
+    expect(body).toMatch(/overflow-y\s*:\s*scroll\s*;/);
+    expect(body).not.toMatch(/scrollbar-gutter/);
+  });
+});
