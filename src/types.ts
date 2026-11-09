@@ -830,6 +830,13 @@ export interface BundleInfo {
   notes: ImportNote[];
   /** Dosyadaki profillerin çalıştırdığı komutlar; ön izlemede açıkça gösteriliyor. */
   profileList: ProfilePreview[];
+  /** Ortam değişkeni taşıyan gruplar; değişkenler gruptaki her sekmenin kabuğuna veriliyor. */
+  groupEnvList: GroupPreview[];
+}
+
+export interface GroupPreview {
+  name: string;
+  envKeys: string[];
 }
 
 export interface ProfilePreview {

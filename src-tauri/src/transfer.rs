@@ -165,6 +165,23 @@ pub struct BundleInfo {
     /// gorup "3 profil" diyen biri icin keyfi komut demek. Ad, tur, kabuk ve
     /// argumanlar goz onunde olunca paylasilan dosyaya bakmadan onaylanmiyor.
     pub profile_list: Vec<ProfilePreview>,
+    /// Dosyadaki gruplarin kabuga verdigi ortam degiskenleri.
+    ///
+    /// Grup env'i gruptaki HER sekmenin kabuguna yaziliyor ve profilinkinin
+    /// ustune biniyor (`pty::spawn`). On izleme onu hic gostermiyordu:
+    /// profilleri temiz gorunen bir dosya, `PROMPT_COMMAND` ya da `BASH_ENV`
+    /// tasiyan bir grupla, sekme acilir acilmaz komut calistirabiliyordu.
+    /// Yalnizca env'i olan gruplar listeleniyor.
+    pub group_env_list: Vec<GroupPreview>,
+}
+
+/// On izlemede bir grubun kabuga verdigi ortam degiskenleri.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupPreview {
+    pub name: String,
+    /// Yalnizca anahtarlar: degerler sir olabilir (bkz. `ProfilePreview`).
+    pub env_keys: Vec<String>,
 }
 
 /// On izlemede bir profilin kimligi: ne calistiriyor, hangi ortam anahtarlari.
@@ -527,6 +544,20 @@ pub fn describe(path: &Path, bundle: &Bundle, notes: Vec<ImportNote>) -> BundleI
                         shell: p.shell.clone(),
                         args: p.args.clone(),
                         env_keys: p.env.keys().cloned().collect(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        group_env_list: bundle
+            .workspace
+            .as_ref()
+            .map(|w| {
+                w.groups
+                    .iter()
+                    .filter(|g| !g.env.is_empty())
+                    .map(|g| GroupPreview {
+                        name: g.name.clone(),
+                        env_keys: g.env.keys().cloned().collect(),
                     })
                     .collect()
             })

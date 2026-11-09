@@ -453,6 +453,27 @@ export function BackupPanel() {
                 </div>
               )}
 
+              {/* Grup env'i gruptaki her sekmenin kabuğuna yazılıyor; profilleri
+                  temiz görünen bir dosya komutu buradan çalıştırabiliyordu. */}
+              {preview.groupEnvList.length > 0 && (
+                <div className="section">
+                  <h3>{t("transfer.groupEnv")}</h3>
+                  <p className="dim" style={{ fontSize: 11 }}>
+                    {t("transfer.groupEnvHint")}
+                  </p>
+                  <div className="notes">
+                    {preview.groupEnvList.map((group, i) => (
+                      <div className="note" key={i}>
+                        <span>
+                          <strong>{group.name}</strong>{" "}
+                          <span className="mono">{group.envKeys.join(", ")}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {preview.notes.length > 0 && (
                 <div className="section">
                   <h3>{t("transfer.notes")}</h3>

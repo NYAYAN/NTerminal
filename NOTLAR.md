@@ -1270,6 +1270,15 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
     anahtar yokken biçim eskisiyle aynı. PowerShell ve cmd betikleri mac'te
     KOŞTURULAMADI; testleri `tests/shell_integration.rs`te, CI'ın Windows
     koşusu deneyecek.
+- **İçe aktarma ön izlemesi grupların ortam değişkenlerini de gösteriyor**
+  (`BundleInfo.group_env_list`, [`BackupPanel`](src/components/BackupPanel.tsx)).
+  Ön izleme profillerin komutunu ve env anahtarlarını gösteriyordu; grup env'i
+  hiç yoktu, oysa gruptaki her sekmenin kabuğuna yazılıyor ve profilinkinin
+  üstüne biniyor. Profilleri temiz görünen bir dosya `PROMPT_COMMAND` /
+  `BASH_ENV` taşıyan bir grupla sekme açılır açılmaz komut çalıştırabiliyordu.
+  Yalnızca ANAHTARLAR (profildeki kararın aynısı: değerler sır olabilir);
+  hangi anahtarın tehlikeli olduğunu uygulama işaretlemiyor, ipucu metni
+  söylüyor.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`

