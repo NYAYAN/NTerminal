@@ -1279,6 +1279,12 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   Yalnızca ANAHTARLAR (profildeki kararın aynısı: değerler sır olabilir);
   hangi anahtarın tehlikeli olduğunu uygulama işaretlemiyor, ipucu metni
   söylüyor.
+- **CI eylemleri commit SHA'sına sabitli** (`build.yml`,
+  [`workflowPins.test.ts`](src/lib/workflowPins.test.ts)). `@v7` / `@stable`
+  hareketli işaretçi; `paket` işi güncelleme imza anahtarını kullanıyor.
+  Sürüm yorumu Dependabot için. `dtolnay/rust-toolchain` master SHA'sında
+  `toolchain` girdisi zorunlu (dalın adı artık seçmiyor): `toolchain: stable`.
+  SHA'lar 2026-11-10'da `git ls-remote` ile okundu; CI'da henüz KOŞMADI.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`

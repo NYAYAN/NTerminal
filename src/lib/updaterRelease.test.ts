@@ -107,7 +107,10 @@ describe("yayın işi", () => {
     expect(create).toBeGreaterThan(prepare);
     // İndirme betiğin GİRDİSİNE yapılıyor; Release'e giden `paketler/`i
     // yalnızca betik dolduruyor.
-    expect(yayin).toMatch(/download-artifact@v\d+\s+with:\s+pattern: nterminal-\*\s+path: indirilen/);
+    // Eylem commit'e sabitli, sürümü yorumda (bkz. `workflowPins.test.ts`).
+    expect(yayin).toMatch(
+      /download-artifact@[0-9a-f]{40} # v[\d.]+\s+with:\s+pattern: nterminal-\*\s+path: indirilen/,
+    );
   });
 });
 
