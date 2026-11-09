@@ -83,17 +83,22 @@ describe("öneri çubuğu", () => {
     expect(container.querySelector(".suggest-title")!.textContent).toBe("GEÇMİŞ");
   });
 
-  it("komutun en son çalıştırıldığı an satırda yazıyor", () => {
-    // Aynı ön ekle başlayan iki komut arasındaki seçim çoğu zaman buna
-    // bakılarak yapılıyor.
-    const now = new Date();
-    now.setHours(9, 5, 0, 0);
+  it("komutun ne kadar önce çalıştırıldığı satırda yazıyor", () => {
+    // BİLDİRİLEN İSTEK: "bu komutları en son ne kadar süre önce
+    // çalıştırdığımı görmek de önemli." Kesin an ipucunda duruyor.
+    const at = Date.now() - 12 * 60_000 - 5_000;
     useStore.setState({
-      suggestHistory: [{ command: "npm test", cwd: null, at: now.getTime() }],
+      suggestHistory: [
+        { command: "npm test", cwd: null, at },
+        // Eski tekrar: en son çalıştırma sayılıyor.
+        { command: "npm test", cwd: null, at: at - 3 * 3_600_000 },
+      ],
     });
     setSuggest(["npm test"], 0, "np");
     const { container } = render(<SuggestionBar />);
-    expect(container.querySelector(".suggest-when")!.textContent).toContain("09");
+    const when = container.querySelector(".suggest-when")!;
+    expect(when.textContent).toBe("12 dk önce");
+    expect(when.getAttribute("title")).toBe(new Date(at).toLocaleString("tr-TR"));
   });
 
   it("zamanı bilinmeyen komutta alan boş kalıyor", () => {

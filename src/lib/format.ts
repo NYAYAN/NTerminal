@@ -26,6 +26,30 @@ export function formatWhen(ms: number): string {
   return `${date.toLocaleDateString(locale, { day: "numeric", month: "short" })} ${time}`;
 }
 
+/**
+ * Üzerinden geçen süre: "az önce", "12 dk önce", "3 sa önce", "5 gün önce".
+ *
+ * BİLDİRİLEN İSTEK: "yukarı oka bastığımda geçmiş komutları gösteriyor; bu
+ * komutları en son ne kadar süre önce çalıştırdığımı görmek de önemli." Saat
+ * ("14:32") bunu hesaplatıyordu; süre doğrudan okunuyor. Kesin an satırın
+ * ipucunda (`formatFullDate`).
+ *
+ * Aşağı yuvarlanıyor: 59 sn "az önce", 119 dk "1 sa önce". Ay 30, yıl 365 gün
+ * sayılıyor; bu ölçekte kaba değer yeterli.
+ */
+export function formatAgo(ms: number, now: number = Date.now()): string {
+  if (!ms) return "";
+  const min = Math.floor(Math.max(0, now - ms) / 60_000);
+  if (min < 1) return t("unit.agoNow");
+  if (min < 60) return t("unit.agoMin", { n: min });
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return t("unit.agoHour", { n: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 30) return t("unit.agoDay", { n: days });
+  if (days < 365) return t("unit.agoMonth", { n: Math.floor(days / 30) });
+  return t("unit.agoYear", { n: Math.floor(days / 365) });
+}
+
 export function formatFullDate(ms: number): string {
   if (!ms) return "";
   return new Date(ms).toLocaleString(localeTag());

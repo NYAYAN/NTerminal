@@ -124,6 +124,7 @@ describe("büyük harf düzeni", () => {
     "settings.historyReading",
     "fav.emptyLine3",
     "unit.yesterday",
+    "unit.agoNow",
     "transfer.defaultFileName",
   ]);
 

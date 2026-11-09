@@ -1989,6 +1989,12 @@ export const MESSAGES = {
   "unit.minSec": ["{m} dk {s} sn", "{m} m {s} s"],
   "unit.hourMin": ["{h} sa {m} dk", "{h} h {m} m"],
   "unit.yesterday": ["dün {time}", "yesterday {time}"],
+  "unit.agoNow": ["az önce", "just now"],
+  "unit.agoMin": ["{n} dk önce", "{n} min ago"],
+  "unit.agoHour": ["{n} sa önce", "{n} h ago"],
+  "unit.agoDay": ["{n} gün önce", "{n} d ago"],
+  "unit.agoMonth": ["{n} ay önce", "{n} mo ago"],
+  "unit.agoYear": ["{n} yıl önce", "{n} y ago"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type MsgKey = keyof typeof MESSAGES;

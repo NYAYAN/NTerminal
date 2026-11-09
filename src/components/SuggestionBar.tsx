@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 
 import { placeSuggestions } from "../lib/anchor";
-import { formatWhen } from "../lib/format";
+import { formatAgo, formatFullDate } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { prettyCombo } from "../lib/keys";
 import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
@@ -231,7 +231,10 @@ export function SuggestionBar() {
                 </span>
                 {/* Zaman bilinmiyorsa (eski kayıt, henüz yüklenmemiş geçmiş) alan
                     boş kalıyor: yer tutuyor ki komutlar satır satır kaymasın. */}
-                <span className="suggest-when">{at ? formatWhen(at) : ""}</span>
+                {/* Geçen süre ("12 dk önce"); kesin an ipucunda. */}
+                <span className="suggest-when" title={at ? formatFullDate(at) : undefined}>
+                  {at ? formatAgo(at) : ""}
+                </span>
               </button>
               {/* Her satırda duruyor: soluk, üzerine gelince etkin (bkz.
                   `.suggest-del`). Tıklanan SATIR siliniyor, seçili olan değil —
