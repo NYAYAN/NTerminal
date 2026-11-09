@@ -11,6 +11,7 @@ import {
   resolveInputMode,
   SIGINT,
   stdinKeyAction,
+  strayKeyReset,
   type CtrlCSignals,
   type InputSignals,
   type PassThroughKey,
@@ -429,5 +430,16 @@ describe("Ctrl+C kararı", () => {
     expect(resolveCtrlC({ ...WINDOWS, mac: true, boxSelection: true, gridSelection: true })).toBe(
       "sigint",
     );
+  });
+});
+
+describe("kabuğun satırına sızan tuşları silen dizi", () => {
+  it("kabuk ailesine ve platforma göre seçiliyor", () => {
+    expect(strayKeyReset("posix", "macos")).toBe("\x15");
+    expect(strayKeyReset("posix", "windows")).toBe("\x15");
+    // Esc değil: PSReadLine vi kipinde komut kipine geçirirdi.
+    expect(strayKeyReset("powershell", "windows")).toBe("\x1b[1;5H");
+    expect(strayKeyReset("powershell", "linux")).toBe("\x15");
+    expect(strayKeyReset("cmd", "windows")).toBe("\x1b");
   });
 });

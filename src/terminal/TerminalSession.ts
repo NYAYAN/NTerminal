@@ -13,7 +13,13 @@ import { hasVisibleContent, type BlockView } from "../lib/blocks";
 import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
-import { looksLikeSecretPrompt, resolveCtrlC, type CtrlCAction } from "../lib/inputMode";
+import {
+  looksLikeSecretPrompt,
+  resolveCtrlC,
+  strayKeyReset,
+  type CtrlCAction,
+} from "../lib/inputMode";
+import { shellFamily } from "../lib/shellQuote";
 import { typingOutsideTerminal } from "../lib/focus";
 import { cwdCandidatesFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
@@ -411,6 +417,8 @@ export class TerminalSession {
   private openedForCurrentPrompt = false;
   /** Kabuk istemde bekliyor mu: OSC 133;B geldi, 133;C gelmedi. */
   private atPrompt = false;
+  /** Komut çalışırken programa tuş yazıldı; istemde satır boşaltılacak. */
+  private strayKeys = false;
   /** İkincil ekran tamponu etkin mi (vim, less, htop). */
   private altScreen = false;
   /** Tam ekrandaki programın adı (`pty_foreground`); ekrandan çıkınca null. */
@@ -1881,7 +1889,29 @@ export class TerminalSession {
    */
   sendKey(data: string) {
     if (!data) return;
-    void api.ptyWriteKey(this.tabId, data).catch(() => {});
+    void api
+      .ptyWriteKey(this.tabId, data)
+      .then((written) => {
+        if (!written) return;
+        this.strayKeys = true;
+        // Yanıt istemden SONRA geldi (tuş komut biterken basıldı): hemen.
+        if (this.atPrompt) this.dropStrayKeys();
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Komut çalışırken programa yazılan tuş kabuğun satırına sızmış olabilir:
+   * kabuk isteme döndüğünde satırı boşaltılıyor. Gerekçesi ve dizinin seçimi
+   * `strayKeyReset` üzerinde.
+   */
+  private dropStrayKeys() {
+    if (!this.strayKeys) return;
+    this.strayKeys = false;
+    if (this.exited) return;
+    const kind = this.settings.profiles.find((p) => p.id === this.profileId)?.kind;
+    const reset = strayKeyReset(shellFamily(kind, this.shell, platform()), platform());
+    void api.ptyWrite(this.tabId, reset).catch(() => {});
   }
 
   /**
@@ -2500,6 +2530,8 @@ ${dim}[${
         // istediğimiz nokta bu.
         this.promptEndMark = this.currentMark();
         this.openedForCurrentPrompt = false;
+        // Kutudan önce: sızan tuşların silinmesi ilk komuttan önce kuyrukta.
+        this.dropStrayKeys();
         this.setAtPrompt(true);
         break;
       case "C":

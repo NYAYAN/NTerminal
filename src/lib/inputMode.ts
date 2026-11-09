@@ -1,3 +1,6 @@
+import type { Platform } from "./platform";
+import type { ShellFamily } from "./shellQuote";
+
 /**
  * Tuş vuruşları nereye gidiyor: uygulamanın girdi kutusuna mı, doğrudan
  * kabuğa mı?
@@ -358,6 +361,36 @@ function lineKey(event: PassThroughKey): boolean {
   if (event.altKey) return false;
   if (event.key === "Enter" || event.key === "Backspace") return true;
   return event.ctrlKey && /^[a-z]$/i.test(event.key);
+}
+
+/**
+ * Kabuğun satırına sızmış tuşları silen dizi.
+ *
+ * BİLDİRİLEN HATA (Windows, `dotnet publish`): "o çalışırken yukarı oka
+ * basıyorum; geçmişin ilk sırasındaki oraya otomatik yazılıyor. Bittikten
+ * sonra geçmişten birini seçip Enter'a basınca önceki ile birleştirip
+ * çalıştırıyor." `lineKey`deki zincirin aynısı; oradaki engel terminalin
+ * kipine bakıyor ve Windows'ta kip görünmüyor (ConPTY), yani tuş her zaman
+ * gidiyor. Tuş okuyan ama okumadan biten program da aynı yoldan sızdırıyor.
+ *
+ * Bu yüzden engelin yanında bir de ONARIM var: komut çalışırken programa
+ * tuş yazıldıysa, kabuk isteme döndüğünde satırı boşaltılıyor
+ * (`TerminalSession.dropStrayKeys`). Dizi sızan tuşlardan SONRA kuyruğa
+ * giriyor; kabuk önce oku işleyip geçmişten satırı yazıyor, sonra siliyor.
+ * Program tuşu gerçekten okuduysa satır zaten boş, dizi hiçbir şey yapmıyor.
+ *
+ *  - posix (zsh, bash, fish): Ctrl+U. emacs ve vi kiplerinde imleçten başa
+ *    siliyor; geçmişten gelen satırda imleç sonda.
+ *  - PowerShell: Windows'ta Ctrl+Home (`BackwardDeleteInput`). Esc
+ *    (`RevertLine`) DEĞİL: PSReadLine vi kipindeyse Esc komut kipine geçirir
+ *    ve kutudan gelen komut tuş komutu diye okunurdu; bağlı olmayan Ctrl+Home
+ *    ise yok sayılıyor. Öteki platformlarda varsayılan kip emacs: Ctrl+U.
+ *  - cmd: Esc satırı siliyor.
+ */
+export function strayKeyReset(family: ShellFamily, platform: Platform): string {
+  if (family === "cmd") return "\x1b";
+  if (family === "powershell" && platform === "windows") return "\x1b[1;5H";
+  return "\x15";
 }
 
 /**

@@ -1229,7 +1229,12 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   master ucundan `ICANON`a bakıyor (macOS'ta iki uç aynı `tty`; Linux'ta master
   üzerindeki `tcgetattr` slave'inkini veriyor); kanonikse ok, Tab, Esc, Boşluk
   yazılmıyor. Enter, Backspace ve Ctrl+harf satırın kendi tuşları, her kipte
-  gidiyor. Windows'ta ConPTY kipi vermiyor, orada eski davranış. Açık kalan iki
+  gidiyor. Windows'ta ConPTY kipi vermiyor, tuş orada her zaman yazılıyor
+  (yeniden BİLDİRİLDİ: `dotnet publish` çalışırken yukarı ok). Bunun için
+  ONARIM var ([`strayKeyReset`](src/lib/inputMode.ts), `dropStrayKeys`): tuş
+  programa yazıldıysa kabuk isteme döndüğünde (133;B) satırı boşaltılıyor.
+  posix Ctrl+U (zsh ve bash'te PTY düzeneğiyle doğrulandı), Windows PowerShell
+  Ctrl+Home, cmd Esc (bu ikisi Windows'ta DENENMEDİ). Açık kalan iki
   yol aynı sızıntıyı verebilir: komut biter bitmez, istem gelmeden ızgaraya
   basılan tuş ve dolu kutuda Tab/Ctrl+D ile programa devredilen yarım satır.
 

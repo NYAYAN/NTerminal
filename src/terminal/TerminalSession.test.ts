@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 
+import { api } from "../lib/ipc";
+import { platform, setPlatform } from "../lib/platform";
 import { useStore } from "../store/useStore";
 import { TerminalSession } from "./TerminalSession";
 
@@ -778,5 +780,88 @@ describe("dizin bildirimi", () => {
     await flush(s);
     expect(s.cwd).toBe("/tmp/a b/c");
     void s.dispose(true);
+  });
+});
+
+/*
+ * BİLDİRİLEN HATA (Windows, `dotnet publish`): komut çalışırken basılan yukarı
+ * ok kabuğun satırına geçmişten bir komut yazdırıyor, kutudan gelen sonraki
+ * komut onun arkasına ekleniyordu. Windows'ta tuşu yazmadan durduracak bilgi
+ * yok (ConPTY kipi vermiyor); istem döndüğünde satır boşaltılıyor.
+ */
+describe("komut çalışırken programa yazılan tuş", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+  const calisiyor = `${ESC}]133;C${BEL}`;
+  const istem = `${ESC}]133;D;0${BEL}${ESC}]133;A${BEL}${ESC}]133;B${BEL}`;
+
+  async function kur(tabId: string, yazildi: boolean) {
+    h.reset();
+    h.yazilan.length = 0;
+    (api as unknown as Record<string, unknown>).ptyWriteKey = vi.fn(async () => yazildi);
+    const s = session(tabId);
+    await s.start(null);
+    await flush(s);
+    h.emit(tabId, calisiyor);
+    await flush(s);
+    return s;
+  }
+
+  it("istem dönünce kabuğun satırı boşaltılıyor (Windows PowerShell: Ctrl+Home)", async () => {
+    const onceki = platform();
+    setPlatform("windows");
+    try {
+      const s = await kur("sz1", true);
+      s.sendKey(`${ESC}[A`);
+      await Promise.resolve();
+      expect(h.yazilan, "komut sürerken satıra dokunuldu").toEqual([]);
+
+      h.emit("sz1", istem);
+      await flush(s);
+      expect(h.yazilan).toEqual([{ id: "sz1", data: `${ESC}[1;5H` }]);
+
+      // Tek seferlik: sonraki istemde yeniden gönderilmiyor.
+      h.emit("sz1", calisiyor + istem);
+      await flush(s);
+      expect(h.yazilan).toHaveLength(1);
+      void s.dispose(true);
+    } finally {
+      setPlatform(onceki);
+    }
+  });
+
+  it("tuş yazılmadıysa (satır okuyan program) kabuğa hiçbir şey gitmiyor", async () => {
+    const s = await kur("sz2", false);
+    s.sendKey(`${ESC}[A`);
+    await Promise.resolve();
+    h.emit("sz2", istem);
+    await flush(s);
+    expect(h.yazilan).toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("yazma yanıtı istemden sonra gelirse satır o anda boşaltılıyor", async () => {
+    const onceki = platform();
+    setPlatform("macos");
+    try {
+      const s = await kur("sz3", true);
+      let yanitla: (v: boolean) => void = () => {};
+      (api as unknown as Record<string, unknown>).ptyWriteKey = vi.fn(
+        () => new Promise<boolean>((resolve) => (yanitla = resolve)),
+      );
+      s.sendKey(`${ESC}[A`);
+      h.emit("sz3", istem);
+      await flush(s);
+      expect(h.yazilan).toEqual([]);
+
+      yanitla(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      // Profil bulunamıyor, kabuk adı "powershell": mac'te emacs kipi, Ctrl+U.
+      expect(h.yazilan).toEqual([{ id: "sz3", data: "\x15" }]);
+      void s.dispose(true);
+    } finally {
+      setPlatform(onceki);
+    }
   });
 });
