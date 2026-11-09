@@ -1234,9 +1234,10 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   ONARIM var ([`strayKeyReset`](src/lib/inputMode.ts), `dropStrayKeys`): tuş
   programa yazıldıysa kabuk isteme döndüğünde (133;B) satırı boşaltılıyor.
   posix Ctrl+U (zsh ve bash'te PTY düzeneğiyle doğrulandı), Windows PowerShell
-  Ctrl+Home, cmd Esc (bu ikisi Windows'ta DENENMEDİ). Açık kalan iki
-  yol aynı sızıntıyı verebilir: komut biter bitmez, istem gelmeden ızgaraya
-  basılan tuş ve dolu kutuda Tab/Ctrl+D ile programa devredilen yarım satır.
+  Ctrl+Home, cmd Esc (bu ikisi Windows'ta DENENMEDİ). Komut biter bitmez,
+  istem gelmeden ızgaraya basılan ok/Tab/Esc de aynı onarımdan geçiyor
+  ([`isStrayKey`](src/lib/inputMode.ts)); harfler bilerek silinmiyor. Açık
+  kalan yol: dolu kutuda Tab/Ctrl+D ile programa devredilen yarım satır.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`

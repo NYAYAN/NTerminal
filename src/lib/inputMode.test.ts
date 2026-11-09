@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  isStrayKey,
   looksLikeSecretPrompt,
   passThroughSequence,
   programOwnsKey,
@@ -441,5 +442,19 @@ describe("kabuğun satırına sızan tuşları silen dizi", () => {
     expect(strayKeyReset("powershell", "windows")).toBe("\x1b[1;5H");
     expect(strayKeyReset("powershell", "linux")).toBe("\x15");
     expect(strayKeyReset("cmd", "windows")).toBe("\x1b");
+  });
+});
+
+describe("ızgaradan giden ve satırı bozabilecek tuş", () => {
+  it("ok, Home/End, Tab ve Esc sayılıyor", () => {
+    for (const tus of ["\x1b[A", "\x1bOA", "\x1b[B", "\x1b[H", "\x1bOF", "\t", "\x1b"]) {
+      expect(isStrayKey(tus), JSON.stringify(tus)).toBe(true);
+    }
+  });
+
+  it("harfler, Enter ve terminalin kendi yanıtları sayılmıyor", () => {
+    for (const veri of ["l", "ls\r", "\r", "\x1b[I", "\x1b[12;40R", "\x1b[?1;2c", "\x1b[A\x1b[A"]) {
+      expect(isStrayKey(veri), JSON.stringify(veri)).toBe(false);
+    }
   });
 });

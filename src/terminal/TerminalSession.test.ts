@@ -864,4 +864,56 @@ describe("komut çalışırken programa yazılan tuş", () => {
       setPlatform(onceki);
     }
   });
+  it("komut bitip istem gelmeden ızgaradan basılan ok da istemde siliniyor", async () => {
+    const onceki = platform();
+    setPlatform("macos");
+    try {
+      const s = await kur("sz4", false);
+      // Komut bitti (D), istem çiziliyor (A) ama henüz bitmedi (B yok).
+      h.emit("sz4", `${ESC}]133;D;0${BEL}${ESC}]133;A${BEL}`);
+      await flush(s);
+      s.term.input(`${ESC}[A`, true);
+      s.term.input("l", true); // bilerek yazılan harf işaret koymuyor
+      h.yazilan.length = 0;
+
+      h.emit("sz4", `${ESC}]133;B${BEL}`);
+      await flush(s);
+      expect(h.yazilan).toEqual([{ id: "sz4", data: "\x15" }]);
+      void s.dispose(true);
+    } finally {
+      setPlatform(onceki);
+    }
+  });
+
+  it("aralıkta yalnızca harf yazıldıysa satıra dokunulmuyor", async () => {
+    const s = await kur("sz5", false);
+    h.emit("sz5", `${ESC}]133;D;0${BEL}${ESC}]133;A${BEL}`);
+    await flush(s);
+    s.term.input("ls", true);
+    h.yazilan.length = 0;
+    h.emit("sz5", `${ESC}]133;B${BEL}`);
+    await flush(s);
+    expect(h.yazilan).toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("ayar kapalıyken (klasik terminal) aralıktaki ok silinmiyor", async () => {
+    const ayarlar = useStore.getState().settings;
+    useStore.setState({
+      settings: { ...ayarlar, behavior: { ...ayarlar.behavior, appInput: false } },
+    });
+    try {
+      const s = await kur("sz6", false);
+      h.emit("sz6", `${ESC}]133;D;0${BEL}${ESC}]133;A${BEL}`);
+      await flush(s);
+      s.term.input(`${ESC}[A`, true);
+      h.yazilan.length = 0;
+      h.emit("sz6", `${ESC}]133;B${BEL}`);
+      await flush(s);
+      expect(h.yazilan).toEqual([]);
+      void s.dispose(true);
+    } finally {
+      useStore.setState({ settings: ayarlar });
+    }
+  });
 });

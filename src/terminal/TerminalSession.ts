@@ -14,6 +14,7 @@ import { scanForServerUrls } from "../lib/serverScan";
 import { linkCellRanges, type CellLike } from "../lib/links";
 import { acceptKeys, effectiveShellPrediction } from "../lib/suggest";
 import {
+  isStrayKey,
   looksLikeSecretPrompt,
   resolveCtrlC,
   strayKeyReset,
@@ -2274,6 +2275,20 @@ export class TerminalSession {
     if (this.exited) {
       // Kabuk bittiyse Enter'a basmak sekmeyi yeniden başlatmasın; sessizce yut.
       return;
+    }
+
+    // Komut bitti, istem henüz gelmedi: kutu kapalıyken ızgaradan giden ok
+    // kabuğun satırına sızıyor (bkz. `isStrayKey`). Ayar kapalıysa (klasik
+    // terminal) dokunulmuyor: orada satır ızgarada, tuş da yerine gidiyor.
+    if (
+      this.settings.behavior.appInput &&
+      this.integration &&
+      !this.atPrompt &&
+      !this.running &&
+      !this.altScreenActive() &&
+      isStrayKey(data)
+    ) {
+      this.strayKeys = true;
     }
 
     // İşaretimiz yoksa (entegrasyonsuz kabuk) ilk yazılan karakterde imleci

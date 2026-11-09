@@ -394,6 +394,23 @@ export function strayKeyReset(family: ShellFamily, platform: Platform): string {
 }
 
 /**
+ * Izgaradan gelen veri kabuğun satırını bozabilecek bir TUŞ mu: ok, Home/End,
+ * Tab ya da tek başına Esc.
+ *
+ * Komut bitti ama istem henüz çizilmedi (133;D ile 133;B arası): kutu kapalı,
+ * tuşlar ızgaradan doğrudan kabuğa gidiyor. Tam o anda basılan yukarı ok
+ * kabuğun satırına geçmişten komut yazdırıyor, kutu ise boş açılıyor;
+ * `strayKeyReset`in anlattığı sızıntının aynısı. Bu tuşlar işaretleniyor ve
+ * istemde satır boşaltılıyor.
+ *
+ * Harfler DEĞİL: o aralıkta bilerek yazılan metin silinmemeli. xterm'in kendi
+ * yanıtları da (imleç konumu, odak bildirimi) değil; onları kabuk okuyor.
+ */
+export function isStrayKey(data: string): boolean {
+  return /^(\x1b[[O][A-DHF]|\x1b|\t)$/.test(data);
+}
+
+/**
  * Çalışan komuta yazarken tuşun ne yapacağı.
  *
  * ## Kural tek cümle
