@@ -23,7 +23,13 @@ import {
 import { sanitizePaste } from "../lib/paste";
 import { shellFamily } from "../lib/shellQuote";
 import { typingOutsideTerminal } from "../lib/focus";
-import { cwdCandidatesFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
+import {
+  cwdCandidatesFromFileUri,
+  newMarkKey,
+  parseOsc133,
+  parseOsc633,
+  stripMarkKey,
+} from "../lib/osc";
 import { isMac, platform } from "../lib/platform";
 import { promptRgb } from "../lib/promptColors";
 import { shouldResize } from "../lib/ptySize";
@@ -360,6 +366,13 @@ export class TerminalSession {
   /** Kabuktan en az bir OSC 133 işareti geldi mi — iddianın KANITI. */
   private integrationSeen = false;
   private integrationProbe: number | null = null;
+  /**
+   * Bu kabuğun işaret anahtarı (`NTERMINAL_NONCE`); gerekçesi `newMarkKey`.
+   * Her `start`ta yenileniyor.
+   */
+  private markKey = "";
+  /** Anahtarlı en az bir işaret görüldü: bu kabukta betiğimiz çalışıyor. */
+  private keyedMarkSeen = false;
   /**
    * Kabuğun son KESİN dizin bildirimi (`633;P;Cwd`); yoksa `null`.
    *
@@ -759,6 +772,9 @@ export class TerminalSession {
     }
     this.unlisteners.push(unExit);
 
+    // Anahtar spawn'dan ÖNCE: çıktı yanıttan önce gelebiliyor.
+    this.markKey = newMarkKey();
+    this.keyedMarkSeen = false;
     try {
       const result = await api.ptySpawn(
         {
@@ -767,6 +783,9 @@ export class TerminalSession {
           cwd: this.cwd,
           env: {
             ...this.env,
+            // Betikler her işaretin sonuna ekliyor (bkz. `admitMark`). Grup
+            // env'inden SONRA: dışarıdan verilen bir değer anahtarı ezemesin.
+            NTERMINAL_NONCE: this.markKey,
             // Kabuk betigi bunu okuyup PSReadLine tahminini aciyor. Ayar
             // olarak tasiniyor cunku kullanici kapatabilmeli.
             // Liste gorunumu istem dipteyken calisamiyor; kural tek yerde
@@ -2263,7 +2282,9 @@ export class TerminalSession {
     // OSC 7: standart "çalışma dizini bildirimi"
     this.disposables.push(
       this.term.parser.registerOscHandler(7, (payload) => {
-        const yol = cwdCandidatesFromFileUri(payload);
+        const body = this.admitMark(payload, true);
+        if (body === null) return true;
+        const yol = cwdCandidatesFromFileUri(body);
         if (!yol) return true;
         // Kesin bildirimle AYNI dizini gösteriyorsa (ham ya da çözülmüş okumayla)
         // yapacak bir şey yok: yüzde çözümlemesi yalnızca zarar verirdi
@@ -2500,7 +2521,38 @@ ${dim}[${
     }, INTEGRATION_PROBE_MS);
   }
 
-  private handleOsc133(payload: string) {
+  /**
+   * İşaret bu kabuktan mı geliyor? Geçerliyse anahtarı atılmış yükü, değilse
+   * `null` döner. Gerekçesi `newMarkKey` üzerinde.
+   *
+   * ANAHTARLI işaret her zaman geçerli.
+   *
+   * ANAHTARSIZ işaret yalnızca `legacy` yolunda (OSC 133 ve 7) ve yalnızca
+   * betiğimizin ÇALIŞMADIĞI kabukta sayılıyor: fish gibi işaretleri kendisi
+   * gönderen ama anahtarı bilmeyen kabuklar eskisi gibi çalışsın. Betik
+   * verildiyse (`integrationClaimed`) ya da anahtarlı bir işaret görüldüyse
+   * kabuk anahtarı biliyor demektir; anahtarsız gelen ya çıktının içine
+   * gömülü sahte bir işaret ya da iç içe / uzak bir kabuğun kendi işareti —
+   * ikisi ayırt edilemiyor, ikisi de sayılmıyor. Betik verildi bilgisi
+   * `pty_spawn`ın yanıtıyla geliyor; ondan önceki birkaç milisaniyede ekranda
+   * yalnızca kabuğun kendi açılış çıktısı var.
+   *
+   * OSC 633 (komut metni, dizin, düzenleme isteği) YALNIZCA anahtarla: onu
+   * gönderen tek kaynak betiklerimiz ve geçmişe yazan, dosya açtıran o.
+   */
+  private admitMark(payload: string, legacy: boolean): string | null {
+    const body = stripMarkKey(payload, this.markKey);
+    if (body !== null) {
+      this.keyedMarkSeen = true;
+      return body;
+    }
+    if (!legacy || this.integrationClaimed || this.keyedMarkSeen) return null;
+    return payload;
+  }
+
+  private handleOsc133(rawPayload: string) {
+    const payload = this.admitMark(rawPayload, true);
+    if (payload === null) return;
     this.noteIntegration();
     const { kind, exitCode } = parseOsc133(payload);
     switch (kind) {
@@ -2581,7 +2633,9 @@ ${dim}[${
     }
   }
 
-  private handleOsc633(payload: string) {
+  private handleOsc633(rawPayload: string) {
+    const payload = this.admitMark(rawPayload, false);
+    if (payload === null) return;
     const parsed = parseOsc633(payload);
     if (!parsed) return;
     switch (parsed.kind) {

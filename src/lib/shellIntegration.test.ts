@@ -229,7 +229,11 @@ describe("zsh betiği", () => {
     // yeniden kuran temalarda ilk istemden sonra kaybolur; komut metni okunamaz.
     const body = ZSH.slice(ZSH.indexOf("__nterm_ps1_mark()"));
     expect(body).toContain("133;B");
-    expect(body, "PS1 zaten işaretli mi denetimi yok").toMatch(/\$PS1 != \*'133;B'\*/);
+    // Anahtarlı işaret aranıyor: temanın kendi (anahtarsız) `133;B`si
+    // bizimkinin eklenmesini engellememeli — uygulama onu saymıyor.
+    expect(body, "PS1 zaten işaretli mi denetimi yok").toContain(
+      '$PS1 != *"133;B${__nterm_key}"*',
+    );
   });
 
   it("PS1 işaretini sıfır genişlikli bölgeye alıyor", () => {
@@ -440,6 +444,145 @@ describe("OSC sözleşmesi", () => {
     // Prediction yalnızca zsh'te var (bash'te karşılığı yok); onu çıkarıyoruz.
     const zsh = shape(zshPayloads).filter((s) => !s.includes("Prediction"));
     expect(zsh).toEqual(shape(shPayloads));
+  });
+});
+
+/**
+ * İşaret anahtarı: betikler her dizinin SONUNA sekmenin anahtarını ekliyor
+ * (`NTERMINAL_NONCE`), arayüz anahtarsız diziyi saymıyor.
+ *
+ * AÇIK: işaretler doğrulanmıyordu; terminale basılan her metin (`cat` ile
+ * açılan dosya, uzak sunucunun çıktısı) aynı dizileri gönderip geçmişe sahte
+ * komut yazdırabiliyor, rastgele bir dosya için düzenleyici açtırabiliyordu
+ * (bkz. `osc.ts`, `newMarkKey`). Tek bir dizinin anahtarsız kalması o diziyi
+ * sessizce öldürür: arayüz onu atıyor, hata çıkmıyor. Bu testler onu bağlıyor.
+ */
+describe("işaret anahtarı", () => {
+  const PS1 = read(DIR, "nterminal.ps1");
+  const CMD = read(DIR, "nterminal.cmd");
+  const EDIT = read(DIR, "nterminal-edit.sh");
+  const KEY = "0123456789abcdef0123456789abcdef";
+
+  /** Çıktıdaki OSC 133 / 633 / 7 dizilerinin yükleri (BEL ile biten). */
+  function marks(out: string): string[] {
+    // eslint-disable-next-line no-control-regex
+    return [...out.matchAll(/\x1b\]((?:133|633|7);[^\x07\x1b]*)\x07/g)].map((m) => m[1]);
+  }
+
+  it("beş betik de anahtarı ortamdan okuyor", () => {
+    for (const [ad, betik] of Object.entries({ zsh: ZSH, bash: SH, ps1: PS1, cmd: CMD, edit: EDIT })) {
+      expect(betik, `${ad} betiği anahtarı okumuyor`).toContain("NTERMINAL_NONCE");
+    }
+  });
+
+  it("zsh ve bash yardımcısı anahtarı her diziye ekliyor", () => {
+    for (const betik of [ZSH, SH]) {
+      expect(betik).toMatch(/__nterm_osc\(\) \{ printf '\\033\]%s%s\\007' "\$1" "\$__nterm_key";? \}/);
+    }
+  });
+
+  it("PS1'e gömülen 133;B de anahtarlı", () => {
+    // B yardımcıdan gitmiyor, istem dizesine yazılıyor: eki ayrıca taşımalı.
+    expect(ZSH).toContain("$'\\e]133;B'\"${__nterm_key}\"$'\\a'");
+    expect(SH).toContain("\\[\\033]133;B${__nterm_key}\\007\\]");
+  });
+
+  it("PowerShell'de her dizi anahtarlı sonla bitiyor", () => {
+    const satirlar = PS1.split(/\r?\n/);
+    const dizi = satirlar.filter((l) => l.includes("$Global:__NTermESC + ']"));
+    expect(dizi.length, "dizi gönderen satır bulunamadı").toBeGreaterThanOrEqual(10);
+    for (const l of dizi) {
+      expect(l, `anahtarsız dizi: ${l.trim()}`).toContain("$Global:__NTermEnd");
+    }
+    // Çıplak BEL yalnızca iki tanımda: kendisi ve anahtarlı son.
+    expect(satirlar.filter((l) => l.includes("$Global:__NTermBEL")).length).toBe(2);
+  });
+
+  it("cmd isteminde beş dizinin beşi de anahtarlı", () => {
+    const istem = CMD.split(/\r?\n/).find((l) => l.startsWith("prompt "))!;
+    // Diziler `$E\` (ST) ile bitiyor; her parçanın sonu anahtar olmalı.
+    const diziler = istem.split("$E\\").filter((p) => p.includes("$E]"));
+    expect(diziler.length).toBe(5);
+    for (const d of diziler) {
+      expect(d.endsWith("%NTERM_KEY%"), `anahtarsız dizi: ${d}`).toBe(true);
+    }
+  });
+
+  it("PowerShell yükleyicisinin hata bildirimi de anahtarlı", () => {
+    const pty = read(process.cwd(), "src-tauri/src/pty.rs");
+    const baslangic = pty.indexOf("pub const POWERSHELL_BOOTSTRAP");
+    const yukleyici = pty.slice(baslangic, pty.indexOf(");", baslangic));
+    expect(yukleyici).toContain("Integration=failed");
+    expect(yukleyici).toContain("$env:NTERMINAL_NONCE");
+  });
+
+  it("düzenleme isteği anahtarı son alan olarak ekliyor", () => {
+    expect(EDIT).toContain("printf '\\033]633;P;EditFile=%s%s\\007' \"$(esc \"$abs\")\" \"$key\"");
+  });
+
+  /** Kancaları PTY'siz çağırır: istem, komut ve PS1 işaretleri stdout'ta. */
+  function kancalar(kabuk: "zsh" | "bash", key: string | null): string {
+    const home = mkdtempSync(join(tmpdir(), "nt-anahtar-"));
+    try {
+      const zsh = kabuk === "zsh";
+      const betik = join(DIR, zsh ? "nterminal.zsh" : "nterminal.sh");
+      const govde = zsh
+        ? 'source "$1"; __nterm_precmd; __nterm_preexec "echo a; echo b"; __nterm_ps1_mark; print -rn -- "$PS1"'
+        : 'source "$1"; __nterm_precmd; printf "%s" "$PS1"';
+      const r = spawnSync(
+        kabuk,
+        zsh ? ["-f", "-c", govde, "zsh", betik] : ["--norc", "--noprofile", "-c", govde, "bash", betik],
+        {
+          cwd: home,
+          env: {
+            PATH: "/usr/bin:/bin",
+            HOME: home,
+            TERM: "xterm-256color",
+            ...(key === null ? {} : { NTERMINAL_NONCE: key }),
+          },
+          encoding: "utf8",
+          timeout: 15000,
+        },
+      );
+      return r.stdout ?? "";
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  it.skipIf(noZsh)("gerçek zsh: bütün diziler anahtarla bitiyor", () => {
+    const out = kancalar("zsh", KEY);
+    const yukler = marks(out);
+    // D, Cwd, OSC 7, A, komut metni, C ve (yüklenirken) öneri durumu.
+    expect(yukler.length).toBeGreaterThanOrEqual(6);
+    for (const y of yukler) expect(y.endsWith(`;${KEY}`), `anahtarsız dizi: ${y}`).toBe(true);
+    expect(yukler).toContain(`633;E;echo a\\x3B echo b;${KEY}`);
+    expect(yukler).toContain(`133;C;${KEY}`);
+    expect(out, "PS1 işareti anahtarsız").toContain(`133;B;${KEY}`);
+  });
+
+  it.skipIf(process.platform === "win32")("gerçek bash: bütün diziler anahtarla bitiyor", () => {
+    const out = kancalar("bash", KEY);
+    const yukler = marks(out);
+    expect(yukler.length).toBeGreaterThanOrEqual(4);
+    for (const y of yukler) expect(y.endsWith(`;${KEY}`), `anahtarsız dizi: ${y}`).toBe(true);
+    expect(yukler).toContain(`133;A;${KEY}`);
+    expect(out, "PS1 işareti anahtarsız").toContain(`133;B;${KEY}`);
+  });
+
+  it.skipIf(process.platform === "win32")("anahtar yokken diziler eskisi gibi, eksiz", () => {
+    // Betik uygulama dışında yüklendiğinde: sonda boş bir alan kalmamalı.
+    const out = kancalar("bash", null);
+    expect(marks(out)).toContain("133;A");
+    expect(marks(out)).toContain("133;D");
+    expect(out).toContain("133;B\\007");
+  });
+
+  it.skipIf(process.platform === "win32")("anahtardaki yabancı karakterler diziye girmiyor", () => {
+    // Anahtar istem dizesine de yazılıyor; `;`, `%` ya da ESC taşıyan bir
+    // değer diziyi bölmemeli. Uygulama yalnızca onaltılık üretiyor.
+    const yukler = marks(kancalar("bash", "ab;cd%\x1bef"));
+    for (const y of yukler) expect(y.endsWith(";abcdef"), y).toBe(true);
   });
 });
 

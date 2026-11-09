@@ -71,7 +71,14 @@ restore() {
 trap restore EXIT
 stty -echo </dev/tty 2>/dev/null
 
-printf '\033]633;P;EditFile=%s\007' "$(esc "$abs")" >/dev/tty
+# Isaret anahtari: uygulama anahtarsiz istegi saymiyor (ciktinin icine gomulu
+# sahte bir EditFile rastgele bir dosya icin duzenleyici actirabiliyordu).
+# Degiskeni kabuk disa aktarilmis birakiyor; git uzerinden buraya ulasiyor.
+key=${NTERMINAL_NONCE-}
+key=${key//[^A-Za-z0-9]/}
+[ -n "$key" ] && key=";$key"
+
+printf '\033]633;P;EditFile=%s%s\007' "$(esc "$abs")" "$key" >/dev/tty
 
 ack=
 IFS= read -r -t 2 ack </dev/tty

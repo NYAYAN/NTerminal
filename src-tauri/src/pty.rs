@@ -81,11 +81,48 @@ pub const CLEAR_INHERITED_ENV: [&str; 1] = ["NTERMINAL_INTEGRATION_LOADED"];
 /// bildiriliyor: arayuz sekmeyi entegrasyonsuz sayiyor, sonsuz bir
 /// "baslatiliyor" yerine duz terminal kaliyor. `Write-Host` ve `[char]`
 /// bilincli: kisitli dil kipinde de calisan tek yol onlar.
+///
+/// Bildirim de isaret anahtarini tasiyor (`NTERMINAL_NONCE`, betiklerdeki
+/// kuralin aynisi): arayuz anahtarsiz 633 dizilerini saymiyor.
 pub const POWERSHELL_BOOTSTRAP: &str = concat!(
     "try { & ([scriptblock]::Create([IO.File]::ReadAllText($env:NTERMINAL_INTEGRATION_SCRIPT))) } ",
-    "catch { Write-Host -NoNewline ([char]27 + ']633;P;Integration=failed' + [char]7); ",
+    "catch { Write-Host -NoNewline ([char]27 + ']633;P;Integration=failed' + ",
+    "$(if ($env:NTERMINAL_NONCE) { ';' + $env:NTERMINAL_NONCE }) + [char]7); ",
     "Write-Host -ForegroundColor Red ('N-Terminal: ' + $_) }",
 );
+
+/// Isaret anahtarini tasiyan ortam degiskeni.
+///
+/// Arayuz her kabuga rastgele bir anahtar veriyor (`spec.env` icinde geliyor)
+/// ve yalnizca onu tasiyan OSC 133 / 633 / 7 dizilerini kabul ediyor: ciktinin
+/// icine gomulu sahte isaretler gecmise komut yazdirabiliyor, rastgele bir
+/// dosya icin duzenleyici actirabiliyordu (bkz. src/lib/osc.ts `newMarkKey`).
+/// Betikler anahtari bu degiskenden okuyup her dizinin sonuna ekliyor.
+pub const MARK_KEY_ENV: &str = "NTERMINAL_NONCE";
+
+/// WSLENV'e isaret anahtarini ekler.
+///
+/// WSL, Windows tarafindaki ortam degiskenlerinden yalnizca WSLENV'de adi
+/// gecenleri Linux tarafina tasiyor. Anahtar tasinmazsa WSL'deki bash betigi
+/// isaretleri ANAHTARSIZ gonderir; arayuz betigin verildigini bildigi icin
+/// hepsini atar ve sekme duz terminale duser.
+///
+/// `/u`: yalnizca Windows'tan WSL'e giderken tasinsin. Kullanicinin kendi
+/// listesi korunuyor; anahtar zaten listedeyse ikinci kez eklenmiyor.
+pub fn wslenv_with_nonce(existing: Option<&str>) -> String {
+    let existing = existing.unwrap_or("").trim_matches(':');
+    let var = MARK_KEY_ENV;
+    let listed = existing
+        .split(':')
+        .any(|entry| entry.split('/').next() == Some(var));
+    if listed {
+        existing.to_string()
+    } else if existing.is_empty() {
+        format!("{var}/u")
+    } else {
+        format!("{existing}:{var}/u")
+    }
+}
 
 /// Betigin yolunu tasiyan ortam degiskeni.
 ///
@@ -326,6 +363,22 @@ impl PtyManager {
                 // OKUNAMAZ: o vektor bu cagriyla doluyor, cagri aninda bos.
                 spec.env.get("NTERMINAL_PREDICTION").map(String::as_str),
             );
+
+        // WSL yalnizca WSLENV'de sayilan degiskenleri iceri aliyor; isaret
+        // anahtari orada degilse betik isaretleri anahtarsiz gonderir ve
+        // arayuz hepsini atar (gerekcesi `wslenv_with_nonce` uzerinde).
+        // Kullanicinin kendi WSLENV'i korunuyor; kaynak sirasi ZDOTDIR'inkiyle
+        // ayni. Dal Windows disinda hic calismiyor (orada WSL entegrasyon
+        // almiyor) ama her platformda derleniyor.
+        if integration && matches!(profile.kind, ShellKind::Wsl) {
+            let mevcut = spec
+                .env
+                .get("WSLENV")
+                .or_else(|| profile.env.get("WSLENV"))
+                .cloned()
+                .or_else(|| std::env::var("WSLENV").ok());
+            int_env.push(("WSLENV".into(), wslenv_with_nonce(mevcut.as_deref())));
+        }
 
         let cwd = spec
             .cwd

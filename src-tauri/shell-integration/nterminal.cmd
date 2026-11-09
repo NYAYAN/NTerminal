@@ -27,4 +27,12 @@ set "NTERM_EDIT=%~dp0nterminal-edit.sh"
 if not defined GIT_EDITOR if "%NTERMINAL_GIT_EDITOR%"=="1" if exist "%NTERM_EDIT%" set "GIT_EDITOR=bash '%NTERM_EDIT:\=/%'"
 set "NTERM_EDIT="
 
-prompt $E]133;D$E\$E]633;P;Cwd=$P$E\$E]7;file:///$P$E\$E]133;A$E\$P$G$E]133;B$E\
+rem Isaret anahtari (NTERMINAL_NONCE): uygulama yalnizca bu anahtari tasiyan
+rem isaretleri kabul ediyor; ciktinin icine gomulu sahte isaretler sayilmiyor
+rem (gerekcesi nterminal.zsh, bolum 1). Her dizinin SON alani. `%NTERM_KEY%`
+rem bu satir calisirken aciliyor, PROMPT'a metin olarak giriyor; ic ice acilan
+rem cmd PROMPT'u oldugu gibi miras aliyor.
+set "NTERM_KEY="
+if defined NTERMINAL_NONCE set "NTERM_KEY=;%NTERMINAL_NONCE%"
+prompt $E]133;D%NTERM_KEY%$E\$E]633;P;Cwd=$P%NTERM_KEY%$E\$E]7;file:///$P%NTERM_KEY%$E\$E]133;A%NTERM_KEY%$E\$P$G$E]133;B%NTERM_KEY%$E\
+set "NTERM_KEY="

@@ -1367,3 +1367,229 @@ fn git_duzenleyicisi_kullanicinin_kendi_duzenleyicisine_saygi_gosteriyor() {
     drop(pty);
     gecici_klasoru_sil(&kok);
 }
+
+// ------------------------------------------------------------ isaret anahtari
+//
+// ACIK: kabuk isaretleri dogrulanmiyordu. Terminale basilan her metin (`cat`
+// ile acilan dosya, uzak sunucunun ciktisi) ayni dizileri gonderip gecmise
+// sahte komut yazdirabiliyor, rastgele bir dosya icin duzenleyici
+// actirabiliyordu. Uygulama her kabuga bir anahtar veriyor (NTERMINAL_NONCE);
+// betikler onu her dizinin SON alani olarak ekliyor, arayuz anahtarsiz diziyi
+// saymiyor (bkz. src/lib/osc.ts `newMarkKey`).
+//
+// Tek bir dizinin anahtarsiz kalmasi o diziyi sessizce oldurur: arayuz atiyor,
+// hata cikmiyor. Buradaki testler gercek kabukta BUTUN dizilere bakiyor.
+
+const ANAHTAR: &str = "0123456789abcdef0123456789abcdef";
+
+/// Tampondaki OSC 133 / 633 / 7 dizilerinin yukleri. BEL ya da ST (`ESC \`)
+/// ile biteni okur; sonu henuz gelmemis yarim diziyi atlar.
+fn isaret_yukleri(buffer: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = buffer;
+    while let Some(start) = rest.find("\u{1b}]") {
+        rest = &rest[start + 2..];
+        let end = match (rest.find('\u{7}'), rest.find("\u{1b}\\")) {
+            (Some(a), Some(b)) => a.min(b),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => break,
+        };
+        let body = &rest[..end];
+        if body.starts_with("133;") || body.starts_with("633;") || body.starts_with("7;") {
+            out.push(body.to_string());
+        }
+        rest = &rest[end..];
+    }
+    out
+}
+
+/// Anahtarla BITMEYEN diziler; bos olmali.
+fn anahtarsiz_isaretler(buffer: &str) -> Vec<String> {
+    let son = format!(";{ANAHTAR}");
+    isaret_yukleri(buffer).into_iter().filter(|y| !y.ends_with(&son)).collect()
+}
+
+#[test]
+fn powershell_isaretleri_anahtari_tasiyor() {
+    let Some(powershell) = find_powershell() else {
+        eprintln!("powershell.exe yok, test atlandi");
+        return;
+    };
+    let script = script_path("nterminal.ps1");
+    let mut cmd = powershell_entegre(&powershell, &script);
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("NTERMINAL", "1");
+    cmd.env("NTERMINAL_NONCE", ANAHTAR);
+    let mut pty = PtyHarness::spawn(cmd);
+
+    // Ilk istem: acilis bildirimleri (oneri durumu, blok basligi), dizin,
+    // D, A ve B. Hepsi anahtarli olmali.
+    assert!(
+        pty.wait_for(&format!("]133;B;{ANAHTAR}"), Duration::from_secs(40)),
+        "anahtarli 133;B gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    let ilk = isaret_yukleri(&pty.buffer);
+    assert!(ilk.len() >= 4, "ilk istemde beklenen diziler yok: {ilk:?}");
+    assert_eq!(anahtarsiz_isaretler(&pty.buffer), Vec::<String>::new(), "ilk istemde anahtarsiz dizi");
+
+    // Komut dongusu: komut metni (E), basladi (C), bitti (D), yeni istem.
+    assert!(
+        pty.sync_prompt(Duration::from_secs(30)),
+        "kabuk girdiyi okumaya baslamadi. Son cikti:\n{}",
+        pty.tail()
+    );
+    pty.send_line("Write-Output anahtar-testi");
+    assert!(
+        pty.wait_for(&format!("]133;D;0;{ANAHTAR}"), Duration::from_secs(25)),
+        "anahtarli 133;D;0 gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    assert!(
+        pty.wait_for(&format!("]133;B;{ANAHTAR}"), Duration::from_secs(25)),
+        "komuttan sonraki istem gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    let yukler = isaret_yukleri(&pty.buffer);
+    assert!(
+        yukler.contains(&format!("633;E;Write-Output anahtar-testi;{ANAHTAR}")),
+        "komut metni anahtarsiz ya da yok: {yukler:?}"
+    );
+    assert!(yukler.contains(&format!("133;C;{ANAHTAR}")), "133;C anahtarsiz ya da yok: {yukler:?}");
+    assert_eq!(anahtarsiz_isaretler(&pty.buffer), Vec::<String>::new(), "komut dongusunde anahtarsiz dizi");
+}
+
+#[test]
+fn powershell_yukleyici_hatasi_anahtari_tasiyor() {
+    // Betik yuklenemedi: bildirim yukleyicinin KENDISINDEN geliyor, betikten
+    // degil. Anahtarsiz olsaydi arayuz onu atar, serit 5 sn daha beklerdi.
+    let Some(powershell) = find_powershell() else {
+        eprintln!("powershell.exe yok, test atlandi");
+        return;
+    };
+    let yok = std::env::temp_dir().join("nterminal-olmayan-klasor").join("nterminal.ps1");
+    let mut cmd = powershell_entegre(&powershell, &yok);
+    cmd.env("NTERMINAL_NONCE", ANAHTAR);
+    let mut pty = PtyHarness::spawn(cmd);
+    assert!(
+        pty.wait_for(&format!("]633;P;Integration=failed;{ANAHTAR}"), Duration::from_secs(40)),
+        "hata bildirimi anahtarsiz. Son cikti:\n{}",
+        pty.tail()
+    );
+}
+
+#[test]
+fn cmd_isaretleri_anahtari_tasiyor() {
+    let Some(cmd_exe) = find_cmd() else {
+        eprintln!("cmd.exe yok, test atlandi");
+        return;
+    };
+    let script = script_path("nterminal.cmd");
+
+    let mut cmd = CommandBuilder::new(&cmd_exe);
+    cmd.arg("/K");
+    cmd.arg(&script);
+    cmd.env("NTERMINAL_NONCE", ANAHTAR);
+    for key in nterminal_lib::pty::CLEAR_INHERITED_ENV {
+        cmd.env_remove(key);
+    }
+    let mut pty = PtyHarness::spawn(cmd);
+    assert!(
+        pty.wait_for(&format!("]133;B;{ANAHTAR}"), Duration::from_secs(30)),
+        "anahtarli 133;B gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    // PROMPT'taki bes dizi: D, dizin (633 ve OSC 7), A, B.
+    let ilk = isaret_yukleri(&pty.buffer);
+    assert!(ilk.len() >= 5, "istemde beklenen diziler yok: {ilk:?}");
+    assert_eq!(anahtarsiz_isaretler(&pty.buffer), Vec::<String>::new(), "cmd isteminde anahtarsiz dizi");
+    // Dizin kacissiz (`$P`); anahtar yine SON alan.
+    assert!(
+        ilk.iter().any(|y| y.starts_with("633;P;Cwd=") && y.ends_with(&format!(";{ANAHTAR}"))),
+        "dizin bildirimi anahtarsiz ya da yok: {ilk:?}"
+    );
+}
+
+#[test]
+fn cmd_anahtar_yokken_diziler_eksiz() {
+    // Betik uygulama disinda yuklendi: `%NTERM_KEY%` bos acilmali, dizinin
+    // sonunda bos bir alan ya da degiskenin adi kalmamali.
+    let Some(cmd_exe) = find_cmd() else {
+        eprintln!("cmd.exe yok, test atlandi");
+        return;
+    };
+    let script = script_path("nterminal.cmd");
+    let mut cmd = CommandBuilder::new(&cmd_exe);
+    cmd.arg("/K");
+    cmd.arg(&script);
+    cmd.env_remove("NTERMINAL_NONCE");
+    for key in nterminal_lib::pty::CLEAR_INHERITED_ENV {
+        cmd.env_remove(key);
+    }
+    let mut pty = PtyHarness::spawn(cmd);
+    assert!(
+        pty.wait_for("]133;B", Duration::from_secs(30)),
+        "133;B gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    // B'nin sonlandiricisi da gelsin: yarim dizi sayilmiyor.
+    let _ = pty.wait_for("]133;B\u{1b}\\", Duration::from_secs(5));
+    let yukler = isaret_yukleri(&pty.buffer);
+    for beklenen in ["133;D", "133;A", "133;B"] {
+        assert!(yukler.iter().any(|y| y == beklenen), "{beklenen} eksiz gelmedi: {yukler:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_istegi_anahtari_tasiyor() {
+    // Duzenleme istegi git'in cocugundan geliyor; anahtar ona ortamdan
+    // ulasiyor (kabuk degiskeni disa aktarilmis birakiyor). Anahtarsiz istek
+    // arayuzde sayilmiyor: ciktinin icine gomulu sahte bir EditFile rastgele
+    // bir dosya icin duzenleyici actirabiliyordu.
+    let kok = gecici_klasor("git-anahtar");
+    let depo = ayrisan_depo(&kok);
+    let mut pty = birlestir(&kok, &depo, &[("NTERMINAL_NONCE", ANAHTAR)]);
+    assert!(
+        pty.wait_for(&format!(";{ANAHTAR}\u{7}"), Duration::from_secs(20)),
+        "anahtarli istek gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    let yukler = isaret_yukleri(&pty.buffer);
+    let istek = yukler
+        .iter()
+        .find(|y| y.starts_with("633;P;EditFile="))
+        .unwrap_or_else(|| panic!("duzenleme istegi yok: {yukler:?}"));
+    assert!(istek.ends_with(&format!("MERGE_MSG;{ANAHTAR}")), "istek: {istek}");
+
+    pty.send_raw(b"ack\n");
+    pty.send_raw(b"cancel\n");
+    assert!(
+        pty.wait_for("CIKIS=", Duration::from_secs(20)),
+        "git iptalden sonra donmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}
+
+#[cfg(unix)]
+#[test]
+fn git_duzenleyicisi_anahtar_yokken_istegi_eksiz_gonderiyor() {
+    let kok = gecici_klasor("git-anahtarsiz");
+    let depo = ayrisan_depo(&kok);
+    // Kosan ortamdan miras gelmesin (testler bir N-Terminal sekmesinden
+    // calistirilabilir).
+    let mut pty = birlestir(&kok, &depo, &[("NTERMINAL_NONCE", "")]);
+    assert!(
+        pty.wait_for("MERGE_MSG\u{7}", Duration::from_secs(20)),
+        "eksiz istek gelmedi. Son cikti:\n{}",
+        pty.tail()
+    );
+    pty.send_raw(b"ack\n");
+    pty.send_raw(b"cancel\n");
+    let _ = pty.wait_for("CIKIS=", Duration::from_secs(20));
+    drop(pty);
+    gecici_klasoru_sil(&kok);
+}

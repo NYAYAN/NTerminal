@@ -51,7 +51,14 @@ esac
 
 # --- 2) yardimcilar ---------------------------------------------------------
 
-__nterm_osc() { printf '\033]%s\007' "$1"; }
+# Isaret anahtari (NTERMINAL_NONCE): uygulama yalnizca bu anahtari tasiyan
+# isaretleri kabul ediyor; ciktinin icine gomulu sahte isaretler sayilmiyor.
+# Her dizinin SON alani. Gerekcesi ve bicimi nterminal.zsh, bolum 1.
+__nterm_key=${NTERMINAL_NONCE-}
+__nterm_key=${__nterm_key//[^A-Za-z0-9]/}
+[ -n "$__nterm_key" ] && __nterm_key=";$__nterm_key"
+
+__nterm_osc() { printf '\033]%s%s\007' "$1" "$__nterm_key"; }
 
 # OSC yukunde ';' ayirici oldugu icin kaciyoruz. Arayuz ayni kurali tersine uygular.
 __nterm_escape() {
@@ -200,8 +207,8 @@ unset -f __nterm_rgb_ok
 # \[ \] sarmasi bash'e "bu karakterler ekranda yer kaplamaz" der; olmazsa
 # satir uzunlugu yanlis hesaplanip imlec kayar.
 case "${PS1-}" in
-  *'133;B'*) ;;
-  *) PS1="${PS1}\[\033]133;B\007\]" ;;
+  *"133;B${__nterm_key}"*) ;;
+  *) PS1="${PS1}\[\033]133;B${__nterm_key}\007\]" ;;
 esac
 
 # Git mesajlari kutuda: GIT_EDITOR yardimci betige (gerekcesi nterminal.zsh,

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   cwdCandidatesFromFileUri,
   cwdFromFileUri,
+  newMarkKey,
   parseOsc133,
   parseOsc633,
+  stripMarkKey,
   unescapeOsc,
 } from "./osc";
 import { base64ToBytes } from "./ipc";
@@ -101,6 +103,47 @@ describe("OSC 633 ayrıştırma", () => {
 
   it("boş yükte null verir", () => {
     expect(parseOsc633("")).toBe(null);
+  });
+});
+
+/*
+ * Betikler her dizinin sonuna sekmenin anahtarını ekliyor; anahtarı bilmeyen
+ * kaynağın (çıktının içine gömülü sahte işaret) dizisi sayılmıyor.
+ */
+describe("işaret anahtarı", () => {
+  const K = "0123456789abcdef0123456789abcdef";
+
+  it("anahtar 128 bit onaltılık ve her seferinde farklı", () => {
+    const a = newMarkKey();
+    const b = newMarkKey();
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it("doğru anahtar atılıyor, yük ayrıştırıcıya eskisi gibi gidiyor", () => {
+    expect(stripMarkKey(`A;${K}`, K)).toBe("A");
+    expect(parseOsc133(stripMarkKey(`D;130;${K}`, K)!)).toEqual({ kind: "D", exitCode: 130 });
+    // Komut metnindeki `;` kaçışlı geliyor: son alan başka şeyle karışmıyor.
+    const komut = stripMarkKey(`E;git add .\\x3B git commit;${K}`, K)!;
+    expect(parseOsc633(komut)!.value).toBe("git add .; git commit");
+  });
+
+  it("cmd'nin kaçışsız yolunda `;` olsa da yalnızca SON alan anahtar", () => {
+    expect(stripMarkKey(`P;Cwd=C:\\a;b;${K}`, K)).toBe("P;Cwd=C:\\a;b");
+  });
+
+  it("anahtarsız, yanlış anahtarlı ve anahtarı ortada taşıyan yük reddediliyor", () => {
+    expect(stripMarkKey("A", K)).toBe(null);
+    expect(stripMarkKey(`A;${"0".repeat(32)}`, K)).toBe(null);
+    expect(stripMarkKey(`A;${K}x`, K)).toBe(null);
+    expect(stripMarkKey(`A;${K};B`, K)).toBe(null);
+    // Ayırıcı şart: anahtarla biten ama `;` taşımayan yük geçmiyor.
+    expect(stripMarkKey(K, K)).toBe(null);
+  });
+
+  it("anahtar yokken hiçbir yük doğrulanmış sayılmıyor", () => {
+    expect(stripMarkKey("A;", "")).toBe(null);
+    expect(stripMarkKey("A", "")).toBe(null);
   });
 });
 

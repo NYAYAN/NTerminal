@@ -28,6 +28,30 @@ fn wsl_yol_cevrimi() {
     assert_eq!(wsl_mount_path(std::path::Path::new("\\\\sunucu\\pay\\x.sh")), None);
 }
 
+/// WSL isaret anahtarini ancak WSLENV'de adi gecerse Linux tarafina tasiyor.
+/// Tasimazsa betik isaretleri anahtarsiz gonderir, arayuz hepsini atar ve WSL
+/// sekmesi duz terminale duser.
+#[test]
+fn wslenv_isaret_anahtarini_tasiyor() {
+    assert_eq!(wslenv_with_nonce(None), "NTERMINAL_NONCE/u");
+    assert_eq!(wslenv_with_nonce(Some("")), "NTERMINAL_NONCE/u");
+    // Kullanicinin listesi korunuyor, anahtar SONA ekleniyor.
+    assert_eq!(
+        wslenv_with_nonce(Some("GOPATH/l:USERPROFILE/pu")),
+        "GOPATH/l:USERPROFILE/pu:NTERMINAL_NONCE/u"
+    );
+    // Sondaki ayirici cift `::` uretmesin.
+    assert_eq!(wslenv_with_nonce(Some("GOPATH/l:")), "GOPATH/l:NTERMINAL_NONCE/u");
+    // Zaten listedeyse (bayrakli ya da bayraksiz) ikinci kez eklenmiyor.
+    assert_eq!(wslenv_with_nonce(Some("A:NTERMINAL_NONCE/u:B")), "A:NTERMINAL_NONCE/u:B");
+    assert_eq!(wslenv_with_nonce(Some("NTERMINAL_NONCE")), "NTERMINAL_NONCE");
+    // Adi yalnizca ON EK olarak tasiyan baska bir degisken sayilmiyor.
+    assert_eq!(
+        wslenv_with_nonce(Some("NTERMINAL_NONCE_ESKI/u")),
+        "NTERMINAL_NONCE_ESKI/u:NTERMINAL_NONCE/u"
+    );
+}
+
 /// Entegrasyon argumanlarini gercek betik dosyalariyla sinamak icin
 /// gecici bir klasore bos betikler yaziyoruz: `apply_integration` dosyanin
 /// varligini kontrol ediyor.
@@ -124,6 +148,11 @@ fn powershell_betigi_yurutme_ilkesine_takilmayan_yoldan_yukleniyor() {
     assert!(!POWERSHELL_BOOTSTRAP.contains('"'), "yukleyicide cift tirnak var");
     // Yuklenemezse arayuz bunu duymali; yoksa "baslatiliyor" yine sonsuz.
     assert!(POWERSHELL_BOOTSTRAP.contains("]633;P;Integration=failed"));
+    // Bildirim isaret anahtarini tasimali: arayuz anahtarsiz 633'u saymiyor.
+    assert!(
+        POWERSHELL_BOOTSTRAP.contains("$env:NTERMINAL_NONCE"),
+        "hata bildirimi anahtarsiz: {POWERSHELL_BOOTSTRAP}"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 

@@ -19,6 +19,14 @@ $env:NTERMINAL_INTEGRATION_LOADED = '1'
 
 $Global:__NTermESC = [char]27
 $Global:__NTermBEL = [char]7
+# Isaret anahtari (NTERMINAL_NONCE): uygulama yalnizca bu anahtari tasiyan
+# isaretleri kabul ediyor; ciktinin icine gomulu sahte isaretler (bir dosyanin
+# icerigi, uzak sunucunun ciktisi) sayilmiyor. Her dizinin SON alani:
+# `133;A;<anahtar>`. Gerekcesi nterminal.zsh, bolum 1. Anahtar yoksa eksiz.
+$Global:__NTermKey = ''
+if ($env:NTERMINAL_NONCE -match '^[A-Za-z0-9]+$') { $Global:__NTermKey = ';' + $env:NTERMINAL_NONCE }
+# Dizilerin sonu: anahtar + BEL.
+$Global:__NTermEnd = $Global:__NTermKey + $Global:__NTermBEL
 $Global:__NTermPrevLastExit = $Global:LASTEXITCODE
 $Global:__NTermSawCommand = $false
 $Global:__NTermLastHistoryId = -1
@@ -37,7 +45,7 @@ $Global:__NTermPromptBottom = ($env:NTERMINAL_PROMPT_BOTTOM -eq '1')
 $Global:__NTermBlockHeader = ($env:NTERMINAL_BLOCK_HEADER -eq '1')
 
 function Global:__NTermOsc([string]$Body) {
-    try { [Console]::Write($Global:__NTermESC + ']' + $Body + $Global:__NTermBEL) } catch { }
+    try { [Console]::Write($Global:__NTermESC + ']' + $Body + $Global:__NTermEnd) } catch { }
 }
 
 # OSC yuku icinde ';' ayirici oldugundan komut metnini kacisliyoruz.
@@ -135,7 +143,7 @@ function Global:prompt {
         } elseif (-not $lastSuccess) {
             $code = 1
         }
-        $out += $Global:__NTermESC + ']133;D;' + $code + $Global:__NTermBEL
+        $out += $Global:__NTermESC + ']133;D;' + $code + $Global:__NTermEnd
         $Global:__NTermSawCommand = $false
     } elseif ($Global:__NTermUseHistoryFallback) {
         # PSReadLine kancasi kurulamadi: komutu gecmisten kurtarmayi dene.
@@ -154,20 +162,20 @@ function Global:prompt {
                 } elseif (-not $lastSuccess) {
                     $code = 1
                 }
-                $out += $Global:__NTermESC + ']633;E;' + (__NTermEscape $h.CommandLine) + $Global:__NTermBEL
-                $out += $Global:__NTermESC + ']133;C' + $Global:__NTermBEL
-                $out += $Global:__NTermESC + ']633;X;Dur=' + $dur + $Global:__NTermBEL
-                $out += $Global:__NTermESC + ']133;D;' + $code + $Global:__NTermBEL
+                $out += $Global:__NTermESC + ']633;E;' + (__NTermEscape $h.CommandLine) + $Global:__NTermEnd
+                $out += $Global:__NTermESC + ']133;C' + $Global:__NTermEnd
+                $out += $Global:__NTermESC + ']633;X;Dur=' + $dur + $Global:__NTermEnd
+                $out += $Global:__NTermESC + ']133;D;' + $code + $Global:__NTermEnd
                 $recovered = $true
             }
         } catch { }
         if (-not $recovered) {
-            $out += $Global:__NTermESC + ']133;D' + $Global:__NTermBEL
+            $out += $Global:__NTermESC + ']133;D' + $Global:__NTermEnd
         }
     } else {
         # Komut calismadi (bos satirda Enter, Ctrl+C, ilk istem). Kodsuz D
         # gonderiyoruz: arayuz bunu "bildirilecek komut yok" olarak okuyor.
-        $out += $Global:__NTermESC + ']133;D' + $Global:__NTermBEL
+        $out += $Global:__NTermESC + ']133;D' + $Global:__NTermEnd
     }
 
     $Global:__NTermPrevLastExit = $lastExit
@@ -209,9 +217,9 @@ function Global:prompt {
     # bos bir satiri gosterir, satir okuma bozulurdu.
     $out += __NTermBottomPad $userPrompt
 
-    $out += $Global:__NTermESC + ']133;A' + $Global:__NTermBEL
+    $out += $Global:__NTermESC + ']133;A' + $Global:__NTermEnd
     $out += $userPrompt
-    $out += $Global:__NTermESC + ']133;B' + $Global:__NTermBEL
+    $out += $Global:__NTermESC + ']133;B' + $Global:__NTermEnd
     return $out
 }
 

