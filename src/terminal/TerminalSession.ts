@@ -20,6 +20,7 @@ import {
   strayKeyReset,
   type CtrlCAction,
 } from "../lib/inputMode";
+import { sanitizePaste } from "../lib/paste";
 import { shellFamily } from "../lib/shellQuote";
 import { typingOutsideTerminal } from "../lib/focus";
 import { cwdCandidatesFromFileUri, parseOsc133, parseOsc633 } from "../lib/osc";
@@ -637,7 +638,15 @@ export class TerminalSession {
 
     const opened = this.term.element;
     if (opened) container.appendChild(opened);
-    else this.term.open(container);
+    else {
+      // `finally`: jsdom'da `open` canvas bağlamında düşüyor ama düğüm kurulmuş
+      // oluyor; dinleyici her iki durumda da bağlanmalı.
+      try {
+        this.term.open(container);
+      } finally {
+        this.bindNativePaste();
+      }
+    }
 
     this.invalidateGeometry();
     this.safeFit();
@@ -2789,7 +2798,31 @@ ${dim}[${
    * macOS'ta WebKit'in "Paste" onay düğmesini çıkarıyordu.
    */
   pasteText(text: string) {
-    if (text) this.term.paste(text);
+    // Denetim karakterleri ayıklanıyor: metnin içindeki `ESC[201~` yapıştırmayı
+    // yarıda bitirip gerisini çalıştırıyordu (bkz. `sanitizePaste`).
+    const clean = sanitizePaste(text);
+    if (clean) this.term.paste(clean);
+  }
+
+  /**
+   * Tarayıcının KENDİ yapıştırma olayı (macOS'ta Düzen > Yapıştır, kısayolu
+   * değiştirilmişse Cmd+V) xterm'e ulaşmadan burada karşılanıyor.
+   *
+   * xterm o olayı kendisi dinliyor ve panodaki metni olduğu gibi yazıyor;
+   * `pasteClipboard`dan geçmediği için temizlenmiyordu. Yakalama aşamasında,
+   * terminalin kök düğümünde: xterm'in dinleyicileri içerideki metin alanında
+   * ve olay onlara hiç inmiyor.
+   */
+  private bindNativePaste() {
+    const el = this.term.element;
+    if (!el) return;
+    const onPaste = (event: ClipboardEvent) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.pasteText(event.clipboardData?.getData("text/plain") ?? "");
+    };
+    el.addEventListener("paste", onPaste, true);
+    this.disposables.push({ dispose: () => el.removeEventListener("paste", onPaste, true) });
   }
 
   hasSelection(): boolean {

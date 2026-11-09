@@ -121,3 +121,40 @@ describe("terminalin yeniden bağlanması", () => {
     void s.dispose(false);
   });
 });
+/*
+ * Tarayıcının kendi yapıştırma olayı (macOS'ta Düzen > Yapıştır) xterm'e
+ * ulaşmadan karşılanıyor: xterm panodaki metni olduğu gibi yazıyordu ve
+ * içindeki `ESC[201~` yapıştırmayı yarıda bitiriyordu (bkz. `sanitizePaste`).
+ */
+describe("tarayıcının yapıştırma olayı", () => {
+  function yapistir(s: InstanceType<typeof TerminalSession>, metin: string) {
+    const alan = s.term.element!.querySelector("textarea")!;
+    const olay = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(olay, "clipboardData", { value: { getData: () => metin } });
+    alan.dispatchEvent(olay);
+    return olay;
+  }
+
+  it("metin temizlenerek ve TEK KEZ yazılıyor", () => {
+    const { s } = oturum();
+    const yazilan: string[] = [];
+    s.term.onData((veri) => yazilan.push(veri));
+
+    const olay = yapistir(s, "echo guvenli\x1b[201~\necho SIZDI\n");
+
+    // xterm'in kendi dinleyicisi de çalışsaydı ham metin ikinci kez gelirdi.
+    expect(yazilan).toEqual(["echo guvenli[201~\recho SIZDI\r"]);
+    expect(olay.defaultPrevented).toBe(true);
+    void s.dispose(false);
+  });
+
+  it("kap değişince dinleyici ikinci kez bağlanmıyor", () => {
+    const { s } = oturum();
+    s.attach(kap());
+    const yazilan: string[] = [];
+    s.term.onData((veri) => yazilan.push(veri));
+    yapistir(s, "ls");
+    expect(yazilan).toEqual(["ls"]);
+    void s.dispose(false);
+  });
+});

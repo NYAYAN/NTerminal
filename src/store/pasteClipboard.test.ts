@@ -112,6 +112,30 @@ describe("yapıştırma", () => {
     expect(pasteT1).toHaveBeenCalledWith("npm run dev");
   });
 
+  it("denetim karakterleri iki yolda da ayıklanıyor", async () => {
+    // Metnin içindeki `ESC[201~` yapıştırmayı yarıda bitirip gerisini
+    // Enter'a basılmadan çalıştırıyordu (bkz. `sanitizePaste`).
+    const pano = "echo guvenli\x1b[201~\necho SIZDI\n";
+    const temiz = "echo guvenli[201~\necho SIZDI\n";
+
+    seed(true);
+    clipboard(pano);
+    await useStore.getState().pasteClipboard("t1");
+    expect(sink).toHaveBeenCalledWith(temiz, "insert");
+
+    seed(false);
+    clipboard(pano);
+    await useStore.getState().pasteClipboard("t1");
+    expect(pasteT1).toHaveBeenCalledWith(temiz);
+  });
+
+  it("yalnızca denetim karakteri taşıyan pano hiçbir şey yapıştırmıyor", async () => {
+    seed(false);
+    clipboard("\x1b\x03");
+    await useStore.getState().pasteClipboard("t1");
+    expect(pasteT1).not.toHaveBeenCalled();
+  });
+
   it("başka bir bölmeye yapıştırılan metin o bölmenin terminaline gidiyor", async () => {
     // Kutu yalnızca ETKİN sekmenin; t2'ye yapıştırılan metnin t1'in kutusuna
     // düşmesi yanlış kabuğa komut yazmak olurdu.

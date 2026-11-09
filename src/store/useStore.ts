@@ -25,6 +25,7 @@ import { SIGINT } from "../lib/inputMode";
 import { nextViewMode, normalizeViewMode } from "../lib/panes";
 import { applyDrop, type DropTarget } from "../lib/favoriteGroups";
 import { MAX_CD_SUGGESTIONS, cdQuery, cdSuggestions, descend, exactDir } from "../lib/cdSuggest";
+import { sanitizePaste } from "../lib/paste";
 import { quoteForShell, shellFamily } from "../lib/shellQuote";
 import { ancestorDirs, sameDir } from "../lib/dirs";
 import { DEFAULT_FLAGS } from "../lib/textSearch";
@@ -2869,6 +2870,9 @@ export const useStore = create<Store>((set, get) => ({
     }
     // Boş pano ya da metin olmayan içerik (görsel, dosya): yapıştırılacak bir
     // şey yok, bu bir hata değil.
+    if (!text) return;
+    // Kutuya da terminale de TEMİZ metin gidiyor (bkz. `sanitizePaste`).
+    text = sanitizePaste(text);
     if (!text) return;
     const sink = get().appInputSink;
     if (sink && get().activeTab()?.tab.id === tabId) {

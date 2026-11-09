@@ -6,6 +6,7 @@ import { typingOutsideTerminal } from "../lib/focus";
 import { passThroughSequence, resolveInputMode, SIGINT, stdinKeyAction } from "../lib/inputMode";
 import { useT } from "../lib/i18n";
 import { matchCombo } from "../lib/keys";
+import { sanitizePaste } from "../lib/paste";
 import { promptedTabs } from "../lib/promptSeen";
 import { terminalFontSize } from "../lib/settingsLimits";
 import { DELETE_SUGGESTION_KEY } from "../lib/suggest";
@@ -22,6 +23,25 @@ import { KeyBar } from "./KeyBar";
  */
 function typingElsewhere(): boolean {
   return typingOutsideTerminal() && !document.activeElement?.closest(".command-input");
+}
+
+/**
+ * Metni kutuda imlecin olduğu yere, seçim varsa seçimin yerine koyar.
+ *
+ * `insertText` tarayıcının düzenleme komutu ve iki işi birden görüyor:
+ * yapıştırma Cmd+Z ile tek adımda geri alınıyor, çıkan `input` olayı da
+ * React'ın `onChange`ine gidiyor. Komutu tanımayan ortamda (jsdom) metin elle
+ * yerleştiriliyor.
+ */
+function insertAtCursor(
+  el: HTMLTextAreaElement,
+  text: string,
+  setValue: (value: string) => void,
+) {
+  el.focus();
+  if (document.execCommand?.("insertText", false, text)) return;
+  el.setRangeText(text, el.selectionStart, el.selectionEnd, "end");
+  setValue(el.value);
 }
 
 /**
@@ -310,17 +330,9 @@ export function CommandInput() {
       /*
        * Yapıştırma: metin imlecin olduğu yere, seçim varsa seçimin yerine —
        * tarayıcının kendi yapıştırmasıyla aynı sonuç (bkz. `pasteClipboard`).
-       *
-       * `insertText` tarayıcının düzenleme komutu ve iki işi birden görüyor:
-       * yapıştırma Cmd+Z ile tek adımda geri alınıyor, çıkan `input` olayı da
-       * React'ın `onChange`ine gidiyor. Komutu tanımayan ortamda (jsdom) metin
-       * elle yerleştiriliyor.
        */
       if (mode === "insert" && el) {
-        el.focus();
-        if (document.execCommand?.("insertText", false, text)) return;
-        el.setRangeText(text, el.selectionStart, el.selectionEnd, "end");
-        setValue(el.value);
+        insertAtCursor(el, text, setValue);
         return;
       }
       // Ekleme kipinde araya boşluk konuyor: `code` + `src/a.ts` birleşip
@@ -861,6 +873,17 @@ export function CommandInput() {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
+            // Tarayıcının kendi yapıştırması (kutuda Cmd+V / Ctrl+V): metin
+            // temizse dokunulmuyor. Denetim karakteri taşıyorsa temizlenmiş
+            // hâli konuyor; kutu onları çizmiyor ama Enter'da kabuğa olduğu
+            // gibi yazardı (bkz. `sanitizePaste`).
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text/plain");
+              const clean = sanitizePaste(text);
+              if (clean === text) return;
+              e.preventDefault();
+              if (clean) insertAtCursor(e.currentTarget, clean, setValue);
+            }}
             // Kutu kendi içinde kaydığında renkli katman da kaymalı; yoksa
             // uzun komutlarda renkler metinden ayrı düşer.
             onScroll={(e) => {

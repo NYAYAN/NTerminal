@@ -1342,3 +1342,30 @@ describe("tam ekran programın tuş çubuğu", () => {
     expect(bar(container)?.style.getPropertyValue("--cmd-row-h")).toMatch(/^\d+px$/);
   });
 });
+/*
+ * Kutuda Cmd+V / Ctrl+V tarayıcının kendi yapıştırması. Kutu denetim
+ * karakterini çizmiyor ama Enter'da kabuğa olduğu gibi yazardı
+ * (bkz. `sanitizePaste`).
+ */
+describe("kutuya yapıştırma", () => {
+  const pano = (text: string) => ({ clipboardData: { getData: () => text } });
+
+  it("denetim karakteri taşıyan metin temizlenerek konuyor", () => {
+    const { container } = render(<CommandInput />);
+    const box = field(container)!;
+    // \x15 Ctrl+U: kutuda `echo iyi kotu` görünüp kabukta `kotu` çalışırdı.
+    const gecti = fireEvent.paste(box, pano("echo iyi \x15kotu\x1b[201~"));
+    expect(gecti, "tarayıcının ham yapıştırması engellenmedi").toBe(false);
+    expect(box.value).toBe("echo iyi kotu[201~");
+
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sendKeys).toHaveBeenCalledWith("echo iyi kotu[201~\r");
+  });
+
+  it("temiz metinde tarayıcının yapıştırmasına dokunulmuyor", () => {
+    // Geri alma (Cmd+Z) ve imleç konumu tarayıcının işi; yoldan çekiliyoruz.
+    const { container } = render(<CommandInput />);
+    const gecti = fireEvent.paste(field(container)!, pano("npm run dev\nnpm test"));
+    expect(gecti).toBe(true);
+  });
+});

@@ -1238,6 +1238,17 @@ Yan kararlar, her biri bir tuzağı kapatıyor:
   istem gelmeden ızgaraya basılan ok/Tab/Esc de aynı onarımdan geçiyor
   ([`isStrayKey`](src/lib/inputMode.ts)); harfler bilerek silinmiyor. Açık
   kalan yol: dolu kutuda Tab/Ctrl+D ile programa devredilen yarım satır.
+- **Yapıştırılan metinden denetim karakterleri ayıklanıyor**
+  ([`sanitizePaste`](src/lib/paste.ts)). xterm 6.0.0 yapıştırmayı
+  `ESC[200~` … `ESC[201~` ile sarıyor ama metnin içine bakmıyor; panodaki metin
+  bitiş işaretini taşırsa gerisi klavyeden yazılmış sayılıyor. zsh'te PTY
+  düzeneğiyle yeniden üretildi: `echo guvenli ESC[201~ ⏎ echo SIZDI ⏎`
+  yapıştırılınca ikinci komut Enter'a basılmadan çalıştı; temizlenince
+  çalışmadı. Dört giriş de kapalı: `pasteClipboard` (kısayol, sağ tık),
+  `pasteText`, tarayıcının yerel olayı terminalde (`bindNativePaste`, yakalama
+  aşamasında; gerçek pencerede DENENMEDİ) ve komut kutusunda (`onPaste`).
+  Kapsam dışı: bracketed paste'i açmayan kabukta (cmd, bash 3.2) çok satırlı
+  metin satır satır çalışıyor.
 
 **Bedel.** Yazdıkça süzülen listeler süzgeci Enter'da görüyor; Jest/Vitest
 izleme kipinin tek harflik kısayolları harf + Enter istiyor (fazladan `\r`
