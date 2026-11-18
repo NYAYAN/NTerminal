@@ -6,20 +6,18 @@ import { describe, expect, it } from "vitest";
 const SCRIPT = readFileSync("public/webkit-denetimi.js", "utf8");
 
 /** Betiği sahte bir pencerede koşturup gövdeye yazılanı döndürür. */
-function run({ colorMix, lookbehind }: { colorMix: boolean; lookbehind: boolean }): string {
-  const body = { innerHTML: "<div id=\"root\"></div>", style: {} as Record<string, string> };
+function run({ lookbehind }: { lookbehind: boolean }): string {
+  const body = { innerHTML: '<div id="root"></div>', style: {} as Record<string, string> };
   let ready: (() => void) | undefined;
   const RealRegExp = RegExp;
   const context = {
     window: {} as Record<string, unknown>,
-    CSS: { supports: (_p: string, v: string) => colorMix || !v.includes("color-mix") },
     RegExp: function (source: string) {
       if (!lookbehind && source.includes("(?<")) throw new SyntaxError("Invalid regular expression");
       return new RealRegExp(source);
     },
     document: { body, addEventListener: (_e: string, fn: () => void) => (ready = fn) },
   };
-  context.window.CSS = context.CSS;
   runInNewContext(SCRIPT, context);
   ready?.();
   return body.innerHTML;
@@ -34,15 +32,13 @@ describe("eski WebKit denetimi", () => {
   });
 
   it("güncel WebKit'te arayüze dokunmuyor", () => {
-    expect(run({ colorMix: true, lookbehind: true })).toBe('<div id="root"></div>');
+    expect(run({ lookbehind: true })).toBe('<div id="root"></div>');
   });
 
-  it("color-mix ya da lookbehind yoksa siyah ekran yerine güncelleme uyarısı", () => {
-    for (const eksik of [{ colorMix: false, lookbehind: true }, { colorMix: true, lookbehind: false }]) {
-      const html = run(eksik);
-      expect(html, JSON.stringify(eksik)).toContain("Safari 16.4");
-      expect(html).toContain("Yazılım Güncelleme");
-    }
+  it("lookbehind yoksa siyah ekran yerine güncelleme uyarısı", () => {
+    const html = run({ lookbehind: false });
+    expect(html).toContain("Safari 16.4");
+    expect(html).toContain("Yazılım Güncelleme");
   });
 
   it("arayüz kodunda regex lookbehind yok: eski WebKit bütün dosyayı reddediyor", () => {

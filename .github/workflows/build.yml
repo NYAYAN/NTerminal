@@ -59,6 +59,8 @@ env:
   CARGO_TERM_COLOR: always
   # Düşen bir testi CI kütüğünden anlamanın tek yolu yığın izi.
   RUST_BACKTRACE: "1"
+  # macOS ikilileri ve C bağımlılıkları için minimum hedef sürüm (macOS 11 Big Sur).
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
 
 jobs:
   # Arayüz testleri jsdom üzerinde koşuyor, platformdan bağımsız: en ucuz

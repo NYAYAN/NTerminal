@@ -1,20 +1,16 @@
 // Eski WebKit denetimi: modül paketinden ÖNCE, sıradan (modül olmayan) bir
 // script olarak koşuyor ve bilerek eski sözdizimiyle yazılı.
 //
-// macOS'ta arayüzü sistemin WebKit'i (Safari'nin motoru) çalıştırıyor. Safari
-// 16.4'ten eskisi (ör. güncellenmemiş macOS 12) arayüzün kullandığı CSS
-// `color-mix()` ve regex lookbehind'ı tanımıyor; paket ya hiç yüklenmiyor ya
-// renksiz açılıyor ve kullanıcı yalnızca koyu pencere zeminini görüyor
-// (0.4.6, MacBook Air 2017). Siyah ekran yerine ne yapılacağını söyle.
+// macOS'ta arayüzü sistemin WebKit'i (Safari'nin motoru) çalıştırıyor. Çok eski
+// WebKit (Safari 16.4 öncesi) regex lookbehind'ı tanımıyor; paket ya hiç
+// yüklenmiyor ya da sözdizimi hatası veriyor ve kullanıcı yalnızca koyu
+// pencere zeminini görüyor. Siyah ekran yerine ne yapılacağını söyle.
 // CSP satır içi script'e izin vermediği için ayrı dosya.
 (function () {
   var destekli = true;
   try {
     new RegExp("(?<!a)b");
   } catch (e) {
-    destekli = false;
-  }
-  if (!(window.CSS && CSS.supports && CSS.supports("color", "color-mix(in srgb, red, blue)"))) {
     destekli = false;
   }
   if (destekli) return;
