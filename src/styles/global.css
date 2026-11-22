@@ -1227,6 +1227,10 @@ button.hit-head:hover {
    dosya); gövde kayıyor. */
 .viewer-editor,
 .viewer-editor:focus {
+  /* Konumlu: altındaki katmanlar (arama işaretleri, renkli harfler) mutlak
+     konumlu ve konumlu öğeler belge sırasıyla boyanıyor; yazı alanı onların
+     ÜSTÜNDE kalmalı (bkz. `.viewer-find-layer`). */
+  position: relative;
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -1351,6 +1355,88 @@ button.hit-head:hover {
   color: inherit;
   border-radius: 2px;
   box-shadow: 0 0 0 1px color-mix(in srgb, #e3b341 70%, transparent);
+}
+
+/* Dosyada arama (`FileFind`).
+ *
+ * Bütün eşleşmeler aynı sarı ailesinde (içerik aramasının işaretiyle aynı)
+ * ama soluk; ETKİN olan koyu ve çerçeveli. 150 eşleşme arasında Enter'a basınca
+ * hangisinde olunduğu renk tonundan değil çerçeveden okunuyor (terminal
+ * aramasında ölçülen sorun, bkz. `TerminalFind`). */
+.viewer-find-hit {
+  background: color-mix(in srgb, #e3b341 30%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.viewer-find-hit.on {
+  background: color-mix(in srgb, #e3b341 62%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+/* Çubuk: başlığın ALTINDA bir şerit, kodu aşağı itiyor. Kodun üstünde yüzen
+   bir kutu (terminaldeki gibi) olamıyor: görüntüleyici ağacın yanında dar
+   kalıyor ve kutu ilk satırları bütünüyle örtüyordu — dosyanın başındaki bir
+   eşleşme kutunun altında kalıyor, yukarı da kaydırılamıyordu (ölçüldü). Bu
+   yüzden IntelliJ'deki gibi şerit. Görünüm terminaldekinin: kutunun içinde
+   seçenekler, sayaç, oklar. */
+.viewer-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 5px 6px 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.viewer-find .search-field {
+  flex: 0 1 320px;
+  min-width: 90px;
+}
+
+.viewer-find .count {
+  min-width: 52px;
+  text-align: center;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8462rem;
+}
+
+/* Eşleşme yok ya da düzenli ifade bozuk: sayaç uyarı renginde; bozuk ifadede
+   kutunun çerçevesi de (nedeni üzerine gelince). */
+.viewer-find.none .count {
+  color: var(--err, #f85149);
+}
+
+.viewer-find .search-field.bad,
+.viewer-find .search-field.bad:focus-within {
+  border-color: var(--err, #f85149);
+}
+
+/* Düzenlerken işaretler: yazı alanının ve renkli katmanın ALTINDA, onlarla
+   aynı yazı tipi, satır yüksekliği ve soldaki boşlukla. Yalnızca eşleşmesi
+   olan satırlar çiziliyor, her biri kendi satırının yerinde (`--row`). Harfler
+   saydam; görünen yalnızca `<mark>`ların zemini. */
+.viewer-find-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.viewer-find-row {
+  position: absolute;
+  left: 10px;
+  top: calc(var(--row) * 1lh);
 }
 
 /* Sözdizimi renkleri (bkz. `lib/syntaxScopes.ts`).

@@ -1069,6 +1069,8 @@ export const MESSAGES = {
   "find.prev": ["Önceki (Shift+Enter)", "Previous (Shift+Enter)"],
   "find.next": ["Sonraki (Enter)", "Next (Enter)"],
   "find.close": ["Kapat (Esc)", "Close (Esc)"],
+  // Açık dosyada arama (görüntüleyicinin çubuğu, `FileFind`).
+  "viewerFind.placeholder": ["Dosyada ara…", "Find in file…"],
 
   // --------------------------------------------------------------- durum çubuğu
   "status.revealHint": ["({fm}'de açmak için tıklayın)", "(click to open in {fm})"],
@@ -1984,7 +1986,8 @@ export const MESSAGES = {
   "action.toggleLock": ["Sekmeyi kilitle / kilidi aç", "Lock / unlock tab"],
   "action.toggleViewMode": ["Sekme / bölme görünümü", "Tab / pane view"],
   "action.clearTerminal": ["Terminali temizle", "Clear terminal"],
-  "action.findInTerminal": ["Terminalde ara", "Find in terminal"],
+  // Açık bir metin dosyası terminali örtüyorsa arama dosyada (bkz. `FileFind`).
+  "action.findInTerminal": ["Terminalde ya da açık dosyada ara", "Find in terminal or open file"],
   "action.copy": ["Kopyala", "Copy"],
   "action.paste": ["Yapıştır", "Paste"],
   "action.zoomIn": ["Yazıyı büyült", "Increase font size"],

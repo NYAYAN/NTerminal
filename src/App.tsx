@@ -24,6 +24,7 @@ import { TerminalArea } from "./components/TerminalArea";
 import { StashDialog } from "./components/StashDialog";
 import { WindowControls } from "./components/WindowControls";
 import { railTree } from "./lib/design";
+import { openViewerFind, viewerFindAvailable } from "./lib/fileFind";
 import { frameMonitor } from "./lib/health";
 import { useT, useLang } from "./lib/i18n";
 import { api, onOpenFile, onSessionEnd } from "./lib/ipc";
@@ -609,15 +610,26 @@ export function App() {
       }
       if (matchCombo(event, keys.clearTerminal)) return run(() => session?.clear());
       /*
-       * Terminalde ara. Açık bir dosya terminali örtüyorsa önce panel kapanıyor:
-       * arama çubuğu terminalin sağ üstünde ve panelin ALTINDA kalırdı —
-       * kısayol hiçbir şey yapmıyormuş gibi görünürdü. Kısayolun adı da
-       * "terminalde"; terminali öne getirmek istenen şey.
+       * Ara: açık bir METİN dosyası terminali örtüyorsa dosyada, değilse
+       * terminalde.
+       *
+       * BİLDİRİLEN: "bir dosya açıkken arama için Cmd+F yapınca gidip
+       * terminalden search ediyor, dosyadan değil." Eskiden bu dal paneli
+       * kapatıp terminalde arıyordu (çubuk panelin ALTINDA kalırdı); kullanıcının
+       * baktığı şey ise dosya. Görüntüleyici açıkken kendi aramasını kaydediyor
+       * (`provideViewerFind`).
+       *
+       * Görsel açıksa (aranacak metin yok) eski yol: panel kapanıyor, terminalde
+       * aranıyor.
        */
-      if (matchCombo(event, keys.findInTerminal))
+      if (matchCombo(event, keys.findInTerminal)) {
+        if (store.ui.treeOpen && store.ui.viewerPath && viewerFindAvailable()) {
+          return run(() => openViewerFind());
+        }
         return run(() =>
           store.setUi(store.ui.treeOpen && store.ui.viewerPath ? { findOpen: true, treeOpen: false } : { findOpen: true }),
         );
+      }
       /*
        * Kopyala / yapıştır KOMUT KUTUSUNDA yakalanmıyor.
        *

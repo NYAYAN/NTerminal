@@ -443,13 +443,19 @@ describe("görünüm düğmeleri", () => {
     expect(APP).toMatch(/className="titlebar-search"[\s\S]{0,400}paletteMode: "files"/);
   });
 
-  it("açık dosya terminali örtüyorsa 'Terminalde ara' önce paneli kapatıyor", () => {
-    // Arama çubuğu terminalin sağ üstünde ve panelin ALTINDA kalırdı: kısayol
-    // hiçbir şey yapmıyormuş gibi görünürdü.
+  it("arama kısayolu açık metin dosyasında dosyada arıyor, görselde paneli kapatıp terminalde", () => {
+    // BİLDİRİLEN: "bir dosya açıkken Cmd+F yapınca terminalden search ediyor,
+    // dosyadan değil." Önce görüntüleyicinin araması (kayıtlıysa: metin dosyası
+    // açık), sonra eski yol: terminalin arama çubuğu panelin ALTINDA kalırdı,
+    // panel kapanıyor.
     const at = APP.indexOf("matchCombo(event, keys.findInTerminal)");
     expect(at, "kısayol dalı yok").toBeGreaterThan(-1);
     const branch = APP.slice(at, APP.indexOf(";", APP.indexOf("findOpen: true", at) + 60));
-    expect(branch).toMatch(/store\.ui\.treeOpen && store\.ui\.viewerPath \? \{ findOpen: true, treeOpen: false \}/);
+    const viewer = branch.indexOf("viewerFindAvailable()");
+    const terminal = branch.search(/store\.ui\.treeOpen && store\.ui\.viewerPath \? \{ findOpen: true, treeOpen: false \}/);
+    expect(viewer, "dosyada arama dalı yok").toBeGreaterThan(-1);
+    expect(branch).toMatch(/store\.ui\.treeOpen && store\.ui\.viewerPath && viewerFindAvailable\(\)\) \{\s*return run\(\(\) => openViewerFind\(\)\)/);
+    expect(terminal, "görselde terminal yolu yok").toBeGreaterThan(viewer);
   });
 
   it("dosya paneli öneri şeridinin ALTINDA", () => {

@@ -2095,6 +2095,53 @@ uygulamaya hiç sorulmuyor), `TerminalSession.test.ts` › "git mesaj isteği",
 **Denenmedi:** Windows (Git for Windows'un bash'i ConPTY altında `/dev/tty` ve
 `stty`; PowerShell ve cmd yolları). Bu makinede derlenemiyor.
 
+### 1.36 Açık dosyada arama
+
+BİLDİRİLEN: "bir dosya açıkken arama için Cmd+F yapınca gidip terminalden
+search ediyor, dosyadan değil." Görüntüleyicinin araması yoktu; kısayol
+(`findInTerminal`) paneli kapatıp terminalde arıyordu (o da bilinçliydi:
+terminalin çubuğu panelin altında kalırdı).
+
+**Akış.** Görüntüleyici (`FileViewer`) açıkken kendi aramasını kaydediyor
+([`provideViewerFind`](src/lib/fileFind.ts)); genel dinleyici (`App.tsx`) kayıt
+varsa onu açıyor, yoksa (görsel açık) eski yol. Yazı alanında genel dinleyici
+kısayolu bırakıyor (metin kutusu); orada görüntüleyicinin kendi `onKeyDown`'u
+karşılıyor — Windows'ta `Ctrl+F` de (`isFindKey`). Çubuk [`FileFind`](src/components/FileFind.tsx):
+Enter / Shift+Enter / F3 / ⌘G, Esc kapatıyor (`data-owns-escape`, panel
+kapanmıyor), odak geldiği yere dönüyor. Etkin eşleşme bir KONUMDAN bulunuyor
+(`anchor` → `matchAtOrAfter`): sorgu ya da metin değişince eşleşmeler yeniden
+hesaplanıyor, işaretli olan yerinde kalıyor. Ekran yalnızca ARAMA değişince
+kaydırılıyor (`revealKey`; düzenlerken yazılan harf değil). Okurken işaretler
+satırların içinde (`foundLine`), düzenlerken yazı alanının altında yalnızca
+eşleşmeli satırları çizen bir katmanda (`FindLayer`, `top: calc(var(--row) *
+1lh)`); etkin eşleşme yazı alanında seçiliyor.
+
+Yan kararlar:
+
+- **Şerit, yüzen kutu değil.** İlk hâli terminaldeki gibi kodun sağ üstünde
+  yüzüyordu. Ağacın yanındaki dar görüntüleyicide kutu ilk üç satırı bütünüyle
+  örttü; dosyanın başındaki bir eşleşme kutunun altında kaldı ve yukarı
+  kaydırılamadı (düzenekte görüldü). Şerit başlığın altında, IntelliJ'deki gibi.
+- **Kurallar içerik aramasıyla (Rust `search::matcher`) aynı.** Seçenekler
+  (`ui.searchFlags`) ortak; aynı sorgu iki yerde farklı eşleşmemeli. Beklenen
+  değerler Rust'ın kendisiyle üretildi (regex 1.13.1). Farklar kapatıldı:
+  JavaScript'in `\w`/`\d`'si ASCII → `\p{…}` sınıfları; `\-`, `\#` gibi
+  gereksiz kaçışlar `u` kipinde hata → `\xHH`; tam sözcük Unicode'a göre.
+- **Geri bakış YOK.** Unicode sözcük sınırı ifadenin içinde geri bakış isterdi;
+  `webkitDenetimi.test.ts` arayüz kodunda geri bakışı yasaklıyor. Sınır
+  eşleşmeden sonra iki yanındaki harfe bakılarak sınanıyor (`wholeWordCheck`).
+  Bedeli: düzenli ifade + tam sözcükte `a|ab` aynı yerde önce `a`yı bulup
+  sınava takılınca `ab` denenmiyor (Rust bulurdu); kullanıcının yazdığı
+  `\b`/`\B` JavaScript'in (ASCII).
+- **Sınır 9.999 eşleşme** ("9999+"): yarım megabaytta tek harf yüz binlerce
+  `<mark>` olurdu.
+
+**Doğrulama.** `fileFind.test.ts` (kurallar, Rust'la aynı çıktılar),
+`fileFind.test.tsx` (açma, gezinme, Esc, seçimden doldurma, düzenleme, dosya
+paneli), `titlebar.test.tsx`. Düzenekte Chromium ve ekran dışı WebKit: işaretler
+düzenlerken renkli katmanla hizalı (Chromium 0 px, WebKit en çok 1 px).
+**Denenmedi:** gerçek pencerede (Tauri) ve Windows'ta.
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.

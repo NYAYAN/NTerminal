@@ -193,7 +193,7 @@ dağıtım): [docs/gelistirme.md](docs/gelistirme.md#macos-paketinin-imzası-ve-
 | Geçmişte hızlı arama | ⌘R | Ctrl+R |
 | Favori komutlar | ⌘⇧B | Ctrl+Shift+B |
 | Sekme / bölme görünümü | ⌘⇧E | Ctrl+Shift+E |
-| Terminalde ara | ⌘F | Ctrl+Shift+F |
+| Terminalde ya da açık dosyada ara | ⌘F | Ctrl+Shift+F |
 | Terminali temizle | ⌘K | Ctrl+Shift+K |
 | Ayarlar | ⌘, | Ctrl+, |
 

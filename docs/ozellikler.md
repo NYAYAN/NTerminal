@@ -348,9 +348,22 @@ renkte bir nokta durur, klasörü açmadan nerede değişiklik olduğu görünü
 Görüntüleyicide kaydedilen dosya hemen işaretlenir. Görüntüleyicinin `×`'i yalnızca dosyayı, panelin
 `×`'i ya da klasör düğmesi paneli kapatır. Panelin içindeyken `Esc` önce aramayı,
 sonra paneli kapatır ve odak terminale (ya da komut kutusuna) döner;
-düzenlerken basılan `Esc` paneli kapatmaz. Açık bir dosya terminali örtüyorsa
-**Terminalde ara** kısayolu önce paneli kapatır. Aramadan ya da paletten açılan
+düzenlerken basılan `Esc` paneli kapatmaz. Aramadan ya da paletten açılan
 dosyanın dalları ağaçta kendiliğinden açılır.
+
+**Dosyada arama.** Görüntüleyicide bir dosya açıkken arama kısayolu (`⌘F`,
+Windows'ta `Ctrl+Shift+F`; görüntüleyicinin içindeyken `Ctrl+F` de) terminalde
+değil **dosyada** arar: başlığın altında bir arama şeridi açılır, bütün
+eşleşmeler işaretlenir, etkin olan koyu ve çerçeveli görünür. `Enter` sonraki,
+`Shift+Enter` önceki eşleşmeye gider (`F3`, mac'te `⌘G` de); sondan başa döner,
+sayaç "3/12" gibi nerede olduğunuzu söyler. Seçili bir metin varsa kutuya o gelir
+ve arama oradan başlar; yoksa kutuda son aranan durur. **Aa**, **tam sözcük** ve
+**düzenli ifade** seçenekleri dosyaların içinde aramayla ortaktır ve aynı
+kurallarla eşleşir (tam sözcük Türkçe harflerde de çalışır). Düzenlerken de
+arama yapılabilir: işaretler yazdıkça güncellenir, etkin eşleşme yazı alanında
+seçilir ve `Esc`'ten sonra üzerine yazılabilir. `Esc` şeridi kapatır (paneli
+değil). Görsel açıksa aranacak metin olmadığı için kısayol paneli kapatıp
+terminalde arar.
 
 **Panelde arama.** Panel başlığındaki büyüteç bir kutu açar; üstündeki iki düğme
 ne arandığını seçer: **Dosya** (dosya adlarında bulanık arama) ya da **İçerik**
@@ -1056,7 +1069,7 @@ dışa aktarılır.
 | `Ctrl+Shift+L` | Sekmeyi kilitle / kilidi aç |
 | `Ctrl+Shift+E` | Sekme / bölme görünümü |
 | `Ctrl+Shift+K` | Terminali temizle |
-| `Ctrl+Shift+F` | Terminalde ara |
+| `Ctrl+Shift+F` | Terminalde ara (açık bir dosya varsa dosyada) |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Kopyala / yapıştır |
 | `Ctrl+,` | Ayarlar |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Yazıyı büyült / küçült / sıfırla |
