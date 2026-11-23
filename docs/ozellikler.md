@@ -139,6 +139,11 @@ gelir, sekmeye girdiğinizde önceki çıktı ekranda durur ve altında ayırıc
 satırla yeni kabuk başlar. Sekmeler tembel açılır: 20 sekmeli bir çalışma alanı
 açılışta 20 kabuk süreci başlatmaz, sekmeye tıkladığınızda başlar.
 
+**Pencere boyutu ve yeri de hatırlanır.** Pencere en son bıraktığınız boyutta,
+yerde ve büyütülmüşse büyütülmüş açılır. O ekran artık bağlı değilse (dizüstüne
+takılı harici ekran çıkarıldıysa) ya da ekran küçüldüyse pencere ana ekrana
+sığdırılarak açılır; ekranın dışında ya da ekrandan büyük açılmaz.
+
 > Kabuk süreçleri uygulamayla birlikte kapanır. Geri yüklenen içerik geçmiş
 > ekran görüntüsüdür, canlı bir oturum değildir (tmux gibi değil).
 

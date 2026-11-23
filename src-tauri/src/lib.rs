@@ -19,6 +19,7 @@ mod store;
 mod transfer;
 mod update;
 mod tray;
+mod window_state;
 // Windows'ta on plandaki program (bkz. `pty::foreground_program`). Saf kural
 // her platformda sinaniyor.
 #[cfg(any(windows, test))]
@@ -1399,6 +1400,10 @@ pub fn run() {
 
     let favorites = FavoriteStore::load(data_paths.clone());
 
+    // Pencerenin boyutu ve yeri veri klasorunde (bkz. window_state.rs).
+    let window_recorder = window_state::Recorder::new(data_paths.root.join(window_state::FILE));
+    let window_file = data_paths.root.join(window_state::FILE);
+
     let state = AppState {
         paths: data_paths,
         settings: Mutex::new(settings),
@@ -1421,6 +1426,11 @@ pub fn run() {
         .manage(state)
         .manage(update::Pending::default())
         .setup(move |app| {
+            // Ilk cizimden once: pencere varsayilan boyutta gorunup sonra
+            // ziplamasin. Yapilandirmadaki pencere bu noktada kurulmus oluyor.
+            if let Some(main) = app.get_webview_window("main") {
+                window_state::restore(&main, &window_file);
+            }
             tray::setup(app.handle(), &lang)?;
             // Uygulama yeniden acildiginda gelen haber (bkz. instance.rs).
             let handle = app.handle().clone();
@@ -1512,7 +1522,13 @@ pub fn run() {
             node_env,
             tray_labels,
         ])
-        .on_window_event(|window, event| {
+        .on_window_event(move |window, event| {
+            // Ana pencerenin boyutu, yeri, buyutulmus hali (bkz. window_state.rs).
+            if window.label() == "main" {
+                if let Some(main) = window.app_handle().get_webview_window("main") {
+                    window_recorder.on_event(&main, event);
+                }
+            }
             // Kapatma KARARI burada DEGIL: arayuz `onCloseRequested`i yakalayip
             // durumu diske yaziyor ve ardindan `destroy()` cagiriyor. `destroy`
             // kapatma istegini tumden atladigi icin buraya konulacak bir
