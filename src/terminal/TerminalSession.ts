@@ -552,6 +552,40 @@ export class TerminalSession {
       // Alt'ın yaptığı iş). Diğer platformlarda ayarın etkisi yok.
       macOptionIsMeta: isMac() && init.settings.behavior.macOptionIsMeta,
       rightClickSelectsWord: false,
+      /*
+       * Programın OSC 8 ile yazdığı bağlantılar da işletim sisteminin
+       * tarayıcısına (`openLink`), düz metin URL'lerle aynı yoldan.
+       *
+       * BİLDİRİLEN: "Do you want to navigate to http://localhost:18432/?
+       * WARNING: This link could potentially be dangerous" penceresi çıkıyor,
+       * OK'e basınca tarayıcı açılmıyor. Düz metin URL'ler `WebLinksAddon`dan
+       * geçiyordu; OSC 8 bağlantılarını ise xterm'in KENDİ sağlayıcısı
+       * yakalıyor ve önce o davranıyor. `linkHandler` verilmeyince varsayılanı
+       * `confirm()` + `window.open()`: pencere o, webview'de `window.open`
+       * hiçbir şey açmıyor. Bağlantının metni adresin kendisi olduğu için iki
+       * tür ekranda ayırt edilemiyordu.
+       *
+       * `allowNonHttpProtocols` BİLEREK kapalı: xterm o zaman yalnızca
+       * `http`/`https` bağlantılarını tıklanabilir yapıyor. Program çıktısındaki
+       * `file:` ya da özel bir şemayı tek tıkla açmak çıktıyı yazan herkese
+       * kod çalıştırma yolu verirdi.
+       *
+       * Kaldırılan `confirm` bir işe yarıyordu: OSC 8 bağlantısının ekrandaki
+       * metni adresinden farklı olabilir. Onun yerine gerçek adres fare
+       * üstündeyken ipucu olarak görünüyor; VS Code ve Windows Terminal da
+       * böyle yapıyor.
+       */
+      linkHandler: {
+        activate: (event, uri) => this.openLink(event, uri),
+        hover: (_event, uri) => {
+          this.container?.classList.add("link-hover");
+          this.container?.setAttribute("title", uri);
+        },
+        leave: () => {
+          this.container?.classList.remove("link-hover");
+          this.container?.removeAttribute("title");
+        },
+      },
       // windowsPty YALNIZCA Windows'ta verilmeli.
       //
       // Windows'ta buildNumber şart: xterm satır akışını (reflow)
@@ -579,20 +613,12 @@ export class TerminalSession {
     // Baglanti tiklamasi: varsayilan handler `window.open` cagiriyor, Tauri
     // webview'unde bu hicbir sey yapmadigi icin linkler tiklanamaz
     // gorunuyordu. Isletim sisteminin varsayilan tarayicisina Rust tarafindan
-    // gonderiyoruz.
+    // gonderiyoruz (`openLink`; OSC 8 baglantilari da oradan, bkz. `linkHandler`).
     this.term.loadAddon(
-      new WebLinksAddon(
-        (event, uri) => {
-          event.preventDefault();
-          void api.openExternal(uri).catch(() => {
-            this.callbacks.onLinkFailed?.(uri);
-          });
-        },
-        {
-          hover: () => this.container?.classList.add("link-hover"),
-          leave: () => this.container?.classList.remove("link-hover"),
-        },
-      ),
+      new WebLinksAddon((event, uri) => this.openLink(event, uri), {
+        hover: () => this.container?.classList.add("link-hover"),
+        leave: () => this.container?.classList.remove("link-hover"),
+      }),
     );
 
     const unicode = new Unicode11Addon();
@@ -600,6 +626,25 @@ export class TerminalSession {
     this.term.unicode.activeVersion = "11";
 
     this.registerHandlers();
+  }
+
+  /**
+   * Terminaldeki bir bağlantıyı işletim sisteminin varsayılan tarayıcısında
+   * açar.
+   *
+   * İKİ yol buraya geliyor: düz metin URL'ler (`WebLinksAddon`) ve programın
+   * OSC 8 ile yazdığı bağlantılar (xterm'in `linkHandler`ı). Tek yöntem,
+   * çünkü ikisi ayrı yazıldığında biri unutuldu: OSC 8 yolu xterm'in
+   * `window.open`ına kalmıştı ve webview'de hiçbir şey açmıyordu.
+   *
+   * Açılamazsa kullanıcı duyuyor (`onLinkFailed` → bildirim); sessizce
+   * yutulan bir tıklama bağlantıyı bozuk değil ölü gösterir.
+   */
+  private openLink(event: MouseEvent, uri: string) {
+    event.preventDefault();
+    void api.openExternal(uri).catch(() => {
+      this.callbacks.onLinkFailed?.(uri);
+    });
   }
 
   /** Dikkat: bütün geri çağırmaları DEĞİŞTİRİR, birleştirmez. */

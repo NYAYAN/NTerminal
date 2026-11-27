@@ -2142,6 +2142,38 @@ paneli), `titlebar.test.tsx`. Düzenekte Chromium ve ekran dışı WebKit: işar
 düzenlerken renkli katmanla hizalı (Chromium 0 px, WebKit en çok 1 px).
 **Denenmedi:** gerçek pencerede (Tauri) ve Windows'ta.
 
+### 1.37 Programın yazdığı bağlantılar tarayıcıyı açmıyordu
+
+**Bildirilen:** bir bağlantıya tıklayınca "Do you want to navigate to
+http://localhost:18432/? WARNING: This link could potentially be dangerous"
+penceresi çıkıyor, OK'den sonra tarayıcı açılmıyor.
+
+**Kök neden.** Pencere uygulamanın değil, xterm'in. Düz metin URL'ler
+`WebLinksAddon`dan geçiyor ve uygulama onlara kendi işleyicisini veriyordu
+(`api.openExternal`). Programın OSC 8 ile yazdığı bağlantıları (ekranda bir
+metin, arkasında bir adres) ise xterm'in KENDİ sağlayıcısı yakalıyor ve önce o
+davranıyor; `linkHandler` seçeneği verilmeyince varsayılanı `confirm()` +
+`window.open()`. Webview'de `window.open` hiçbir şey açmıyor. Bildirilen
+bağlantının metni adresin kendisiydi; iki tür ekranda ayırt edilemiyordu.
+
+**Çözüm.** `linkHandler` (TerminalSession) ve iki yolun buluştuğu tek yöntem,
+`openLink`: ikisi ayrı yazıldığında biri unutulmuştu. İki karar:
+
+- **`allowNonHttpProtocols` kapalı.** xterm o zaman yalnızca `http`/`https`
+  bağlantılarını tıklanabilir yapıyor; program çıktısındaki `file:` ya da özel
+  bir şemayı tek tıkla açmak çıktıyı yazan herkese kod çalıştırma yolu verirdi.
+- **Onay penceresinin yerine ipucu.** Kaldırılan `confirm` bir işe yarıyordu:
+  OSC 8 bağlantısının metni adresinden farklı olabilir. Gerçek adres fare
+  üstündeyken `title` ipucu olarak görünüyor (VS Code, Windows Terminal da
+  böyle).
+
+**Doğrulama.** `TerminalSession.test.ts` › "programın yazdığı bağlantı (OSC
+8)": bağlantıyı xterm'in GERÇEK sağlayıcısından tıklıyor (iç API,
+`_core._linkProviderService`; jsdom'da fare tıklaması kurulamıyor). Düzeltme
+geri alınınca dört testin üçü düşüyor (onay penceresi, ipucu, hata bildirimi);
+dördüncüsü `http` dışı şemaların tıklanamazlığını bağlıyor.
+**Denenmedi:** gerçek pencerede (Tauri).
+
 ## 2. Açık işler
 
 Sıra önerisi yukarıdan aşağı.

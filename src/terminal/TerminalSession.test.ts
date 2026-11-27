@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ILink, ILinkProvider } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
 
 import { api } from "../lib/ipc";
@@ -88,7 +89,13 @@ const h = vi.hoisted(() => {
       durum.sessiz = false;
       durum.entegre = true;
       anahtar.clear();
+      h.acilan.length = 0;
+      h.acmaHatasi = false;
     },
+    /** İşletim sisteminin tarayıcısında açılan adresler (`openExternal`). */
+    acilan: [] as string[],
+    /** `openExternal` başarısız olsun mu (tarayıcı açılamadı). */
+    acmaHatasi: false,
     /** Kabuğa yazılan her şey (`ptyWrite`). */
     yazilan: [] as { id: string; data: string }[],
     /** `ptyKill` ile öldürülen kimlikler. */
@@ -153,12 +160,18 @@ vi.mock("../lib/ipc", () => {
     return { program: h.onPlan, readsKeys: true, echo: false };
   });
 
+  /** İşletim sisteminin varsayılan tarayıcısı (Rust `open_external`). */
+  const openExternal = vi.fn(async (url: string) => {
+    if (h.acmaHatasi) throw new Error("tarayici acilamadi");
+    h.acilan.push(url);
+  });
+
   return {
     // Gerçek `api` yüzeyi geniş; testin ilgilendiği çağrılar `ptySpawn`,
     // `ptyWrite` ve `ptyKill`. Vekil, geri kalanını sessiz birer boş çağrıya
     // indiriyor — yüzey büyüdükçe testin bozulmaması için.
     api: new Proxy(
-      { ptySpawn, ptyWrite, ptyKill, ptyForeground } as Record<string, unknown>,
+      { ptySpawn, ptyWrite, ptyKill, ptyForeground, openExternal } as Record<string, unknown>,
       {
         get: (target, prop: string) =>
           target[prop] ?? vi.fn(async () => null),
@@ -1117,6 +1130,140 @@ describe("işaret anahtarı", () => {
     h.emitHam("ia8", osc("133;C"));
     await flush(s);
     expect(s.inputSignals().atPrompt, "anahtarsız `133;C` kutuyu kapattı").toBe(true);
+    void s.dispose(true);
+  });
+});
+
+/**
+ * Programın OSC 8 ile yazdığı bağlantı.
+ *
+ * BİLDİRİLEN: "Do you want to navigate to http://localhost:18432/? WARNING:
+ * This link could potentially be dangerous" penceresi çıkıyor, OK'e basınca
+ * tarayıcı açılmıyor.
+ *
+ * Düz metin URL'ler `WebLinksAddon`dan geçiyordu. OSC 8 bağlantılarını ise
+ * xterm'in KENDİ sağlayıcısı yakalıyor ve `linkHandler` verilmeyince
+ * varsayılanı `confirm()` + `window.open()`; webview'de ikincisi hiçbir şey
+ * açmıyor. Testler xterm'in GERÇEK sağlayıcısından tıklıyor: `linkHandler`
+ * kaldırılırsa `confirm` çağrılıyor ve ilk test düşüyor.
+ */
+describe("programın yazdığı bağlantı (OSC 8)", () => {
+  const ESC = String.fromCharCode(27);
+  const ADRES = "http://localhost:18432/";
+  /** Dizgi sonlandırıcısı (ST): `ESC \`. */
+  const ST = `${ESC}\\`;
+  /** OSC 8: `ESC ] 8 ; ; adres ST` metin `ESC ] 8 ; ; ST`. */
+  const osc8 = (adres: string, metin: string) => `${ESC}]8;;${adres}${ST}${metin}${ESC}]8;;${ST}`;
+
+  /**
+   * xterm'in bağlantı sağlayıcılarının görünen satırlardaki bütün bağlantıları.
+   *
+   * İç API (`_core._linkProviderService`): OSC 8 sağlayıcısına dışarıdan
+   * ulaşmanın yolu yok, fareyle tıklamayı jsdom'da kurmak da mümkün değil
+   * (satır ölçüleri yok). Yol kapanırsa test sebebini söyleyerek düşüyor.
+   */
+  async function baglantilar(s: TerminalSession): Promise<ILink[]> {
+    const core = (s.term as unknown as {
+      _core?: { _linkProviderService?: { linkProviders?: ILinkProvider[] } };
+    })._core;
+    const providers = core?._linkProviderService?.linkProviders;
+    expect(providers, "xterm'in bağlantı sağlayıcılarına ulaşılamadı: xterm sürümü değişmiş").toBeTruthy();
+    const hepsi: ILink[] = [];
+    for (let satir = 1; satir <= s.term.rows; satir++) {
+      for (const provider of providers!) {
+        const links = await new Promise<ILink[] | undefined>((resolve) =>
+          provider.provideLinks(satir, resolve),
+        );
+        hepsi.push(...(links ?? []));
+      }
+    }
+    return hepsi;
+  }
+
+  /** Oturumu bir kaba bağlar; jsdom canvas vermiyor ama kap bu noktada atanmış. */
+  async function bagliOturum(tabId: string) {
+    h.reset();
+    const s = session(tabId);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    try {
+      s.attach(host);
+    } catch {
+      // jsdom canvas bağlamı vermiyor; kap ve DOM bu noktada kurulmuş oluyor.
+    }
+    await s.start(null);
+    await flush(s);
+    return { s, host };
+  }
+
+  it("tıklanınca işletim sisteminin tarayıcısında açılıyor, onay penceresi çıkmıyor", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const { s } = await bagliOturum("osc8-ac");
+    // Metin adres değil: düz metin URL sağlayıcısı (`WebLinksAddon`) eşleşmesin,
+    // bağlantıyı yalnızca xterm'in OSC 8 sağlayıcısı versin.
+    s.term.write(osc8(ADRES, "sunucuyu aç"));
+    await flush(s);
+
+    const link = (await baglantilar(s)).find((l) => l.text === ADRES);
+    expect(link, "OSC 8 bağlantısı tıklanabilir değil").toBeTruthy();
+    link!.activate(new MouseEvent("click"), link!.text);
+    await Promise.resolve();
+
+    expect(confirm, "xterm'in varsayılanı çalıştı: 'This link could potentially be dangerous'").not.toHaveBeenCalled();
+    expect(open, "webview'de hiçbir şey açmayan window.open çağrıldı").not.toHaveBeenCalled();
+    expect(h.acilan).toEqual([ADRES]);
+
+    confirm.mockRestore();
+    open.mockRestore();
+    void s.dispose(true);
+  });
+
+  it("fare üstündeyken gerçek adres ipucu olarak görünüyor", async () => {
+    // Kaldırılan `confirm` bir işe yarıyordu: ekrandaki metin adresten farklı
+    // olabilir. Adres artık fare üstündeyken görünüyor.
+    const { s, host } = await bagliOturum("osc8-ipucu");
+    s.term.write(osc8(ADRES, "dokümanlar"));
+    await flush(s);
+
+    const link = (await baglantilar(s)).find((l) => l.text === ADRES);
+    link!.hover?.(new MouseEvent("mousemove"), link!.text);
+    expect(host.getAttribute("title"), "adres görünmüyor").toBe(ADRES);
+    expect(host.classList.contains("link-hover"), "imleç tıklanabilir değil").toBe(true);
+
+    link!.leave?.(new MouseEvent("mouseleave"), link!.text);
+    expect(host.hasAttribute("title"), "ipucu bağlantıdan çıkınca kalmış").toBe(false);
+    expect(host.classList.contains("link-hover")).toBe(false);
+    void s.dispose(true);
+  });
+
+  it("http/https dışındaki şemalar tıklanabilir değil", async () => {
+    // Program çıktısındaki bir `file:` ya da özel şemayı tek tıkla açmak çıktıyı
+    // yazan herkese kod çalıştırma yolu verirdi (`allowNonHttpProtocols` kapalı).
+    const { s } = await bagliOturum("osc8-sema");
+    s.term.write(osc8("file:///C:/Windows/System32/calc.exe", "rapor"));
+    s.term.write(osc8("vscode://file/C:/x.ts", "dosya"));
+    await flush(s);
+
+    const links = await baglantilar(s);
+    expect(links.map((l) => l.text), "http dışı bağlantı tıklanabilir").toEqual([]);
+    void s.dispose(true);
+  });
+
+  it("tarayıcı açılamazsa kullanıcı duyuyor", async () => {
+    // Sessizce yutulan bir tıklama bağlantıyı bozuk değil ölü gösterirdi.
+    const { s } = await bagliOturum("osc8-hata");
+    const onLinkFailed = vi.fn();
+    s.setCallbacks({ onLinkFailed });
+    h.acmaHatasi = true;
+    s.term.write(osc8(ADRES, "sunucuyu aç"));
+    await flush(s);
+
+    const link = (await baglantilar(s)).find((l) => l.text === ADRES);
+    link!.activate(new MouseEvent("click"), link!.text);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onLinkFailed).toHaveBeenCalledWith(ADRES);
     void s.dispose(true);
   });
 });

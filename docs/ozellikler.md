@@ -542,6 +542,14 @@ tarayıcısında açılır. (xterm'in varsayılan davranışı `window.open` ça
 Tauri webview'ünde bu hiçbir şey yapmadığı için linkler sessizce
 çalışmıyordu.) Yalnızca `http`/`https` açılır ve url kabuktan geçirilmez.
 
+Programın kendisinin yazdığı bağlantılar (OSC 8: ekranda bir metin, arkasında
+bir adres) da aynı yoldan açılıyor. Eskiden bunlara tıklamak xterm'in
+"Do you want to navigate to …? WARNING: This link could potentially be
+dangerous" penceresini açıyor, OK'den sonra da hiçbir şey olmuyordu: o yol
+`window.open`a kalmıştı. Ekrandaki metin adresten farklı olabileceği için
+gerçek adres, fare üstündeyken ipucu olarak görünüyor; `file:` ya da özel
+şemalı bağlantılar tıklanamaz.
+
 Renklendirme xterm'in dekorasyon API'siyle yapılıyor ve **yalnızca görünür
 satırlara** uygulanıyor: dekorasyon tampon satırına bağlı bir imleçle yaşıyor,
 on binlerce satırlık kaydırma tamponunun tamamına kaydetmek belleği ve çizimi
