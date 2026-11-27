@@ -77,6 +77,10 @@ describe("git mesaj düzenleyicisi", () => {
     const { container } = render(<GitMessageEditor tabId={TAB} path={YOL} typography={yaziTipi} />);
     await waitFor(() => expect(alan(container).value).not.toBe(""));
     fireEvent.change(alan(container), { target: { value: "Özellik dalı birleştirildi" } });
+    // CI'de (2026-11-27, 0.4.14 koşusu) tıklama yeni metin çizilmeden gitti ve
+    // dosyaya ESKİ mesaj yazıldı; yerelde 5/5 geçiyordu. Düğme, son çizimdeki
+    // `parts`ı görüyor: önce düzenlemenin ekrana yansıdığını bekle.
+    await waitFor(() => expect(alan(container).value).toBe("Özellik dalı birleştirildi"));
     fireEvent.click(dugme(container, "Onayla"));
     await waitFor(() => expect(finishEdit).toHaveBeenCalledWith("ok"));
     // Beklenen içerik denetimiyle: dosya bu arada değiştiyse üstüne yazılmıyor.
